@@ -12,6 +12,12 @@ public sealed class MediaFixture : IDisposable
 {
     public string Directory { get; } = Path.Combine(Path.GetTempPath(), "openrend-tests-" + Guid.NewGuid().ToString("N"));
     public string Source => Path.Combine(Directory, "colours and tones.mkv");
+    public string DelayedAudio => Path.Combine(Directory, "delayed-audio.mkv");
+    public string DelayedVideo => Path.Combine(Directory, "delayed-video.mkv");
+    public string ResampleTail => Path.Combine(Directory, "tail-44100.wav");
+    public string VariableRate => Path.Combine(Directory, "variable-rate.mkv");
+    public string TimestampOffset => Path.Combine(Directory, "timestamp-offset.mkv");
+    public string RotatedVideo => Path.Combine(Directory, "rotation-90.mp4");
     public MediaFixture()
     {
         System.IO.Directory.CreateDirectory(Directory);
@@ -21,6 +27,22 @@ public sealed class MediaFixture : IDisposable
             "-f", "lavfi", "-i", "sine=frequency=880:sample_rate=48000:duration=1",
             "-filter_complex", "[0:v][1:a][2:v][3:a]concat=n=2:v=1:a=1[v][a]",
             "-map", "[v]", "-map", "[a]", "-c:v", "ffv1", "-c:a", "pcm_f32le", Source);
+        Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=160x90:r=30:d=1",
+            "-itsoffset", "0.25", "-f", "lavfi", "-i", "sine=frequency=997:sample_rate=48000:duration=0.75",
+            "-map", "0:v", "-map", "1:a", "-c:v", "ffv1", "-c:a", "pcm_f32le", DelayedAudio);
+        Run("ffmpeg", "-v", "error", "-y", "-itsoffset", "0.25", "-f", "lavfi", "-i", "color=red:s=160x90:r=20:d=0.75",
+            "-f", "lavfi", "-i", "sine=frequency=997:sample_rate=48000:duration=1", "-map", "0:v", "-map", "1:a", "-fps_mode:v", "passthrough", "-enc_time_base:v", "1/1000", "-c:v", "ffv1", "-c:a", "pcm_f32le", DelayedVideo);
+        Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "sine=frequency=997:sample_rate=44100:duration=1", "-c:a", "pcm_f32le", ResampleTail);
+        Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=32x16:r=25:d=0.04",
+            "-f", "lavfi", "-i", "color=green:s=32x16:r=25:d=0.04", "-f", "lavfi", "-i", "color=blue:s=32x16:r=25:d=0.04",
+            "-f", "lavfi", "-i", "color=white:s=32x16:r=25:d=0.04", "-filter_complex",
+            "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0,settb=1/1000,setpts='if(eq(N,0),0,if(eq(N,1),120,if(eq(N,2),520,560)))'[v]",
+            "-map", "[v]", "-fps_mode", "vfr", "-c:v", "ffv1", VariableRate);
+        Run("ffmpeg", "-v", "error", "-y", "-i", Source, "-c", "copy", "-output_ts_offset", "5", TimestampOffset);
+        var coded = Path.Combine(Directory, "rotation-coded.mp4");
+        Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=32x32:r=1:d=1", "-f", "lavfi", "-i", "color=blue:s=32x32:r=1:d=1",
+            "-filter_complex", "[0:v][1:v]hstack[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", coded);
+        Run("ffmpeg", "-v", "error", "-y", "-display_rotation:v:0", "90", "-i", coded, "-c", "copy", RotatedVideo);
     }
 
     internal static string Run(string executable, params string[] arguments)
@@ -29,8 +51,10 @@ public sealed class MediaFixture : IDisposable
         {
             StartInfo = new ProcessStartInfo(MediaExecutables.Find(executable))
             {
-                UseShellExecute = false, CreateNoWindow = true,
-                RedirectStandardError = true, RedirectStandardOutput = true
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardError = true,
+                RedirectStandardOutput = true
             }
         };
         foreach (var argument in arguments) process.StartInfo.ArgumentList.Add(argument);
@@ -51,6 +75,103 @@ public sealed class MediaFixture : IDisposable
 
 public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper log) : IClassFixture<MediaFixture>
 {
+    [Fact]
+    public void DelayedAudioKeepsItsContainerOffsetAndLeadingSilence()
+    {
+        using var media = new MediaService();
+        var leading = media.GetAudio(fixture.DelayedAudio, 0, 9600);
+        Assert.InRange(Rms(leading, 0), 0, .000001);
+        var boundary = media.GetAudio(fixture.DelayedAudio, .2, 4800);
+        Assert.All(boundary.Take(2400 * 2), sample => Assert.InRange(Math.Abs(sample), 0, .000001));
+        Assert.InRange(Rms(boundary.Skip(2400 * 2).ToArray(), 0), .04, .1);
+        Assert.InRange(Rms(media.GetAudio(fixture.DelayedAudio, .4, 4096), 0), .04, .1);
+    }
+
+    [Fact]
+    public void DelayedVideoDoesNotDisplayItsFirstFrameBeforeItsPresentationTime()
+    {
+        using var media = new MediaService();
+        var firstTimestamp = MediaFixture.Run("ffprobe", "-v", "error", "-select_streams", "v", "-show_entries", "frame=best_effort_timestamp_time", "-of", "csv=p=0", fixture.DelayedVideo).Split('\n')[0];
+        Assert.Equal(.25, double.Parse(firstTimestamp, System.Globalization.CultureInfo.InvariantCulture), 3);
+        foreach (var seconds in new[] { 0, .1, .249, .6, .2, .25 })
+        {
+            Pixel(media.GetFrame(fixture.DelayedVideo, seconds, 160, 90), red: seconds < .25 ? 0 : 255, blue: 0);
+        }
+        Assert.InRange(Rms(media.GetAudio(fixture.DelayedVideo, .05, 4096), 0), .04, .1);
+    }
+
+    [Theory]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(270)]
+    [InlineData(-90)]
+    public async Task QuarterTurnDisplayRotationMatchesFfmpegAutorotation(int angle)
+    {
+        var rotated = fixture.RotatedVideo;
+        if (angle != 90)
+        {
+            rotated = Path.Combine(fixture.Directory, $"rotation-{angle}.mp4");
+            MediaFixture.Run("ffmpeg", "-v", "error", "-y", "-display_rotation:v:0", angle.ToString(System.Globalization.CultureInfo.InvariantCulture), "-i", Path.Combine(fixture.Directory, "rotation-coded.mp4"), "-c", "copy", rotated);
+        }
+        using var inspection = JsonDocument.Parse(MediaFixture.Run("ffprobe", "-v", "error", "-select_streams", "v:0", "-show_streams", "-of", "json", rotated));
+        var stream = inspection.RootElement.GetProperty("streams")[0];
+        var matrix = stream.GetProperty("side_data_list").EnumerateArray().Single(item => item.GetProperty("side_data_type").GetString() == "Display Matrix");
+        Assert.Equal((angle % 360 + 360) % 360, (matrix.GetProperty("rotation").GetInt32() % 360 + 360) % 360);
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(rotated);
+        var portrait = angle % 180 != 0;
+        Assert.Equal(portrait ? 32 : 64, asset.Width);
+        Assert.Equal(portrait ? 64 : 32, asset.Height);
+        var reference = Path.Combine(fixture.Directory, $"rotation-reference-{angle}.bgra");
+        MediaFixture.Run("ffmpeg", "-v", "error", "-y", "-i", rotated, "-frames:v", "1", "-pix_fmt", "bgra", "-f", "rawvideo", reference);
+        var expected = await File.ReadAllBytesAsync(reference);
+        var actual = media.GetFrame(rotated, 0, asset.Width, asset.Height);
+        Assert.Equal(expected.Length, actual.Length);
+        for (var channel = 0; channel < expected.Length; channel++) Assert.InRange(Math.Abs(expected[channel] - actual[channel]), 0, 2);
+    }
+
+    [Fact]
+    public async Task ResamplingKeepsTheLast44100HzSamples()
+    {
+        using var media = new MediaService();
+        var reference = Path.Combine(fixture.Directory, "tail-reference.f32le");
+        MediaFixture.Run("ffmpeg", "-v", "error", "-y", "-i", fixture.ResampleTail, "-f", "f32le", "-ar", "48000", "-ac", "2", reference);
+        var expectedBytes = await File.ReadAllBytesAsync(reference);
+        var expected = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(expectedBytes.AsSpan()).ToArray();
+        var actual = media.GetAudio(fixture.ResampleTail, 0, 48064);
+        Assert.Equal(48000 * 2, expected.Length);
+        for (var sample = expected.Length - 256; sample < expected.Length; sample++)
+            Assert.InRange(Math.Abs(expected[sample] - actual[sample]), 0, .00001f);
+        Assert.InRange(Rms(actual.Skip(47968 * 2).Take(32 * 2).ToArray(), 0), .03, .1);
+        Assert.All(actual.Skip(48000 * 2), sample => Assert.Equal(0, sample));
+    }
+
+    [Fact]
+    public void VariableRateVideoHoldsPreviousFrameUntilTheNextPresentationTimestamp()
+    {
+        using var media = new MediaService();
+        foreach (var seconds in new[] { .12, .2, .5, .519, .15 })
+        {
+            var pixels = media.GetFrame(fixture.VariableRate, seconds, 32, 16);
+            Assert.InRange((int)pixels[0], 0, 2);
+            Assert.InRange((int)pixels[1], 125, 130);
+            Assert.InRange((int)pixels[2], 0, 2);
+        }
+        Pixel(media.GetFrame(fixture.VariableRate, .52, 32, 16), red: 0, blue: 255);
+        Pixel(media.GetFrame(fixture.VariableRate, .119, 32, 16), red: 255, blue: 0);
+    }
+
+    [Fact]
+    public async Task CommonContainerTimestampOffsetDoesNotAddFiveSecondsToMedia()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.TimestampOffset);
+        Assert.InRange(asset.DurationSeconds, 1.99, 2.01);
+        Pixel(media.GetFrame(fixture.TimestampOffset, .2, 160, 90), red: 255, blue: 0);
+        Pixel(media.GetFrame(fixture.TimestampOffset, 1.2, 160, 90), red: 0, blue: 255);
+        Assert.InRange(Rms(media.GetAudio(fixture.TimestampOffset, .2, 4096), 0), .04, .1);
+    }
+
     [Fact]
     public async Task D3DCompositorMatchesCpuAcrossResizesAndConcurrentCallers()
     {

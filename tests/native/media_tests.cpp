@@ -6,6 +6,8 @@
 #include <numeric>
 #include <vector>
 #include <random>
+#include <filesystem>
+#include <string>
 
 struct DecoderHandle { void* value{}; ~DecoderHandle() { or_decoder_close(value); } };
 TEST(Media, ReportsRealStreamMetadata) {
@@ -44,6 +46,76 @@ TEST(Media, HoldsStillImageAtArbitraryTimelineTime) {
     std::vector<uint8_t> pixels(160 * 90 * 4), later(pixels.size());
     ASSERT_EQ(0, or_decoder_frame(decoder.value, 0, pixels.data(), static_cast<int>(pixels.size()))) << or_last_error();
     EXPECT_EQ(0, or_decoder_frame(decoder.value, 4, later.data(), static_cast<int>(later.size()))) << or_last_error(); EXPECT_EQ(pixels, later);
+}
+TEST(Media, DrainsResamplerAtTheFinal44100HzSample) {
+    DecoderHandle decoder; ASSERT_EQ(0, or_decoder_open(OR_TEST_AUDIO, 0, 0, &decoder.value)) << or_last_error();
+    std::vector<float> audio((96000 + 64) * 2);
+    ASSERT_EQ(96000, or_decoder_audio(decoder.value, 0, 96064, audio.data(), static_cast<int>(audio.size()))) << or_last_error();
+    float tail_peak = 0;
+    for (int sample = 95984 * 2; sample < 96000 * 2; ++sample) tail_peak = std::max(tail_peak, std::abs(audio[sample]));
+    EXPECT_GT(tail_peak, 0.03f);
+    for (size_t sample = 96000 * 2; sample < audio.size(); ++sample) EXPECT_EQ(0, audio[sample]);
+}
+
+class SourceTiming : public testing::Test {
+protected:
+    static inline std::filesystem::path directory;
+    static inline std::filesystem::path temporary_root;
+    static std::string file(const char* name) {
+        auto value = (directory / name).u8string();
+        return std::string(reinterpret_cast<const char*>(value.data()), value.size());
+    }
+    static void generate(const std::wstring& arguments, const wchar_t* name) {
+        auto executable = std::filesystem::path(OR_TEST_MEDIA).parent_path().parent_path().parent_path() / L".deps/ffmpeg/bin/ffmpeg.exe";
+        auto command = L"\"" + executable.wstring() + L"\" -v error -y " + arguments + L" \"" + (directory / name).wstring() + L"\"";
+        STARTUPINFOW startup{}; startup.cb = sizeof(startup); PROCESS_INFORMATION process{};
+        if (!CreateProcessW(executable.c_str(), command.data(), nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, nullptr, &startup, &process)) throw std::runtime_error("Could not start fixture encoder");
+        const auto waited = WaitForSingleObject(process.hProcess, 60000);
+        if (waited != WAIT_OBJECT_0) { TerminateProcess(process.hProcess, 1); WaitForSingleObject(process.hProcess, 5000); }
+        DWORD code{}; GetExitCodeProcess(process.hProcess, &code); CloseHandle(process.hProcess); CloseHandle(process.hThread);
+        if (waited != WAIT_OBJECT_0 || code != 0) throw std::runtime_error("Fixture encoder failed");
+    }
+    static void SetUpTestSuite() {
+        wchar_t root[MAX_PATH]{}, unique[MAX_PATH]{};
+        ASSERT_GT(GetTempPathW(MAX_PATH, root), 0u); temporary_root = std::filesystem::absolute(root).lexically_normal();
+        ASSERT_NE(0u, GetTempFileNameW(root, L"ord", 0, unique)); ASSERT_TRUE(DeleteFileW(unique)); ASSERT_TRUE(CreateDirectoryW(unique, nullptr));
+        directory = std::filesystem::absolute(unique).lexically_normal();
+        ASSERT_NO_THROW(generate(LR"(-f lavfi -i color=red:s=160x90:r=30:d=1 -itsoffset 0.25 -f lavfi -i sine=frequency=997:sample_rate=48000:duration=0.75 -map 0:v -map 1:a -c:v ffv1 -c:a pcm_f32le)", L"delayed.mkv"));
+        ASSERT_NO_THROW(generate(L"-i \"" + (directory / L"delayed.mkv").wstring() + L"\" -c copy -output_ts_offset 5", L"offset.mkv"));
+        ASSERT_NO_THROW(generate(LR"(-f lavfi -i color=red:s=32x16:r=25:d=0.04 -f lavfi -i color=green:s=32x16:r=25:d=0.04 -f lavfi -i color=blue:s=32x16:r=25:d=0.04 -f lavfi -i color=white:s=32x16:r=25:d=0.04 -filter_complex "[0:v][1:v][2:v][3:v]concat=n=4:v=1:a=0,settb=1/1000,setpts='if(eq(N,0),0,if(eq(N,1),120,if(eq(N,2),520,560)))'[v]" -map [v] -fps_mode vfr -c:v ffv1)", L"vfr.mkv"));
+    }
+    static void TearDownTestSuite() {
+        auto parent = directory.parent_path(); parent += L"/"; parent = parent.lexically_normal();
+        if (!directory.empty() && parent == temporary_root && directory.filename().wstring().starts_with(L"ord")) {
+            std::error_code error; std::filesystem::remove_all(directory, error);
+        }
+    }
+};
+TEST_F(SourceTiming, DelayedAudioRetainsLeadingSilenceAcrossSeeks) {
+    DecoderHandle decoder; ASSERT_EQ(0, or_decoder_open(file("delayed.mkv").c_str(), 160, 90, &decoder.value)) << or_last_error();
+    std::vector<float> audio(9600 * 2);
+    ASSERT_EQ(9600, or_decoder_audio(decoder.value, 0, 9600, audio.data(), static_cast<int>(audio.size()))) << or_last_error();
+    EXPECT_TRUE(std::all_of(audio.begin(), audio.end(), [](float sample) { return sample == 0; }));
+    ASSERT_EQ(4800, or_decoder_audio(decoder.value, 0.2, 4800, audio.data(), static_cast<int>(audio.size()))) << or_last_error();
+    EXPECT_TRUE(std::all_of(audio.begin(), audio.begin() + 2400 * 2, [](float sample) { return sample == 0; }));
+    float peak = 0; for (int sample = 2400 * 2; sample < 4800 * 2; ++sample) peak = std::max(peak, std::abs(audio[sample])); EXPECT_GT(peak, 0.04f);
+}
+TEST_F(SourceTiming, CommonTimestampOffsetDoesNotBecomeSourceDuration) {
+    or_metadata metadata{}; ASSERT_EQ(0, or_probe(file("offset.mkv").c_str(), &metadata)); EXPECT_NEAR(1, metadata.duration_seconds, 0.001);
+    DecoderHandle decoder; ASSERT_EQ(0, or_decoder_open(file("offset.mkv").c_str(), 32, 16, &decoder.value));
+    std::vector<float> audio(9600 * 2); ASSERT_EQ(9600, or_decoder_audio(decoder.value, 0, 9600, audio.data(), static_cast<int>(audio.size())));
+    EXPECT_TRUE(std::all_of(audio.begin(), audio.end(), [](float sample) { return sample == 0; }));
+    std::vector<uint8_t> pixels(32 * 16 * 4); ASSERT_EQ(0, or_decoder_frame(decoder.value, 0.2, pixels.data(), static_cast<int>(pixels.size())));
+    EXPECT_GT(pixels[2], 250); EXPECT_LT(pixels[0], 3);
+}
+TEST_F(SourceTiming, VariableRateFramesHoldUntilTheNextPts) {
+    DecoderHandle decoder; ASSERT_EQ(0, or_decoder_open(file("vfr.mkv").c_str(), 32, 16, &decoder.value)); std::vector<uint8_t> pixels(32 * 16 * 4);
+    for (double time : { 0.12, 0.2, 0.5, 0.519, 0.15 }) {
+        ASSERT_EQ(0, or_decoder_frame(decoder.value, time, pixels.data(), static_cast<int>(pixels.size()))) << or_last_error();
+        EXPECT_LT(pixels[0], 3) << time; EXPECT_NEAR(128, pixels[1], 3) << time; EXPECT_LT(pixels[2], 3) << time;
+    }
+    ASSERT_EQ(0, or_decoder_frame(decoder.value, 0.52, pixels.data(), static_cast<int>(pixels.size()))); EXPECT_GT(pixels[0], 250);
+    ASSERT_EQ(0, or_decoder_frame(decoder.value, 0.119, pixels.data(), static_cast<int>(pixels.size()))); EXPECT_GT(pixels[2], 250);
 }
 TEST(Preview, CreatesD3DDevicePresentsAndResizes) {
     HWND hwnd = CreateWindowExW(0, L"STATIC", L"OpenRend native test", WS_POPUP, 0, 0, 320, 180, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
