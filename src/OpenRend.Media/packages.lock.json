@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "dependencies": {
+    "net10.0": {
+      "openrend.core": {
+        "type": "Project"
+      },
+      "openrend.timeline": {
+        "type": "Project",
+        "dependencies": {
+          "OpenRend.Core": "[0.1.0, )"
+        }
+      }
+    },
+    "net10.0/win-x64": {}
+  }
+}

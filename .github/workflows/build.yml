@@ -1,0 +1,15 @@
+name: Build and test
+on:
+  push:
+  pull_request:
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+        with:
+          dotnet-version: '10.0.303'
+      - name: Build native and managed code and run tests
+        shell: pwsh
+        run: ./tools/build.ps1
