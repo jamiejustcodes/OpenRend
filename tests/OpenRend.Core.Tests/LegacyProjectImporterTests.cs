@@ -60,7 +60,7 @@ public sealed class LegacyProjectImporterTests : IDisposable
         Assert.Equal(30, clip.FadeOffsetFrames);
         Assert.Equal(120, clip.FadeDurationFrames);
         Assert.Equal(0.45, TimelineEvaluator.Evaluate(project, 45).Video[0].Opacity, 12);
-        Assert.Contains(result.Warnings, w => w.Contains("groups"));
+        Assert.NotNull(clip.GroupId);
         Assert.Contains(result.Warnings, w => w.Contains("missing"));
         Assert.Contains(result.Warnings, w => w.Contains("Embedded audio"));
     }
@@ -76,6 +76,7 @@ public sealed class LegacyProjectImporterTests : IDisposable
         Assert.Equal(40, embedded.SourceFrame);
         Assert.Equal(0.4, embedded.Gain, 12);
         Assert.Equal(-0.4, embedded.Pan);
+        Assert.Equal(result.Project.Tracks.Single(t => t.Name == "Lower video").Clips[0].GroupId, embedded.Clip.GroupId);
         var music = frame.Audio.Single(a => a.Track.Name == "Music");
         Assert.Equal(0.3, music.Gain, 12);
         Assert.Equal(0.5, music.Pan);

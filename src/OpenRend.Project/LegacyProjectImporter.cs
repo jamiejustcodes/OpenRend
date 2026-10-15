@@ -85,7 +85,6 @@ public static class LegacyProjectImporter
 
         var companionTracks = new Dictionary<Guid, TimelineTrack>();
         var clipIds = new HashSet<string>(StringComparer.Ordinal);
-        var hasGroups = false;
         foreach (var source in Array(root, "clips"))
         {
             RequireFields(source, ["id", "media_id", "track_id", "start", "source_in", "duration"], ["volume", "opacity", "fade_in", "fade_out", "fade_offset", "fade_duration", "group_id", "audio_enabled", "pan"]);
@@ -93,16 +92,13 @@ public static class LegacyProjectImporter
             if (!clipIds.Add(id)) throw new InvalidDataException("Clip IDs must be unique.");
             if (!mediaMap.TryGetValue(Text(source, "media_id"), out var media)) throw new InvalidDataException("A clip references unknown media.");
             if (!trackMap.TryGetValue(Text(source, "track_id"), out var track)) throw new InvalidDataException("A clip references an unknown track.");
-            if (source.TryGetProperty("group_id", out var group) && group.ValueKind != JsonValueKind.Null)
-            {
-                _ = Text(source, "group_id");
-                hasGroups = true;
-            }
+            Guid? groupId = source.TryGetProperty("group_id", out var group) && group.ValueKind != JsonValueKind.Null
+                ? Identifier("group", Text(source, "group_id")) : null;
             var gain = Number(source, "volume", 1);
             if (gain < 0) throw new InvalidDataException("Clip gain must be nonnegative.");
             var clip = new TimelineClip
             {
-                Id = Identifier("clip", id), MediaId = media.Id, Name = media.Name,
+                Id = Identifier("clip", id), MediaId = media.Id, Name = media.Name, GroupId = groupId,
                 StartFrame = Integer(source, "start"), SourceInFrame = Integer(source, "source_in"),
                 DurationFrames = Integer(source, "duration", minimum: 1),
                 Gain = gain, Opacity = Number(source, "opacity", 1), Pan = Number(source, "pan", 0),
@@ -121,14 +117,14 @@ public static class LegacyProjectImporter
                     companionTracks.Add(track.Id, companion);
                     project.Tracks.Add(companion);
                 }
+                clip.GroupId ??= Identifier("embedded-group", id, preserveGuid: false);
                 var audio = clip.DeepClone();
                 audio.Id = Identifier("embedded-clip", id, preserveGuid: false);
                 audio.Gain *= masterGain;
                 companion.Clips.Add(audio);
             }
         }
-        if (hasGroups) warnings.Add("Clip groups were imported as independent clips; linked editing must be recreated.");
-        if (companionTracks.Count > 0) warnings.Add("Embedded audio was placed on separate audio tracks; subsequent video and audio edits are independent.");
+        if (companionTracks.Count > 0) warnings.Add("Embedded audio was placed on linked companion audio tracks.");
         foreach (var track in project.Tracks)
         {
             var ordered = track.Clips.OrderBy(c => c.StartFrame).ToArray();

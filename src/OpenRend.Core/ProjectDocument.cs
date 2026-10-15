@@ -115,6 +115,7 @@ public sealed class TimelineTrack
 public sealed class TimelineClip
 {
     public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid? GroupId { get; set; }
     public Guid MediaId { get; set; }
     public string Name { get; set; } = "Clip";
     public long StartFrame { get; set; }
