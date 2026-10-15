@@ -76,6 +76,29 @@ public sealed class MediaFixture : IDisposable
 public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper log) : IClassFixture<MediaFixture>
 {
     [Fact]
+    public async Task TrackLevelsAffectActualPixelsStereoSamplesAndEncodedOutput()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Source);
+        var video = new TimelineTrack { Kind = TrackKind.Video, Opacity = .5, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = 30, Opacity = .5 }] };
+        var audio = new TimelineTrack { Kind = TrackKind.Audio, Gain = .5, Pan = .5, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = 30, Gain = .8, Pan = -.5 }] };
+        var project = new ProjectDocument { Width = 160, Height = 90, Media = [asset], Tracks = [video, audio] };
+        project.Validate();
+        using var renderer = new TimelineRenderService(media);
+        Pixel(renderer.RenderFrame(project, 10, 160, 90), red: 64, blue: 0);
+        var source = media.GetAudio(asset.Path, .25, 4096);
+        var actual = renderer.RenderAudio(project, .25, 4096);
+        for (var sample = 0; sample < actual.Length; sample++) Assert.InRange(Math.Abs(source[sample] * .2 - actual[sample]), 0, .000001);
+        var destination = Path.Combine(fixture.Directory, "track-levels.mp4");
+        await new ExportService(renderer).ExportAsync(project, destination);
+        Pixel(media.GetFrame(destination, .25, 160, 90), red: 64, blue: 0, tolerance: 8);
+        var encoded = media.GetAudio(destination, .25, 4096);
+        foreach (var channel in new[] { 0, 1 }) Assert.InRange(Rms(encoded, channel) / Rms(source, channel), .17, .23);
+        audio.Pan = -1; audio.Clips[0].Pan = 1;
+        Assert.All(renderer.RenderAudio(project, .25, 4096), sample => Assert.Equal(0, sample));
+    }
+
+    [Fact]
     public void DelayedAudioKeepsItsContainerOffsetAndLeadingSilence()
     {
         using var media = new MediaService();

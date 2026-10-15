@@ -125,7 +125,7 @@ public sealed class TimelineRenderService : IDisposable
             if (track.Kind != TrackKind.Audio || track.IsMuted || (solo && !track.IsSolo)) continue;
             foreach (var clip in track.Clips)
             {
-                if (!assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0) continue;
+                if (!assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0 || track.Gain <= 0) continue;
                 var start = project.FrameRate.Seconds(clip.StartFrame);
                 var end = project.FrameRate.Seconds(clip.EndFrame);
                 // Include only sample instants inside the clip's half-open range.
@@ -135,15 +135,13 @@ public sealed class TimelineRenderService : IDisposable
                 var localStart = seconds + (double)first / MediaService.SampleRate - start;
                 var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
                 var decoded = media.GetAudio(asset.Path, sourceStart, last - first);
-                var left = clip.Pan <= 0 ? 1 : 1 - clip.Pan;
-                var right = clip.Pan >= 0 ? 1 : 1 + clip.Pan;
                 for (var sample = first; sample < last; sample++)
                 {
                     var localFrame = (localStart + (double)(sample - first) / MediaService.SampleRate) * project.FrameRate.Value;
-                    var gain = clip.Gain * TimelineEvaluator.FadeAt(clip, localFrame);
+                    var gains = TimelineEvaluator.AudioGains(track, clip, localFrame);
                     var source = (sample - first) * MediaService.Channels;
-                    output[sample * 2] += (float)(decoded[source] * gain * left);
-                    output[sample * 2 + 1] += (float)(decoded[source + 1] * gain * right);
+                    output[sample * 2] += (float)(decoded[source] * gains.Left);
+                    output[sample * 2 + 1] += (float)(decoded[source + 1] * gains.Right);
                 }
             }
         }

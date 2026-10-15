@@ -313,6 +313,20 @@ public sealed class TimelineEditor
         });
     }
 
+    public void SetTrackLevels(Guid trackId, double? gain = null, double? opacity = null, double? pan = null)
+    {
+        var track = FindTrack(trackId);
+        EnsureUnlocked(track);
+        if (gain.HasValue && !double.IsFinite(gain.Value)) throw new ArgumentOutOfRangeException(nameof(gain));
+        if (opacity.HasValue && !double.IsFinite(opacity.Value)) throw new ArgumentOutOfRangeException(nameof(opacity));
+        if (pan.HasValue && !double.IsFinite(pan.Value)) throw new ArgumentOutOfRangeException(nameof(pan));
+        var nextGain = gain.HasValue ? Math.Max(0, gain.Value) : track.Gain;
+        var nextOpacity = opacity.HasValue ? Math.Clamp(opacity.Value, 0, 1) : track.Opacity;
+        var nextPan = pan.HasValue ? Math.Clamp(pan.Value, -1, 1) : track.Pan;
+        if (nextGain == track.Gain && nextOpacity == track.Opacity && nextPan == track.Pan) return;
+        Execute(_ => { track.Gain = nextGain; track.Opacity = nextOpacity; track.Pan = nextPan; });
+    }
+
     public void SetClipLevels(Guid clipId, double? gain = null, double? opacity = null, double? pan = null, long? fadeInFrames = null, long? fadeOutFrames = null)
     {
         var (track, clip) = FindClip(clipId);

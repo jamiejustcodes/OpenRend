@@ -43,7 +43,10 @@ public sealed class ProjectDocument
 
     public ProjectDocument DeepClone() => new()
     {
-        Name = Name, Width = Width, Height = Height, FrameRate = FrameRate,
+        Name = Name,
+        Width = Width,
+        Height = Height,
+        FrameRate = FrameRate,
         Media = Media.Select(m => m.DeepClone()).ToList(),
         Tracks = Tracks.Select(t => t.DeepClone()).ToList()
     };
@@ -68,6 +71,7 @@ public sealed class ProjectDocument
         foreach (var track in Tracks)
         {
             if (track == null || track.Id == Guid.Empty || !trackIds.Add(track.Id) || !Enum.IsDefined(track.Kind) || track.Clips == null) throw new InvalidDataException("Track is invalid.");
+            if (!double.IsFinite(track.Gain) || track.Gain < 0 || !double.IsFinite(track.Opacity) || track.Opacity is < 0 or > 1 || !double.IsFinite(track.Pan) || track.Pan is < -1 or > 1) throw new InvalidDataException("Track levels are invalid.");
             foreach (var clip in track.Clips)
             {
                 if (clip == null || clip.Id == Guid.Empty || !clipIds.Add(clip.Id)) throw new InvalidDataException("Clip IDs must be unique and non-empty.");
@@ -108,8 +112,11 @@ public sealed class TimelineTrack
     public bool IsSolo { get; set; }
     public bool IsLocked { get; set; }
     public bool IsVisible { get; set; } = true;
+    public double Gain { get; set; } = 1;
+    public double Opacity { get; set; } = 1;
+    public double Pan { get; set; }
     public List<TimelineClip> Clips { get; set; } = [];
-    public TimelineTrack DeepClone() => new() { Id = Id, Name = Name, Kind = Kind, IsMuted = IsMuted, IsSolo = IsSolo, IsLocked = IsLocked, IsVisible = IsVisible, Clips = Clips.Select(c => c.DeepClone()).ToList() };
+    public TimelineTrack DeepClone() => new() { Id = Id, Name = Name, Kind = Kind, IsMuted = IsMuted, IsSolo = IsSolo, IsLocked = IsLocked, IsVisible = IsVisible, Gain = Gain, Opacity = Opacity, Pan = Pan, Clips = Clips.Select(c => c.DeepClone()).ToList() };
 }
 
 public sealed class TimelineClip

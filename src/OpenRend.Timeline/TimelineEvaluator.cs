@@ -26,7 +26,10 @@ public static class TimelineEvaluator
                 if (frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
                 var local = frame - clip.StartFrame;
                 var fade = FadeAt(clip, local);
-                var item = new EvaluatedClip(track, clip, asset, clip.SourceInFrame + local, clip.Opacity * fade, clip.Gain * fade, clip.Pan);
+                var (left, right) = BalanceStages(track, clip);
+                var peak = Math.Max(left, right);
+                var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
+                var item = new EvaluatedClip(track, clip, asset, clip.SourceInFrame + local, clip.Opacity * track.Opacity * fade, clip.Gain * track.Gain * fade * peak, pan);
                 if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item);
                 if (track.Kind == TrackKind.Audio && asset.HasAudio) audio.Add(item);
             }
@@ -42,5 +45,19 @@ public static class TimelineEvaluator
         if (clip.FadeInFrames > 0) fade = Math.Min(fade, position / clip.FadeInFrames);
         if (clip.FadeOutFrames > 0) fade = Math.Min(fade, (envelope - position) / clip.FadeOutFrames);
         return Math.Clamp(fade, 0, 1);
+    }
+
+    public static (double Left, double Right) AudioGains(TimelineTrack track, TimelineClip clip, double localFrame)
+    {
+        var gain = track.Gain * clip.Gain * FadeAt(clip, localFrame);
+        var (left, right) = BalanceStages(track, clip);
+        return (gain * left, gain * right);
+    }
+
+    private static (double Left, double Right) BalanceStages(TimelineTrack track, TimelineClip clip)
+    {
+        // Opposing balance stages attenuate both channels rather than cancelling their pans.
+        return ((clip.Pan <= 0 ? 1 : 1 - clip.Pan) * (track.Pan <= 0 ? 1 : 1 - track.Pan),
+            (clip.Pan >= 0 ? 1 : 1 + clip.Pan) * (track.Pan >= 0 ? 1 : 1 + track.Pan));
     }
 }
