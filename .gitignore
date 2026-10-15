@@ -8,3 +8,4 @@ dist/
 TestResults/
 *.user
 *.partial.mp4
+tests/native/fixture.*
