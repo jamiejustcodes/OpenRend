@@ -15,7 +15,7 @@
     <PackageReference Include="FlaUI.UIA3" Version="5.0.0" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="../../src/OpenRend.App/OpenRend.App.csproj" ReferenceOutputAssembly="false" BuildReference="false" />
+    <ProjectReference Include="../../src/OpenRend.App/OpenRend.App.csproj" ReferenceOutputAssembly="false" Private="false" />
     <ProjectReference Include="../../src/OpenRend.Core/OpenRend.Core.csproj" />
     <ProjectReference Include="../../src/OpenRend.Project/OpenRend.Project.csproj" />
   </ItemGroup>
