@@ -1,0 +1,512 @@
+using System.ComponentModel;
+using System.Globalization;
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using Microsoft.Win32;
+using OpenRend.Core;
+using OpenRend.Project;
+using OpenRend.UI;
+
+namespace OpenRend.App;
+
+public partial class MainWindow : Window
+{
+    private readonly EditorViewModel vm;
+    private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(15) };
+    private readonly DispatcherTimer autosave = new() { Interval = TimeSpan.FromSeconds(30) };
+    private PlaybackSession? playback;
+    private CancellationTokenSource? exportCancellation;
+    private long revision;
+    private bool previewRunning;
+    private bool previewRequested;
+    private bool playbackStarting;
+    private long playbackGeneration;
+    private bool initialized;
+    private bool allowClose;
+    private long lastPreview = -1;
+    private readonly string recoveryPath = Path.Combine(Environment.GetEnvironmentVariable("OPENREND_DATA_DIR")
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend"), "recovery.openrend");
+    private readonly Dictionary<Guid, string> cachedMediaPaths = [];
+    public MainWindow(EditorViewModel viewModel)
+    {
+        vm = viewModel;
+        InitializeComponent();
+        SourceInitialized += (_, _) =>
+        {
+            var enabled = 1;
+            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref enabled, sizeof(int));
+        };
+        DataContext = vm;
+        Timeline.SeekRequested += frame => { Pause(); vm.Position = frame; UpdatePosition(); RequestPreview(); };
+        Timeline.SelectionChanged += () =>
+        {
+            vm.Selection.Clear(); vm.Selection.UnionWith(vm.Editor.ExpandSelection(Timeline.Selection, vm.IgnoreGroups));
+            Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector();
+        };
+        Timeline.EditRequested += gesture => Guard(() => ApplyGesture(gesture));
+        Timeline.TrackAction += (id, action) => Guard(() =>
+        {
+            Pause(); var track = vm.Project.Tracks.Single(t => t.Id == id);
+            vm.Editor.SetTrackState(id, isMuted: action == "Mute" ? !track.IsMuted : null,
+                isSolo: action == "Solo" ? !track.IsSolo : null, isLocked: action == "Lock" ? !track.IsLocked : null,
+                isVisible: action == "Visible" ? !track.IsVisible : null);
+        });
+        Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.SplitRequested += () => Guard(vm.Split);
+        Timeline.DeleteRequested += () => Guard(vm.Delete);
+        Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
+        vm.Changed += Refresh;
+        timer.Tick += async (_, _) =>
+        {
+            if (playback is null) return;
+            try
+            {
+                await playback.CheckAsync();
+                vm.Position = playback.CurrentFrame; UpdatePosition();
+                var meterHeight = Math.Max(0, Workspace.ActualHeight - 60);
+                LeftMeter.Height = meterHeight * Math.Clamp(playback.PeakLeft, 0, 1);
+                RightMeter.Height = meterHeight * Math.Clamp(playback.PeakRight, 0, 1);
+                if (vm.Position != lastPreview) RequestPreview();
+                if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames) Pause();
+            }
+            catch (Exception ex) { Pause(); ShowError(ex); }
+        };
+        autosave.Tick += async (_, _) =>
+        {
+            if (!vm.Dirty || vm.Busy) return;
+            try { await ProjectStore.SaveAsync(vm.Project.DeepClone(), recoveryPath); }
+            catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
+        };
+        Loaded += (_, _) => { initialized = true; LoadWorkspace(); Refresh(); autosave.Start(); };
+    }
+
+    private void Guard(Action action)
+    {
+        if (vm.Busy) return;
+        try { action(); }
+        catch (Exception ex) { ShowError(ex); }
+    }
+    private async Task GuardAsync(Func<Task> action)
+    {
+        if (vm.Busy) return;
+        try { await action(); }
+        catch (Exception ex) { ShowError(ex); }
+    }
+    private void ShowError(Exception ex)
+    {
+        vm.Status = ex.Message;
+        MessageBox.Show(this, ex.Message, "OpenRend", MessageBoxButton.OK, MessageBoxImage.Error);
+    }
+    private void Refresh()
+    {
+        revision++;
+        Timeline.Project = vm.Project;
+        Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection);
+        Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector();
+        UndoMenu.IsEnabled = UndoButton.IsEnabled = vm.Editor.CanUndo;
+        RedoMenu.IsEnabled = RedoButton.IsEnabled = vm.Editor.CanRedo;
+        RenderButton.IsEnabled = vm.Project.DurationFrames > 0 && !vm.Busy;
+        EmptyLibrary.Visibility = vm.Library.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
+        MediaCount.Text = $"{vm.Library.Count} source files";
+        TimelineScroll.Maximum = Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames) * Timeline.PixelsPerSecond);
+        PreviewInfo.Text = PreviewDescription();
+        if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
+        RequestPreview();
+    }
+    private string PreviewDescription() => $"Project: {vm.Project.Width} × {vm.Project.Height}, {vm.Project.FrameRate.Value:0.###}p   |   Composite: {(vm.Renderer.IsHardwareCompositing ? "GPU" : vm.Renderer.IsD3DCompositing ? "WARP" : "CPU")}   |   Display: {(Preview.IsHardware ? "Direct3D 11 hardware" : "Direct3D 11 software")}";
+    private void UpdatePosition()
+    {
+        Timeline.Position = vm.Position; Timeline.InvalidateVisual();
+        Timecode.Text = TimelineView.FormatTimecode(vm.Position, vm.Project.FrameRate);
+    }
+    private async void RequestPreview()
+    {
+        if (!initialized) return;
+        previewRequested = true;
+        if (previewRunning) return;
+        previewRunning = true;
+        try
+        {
+            while (previewRequested && IsLoaded)
+            {
+                previewRequested = false;
+                var project = vm.Project.DeepClone(); var frame = vm.Position; var currentRevision = revision;
+                var (width, height) = PreviewQuality.SelectedIndex switch
+                {
+                    0 => FitSize(project, 320),
+                    2 => (project.Width, project.Height),
+                    _ => FitSize(project, 640)
+                };
+                var pixels = await Task.Run(() => vm.Renderer.RenderFrame(project, frame, width, height));
+                if (currentRevision == revision && frame == vm.Position)
+                {
+                    Preview.Present(pixels, width, height); lastPreview = frame; PreviewInfo.Text = PreviewDescription();
+                }
+                else previewRequested = true;
+            }
+        }
+        catch (Exception ex) { vm.Status = "Preview: " + ex.Message; }
+        finally { previewRunning = false; }
+    }
+    private static (int, int) FitSize(ProjectDocument p, int maxWidth)
+    {
+        var width = Math.Min(maxWidth, p.Width);
+        return (width, Math.Max(1, (int)Math.Round(width * p.Height / (double)p.Width)));
+    }
+    public async Task OpenPathAsync(string path)
+    {
+        if (!await ConfirmUnsavedAsync()) return;
+        Pause();
+        var project = await ProjectStore.LoadAsync(path);
+        vm.Replace(project, path);
+        await PopulateMediaVisualsAsync();
+        var missing = ProjectStore.FindMissingMedia(project);
+        vm.Status = missing.Count > 0 ? $"{missing.Count} missing media files. File → Relink missing media." : $"Opened {Path.GetFileName(path)}.";
+    }
+    private async Task PopulateMediaVisualsAsync()
+    {
+        foreach (var item in vm.Library.ToArray())
+        {
+            if (cachedMediaPaths.TryGetValue(item.Asset.Id, out var cachedPath) && cachedPath == item.Asset.Path) continue;
+            var asset = item.Asset;
+            cachedMediaPaths[asset.Id] = asset.Path;
+            Timeline.Thumbnails.Remove(asset.Id); Timeline.Waveforms.Remove(asset.Id);
+            if (!File.Exists(item.Asset.Path)) continue;
+            try
+            {
+                if (item.Asset.HasVideo)
+                {
+                    var data = await vm.Media.GetThumbnailAsync(item.Asset.Path, 0, 160, 90);
+                    if (vm.Project.Media.All(m => m.Id != asset.Id || m.Path != asset.Path)) continue;
+                    var bitmap = BitmapSource.Create(160, 90, 96, 96, PixelFormats.Bgra32, null, data, 160 * 4); bitmap.Freeze();
+                    item.Thumbnail = bitmap; Timeline.Thumbnails[item.Asset.Id] = bitmap;
+                }
+                if (asset.HasAudio)
+                {
+                    var waveform = await vm.Media.GetWaveformAsync(asset.Path, 512);
+                    if (vm.Project.Media.Any(m => m.Id == asset.Id && m.Path == asset.Path)) Timeline.Waveforms[asset.Id] = waveform;
+                }
+                Timeline.InvalidateVisual();
+            }
+            catch (Exception ex) { cachedMediaPaths.Remove(asset.Id); vm.Status = "Media cache: " + ex.Message; }
+        }
+    }
+    private async Task ImportPathsAsync(IEnumerable<string> paths)
+    {
+        Pause();
+        foreach (var path in paths) await vm.ImportAsync(path);
+        await PopulateMediaVisualsAsync();
+    }
+    private async Task<bool> ConfirmUnsavedAsync()
+    {
+        if (!vm.Dirty) return true;
+        var answer = MessageBox.Show(this, "Save changes to the current project?", "OpenRend", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
+        if (answer == MessageBoxResult.Cancel) return false;
+        if (answer == MessageBoxResult.No) return true;
+        return await SaveProjectAsync(false);
+    }
+    private async Task<bool> SaveProjectAsync(bool saveAs)
+    {
+        var path = vm.ProjectPath;
+        if (path is null || saveAs)
+        {
+            var dialog = new SaveFileDialog { Filter = "OpenRend project|*.openrend", DefaultExt = ".openrend", FileName = vm.Project.Name };
+            if (dialog.ShowDialog(this) != true) return false;
+            path = dialog.FileName;
+        }
+        await vm.SaveAsync(path); return true;
+    }
+    private async void NewClick(object sender, RoutedEventArgs e) => await GuardAsync(async () => { if (await ConfirmUnsavedAsync()) { Pause(); vm.NewProject(); } });
+    private async void OpenClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog { Filter = "OpenRend project|*.openrend|All files|*.*" };
+        if (dialog.ShowDialog(this) == true) await OpenPathAsync(dialog.FileName);
+    });
+    private async void SaveClick(object sender, RoutedEventArgs e) => await GuardAsync(async () => await SaveProjectAsync(false));
+    private async void SaveAsClick(object sender, RoutedEventArgs e) => await GuardAsync(async () => await SaveProjectAsync(true));
+    private async void ImportClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog { Filter = "Video and audio|*.mp4;*.mov;*.mkv;*.avi;*.webm;*.mxf;*.wav;*.mp3;*.flac;*.aac;*.ogg;*.m4a|All files|*.*", Multiselect = true };
+        if (dialog.ShowDialog(this) == true) await ImportPathsAsync(dialog.FileNames);
+    });
+    private async void WindowDrop(object sender, DragEventArgs e)
+    {
+        if (e.Data.GetData(DataFormats.FileDrop) is string[] paths) await GuardAsync(() => ImportPathsAsync(paths));
+    }
+    private async void RecoveryClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        if (!File.Exists(recoveryPath)) { vm.Status = "No recovery project is available."; return; }
+        if (!await ConfirmUnsavedAsync()) return;
+        Pause(); vm.Replace(await ProjectStore.LoadAsync(recoveryPath), null); await PopulateMediaVisualsAsync();
+        vm.Status = "Opened recovery snapshot. Save as a project to keep these edits.";
+    });
+    private async void ImportLegacyClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog { Filter = "Legacy project|*.opentrim|JSON project|*.json" };
+        if (dialog.ShowDialog(this) != true || !await ConfirmUnsavedAsync()) return;
+        var result = await LegacyProjectImporter.LoadAsync(dialog.FileName);
+        Pause(); vm.Replace(result.Project, null); await PopulateMediaVisualsAsync();
+        vm.Status = result.Warnings.Count == 0 ? "Imported project. Save to the OpenRend project format." : string.Join(" ", result.Warnings);
+    });
+    private async void RelinkClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        Pause(); var missing = ProjectStore.FindMissingMedia(vm.Project);
+        if (missing.Count == 0) { vm.Status = "All source media is available."; return; }
+        foreach (var asset in missing)
+        {
+            var dialog = new OpenFileDialog { Title = $"Locate {asset.Name}", FileName = asset.Name };
+            if (dialog.ShowDialog(this) != true) break;
+            var probe = await vm.Media.ProbeAsync(dialog.FileName);
+            vm.Editor.Execute(p =>
+            {
+                var current = p.Media.Single(m => m.Id == asset.Id);
+                current.Path = probe.Path; current.DurationSeconds = probe.DurationSeconds;
+                current.HasVideo = probe.HasVideo; current.HasAudio = probe.HasAudio;
+                current.Width = probe.Width; current.Height = probe.Height; current.FrameRate = probe.FrameRate;
+            });
+        }
+        await PopulateMediaVisualsAsync();
+    });
+    private void PlaceSelectedClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (MediaList.SelectedItem is not MediaItem item) { vm.Status = "Select a source in Project Media."; return; }
+        Pause(); vm.Place(item.Asset.Id);
+    });
+    private void MediaDoubleClick(object sender, MouseButtonEventArgs e) => PlaceSelectedClick(sender, e);
+    private void MediaMouseMove(object sender, MouseEventArgs e)
+    {
+        if (e.LeftButton == MouseButtonState.Pressed && MediaList.SelectedItem is MediaItem item)
+            DragDrop.DoDragDrop(MediaList, new DataObject("OpenRend.Media", item.Asset.Id), DragDropEffects.Copy);
+    }
+    private void MediaSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MediaList.SelectedItem is MediaItem item) vm.Status = $"{item.Name}  •  {item.Details}";
+    }
+    private void BrowseFolderClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var dialog = new OpenFolderDialog();
+        if (dialog.ShowDialog(this) != true) return;
+        FolderLabel.Text = dialog.FolderName;
+        ExplorerList.ItemsSource = new DirectoryInfo(dialog.FolderName).EnumerateFiles()
+            .Where(f => new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm", ".wav", ".mp3", ".flac", ".m4a", ".mxf" }.Contains(f.Extension.ToLowerInvariant())).OrderBy(f => f.Name).ToList();
+    });
+    private async void ExplorerDoubleClick(object sender, MouseButtonEventArgs e) => await GuardAsync(async () =>
+    {
+        if (ExplorerList.SelectedItem is FileInfo file) { await ImportPathsAsync([file.FullName]); ToolsTabs.SelectedIndex = 0; }
+    });
+    private void ApplyGesture(ClipGesture gesture)
+    {
+        Pause();
+        if (gesture.Mode == "Move")
+            vm.Editor.MoveSelection(vm.Selection, gesture.ClipId, gesture.TrackId, gesture.Start, vm.IgnoreGroups);
+        else vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, vm.IgnoreGroups);
+    }
+    private TimelineClip? SelectedClip => vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
+    private void UpdateInspector()
+    {
+        var clip = SelectedClip; Inspector.IsEnabled = clip is not null; ClipName.Text = clip?.Name ?? "Select a timeline clip";
+        if (clip is null) return;
+        ClipStart.Text = clip.StartFrame.ToString(); ClipIn.Text = clip.SourceInFrame.ToString(); ClipDuration.Text = clip.DurationFrames.ToString();
+        ClipOpacity.Text = clip.Opacity.ToString(CultureInfo.CurrentCulture); ClipGain.Text = clip.Gain.ToString(CultureInfo.CurrentCulture);
+        ClipPan.Text = clip.Pan.ToString(CultureInfo.CurrentCulture); ClipFadeIn.Text = clip.FadeInFrames.ToString(); ClipFadeOut.Text = clip.FadeOutFrames.ToString();
+    }
+    private void ApplyPropertiesClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (SelectedClip is not { } clip) return;
+        if (vm.Project.Tracks.Single(t => t.Clips.Contains(clip)).IsLocked) throw new InvalidOperationException("Unlock this track before changing clip properties.");
+        Pause();
+        vm.Editor.Execute(p =>
+        {
+            var start = long.Parse(ClipStart.Text); var sourceIn = long.Parse(ClipIn.Text); var duration = long.Parse(ClipDuration.Text);
+            var fadeIn = long.Parse(ClipFadeIn.Text); var fadeOut = long.Parse(ClipFadeOut.Text);
+            var moved = start != clip.StartFrame || sourceIn != clip.SourceInFrame || duration != clip.DurationFrames;
+            var fadesChanged = fadeIn != clip.FadeInFrames || fadeOut != clip.FadeOutFrames;
+            if (moved)
+            {
+                var startDelta = start - clip.StartFrame; var sourceDelta = sourceIn - clip.SourceInFrame; var durationDelta = duration - clip.DurationFrames;
+                var members = vm.Editor.ExpandSelection([clip.Id], vm.IgnoreGroups);
+                foreach (var track in p.Tracks)
+                    foreach (var member in track.Clips.Where(c => members.Contains(c.Id)))
+                    {
+                        if (track.IsLocked) throw new InvalidOperationException("A linked track is locked.");
+                        member.StartFrame = checked(member.StartFrame + startDelta); member.SourceInFrame = checked(member.SourceInFrame + sourceDelta);
+                        member.DurationFrames = checked(member.DurationFrames + durationDelta); member.FadeOffsetFrames = 0; member.FadeDurationFrames = null;
+                        member.FadeInFrames = Math.Min(member.FadeInFrames, member.DurationFrames);
+                        member.FadeOutFrames = Math.Min(member.FadeOutFrames, member.DurationFrames - member.FadeInFrames);
+                    }
+            }
+            clip.Opacity = double.Parse(ClipOpacity.Text); clip.Gain = double.Parse(ClipGain.Text); clip.Pan = double.Parse(ClipPan.Text);
+            if (moved || fadesChanged)
+            {
+                clip.FadeInFrames = fadeIn; clip.FadeOutFrames = fadeOut; clip.FadeOffsetFrames = 0; clip.FadeDurationFrames = null;
+            }
+        });
+    });
+    private async void ExportClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        if (vm.Project.DurationFrames == 0) { vm.Status = "Place media on the timeline before rendering."; return; }
+        Pause();
+        var dialog = new SaveFileDialog { Filter = "H.264 / AAC video|*.mp4", DefaultExt = ".mp4", FileName = vm.Project.Name + ".mp4" };
+        if (dialog.ShowDialog(this) != true) return;
+        exportCancellation = new CancellationTokenSource(); vm.Busy = true; vm.Progress = 0;
+        CancelRender.Visibility = Visibility.Visible; RenderButton.IsEnabled = false;
+        try
+        {
+            vm.Status = "Rendering edited timeline…";
+            var progress = new Progress<double>(p => { vm.Progress = p; vm.Status = $"Rendering timeline: {p:P0}"; });
+            await vm.Exporter.ExportAsync(vm.Project.DeepClone(), dialog.FileName, progress, exportCancellation.Token);
+            vm.Status = $"Rendered {Path.GetFileName(dialog.FileName)}.";
+        }
+        catch (OperationCanceledException) { vm.Status = "Render cancelled."; }
+        finally { vm.Busy = false; CancelRender.Visibility = Visibility.Collapsed; exportCancellation.Dispose(); exportCancellation = null; Refresh(); }
+    });
+    private void CancelExportClick(object sender, RoutedEventArgs e) => exportCancellation?.Cancel();
+    private async void PlayClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        if (playbackStarting) { Pause(); return; }
+        if (playback is not null) { Pause(); return; }
+        if (vm.Project.DurationFrames == 0) return;
+        if (vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
+        var project = vm.Project.DeepClone(); var start = vm.Position;
+        var masterGain = MasterGain.Value;
+        var generation = ++playbackGeneration; playbackStarting = true;
+        try
+        {
+            var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain));
+            if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
+            playback = session;
+            PlayButton.Content = "Ⅱ"; timer.Start(); vm.Status = "Playing timeline.";
+        }
+        finally { if (generation == playbackGeneration) playbackStarting = false; }
+    });
+    private void Pause()
+    {
+        timer.Stop();
+        playbackGeneration++; playbackStarting = false;
+        if (playback is not null)
+        {
+            playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null; UpdatePosition();
+        }
+        PlayButton.Content = "▶";
+        LeftMeter.Height = RightMeter.Height = 0;
+    }
+    private void PauseClick(object sender, RoutedEventArgs e) => Pause();
+    private void StopClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
+    private void StartClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
+    private void EndClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = vm.Project.DurationFrames; UpdatePosition(); RequestPreview(); }
+    private void PreviousClick(object sender, RoutedEventArgs e) { Pause(); vm.Position--; UpdatePosition(); RequestPreview(); }
+    private void NextClick(object sender, RoutedEventArgs e) { Pause(); vm.Position++; UpdatePosition(); RequestPreview(); }
+    private void MasterGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (playback is not null) playback.MasterGain = e.NewValue; }
+    private void UndoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Undo(); });
+    private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
+    private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
+    private void DeleteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Delete(); });
+    private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); }
+    private void LinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.LinkClips(vm.Selection); });
+    private void UnlinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.UnlinkClips(vm.Selection); });
+    private void IgnoreGroupsClick(object sender, RoutedEventArgs e) { vm.IgnoreGroups = IgnoreGroupsMenu.IsChecked; }
+    private void VideoTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p => p.Tracks.Insert(0, new TimelineTrack
+    { Kind = TrackKind.Video, Name = $"Video {p.Tracks.Count(t => t.Kind == TrackKind.Video) + 1}" })));
+    private void AudioTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.AddTrack(TrackKind.Audio));
+    private void SnapClick(object sender, RoutedEventArgs e) { Timeline.Snapping = SnapToggle.IsChecked == true; SnappingMenu.IsChecked = Timeline.Snapping; }
+    private void SnapMenuClick(object sender, RoutedEventArgs e) { SnapToggle.IsChecked = SnappingMenu.IsChecked; SnapClick(sender, e); }
+    private void RippleClick(object sender, RoutedEventArgs e) { vm.Ripple = RippleToggle.IsChecked == true; RippleMenu.IsChecked = vm.Ripple; }
+    private void RippleMenuClick(object sender, RoutedEventArgs e) { RippleToggle.IsChecked = RippleMenu.IsChecked; RippleClick(sender, e); }
+    private void ZoomInClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Min(1200, Timeline.PixelsPerSecond * 1.25); Refresh(); }
+    private void ZoomOutClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Max(5, Timeline.PixelsPerSecond / 1.25); Refresh(); }
+    private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
+    private void TimelineScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (Timeline is null) return; Timeline.Offset = e.NewValue; Timeline.InvalidateVisual(); }
+    private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) RequestPreview(); }
+    private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(7, GridUnitType.Star); MediaWidth.Width = new GridLength(.32, GridUnitType.Star); ToolsTabs.SelectedIndex = 0; }
+    private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var dialog = new ProjectSettingsWindow(vm.Project) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        Pause(); vm.Editor.Execute(p => { p.Width = dialog.ProjectWidth; p.Height = dialog.ProjectHeight; p.FrameRate = dialog.Rate; p.Name = dialog.ProjectName; });
+        vm.Status = "Project settings updated.";
+    });
+    private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / pause\nEnter  Pause\nEsc  Stop\nAlt+Left / Alt+Right  Step one frame\nCtrl+Home / Ctrl+End  Timeline bounds\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
+    private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "OpenRend 0.1\nWindows video and audio editor\nGPL-3.0-or-later\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
+    private void ExitClick(object sender, RoutedEventArgs e) => Close();
+    private void WindowKeyDown(object sender, KeyEventArgs e)
+    {
+        if (vm.Busy) return;
+        var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
+        var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key == Key.E)) return;
+        Action? action = key switch
+        {
+            Key.I when ctrl => () => ImportClick(this, e),
+            Key.O when ctrl => () => OpenClick(this, e),
+            Key.S when ctrl => () => { if (shift) SaveAsClick(this, e); else SaveClick(this, e); }
+            ,
+            Key.N when ctrl => () => NewClick(this, e),
+            Key.Z when ctrl => () => { if (shift) RedoClick(this, e); else UndoClick(this, e); }
+            ,
+            Key.Y when ctrl => () => RedoClick(this, e),
+            Key.E when ctrl && shift => () => ExportClick(this, e),
+            Key.A when ctrl && shift => () => AudioTrackClick(this, e),
+            Key.V when ctrl && shift => () => VideoTrackClick(this, e),
+            Key.A when ctrl => () => SelectAllClick(this, e),
+            Key.F when ctrl => () => FitClick(this, e),
+            Key.Home when ctrl => () => StartClick(this, e),
+            Key.End when ctrl => () => EndClick(this, e),
+            Key.Left when alt => () => PreviousClick(this, e),
+            Key.Right when alt => () => NextClick(this, e),
+            Key.Enter when alt => () => SettingsClick(this, e),
+            Key.Enter => Pause,
+            Key.Space => () => PlayClick(this, e),
+            Key.Escape => () => StopClick(this, e),
+            Key.S => () => SplitClick(this, e),
+            Key.Delete => () => DeleteClick(this, e),
+            Key.G => () => LinkClick(this, e),
+            Key.U => () => UnlinkClick(this, e),
+            Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); }
+            ,
+            Key.Add or Key.OemPlus => () => ZoomInClick(this, e),
+            Key.Subtract or Key.OemMinus => () => ZoomOutClick(this, e),
+            _ => null
+        };
+        if (action is not null) { action(); e.Handled = true; }
+    }
+    private async void WindowClosing(object? sender, CancelEventArgs e)
+    {
+        if (allowClose) return;
+        e.Cancel = true;
+        if (vm.Busy) { vm.Status = "Cancel the active render before closing."; return; }
+        try
+        {
+            if (!await ConfirmUnsavedAsync()) return;
+            Pause(); autosave.Stop(); SaveWorkspace(); allowClose = true; Close();
+        }
+        catch (Exception ex) { ShowError(ex); }
+    }
+    private string WorkspacePath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "workspace.json");
+    private void SaveWorkspace()
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(WorkspacePath)!);
+        File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(Width, Height, MediaWidth.ActualWidth, WorkspaceHeight.ActualHeight, Timeline.PixelsPerSecond)));
+    }
+    private void LoadWorkspace()
+    {
+        try
+        {
+            if (!File.Exists(WorkspacePath)) return;
+            var settings = System.Text.Json.JsonSerializer.Deserialize<WorkspaceSettings>(File.ReadAllText(WorkspacePath));
+            if (settings is null) return;
+            Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width); Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
+            MediaWidth.Width = new GridLength(Math.Clamp(settings.MediaWidth, 280, Width - 480));
+            WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 230, Height - 300));
+            Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
+        }
+        catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
+    }
+    private sealed record WorkspaceSettings(double Width, double Height, double MediaWidth, double WorkspaceHeight, double Zoom);
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
+}

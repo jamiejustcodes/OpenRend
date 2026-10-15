@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <AssemblyName>OpenRend</AssemblyName>
+    <ApplicationIcon>../../assets/OpenRend.ico</ApplicationIcon>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="../../assets/OpenRend.ico" Link="OpenRend.ico" />
+    <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />
+    <PackageReference Include="Microsoft.Extensions.DependencyInjection" Version="10.0.0" />
+    <PackageReference Include="NAudio" Version="2.2.1" />
+    <ProjectReference Include="../OpenRend.Core/OpenRend.Core.csproj" />
+    <ProjectReference Include="../OpenRend.Timeline/OpenRend.Timeline.csproj" />
+    <ProjectReference Include="../OpenRend.Project/OpenRend.Project.csproj" />
+    <ProjectReference Include="../OpenRend.Media/OpenRend.Media.csproj" />
+    <ProjectReference Include="../OpenRend.UI/OpenRend.UI.csproj" />
+  </ItemGroup>
+  <Target Name="CopyNativeRuntime" AfterTargets="Build">
+    <ItemGroup>
+      <NativeRuntime Include="../../build/native/Release/OpenRend.Native.dll" />
+      <NativeRuntime Include="../../.deps/ffmpeg/bin/*.dll" />
+      <NativeRuntime Include="../../.deps/ffmpeg/bin/ffmpeg.exe" />
+      <NativeRuntime Include="../../.deps/ffmpeg/bin/ffprobe.exe" />
+    </ItemGroup>
+    <Copy SourceFiles="@(NativeRuntime)" DestinationFolder="$(OutDir)" SkipUnchangedFiles="true" />
+  </Target>
+</Project>

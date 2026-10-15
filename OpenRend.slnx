@@ -1,10 +1,17 @@
 <Solution>
   <Folder Name="/src/">
+    <Project Path="src/OpenRend.App/OpenRend.App.csproj" />
     <Project Path="src/OpenRend.Core/OpenRend.Core.csproj" />
+    <Project Path="src/OpenRend.Media/OpenRend.Media.csproj" />
     <Project Path="src/OpenRend.Project/OpenRend.Project.csproj" />
     <Project Path="src/OpenRend.Timeline/OpenRend.Timeline.csproj" />
+    <Project Path="src/OpenRend.UI/OpenRend.UI.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/OpenRend.App.Tests/OpenRend.App.Tests.csproj" />
     <Project Path="tests/OpenRend.Core.Tests/OpenRend.Core.Tests.csproj" />
+    <Project Path="tests/OpenRend.Editor.Tests/OpenRend.Editor.Tests.csproj" />
+    <Project Path="tests/OpenRend.Media.Tests/OpenRend.Media.Tests.csproj" />
+    <Project Path="tests/OpenRend.Playback.Tests/OpenRend.Playback.Tests.csproj" />
   </Folder>
 </Solution>
