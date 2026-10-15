@@ -1,0 +1,10 @@
+**/bin/
+**/obj/
+.vs/
+.deps/
+.local/
+build/
+dist/
+TestResults/
+*.user
+*.partial.mp4

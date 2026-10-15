@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/OpenRend.Core/OpenRend.Core.csproj" />
+    <Project Path="src/OpenRend.Project/OpenRend.Project.csproj" />
+    <Project Path="src/OpenRend.Timeline/OpenRend.Timeline.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/OpenRend.Core.Tests/OpenRend.Core.Tests.csproj" />
+  </Folder>
+</Solution>

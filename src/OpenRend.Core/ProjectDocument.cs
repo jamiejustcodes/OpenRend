@@ -1,0 +1,132 @@
+using System.Text.Json.Serialization;
+
+namespace OpenRend.Core;
+
+public readonly record struct Rational
+{
+    public int Numerator { get; }
+    public int Denominator { get; }
+
+    [JsonConstructor]
+    public Rational(int numerator, int denominator)
+    {
+        if (numerator <= 0) throw new ArgumentOutOfRangeException(nameof(numerator));
+        if (denominator <= 0) throw new ArgumentOutOfRangeException(nameof(denominator));
+        var divisor = Gcd(numerator, denominator);
+        Numerator = numerator / divisor;
+        Denominator = denominator / divisor;
+    }
+
+    public double Value => (double)Numerator / Denominator;
+    public double Seconds(long frames) => frames * (double)Denominator / Numerator;
+    public long Frames(double seconds)
+    {
+        if (!double.IsFinite(seconds)) throw new ArgumentOutOfRangeException(nameof(seconds));
+        return checked((long)Math.Round(seconds * Numerator / Denominator, MidpointRounding.AwayFromZero));
+    }
+
+    public override string ToString() => $"{Numerator}/{Denominator}";
+    private static int Gcd(int a, int b) { while (b != 0) (a, b) = (b, a % b); return a; }
+}
+
+public enum TrackKind { Video, Audio }
+
+public sealed class ProjectDocument
+{
+    public string Name { get; set; } = "Untitled";
+    public int Width { get; set; } = 1280;
+    public int Height { get; set; } = 720;
+    public Rational FrameRate { get; set; } = new(30, 1);
+    public List<MediaAsset> Media { get; set; } = [];
+    public List<TimelineTrack> Tracks { get; set; } = [];
+    [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
+
+    public ProjectDocument DeepClone() => new()
+    {
+        Name = Name, Width = Width, Height = Height, FrameRate = FrameRate,
+        Media = Media.Select(m => m.DeepClone()).ToList(),
+        Tracks = Tracks.Select(t => t.DeepClone()).ToList()
+    };
+
+    public void Validate()
+    {
+        if (Width is <= 0 or > 32768 || Height is <= 0 or > 32768) throw new InvalidDataException("Project dimensions must be between 1 and 32768.");
+        if (FrameRate.Numerator <= 0 || FrameRate.Denominator <= 0) throw new InvalidDataException("Project frame rate must be positive.");
+        if (Media == null || Tracks == null) throw new InvalidDataException("Project collections are missing.");
+        var mediaIds = new HashSet<Guid>();
+        var mediaById = new Dictionary<Guid, MediaAsset>();
+        foreach (var media in Media)
+        {
+            if (media == null || media.Id == Guid.Empty || !mediaIds.Add(media.Id)) throw new InvalidDataException("Media IDs must be unique and non-empty.");
+            if (!double.IsFinite(media.DurationSeconds) || media.DurationSeconds < 0) throw new InvalidDataException("Media duration is invalid.");
+            if (!double.IsFinite(media.FrameRate) || media.FrameRate < 0 || media.Width < 0 || media.Height < 0) throw new InvalidDataException("Media metadata is invalid.");
+            if (string.IsNullOrWhiteSpace(media.Path)) throw new InvalidDataException("Media path is empty.");
+            mediaById.Add(media.Id, media);
+        }
+        var trackIds = new HashSet<Guid>();
+        var clipIds = new HashSet<Guid>();
+        foreach (var track in Tracks)
+        {
+            if (track == null || track.Id == Guid.Empty || !trackIds.Add(track.Id) || !Enum.IsDefined(track.Kind) || track.Clips == null) throw new InvalidDataException("Track is invalid.");
+            foreach (var clip in track.Clips)
+            {
+                if (clip == null || clip.Id == Guid.Empty || !clipIds.Add(clip.Id)) throw new InvalidDataException("Clip IDs must be unique and non-empty.");
+                if (!mediaIds.Contains(clip.MediaId)) throw new InvalidDataException("A clip references unknown media.");
+                if (clip.StartFrame < 0 || clip.SourceInFrame < 0 || clip.DurationFrames <= 0 || clip.StartFrame > long.MaxValue - clip.DurationFrames || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip range is invalid.");
+                var source = mediaById[clip.MediaId];
+                if (track.Kind == TrackKind.Video && !source.HasVideo || track.Kind == TrackKind.Audio && !source.HasAudio) throw new InvalidDataException("A clip has no compatible media stream.");
+                var available = FrameRate.Frames(source.DurationSeconds);
+                if (available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
+                if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
+                var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
+                if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
+            }
+        }
+    }
+}
+
+public sealed class MediaAsset
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Path { get; set; } = "";
+    [JsonIgnore] public string Name => System.IO.Path.GetFileName(Path);
+    public double DurationSeconds { get; set; }
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public double FrameRate { get; set; }
+    public bool HasVideo { get; set; }
+    public bool HasAudio { get; set; }
+    public MediaAsset DeepClone() => (MediaAsset)MemberwiseClone();
+}
+
+public sealed class TimelineTrack
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public string Name { get; set; } = "Track";
+    public TrackKind Kind { get; set; }
+    public bool IsMuted { get; set; }
+    public bool IsSolo { get; set; }
+    public bool IsLocked { get; set; }
+    public bool IsVisible { get; set; } = true;
+    public List<TimelineClip> Clips { get; set; } = [];
+    public TimelineTrack DeepClone() => new() { Id = Id, Name = Name, Kind = Kind, IsMuted = IsMuted, IsSolo = IsSolo, IsLocked = IsLocked, IsVisible = IsVisible, Clips = Clips.Select(c => c.DeepClone()).ToList() };
+}
+
+public sealed class TimelineClip
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid MediaId { get; set; }
+    public string Name { get; set; } = "Clip";
+    public long StartFrame { get; set; }
+    public long SourceInFrame { get; set; }
+    public long DurationFrames { get; set; }
+    [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);
+    public double Gain { get; set; } = 1;
+    public double Opacity { get; set; } = 1;
+    public long FadeInFrames { get; set; }
+    public long FadeOutFrames { get; set; }
+    public long FadeOffsetFrames { get; set; }
+    public long? FadeDurationFrames { get; set; }
+    public double Pan { get; set; }
+    public TimelineClip DeepClone() => (TimelineClip)MemberwiseClone();
+}
