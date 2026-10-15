@@ -8,6 +8,7 @@ public sealed class PreviewHost : HwndHost
 {
     private nint child;
     private nint renderer;
+    public bool IsReady => renderer != 0;
     public bool IsHardware => renderer != 0 && Native.or_renderer_is_hardware(renderer) == 1;
     public event Action? Ready;
     protected override HandleRef BuildWindowCore(HandleRef parent)
@@ -18,6 +19,7 @@ public sealed class PreviewHost : HwndHost
         if (child == 0) throw new System.ComponentModel.Win32Exception();
         var result = Native.or_renderer_create(child, 640, 360, out renderer);
         if (result < 0) throw new InvalidOperationException("Video display could not start: " + Marshal.PtrToStringUTF8(Native.or_last_error()));
+        Native.SetWindowLongPtr(child, -21, renderer);
         Dispatcher.BeginInvoke(() => Ready?.Invoke());
         return new HandleRef(this, child);
     }
@@ -35,6 +37,7 @@ public sealed class PreviewHost : HwndHost
     }
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
+        Native.SetWindowLongPtr(hwnd.Handle, -21, 0);
         if (renderer != 0) { Native.or_renderer_close(renderer); renderer = 0; }
         Native.DestroyWindow(hwnd.Handle);
     }
@@ -64,12 +67,20 @@ public sealed class PreviewHost : HwndHost
         {
             // The swapchain owns the surface; a GDI background erase would cover its frame.
             if (message == 0x14) return 1;
-            if (message == 0x0F) { ValidateRect(hwnd, 0); return 0; }
+            if (message == 0x0F)
+            {
+                ValidateRect(hwnd, 0);
+                var display = GetWindowLongPtr(hwnd, -21);
+                if (display != 0) or_renderer_redraw(display);
+                return 0;
+            }
             return DefWindowProc(hwnd, message, wparam, lparam);
         }
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode)] internal static extern nint GetModuleHandle(string? name);
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)] private static extern ushort RegisterClass(ref WindowClass windowClass);
         [DllImport("user32.dll")] private static extern bool ValidateRect(nint hwnd, nint rect);
+        [DllImport("user32.dll", EntryPoint = "SetWindowLongPtrW")] internal static extern nint SetWindowLongPtr(nint hwnd, int index, nint value);
+        [DllImport("user32.dll", EntryPoint = "GetWindowLongPtrW")] private static extern nint GetWindowLongPtr(nint hwnd, int index);
         [DllImport("user32.dll", CharSet = CharSet.Unicode)] private static extern nint DefWindowProc(nint hwnd, uint message, nint wparam, nint lparam);
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern nint CreateWindowEx(int ex, string cls, string name, int style, int x, int y, int w, int h, nint parent, nint menu, nint instance, nint param);
@@ -77,6 +88,7 @@ public sealed class PreviewHost : HwndHost
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_create(nint hwnd, int width, int height, out nint renderer);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_present(nint renderer, byte[] bgra, int width, int height, int stride);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_resize(nint renderer, int width, int height);
+        [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_redraw(nint renderer);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern void or_renderer_close(nint renderer);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_is_hardware(nint renderer);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern nint or_last_error();

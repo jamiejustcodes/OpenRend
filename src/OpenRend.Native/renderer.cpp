@@ -23,6 +23,7 @@ struct Renderer {
     ComPtr<IDXGISwapChain> swapchain;
     ComPtr<ID3D11RenderTargetView> target;
     ComPtr<ID3D11Texture2D> texture;
+    ComPtr<ID3D11Texture2D> diagnostic_staging;
     ComPtr<ID3D11ShaderResourceView> source;
     ComPtr<ID3D11VertexShader> vertex;
     ComPtr<ID3D11PixelShader> pixel;
@@ -35,7 +36,7 @@ struct Renderer {
         require(w > 0 && h > 0, "Invalid preview dimensions"); if (w == width && h == height) return;
         context->OMSetRenderTargets(0, nullptr, nullptr); target.Reset(); check(swapchain->ResizeBuffers(0, w, h, DXGI_FORMAT_UNKNOWN, 0), "Resize preview"); width = w; height = h; create_target(); draw();
     }
-    void draw() {
+    void draw(bool present = true) {
         const float black[] = { 0.015f, 0.018f, 0.025f, 1 }; context->ClearRenderTargetView(target.Get(), black);
         if (source && texture_width > 0 && texture_height > 0) {
             float scale = std::min(static_cast<float>(width) / texture_width, static_cast<float>(height) / texture_height);
@@ -43,7 +44,7 @@ struct Renderer {
             context->RSSetViewports(1, &viewport); context->RSSetState(rasterizer.Get()); ID3D11RenderTargetView* output = target.Get(); context->OMSetRenderTargets(1, &output, nullptr); context->IASetInputLayout(nullptr); context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); context->VSSetShader(vertex.Get(), nullptr, 0); context->PSSetShader(pixel.Get(), nullptr, 0);
             ID3D11ShaderResourceView* input = source.Get(); context->PSSetShaderResources(0, 1, &input); ID3D11SamplerState* sample = sampler.Get(); context->PSSetSamplers(0, 1, &sample); context->Draw(3, 0);
         }
-        check(swapchain->Present(0, 0), "Present preview frame");
+        if (present) check(swapchain->Present(0, 0), "Present preview frame");
     }
 };
 constexpr char shader[] = R"(
@@ -61,9 +62,10 @@ extern "C" {
 int or_renderer_create(void* hwnd, int width, int height, void** output) { return safe([&] {
     require(hwnd && output && IsWindow(static_cast<HWND>(hwnd)) && width > 0 && height > 0, "Invalid preview window arguments"); *output = nullptr;
     auto r = std::make_unique<Renderer>(); r->width = width; r->height = height;
-    DXGI_SWAP_CHAIN_DESC desc{}; desc.BufferDesc.Width = width; desc.BufferDesc.Height = height; desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; desc.SampleDesc.Count = 1; desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; desc.BufferCount = 2; desc.OutputWindow = static_cast<HWND>(hwnd); desc.Windowed = TRUE; desc.SwapEffect = DXGI_SWAP_EFFECT_DISCARD;
+    DXGI_SWAP_CHAIN_DESC desc{}; desc.BufferDesc.Width = width; desc.BufferDesc.Height = height; desc.BufferDesc.Format = DXGI_FORMAT_B8G8R8A8_UNORM; desc.SampleDesc.Count = 1; desc.BufferUsage = DXGI_USAGE_RENDER_TARGET_OUTPUT; desc.BufferCount = 2; desc.OutputWindow = static_cast<HWND>(hwnd); desc.Windowed = TRUE; desc.SwapEffect = DXGI_SWAP_EFFECT_FLIP_DISCARD;
     D3D_FEATURE_LEVEL level{};
-    auto result = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &desc, &r->swapchain, &r->device, &level, &r->context);
+    wchar_t force_warp[2]{}; const bool warp = GetEnvironmentVariableW(L"OPENREND_FORCE_WARP", force_warp, 2) == 1 && force_warp[0] == L'1';
+    auto result = warp ? E_FAIL : D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_HARDWARE, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &desc, &r->swapchain, &r->device, &level, &r->context);
     r->hardware = SUCCEEDED(result);
     if (FAILED(result)) { r->swapchain.Reset(); r->device.Reset(); r->context.Reset(); result = D3D11CreateDeviceAndSwapChain(nullptr, D3D_DRIVER_TYPE_WARP, nullptr, D3D11_CREATE_DEVICE_BGRA_SUPPORT, nullptr, 0, D3D11_SDK_VERSION, &desc, &r->swapchain, &r->device, &level, &r->context); }
     check(result, "Create D3D11 preview device"); r->create_target();
@@ -90,6 +92,23 @@ int or_renderer_present(void* handle, const uint8_t* bgra, int width, int height
     r.draw(); return 0;
 }); }
 int or_renderer_resize(void* handle, int width, int height) { return safe([&] { require(handle, "Missing preview renderer"); auto& r = *static_cast<Renderer*>(handle); std::lock_guard lock(r.mutex); r.resize(width, height); return 0; }); }
+int or_renderer_redraw(void* handle) { return safe([&] { require(handle, "Missing preview renderer"); auto& r = *static_cast<Renderer*>(handle); std::lock_guard lock(r.mutex); r.draw(); return 0; }); }
 int or_renderer_is_hardware(void* handle) { if (!handle) return 0; return static_cast<Renderer*>(handle)->hardware ? 1 : 0; }
 void or_renderer_close(void* handle) { delete static_cast<Renderer*>(handle); }
+// Native regression diagnostics only; read before presentation discards the buffer.
+__declspec(dllexport) int or_renderer_test_readback(void* handle, uint8_t* bgra, int capacity) { return safe([&] {
+    require(handle && bgra, "Invalid preview readback arguments"); auto& r = *static_cast<Renderer*>(handle); std::lock_guard lock(r.mutex);
+    require(int64_t(r.width) * r.height * 4 <= capacity, "Preview readback buffer is too small");
+    ComPtr<ID3D11Texture2D> buffer; check(r.swapchain->GetBuffer(0, IID_PPV_ARGS(&buffer)), "Get preview diagnostic buffer");
+    D3D11_TEXTURE2D_DESC desc{}; buffer->GetDesc(&desc);
+    D3D11_TEXTURE2D_DESC current{}; if (r.diagnostic_staging) r.diagnostic_staging->GetDesc(&current);
+    if (!r.diagnostic_staging || current.Width != desc.Width || current.Height != desc.Height) {
+        r.diagnostic_staging.Reset(); desc.Usage = D3D11_USAGE_STAGING; desc.BindFlags = 0; desc.CPUAccessFlags = D3D11_CPU_ACCESS_READ; desc.MiscFlags = 0;
+        check(r.device->CreateTexture2D(&desc, nullptr, &r.diagnostic_staging), "Create preview diagnostic staging buffer");
+    }
+    r.draw(false); r.context->CopyResource(r.diagnostic_staging.Get(), buffer.Get());
+    D3D11_MAPPED_SUBRESOURCE mapped{}; check(r.context->Map(r.diagnostic_staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Map preview diagnostic buffer");
+    for (int y = 0; y < r.height; ++y) std::memcpy(bgra + static_cast<size_t>(y) * r.width * 4, static_cast<const uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch, static_cast<size_t>(r.width) * 4);
+    r.context->Unmap(r.diagnostic_staging.Get(), 0); check(r.swapchain->Present(0, 0), "Present preview after diagnostic readback"); return 0;
+}); }
 }

@@ -42,6 +42,8 @@ OR_API void or_decoder_close(void* decoder);
 OR_API int or_renderer_create(void* hwnd, int width, int height, void** renderer);
 OR_API int or_renderer_present(void* renderer, const uint8_t* bgra, int width, int height, int stride);
 OR_API int or_renderer_resize(void* renderer, int width, int height);
+/* Re-present the retained frame after WM_PAINT/exposure without another upload. */
+OR_API int or_renderer_redraw(void* renderer);
 OR_API int or_renderer_is_hardware(void* renderer);
 OR_API void or_renderer_close(void* renderer);
 /* Fixed-size offscreen D3D11 compositor. begin clears opaque black; layers are

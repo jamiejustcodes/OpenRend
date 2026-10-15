@@ -10,6 +10,7 @@
 #include <string>
 
 struct DecoderHandle { void* value{}; ~DecoderHandle() { or_decoder_close(value); } };
+extern "C" __declspec(dllimport) int or_renderer_test_readback(void*, uint8_t*, int);
 TEST(Media, ReportsRealStreamMetadata) {
     static_assert(sizeof(or_metadata) == 48);
     or_metadata metadata{}; ASSERT_EQ(0, or_probe(OR_TEST_MEDIA, &metadata)) << or_last_error();
@@ -127,6 +128,42 @@ TEST(Preview, CreatesD3DDevicePresentsAndResizes) {
     EXPECT_EQ(0, or_renderer_present(renderer, pixels.data(), 160, 90, 640)) << or_last_error();
     EXPECT_TRUE(or_renderer_is_hardware(renderer) == 0 || or_renderer_is_hardware(renderer) == 1);
     or_renderer_close(renderer); DestroyWindow(hwnd);
+}
+TEST(Preview, GpuReadbackPreservesTopDownQuadrantsAcrossLetterboxAndResize) {
+    HWND hwnd = CreateWindowExW(0, L"STATIC", L"OpenRend preview orientation", WS_POPUP, 0, 0, 16, 16, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(nullptr, hwnd); void* renderer{}; ASSERT_EQ(0, or_renderer_create(hwnd, 8, 8, &renderer)) << or_last_error();
+    std::vector<uint8_t> pixels(6 * 4 * 4, 173);
+    for (int y = 0; y < 4; ++y) for (int x = 0; x < 4; ++x) {
+        auto* p = pixels.data() + y * 24 + x * 4;
+        p[0] = y >= 2 ? 255 : 0; p[1] = x >= 2 ? 255 : 0; p[2] = y < 2 ? 255 : 0; p[3] = 255;
+    }
+    ASSERT_EQ(0, or_renderer_present(renderer, pixels.data(), 4, 4, 24)) << or_last_error();
+    auto verify = [&](int width, int height, int top, int image_height) {
+        std::vector<uint8_t> actual(width * height * 4);
+        ASSERT_EQ(0, or_renderer_test_readback(renderer, actual.data(), static_cast<int>(actual.size()))) << or_last_error();
+        auto pixel = [&](int x, int y, int blue, int green, int red) { const int p = (y * width + x) * 4; EXPECT_EQ(blue, actual[p]); EXPECT_EQ(green, actual[p + 1]); EXPECT_EQ(red, actual[p + 2]); EXPECT_EQ(255, actual[p + 3]); };
+        pixel(0, top, 0, 0, 255); pixel(width - 1, top, 0, 255, 255);
+        pixel(0, top + image_height - 1, 255, 0, 0); pixel(width - 1, top + image_height - 1, 255, 255, 0);
+        if (top) { const int p = 0; EXPECT_LT(actual[p], 10); EXPECT_LT(actual[p + 1], 10); EXPECT_LT(actual[p + 2], 10); }
+    };
+    verify(8, 8, 0, 8);
+    ASSERT_EQ(0, or_renderer_resize(renderer, 8, 16)) << or_last_error(); verify(8, 16, 4, 8);
+    ASSERT_EQ(0, or_renderer_resize(renderer, 16, 16)) << or_last_error(); verify(16, 16, 0, 16);
+    ASSERT_EQ(0, or_renderer_redraw(renderer)) << or_last_error(); verify(16, 16, 0, 16);
+    EXPECT_EQ(-1, or_renderer_redraw(nullptr));
+    or_renderer_close(renderer); DestroyWindow(hwnd);
+}
+TEST(Preview, WarpFlipSwapchainSupportsRedrawResizeAndReadback) {
+    SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", L"1");
+    HWND hwnd = CreateWindowExW(0, L"STATIC", L"OpenRend WARP preview", WS_POPUP, 0, 0, 16, 16, nullptr, nullptr, GetModuleHandleW(nullptr), nullptr);
+    ASSERT_NE(nullptr, hwnd); void* renderer{}; ASSERT_EQ(0, or_renderer_create(hwnd, 8, 8, &renderer)) << or_last_error(); EXPECT_EQ(0, or_renderer_is_hardware(renderer));
+    std::vector<uint8_t> pixels(4 * 4 * 4), output(8 * 16 * 4);
+    for (size_t i = 0; i < pixels.size(); i += 4) { pixels[i + 1] = 255; pixels[i + 3] = 255; }
+    ASSERT_EQ(0, or_renderer_present(renderer, pixels.data(), 4, 4, 16)) << or_last_error();
+    ASSERT_EQ(0, or_renderer_resize(renderer, 8, 16)) << or_last_error(); ASSERT_EQ(0, or_renderer_redraw(renderer)) << or_last_error();
+    ASSERT_EQ(0, or_renderer_test_readback(renderer, output.data(), static_cast<int>(output.size()))) << or_last_error();
+    EXPECT_EQ(255, output[(8 * 8 + 4) * 4 + 1]); EXPECT_LT(output[0], 10); EXPECT_LT(output[1], 10); EXPECT_EQ(255, output[3]);
+    or_renderer_close(renderer); DestroyWindow(hwnd); SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", nullptr);
 }
 struct CompositorHandle { void* value{}; ~CompositorHandle() { or_compositor_close(value); } };
 TEST(Compositor, BlendsOrderedLayersReadsOpaquePixelsAndClearsGaps) {
