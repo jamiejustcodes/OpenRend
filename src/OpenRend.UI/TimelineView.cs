@@ -9,6 +9,7 @@ using OpenRend.Core;
 namespace OpenRend.UI;
 
 public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode);
+public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
 
 public sealed class TimelineView : FrameworkElement
 {
@@ -19,6 +20,7 @@ public sealed class TimelineView : FrameworkElement
         set
         {
             project = value ?? throw new ArgumentNullException(nameof(value));
+            if (levelTrack is { } levelId && project.Tracks.All(t => t.Id != levelId)) CancelTrackLevelInput();
             ActiveTrackIndex = Math.Clamp(ActiveTrackIndex, 0, Math.Max(0, project.Tracks.Count - 1));
             (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
             InvalidateVisual();
@@ -29,17 +31,18 @@ public sealed class TimelineView : FrameworkElement
     public HashSet<Guid> Selection { get; } = [];
     public Dictionary<Guid, float[]> Waveforms { get; } = [];
     public Dictionary<Guid, ImageSource> Thumbnails { get; } = [];
-    public double PixelsPerSecond { get; set; } = 70;
+    public double PixelsPerSecond { get; set; } = 13.4;
     public bool Snapping { get; set; } = true;
     public double Offset { get; set; }
     public double VerticalOffset { get; set; }
-    public const double HeaderWidth = 250;
-    public const double RulerHeight = 32;
-    public const double TrackHeight = 88;
+    public const double HeaderWidth = 256;
+    public const double RulerHeight = 46;
+    public const double TrackHeight = 69;
     public event Action<long>? SeekRequested;
     public event Action? SelectionChanged;
     public event Action<ClipGesture>? EditRequested;
     public event Action<Guid, string>? TrackAction;
+    public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
@@ -50,8 +53,20 @@ public sealed class TimelineView : FrameworkElement
     private long delta;
     private int destination;
     private bool seeking;
+    private Guid? levelTrack;
+    private string? levelKind;
+    private double pendingLevel;
+    private bool adjustingLevel;
     private Guid? activeClipId;
     internal Guid? ActiveClipId => activeClipId;
+    internal bool IsTrackLevelFocused(Guid trackId, string level) => IsKeyboardFocusWithin && levelTrack == trackId && levelKind == level;
+    public void CancelTrackLevelInput()
+    {
+        var capturedLevel = adjustingLevel;
+        adjustingLevel = false; levelTrack = null; levelKind = null;
+        if (capturedLevel) ReleaseMouseCapture();
+        InvalidateVisual();
+    }
     private static readonly Brush BackgroundBrush = Brush("#1E1E1E");
     private static readonly Typeface Face = new("Segoe UI");
 
@@ -85,6 +100,16 @@ public sealed class TimelineView : FrameworkElement
     {
         if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) return false;
         if (Project.Tracks.Count == 0) return false;
+        if (levelTrack is { } levelId && levelKind is { } level && key is Key.Left or Key.Right or Key.Home or Key.End)
+        {
+            if (Project.Tracks.Single(t => t.Id == levelId).IsLocked) return true;
+            var current = ReadTrackLevel(levelId, level);
+            var min = level == "Pan" ? -1 : 0; var max = level == "Gain" ? Math.Max(4, current) : 1;
+            var value = key switch { Key.Home => min, Key.End => max, _ => current + (key == Key.Left ? -.01 : .01) };
+            SetTrackLevel(levelId, level, Math.Clamp(value, min, max));
+            return true;
+        }
+        if (key == Key.Escape) { CancelTrackLevelInput(); return true; }
         if (key is Key.Up or Key.Down)
         {
             ActivateTrack(Math.Clamp(ActiveTrackIndex + (key == Key.Down ? 1 : -1), 0, Project.Tracks.Count - 1));
@@ -129,6 +154,7 @@ public sealed class TimelineView : FrameworkElement
     {
         if (index < 0 || index >= Project.Tracks.Count) return;
         ActiveTrackIndex = index;
+        if (levelTrack != Project.Tracks[index].Id) { levelTrack = null; levelKind = null; }
         var top = RulerHeight + index * TrackHeight;
         if (top - VerticalOffset < RulerHeight) VerticalOffset = index * TrackHeight;
         else if (ActualHeight > RulerHeight && top + TrackHeight - VerticalOffset > ActualHeight)
@@ -143,6 +169,7 @@ public sealed class TimelineView : FrameworkElement
         if (index < 0) throw new ElementNotAvailableException();
         var before = Selection.ToHashSet();
         if (!add) Selection.Clear();
+        levelTrack = null; levelKind = null;
         Selection.Add(clipId);
         activeClipId = clipId;
         ActivateTrack(index);
@@ -179,15 +206,55 @@ public sealed class TimelineView : FrameworkElement
     internal Rect ClipBounds(Guid trackId, TimelineClip clip)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        return new Rect(X(clip.StartFrame), RulerHeight + index * TrackHeight - VerticalOffset + 4,
-            Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), TrackHeight - 8);
+        return new Rect(X(clip.StartFrame), RulerHeight + index * TrackHeight - VerticalOffset + 1,
+            Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), TrackHeight - 2);
     }
 
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var x = action switch { "Mute" => 169, "Solo" => 194, _ => 219 };
-        return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 40 : 8), 21, 23);
+        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, _ => 230 };
+        return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 47 : 4), 21, action == "Visible" ? 18 : 20);
+    }
+
+    internal Rect TrackLevelBounds(Guid trackId, string level)
+    {
+        var index = Project.Tracks.FindIndex(t => t.Id == trackId);
+        var y = RulerHeight + index * TrackHeight - VerticalOffset;
+        return level switch { "Opacity" => new Rect(116, y + 25, 124, 20), "Gain" => new Rect(84, y + 25, 48, 20), _ => new Rect(137, y + 46, 43, 18) };
+    }
+    internal double ReadTrackLevel(Guid trackId, string level)
+    {
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
+        if (adjustingLevel && levelTrack == trackId && levelKind == level) return pendingLevel;
+        return level switch { "Gain" => track.Gain, "Opacity" => track.Opacity, _ => track.Pan };
+    }
+    internal void FocusTrackLevel(Guid trackId, string level)
+    {
+        var index = Project.Tracks.FindIndex(t => t.Id == trackId);
+        if (index < 0) throw new ElementNotAvailableException();
+        var changed = levelTrack != trackId || levelKind != level;
+        ActivateTrack(index); levelTrack = trackId; levelKind = level; Focus(); InvalidateVisual();
+        if (changed) (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.NotifyTrackLevelFocus(trackId, level);
+    }
+    internal void SetTrackLevel(Guid trackId, string level, double value)
+    {
+        FocusTrackLevel(trackId, level);
+        TrackLevelRequested?.Invoke(new(trackId, level, value));
+        InvalidateVisual();
+        (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
+    }
+    private static double LevelFraction(string level, double value) => level switch
+    {
+        "Gain" => value <= 0 ? 0 : Math.Clamp((20 * Math.Log10(value) + 60) / (60 + 20 * Math.Log10(4)), 0, 1),
+        "Pan" => (value + 1) / 2,
+        _ => value
+    };
+    private double LevelAt(double x)
+    {
+        var bounds = TrackLevelBounds(levelTrack!.Value, levelKind!);
+        var fraction = Math.Clamp((x - bounds.X - 4) / (bounds.Width - 8), 0, 1);
+        return levelKind switch { "Gain" => fraction == 0 ? 0 : Math.Pow(10, (-60 + (60 + 20 * Math.Log10(4)) * fraction) / 20), "Pan" => fraction * 2 - 1, _ => fraction };
     }
 
     internal Rect ToScreenBounds(Rect bounds, bool clipContent = false)
@@ -223,15 +290,15 @@ public sealed class TimelineView : FrameworkElement
         base.OnRender(dc);
         dc.DrawRectangle(BackgroundBrush, null, new Rect(RenderSize));
         var pen = new Pen(Brush("#383838"), 1);
-        var step = PixelsPerSecond > 130 ? 1 : PixelsPerSecond > 35 ? 5 : 15;
+        var step = PixelsPerSecond >= 130 ? 1 : PixelsPerSecond >= 50 ? 2 : PixelsPerSecond >= 25 ? 5 : PixelsPerSecond >= 10 ? 10 : 20;
         var first = Math.Max(0, (int)(Offset / PixelsPerSecond / step));
         for (var n = first; n * step * PixelsPerSecond - Offset < ActualWidth - HeaderWidth; n++)
         {
             var x = HeaderWidth + n * step * PixelsPerSecond - Offset;
-            dc.DrawLine(pen, new Point(x, RulerHeight), new Point(x, ActualHeight));
-            Text(dc, TimeSpan.FromSeconds(n * step).ToString(@"mm\:ss"), x + 3, 12, Brush("#B8B8B8"), 10);
+            dc.DrawLine(new Pen(Brush("#444444"), 1) { DashStyle = new DashStyle([2, 3], 0) }, new Point(x, RulerHeight), new Point(x, ActualHeight));
+            Text(dc, FormatTimecode(Project.FrameRate.Frames(n * step), Project.FrameRate), x + 3, 30, Brush("#B8B8B8"), 9);
             for (var minor = 1; minor < 5; minor++)
-                dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 26), new Point(x + minor * step * PixelsPerSecond / 5, 32));
+                dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
         }
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, RulerHeight, Math.Max(0, ActualWidth - HeaderWidth), Math.Max(0, ActualHeight - RulerHeight))));
         for (var i = 0; i < Project.Tracks.Count; i++)
@@ -251,22 +318,28 @@ public sealed class TimelineView : FrameworkElement
                     if (mode == "TrimLeft") { start += delta; duration -= delta; }
                     if (mode == "TrimRight") duration += delta;
                 }
-                var rect = new Rect(X(start), cy + 4, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), TrackHeight - 8);
+                var rect = new Rect(X(start), cy + 1, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), TrackHeight - 2);
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
                 var selected = Selection.Contains(clip.Id);
-                dc.DrawRectangle(Brush(track.IsMuted ? "#414141" : track.Kind == TrackKind.Video ? "#355D7B" : "#3B6456"),
-                    new Pen(selected ? Brush("#83C9FF") : Brush("#577384"), selected ? 2 : 1), rect);
+                dc.DrawRectangle(Brush(track.IsMuted ? "#414141" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
+                    new Pen(selected ? Brush("#E4DF8F") : Brush("#5E737C"), 1), rect);
                 dc.PushClip(new RectangleGeometry(rect));
-                dc.DrawRectangle(Brush(selected ? "#477CA2" : "#304D62"), null, new Rect(rect.X, rect.Y, rect.Width, 20));
-                Text(dc, clip.GroupId.HasValue ? "↔ " + clip.Name : clip.Name, rect.X + 5, rect.Y + 2, maxWidth: rect.Width - 10);
+                dc.DrawRectangle(Brush(selected ? "#4D5356" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
+                Text(dc, clip.Name, rect.X + 3, rect.Y + 1, size: 11, maxWidth: rect.Width - 6);
                 if (rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
-                    dc.DrawImage(image, new Rect(rect.X + 2, rect.Y + 22, Math.Min(88, rect.Width - 4), 49));
+                {
+                    var height = TrackHeight - 22;
+                    var width = Math.Max(1, height * image.Width / image.Height);
+                    var firstImage = Math.Max(0, Math.Floor((HeaderWidth - rect.X) / width));
+                    for (var x = rect.X + firstImage * width; x < Math.Min(rect.Right, ActualWidth); x += width)
+                        dc.DrawImage(image, new Rect(x, rect.Y + 19, width, height));
+                }
                 if (track.Kind == TrackKind.Audio && Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
                 {
                     var media = Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
                     if (media is not null)
                     {
-                        var mid = rect.Y + 49;
+                        var mid = rect.Y + 42;
                         var wp = new Pen(Brush("#A5D3B5"), 1);
                         for (var px = 0.0; px < Math.Min(rect.Width, ActualWidth); px += 2)
                         {
@@ -285,33 +358,49 @@ public sealed class TimelineView : FrameworkElement
         }
         dc.Pop();
         dc.DrawRectangle(Brush("#262626"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
-        Text(dc, FormatTimecode(Position, Project.FrameRate), 116, 5, size: 20, maxWidth: 130);
+        Text(dc, FormatTimecode(Position, Project.FrameRate), 126, 12, size: 20, maxWidth: 130);
         dc.PushClip(new RectangleGeometry(new Rect(0, RulerHeight, HeaderWidth, Math.Max(0, ActualHeight - RulerHeight))));
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var t = Project.Tracks[i]; var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            dc.DrawRectangle(Brush(t.IsLocked ? "#292929" : "#303030"), new Pen(Brush("#181818"), 1), new Rect(3, y + 2, HeaderWidth - 7, TrackHeight - 3));
+            dc.DrawRectangle(Brush(t.IsLocked ? "#242424" : "#2B2B2B"), new Pen(Brush("#181818"), 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
+            dc.DrawRectangle(Brush(t.Kind == TrackKind.Video ? "#448DBD" : "#65BECE"), null, new Rect(1, y + 1, 23, TrackHeight - 2));
             if (IsKeyboardFocusWithin && i == ActiveTrackIndex)
                 dc.DrawRectangle(null, new Pen(Brush("#83C9FF"), 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
-            Text(dc, $"{i + 1}   {t.Name}", 12, y + 10, maxWidth: 155);
-            foreach (var (label, on, x) in new[] { ("M", t.IsMuted, 169), ("S", t.IsSolo, 194), ("L", t.IsLocked, 219) })
+            Text(dc, "···", 4, y + 1, size: 12);
+            Text(dc, $"{i + 1}", 5, y + 24, size: 11);
+            Text(dc, t.Name, 30, y + 5, size: 11, maxWidth: 145);
+            foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
             {
-                dc.DrawRectangle(Brush(on ? "#438AC8" : "#404040"), null, new Rect(x, y + 8, 21, 23));
-                Text(dc, label, x + 5, y + 11);
+                var bounds = TrackButtonBounds(t.Id, action);
+                if (on) dc.DrawRectangle(Brush("#438AC8"), null, bounds);
+                Text(dc, label, bounds.X + 5, bounds.Y + 1);
             }
-            Text(dc, t.Kind == TrackKind.Video ? "Video   •   Composite" : "Audio   •   Stereo", 14, y + 44, Brush("#B8B8B8"), 11);
+            var gain = ReadTrackLevel(t.Id, "Gain"); var opacity = ReadTrackLevel(t.Id, "Opacity"); var pan = ReadTrackLevel(t.Id, "Pan");
+            Text(dc, t.Kind == TrackKind.Video ? $"Level: {opacity * 100:0.0} %" : gain > 0 ? $"{20 * Math.Log10(gain):0.0} dB" : "−∞ dB", 31, y + 28, Brush("#B8B8B8"), 11, t.Kind == TrackKind.Video ? 83 : 52);
+            if (t.Kind == TrackKind.Audio) Text(dc, Math.Abs(pan) < .005 ? "Center" : $"{Math.Abs(pan) * 100:0} % {(pan < 0 ? "L" : "R")}", 137, y + 28, Brush("#B8B8B8"), 11, 50);
+            foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
+            {
+                var bounds = TrackLevelBounds(t.Id, level); var center = bounds.Y + bounds.Height / 2;
+                dc.DrawLine(new Pen(Brush("#141414"), 2), new Point(bounds.Left + 4, center), new Point(bounds.Right - 4, center));
+                var thumb = bounds.Left + 4 + LevelFraction(level, ReadTrackLevel(t.Id, level)) * (bounds.Width - 8);
+                dc.DrawRectangle(Brush(t.IsLocked ? "#666666" : "#C4C4C4"), null, new Rect(thumb - 5, center - 5, 10, 10));
+                dc.DrawLine(new Pen(Brush("#555555"), 1), new Point(thumb, center - 3), new Point(thumb, center + 3));
+                if (IsKeyboardFocusWithin && levelTrack == t.Id && levelKind == level)
+                    dc.DrawRectangle(null, new Pen(Brush("#91C9EF"), 1), bounds);
+            }
             if (t.Kind == TrackKind.Video)
             {
                 dc.DrawRectangle(Brush(t.IsVisible ? "#438AC8" : "#404040"), null, TrackButtonBounds(t.Id, "Visible"));
-                Text(dc, "V", 224, y + 43);
+                Text(dc, "V", 235, y + 47);
             }
         }
         dc.Pop();
         var playX = X(Position);
         if (playX >= HeaderWidth && playX < ActualWidth)
         {
-            dc.DrawLine(new Pen(Brush("#F2D46A"), 1), new Point(playX, 28), new Point(playX, ActualHeight));
-            dc.DrawGeometry(Brush("#F2D46A"), null, Geometry.Parse($"M {playX.ToString(CultureInfo.InvariantCulture)},27 l -5,-8 10,0 Z"));
+            dc.DrawLine(new Pen(Brush("#F0F0F0"), 1), new Point(playX, 32), new Point(playX, ActualHeight));
+            dc.DrawGeometry(Brush("#D8B85D"), null, Geometry.Parse($"M {playX.ToString(CultureInfo.InvariantCulture)},32 l -4,-6 8,0 Z"));
         }
         if (Project.Tracks.Count == 0) Text(dc, "Import media, then add it to the timeline", HeaderWidth + 30, RulerHeight + 35, Brush("#B8B8B8"));
     }
@@ -319,8 +408,16 @@ public sealed class TimelineView : FrameworkElement
     public static string FormatTimecode(long frame, Rational rate)
     {
         var fps = Math.Max(1, (int)Math.Round(rate.Numerator / (double)rate.Denominator));
+        var drop = rate.Denominator == 1001 && rate.Numerator is 30000 or 60000 ? fps / 15 : 0;
+        if (drop > 0)
+        {
+            var tenMinutes = fps * 600 - drop * 9;
+            var remainder = frame % tenMinutes;
+            // Every tenth minute keeps its frame numbers; the other nine skip 2 or 4.
+            frame += drop * 9 * (frame / tenMinutes) + (remainder >= drop ? drop * ((remainder - drop) / (fps * 60 - drop)) : 0);
+        }
         var total = frame / fps;
-        return $"{total / 3600:00}:{total / 60 % 60:00}:{total % 60:00}:{frame % fps:00}";
+        return $"{total / 3600:00}:{total / 60 % 60:00}:{total % 60:00}{(drop > 0 ? ';' : ':')}{frame % fps:00}";
     }
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -331,6 +428,14 @@ public sealed class TimelineView : FrameworkElement
             if (track is not null)
             {
                 ActivateTrack(Project.Tracks.IndexOf(track));
+                foreach (var level in track.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
+                {
+                    if (!TrackLevelBounds(track.Id, level).Contains(origin)) continue;
+                    FocusTrackLevel(track.Id, level);
+                    if (track.IsLocked) return;
+                    if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
+                    adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
+                }
                 foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible" })
                     if ((action != "Visible" || track.Kind == TrackKind.Video) && TrackButtonBounds(track.Id, action).Contains(origin))
                     { InvokeTrackAction(track.Id, action); break; }
@@ -351,6 +456,7 @@ public sealed class TimelineView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e); var p = e.GetPosition(this);
+        if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
         if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
         if (dragging is null) return;
         delta = Project.FrameRate.Frames((p.X - origin.X) / PixelsPerSecond);
@@ -378,7 +484,14 @@ public sealed class TimelineView : FrameworkElement
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
-        base.OnMouseLeftButtonUp(e); ReleaseMouseCapture(); seeking = false;
+        var commitLevel = adjustingLevel;
+        adjustingLevel = false;
+        base.OnMouseLeftButtonUp(e); seeking = false; ReleaseMouseCapture();
+        if (commitLevel)
+        {
+            SetTrackLevel(levelTrack!.Value, levelKind!, pendingLevel);
+            return;
+        }
         var clip = dragging; dragging = null;
         if (clip is not null && (delta != 0 || mode == "Move" && Project.Tracks[destination].Id != dragTrack?.Id))
         {
@@ -387,6 +500,13 @@ public sealed class TimelineView : FrameworkElement
                 mode == "Move" ? clip.StartFrame + delta : clip.StartFrame + left,
                 clip.SourceInFrame + left, clip.DurationFrames + (mode == "TrimRight" ? delta : -left), mode));
         }
+        InvalidateVisual();
+    }
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        adjustingLevel = false; seeking = false;
+        if (Mouse.LeftButton == MouseButtonState.Pressed) dragging = null;
         InvalidateVisual();
     }
     protected override void OnMouseWheel(MouseWheelEventArgs e)

@@ -36,6 +36,11 @@ public sealed class TimelineAutomationPeer(TimelineView owner) : FrameworkElemen
     }
 
     internal IRawElementProviderSimple Provider => ProviderFromPeer(this);
+    internal void NotifyTrackLevelFocus(Guid trackId, string level)
+    {
+        _ = GetChildrenCore();
+        tracks[trackId].NotifyLevelFocus(level);
+    }
 
     internal void RefreshSelection(HashSet<Guid> previous)
     {
@@ -90,6 +95,7 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
 {
     private readonly Dictionary<Guid, TimelineClipAutomationPeer> clips = [];
     private readonly Dictionary<string, TimelineTrackButtonAutomationPeer> buttons = [];
+    private readonly Dictionary<string, TimelineTrackLevelAutomationPeer> levels = [];
     internal TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == id) ?? throw new ElementNotAvailableException();
     protected override string GetAutomationIdCore() => $"Track_{id:N}";
     protected override string GetClassNameCore() => "TimelineTrack";
@@ -112,6 +118,11 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
             if (!buttons.TryGetValue(action, out var button)) buttons.Add(action, button = new TimelineTrackButtonAutomationPeer(Timeline, id, action));
             children.Add(button);
         }
+        foreach (var level in Track.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
+        {
+            if (!levels.TryGetValue(level, out var slider)) levels.Add(level, slider = new TimelineTrackLevelAutomationPeer(Timeline, id, level));
+            children.Add(slider);
+        }
         children.AddRange(ClipPeers());
         return children;
     }
@@ -131,7 +142,54 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
     {
         foreach (var clipId in clips.Keys.Where(clipId => !Track.Clips.Any(c => c.Id == clipId)).ToArray()) clips.Remove(clipId);
         foreach (var button in buttons.Values) button.RefreshState();
+        foreach (var slider in levels.Values) slider.RefreshState();
         InvalidatePeer();
+    }
+    internal void NotifyLevelFocus(string level)
+    {
+        _ = GetChildrenCore();
+        levels[level].NotifyFocus();
+    }
+}
+
+internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer timeline, Guid trackId, string level) : TimelineChildAutomationPeer(timeline), IRangeValueProvider
+{
+    private double previous = timeline.View.ReadTrackLevel(trackId, level);
+    private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
+    public bool IsReadOnly => Track.IsLocked || !View.IsEnabled;
+    public double Minimum => level == "Pan" ? -1 : 0;
+    public double Maximum => level == "Gain" ? Math.Max(4, Value) : 1;
+    public double SmallChange => .01;
+    public double LargeChange => .1;
+    public double Value => View.ReadTrackLevel(trackId, level);
+    protected override string GetAutomationIdCore() => $"Track_{trackId:N}_{level}";
+    protected override string GetClassNameCore() => "TimelineTrackLevel";
+    protected override string GetNameCore() => $"{level} {Track.Name}";
+    protected override string GetHelpTextCore() => "Drag to adjust. Double-click to reset. Arrow keys adjust a focused track level.";
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
+    protected override AutomationOrientation GetOrientationCore() => AutomationOrientation.Horizontal;
+    protected override Rect GetBoundingRectangleCore() => View.ToScreenBounds(View.TrackLevelBounds(trackId, level));
+    protected override bool IsEnabledCore() => View.IsEnabled && !Track.IsLocked;
+    protected override bool HasKeyboardFocusCore() => View.IsTrackLevelFocused(trackId, level);
+    protected override void SetFocusCore() { EnsureEnabled(); View.FocusTrackLevel(trackId, level); }
+    public override object? GetPattern(PatternInterface patternInterface) => patternInterface == PatternInterface.RangeValue ? this : null;
+    public void SetValue(double value)
+    {
+        EnsureEnabled();
+        if (IsReadOnly) throw new ElementNotEnabledException();
+        if (!double.IsFinite(value) || value < Minimum || value > Maximum) throw new ArgumentOutOfRangeException(nameof(value));
+        View.SetTrackLevel(trackId, level, value);
+    }
+    internal void RefreshState()
+    {
+        var current = Value;
+        if (current != previous) RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty, previous, current);
+        previous = current;
+        InvalidatePeer();
+    }
+    internal void NotifyFocus()
+    {
+        if (ListenerExists(AutomationEvents.AutomationFocusChanged)) RaiseAutomationEvent(AutomationEvents.AutomationFocusChanged);
     }
 }
 

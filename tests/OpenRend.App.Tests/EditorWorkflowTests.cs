@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text.Json;
+using System.Runtime.InteropServices;
 using FlaUI.Core;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
@@ -59,6 +60,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 VerifyLoadedWorkspace(window);
                 await VerifyTimelineProvidersAsync(window, projectPath);
                 Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
+                Assert.True(Find(window, "CopyButton").IsEnabled);
                 for (var i = 0; i < 30; i++) Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);
                 WaitFor(() => Find(window, "Timecode").Name == "00:00:01:00", "Frame stepping did not reach frame 30.");
                 Chord(window, VirtualKeyShort.KEY_S);
@@ -130,6 +132,21 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             SaveButton(window).Invoke();
             await WaitForSavedStateAsync(projectPath, action, before == ToggleState.On);
         }
+        var opacity = Assert.Single(timeline.FindAllDescendants(c => c.ByClassName("TimelineTrackLevel")));
+        Assert.True(opacity.Patterns.RangeValue.IsSupported);
+        opacity.Patterns.RangeValue.Pattern.SetValue(.25);
+        WaitFor(() => opacity.Patterns.RangeValue.Pattern.Value.Value == .25, "Track opacity did not change.");
+        SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Opacity == .25, "Track opacity was not saved.");
+        Find(window, "UndoButton").AsButton().Invoke();
+        WaitFor(() => opacity.Patterns.RangeValue.Pattern.Value.Value == 1, "Track opacity undo did not restore the slider.");
+        SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Opacity == 1, "Track opacity undo was not saved.");
+        opacity.Focus();
+        WaitFor(() => opacity.Properties.HasKeyboardFocus.Value, "The track slider did not report keyboard focus.");
+        Chord(window, VirtualKeyShort.ESCAPE);
+        Chord(window, VirtualKeyShort.LEFT);
+        Assert.Equal(1, opacity.Patterns.RangeValue.Pattern.Value.Value);
     }
 
     private static async Task WaitForSavedStateAsync(string path, string action, bool expected)
@@ -197,9 +214,20 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             var library = Find(window, "MediaList").AsListBox();
             WaitFor(() => library.Items.Length == 1, "The project media library is empty.");
             Assert.Contains("fixture.mp4", library.Items[0].FindAllDescendants().Select(e => e.Name));
-            WaitFor(() => Find(window, "PreviewInfo").Name.Contains("Direct3D 11"), "The native preview did not initialize.");
+            WaitFor(() => Find(window, "PreviewInfo").Properties.HelpText.ValueOrDefault?.Contains("Direct3D 11") == true, "The native preview did not initialize.");
             var nativeChildren = window.FindAllDescendants(c => c.ByClassName("OpenRend.Preview"));
             Assert.Contains(nativeChildren, e => e.Properties.NativeWindowHandle.ValueOrDefault != 0 && e.BoundingRectangle.Width > 100 && e.BoundingRectangle.Height > 50);
+            var monitor = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
+            Assert.True(GetMonitorInfo(MonitorFromWindow(window.Properties.NativeWindowHandle.Value, 2), ref monitor));
+            var bounds = window.BoundingRectangle;
+            Assert.True(bounds.Top >= monitor.Work.Top - 1 && bounds.Left >= monitor.Work.Left - 1
+                && bounds.Right <= monitor.Work.Right + 1 && bounds.Bottom <= monitor.Work.Bottom + 1, "The maximized workspace extends outside the monitor work area.");
+            foreach (var (filter, expected) in new[] { ("Video", 1), ("Audio", 1), ("Missing Media", 0), ("All Media", 1) })
+            {
+                var item = Assert.Single(Find(window, "MediaTree").FindAllDescendants(c => c.ByControlType(ControlType.TreeItem).And(c.ByName(filter))));
+                item.Patterns.SelectionItem.Pattern.Select();
+                WaitFor(() => library.Items.Length == expected, "Media filter did not update: " + filter);
+            }
             var split = window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Split")));
             Assert.NotNull(split);
             Assert.True(split.IsEnabled);
@@ -218,6 +246,15 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         Assert.NotNull(element);
         return element;
     }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+    [DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
 
     private static Button SaveButton(Window window) => window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Save")))?.AsButton()
         ?? throw new Xunit.Sdk.XunitException("The Save button was not exposed.");

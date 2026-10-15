@@ -13,6 +13,7 @@ public sealed class ProjectSettingsWindow : Window
     public string ProjectName { get; private set; } = "";
     public ProjectSettingsWindow(ProjectDocument project)
     {
+        Style = (Style)FindResource(typeof(Window));
         Title = "Project settings"; Width = 470; Height = 350; ResizeMode = ResizeMode.NoResize; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var grid = new Grid { Margin = new Thickness(20) };
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(160) }); grid.ColumnDefinitions.Add(new ColumnDefinition());

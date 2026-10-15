@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -25,6 +26,10 @@ public partial class MainWindow : Window
     private bool previewRunning;
     private bool previewRequested;
     private bool playbackStarting;
+    private bool safeAreas;
+    private bool masterMuted;
+    private string mediaFilter = "All";
+    private int previewWidth, previewHeight;
     private long playbackGeneration;
     private bool initialized;
     private bool allowClose;
@@ -36,10 +41,19 @@ public partial class MainWindow : Window
     {
         vm = viewModel;
         InitializeComponent();
+        SizeChanged += (_, _) =>
+        {
+            var available = Math.Max(320, ActualWidth - 420);
+            if (PreviewWidth.Width.Value > available) PreviewWidth.Width = new GridLength(available);
+            var height = Math.Max(230, ActualHeight - 261);
+            if (WorkspaceHeight.Height.Value > height) WorkspaceHeight.Height = new GridLength(height);
+        };
         SourceInitialized += (_, _) =>
         {
             var enabled = 1;
-            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref enabled, sizeof(int));
+            var handle = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+            System.Windows.Interop.HwndSource.FromHwnd(handle)?.AddHook(WindowMessage);
+            DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int));
         };
         DataContext = vm;
         Timeline.SeekRequested += frame => { Pause(); vm.Position = frame; UpdatePosition(); RequestPreview(); };
@@ -47,8 +61,14 @@ public partial class MainWindow : Window
         {
             vm.Selection.Clear(); vm.Selection.UnionWith(vm.Editor.ExpandSelection(Timeline.Selection, vm.IgnoreGroups));
             Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector();
+            CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0;
         };
         Timeline.EditRequested += gesture => Guard(() => ApplyGesture(gesture));
+        Timeline.TrackLevelRequested += gesture => Guard(() =>
+        {
+            Pause(); vm.Editor.SetTrackLevels(gesture.TrackId, gain: gesture.Level == "Gain" ? gesture.Value : null,
+                opacity: gesture.Level == "Opacity" ? gesture.Value : null, pan: gesture.Level == "Pan" ? gesture.Value : null);
+        });
         Timeline.TrackAction += (id, action) => Guard(() =>
         {
             Pause(); var track = vm.Project.Tracks.Single(t => t.Id == id);
@@ -68,9 +88,10 @@ public partial class MainWindow : Window
             {
                 await playback.CheckAsync();
                 vm.Position = playback.CurrentFrame; UpdatePosition();
-                var meterHeight = Math.Max(0, Workspace.ActualHeight - 60);
-                LeftMeter.Height = meterHeight * Math.Clamp(playback.PeakLeft, 0, 1);
-                RightMeter.Height = meterHeight * Math.Clamp(playback.PeakRight, 0, 1);
+                var meterHeight = Math.Max(0, MeterArea.ActualHeight);
+                static double MeterPosition(double peak) => peak <= .001 ? 0 : Math.Clamp((20 * Math.Log10(peak) + 60) / 60, 0, 1);
+                LeftMeter.Height = meterHeight * MeterPosition(playback.PeakLeft);
+                RightMeter.Height = meterHeight * MeterPosition(playback.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
                 if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames) Pause();
             }
@@ -110,15 +131,43 @@ public partial class MainWindow : Window
         Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector();
         UndoMenu.IsEnabled = UndoButton.IsEnabled = vm.Editor.CanUndo;
         RedoMenu.IsEnabled = RedoButton.IsEnabled = vm.Editor.CanRedo;
+        CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0;
+        PasteButton.IsEnabled = vm.CanPaste;
         RenderButton.IsEnabled = vm.Project.DurationFrames > 0 && !vm.Busy;
         EmptyLibrary.Visibility = vm.Library.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
         MediaCount.Text = $"{vm.Library.Count} source files";
+        UpdateMediaFilter();
         TimelineScroll.Maximum = Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames) * Timeline.PixelsPerSecond);
+        TimelineScroll.ViewportSize = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
         PreviewInfo.Text = PreviewDescription();
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
         RequestPreview();
     }
-    private string PreviewDescription() => $"Project: {vm.Project.Width} × {vm.Project.Height}, {vm.Project.FrameRate.Value:0.###}p   |   Composite: {(vm.Renderer.IsHardwareCompositing ? "GPU" : vm.Renderer.IsD3DCompositing ? "WARP" : "CPU")}   |   Display: {(Preview.IsHardware ? "Direct3D 11 hardware" : "Direct3D 11 software")}";
+    private string PreviewDescription()
+    {
+        var backend = $"Composite: {(vm.Renderer.IsHardwareCompositing ? "GPU" : vm.Renderer.IsD3DCompositing ? "WARP" : "CPU")}; display: Direct3D 11 {(Preview.IsHardware ? "hardware" : "software")}";
+        PreviewInfo.ToolTip = backend;
+        System.Windows.Automation.AutomationProperties.SetHelpText(PreviewInfo, Preview.IsReady ? backend : "Preview is starting.");
+        return $"Project: {vm.Project.Width}×{vm.Project.Height}, {vm.Project.FrameRate.Value:0.000}p     Preview: {previewWidth}×{previewHeight}     Frame: {vm.Position}     Display: {Preview.ActualWidth:0}×{Preview.ActualHeight:0}";
+    }
+    private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+    {
+        mediaFilter = (e.NewValue as TreeViewItem)?.Tag as string ?? "All";
+        if (MediaList is not null) UpdateMediaFilter();
+    }
+    private void UpdateMediaFilter()
+    {
+        var view = CollectionViewSource.GetDefaultView(vm.Library);
+        view.Filter = item => item is MediaItem media && mediaFilter switch
+        {
+            "Video" => media.Asset.HasVideo,
+            "Audio" => media.Asset.HasAudio,
+            "Missing" => !File.Exists(media.Asset.Path),
+            _ => true
+        };
+        EmptyLibrary.Text = vm.Library.Count == 0 ? "Import video or audio\nCtrl+I or drop files here" : "No media matches this view";
+        EmptyLibrary.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+    }
     private void UpdatePosition()
     {
         Timeline.Position = vm.Position; Timeline.InvalidateVisual();
@@ -136,16 +185,17 @@ public partial class MainWindow : Window
             {
                 previewRequested = false;
                 var project = vm.Project.DeepClone(); var frame = vm.Position; var currentRevision = revision;
+                var zoom = PreviewZoom.SelectedIndex switch { 1 => 2.0, 2 => .5, _ => 1.0 }; var guides = safeAreas;
                 var (width, height) = PreviewQuality.SelectedIndex switch
                 {
                     0 => FitSize(project, 320),
                     2 => (project.Width, project.Height),
                     _ => FitSize(project, 640)
                 };
-                var pixels = await Task.Run(() => vm.Renderer.RenderFrame(project, frame, width, height));
+                var pixels = await Task.Run(() => PreviewDisplay.Apply(vm.Renderer.RenderFrame(project, frame, width, height), width, height, zoom, guides));
                 if (currentRevision == revision && frame == vm.Position)
                 {
-                    Preview.Present(pixels, width, height); lastPreview = frame; PreviewInfo.Text = PreviewDescription();
+                    Preview.Present(pixels, width, height); previewWidth = width; previewHeight = height; lastPreview = frame; PreviewInfo.Text = PreviewDescription();
                 }
                 else previewRequested = true;
             }
@@ -277,6 +327,11 @@ public partial class MainWindow : Window
         if (MediaList.SelectedItem is not MediaItem item) { vm.Status = "Select a source in Project Media."; return; }
         Pause(); vm.Place(item.Asset.Id);
     });
+    private void RemoveUnusedClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p =>
+    {
+        var used = p.Tracks.SelectMany(t => t.Clips).Select(c => c.MediaId).ToHashSet();
+        p.Media.RemoveAll(m => !used.Contains(m.Id));
+    }));
     private void MediaDoubleClick(object sender, MouseButtonEventArgs e) => PlaceSelectedClick(sender, e);
     private void MediaMouseMove(object sender, MouseEventArgs e)
     {
@@ -285,7 +340,7 @@ public partial class MainWindow : Window
     }
     private void MediaSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (MediaList.SelectedItem is MediaItem item) vm.Status = $"{item.Name}  •  {item.Details}";
+        if (MediaList.SelectedItem is MediaItem item) { MediaDetails.Text = item.Details; vm.Status = $"{item.Name}  •  {item.Details}"; }
     }
     private void BrowseFolderClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -297,7 +352,7 @@ public partial class MainWindow : Window
     });
     private async void ExplorerDoubleClick(object sender, MouseButtonEventArgs e) => await GuardAsync(async () =>
     {
-        if (ExplorerList.SelectedItem is FileInfo file) { await ImportPathsAsync([file.FullName]); ToolsTabs.SelectedIndex = 0; }
+        if (ExplorerList.SelectedItem is FileInfo file) { await ImportPathsAsync([file.FullName]); ToolsTabs.SelectedIndex = 1; }
     });
     private void ApplyGesture(ClipGesture gesture)
     {
@@ -373,14 +428,15 @@ public partial class MainWindow : Window
         if (vm.Project.DurationFrames == 0) return;
         if (vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
         var project = vm.Project.DeepClone(); var start = vm.Position;
-        var masterGain = MasterGain.Value;
+        var masterGain = masterMuted ? 0 : MasterGain.Value;
         var generation = ++playbackGeneration; playbackStarting = true;
         try
         {
             var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
             playback = session;
-            PlayButton.Content = "Ⅱ"; timer.Start(); vm.Status = "Playing timeline.";
+            PlayButton.Content = new Image { Source = (ImageSource)FindResource("Icon.Pause"), Width = 16, Height = 16 };
+            PlaybackRate.Text = "Rate: 1.00"; timer.Start(); vm.Status = "Playing timeline.";
         }
         finally { if (generation == playbackGeneration) playbackStarting = false; }
     });
@@ -392,21 +448,35 @@ public partial class MainWindow : Window
         {
             playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null; UpdatePosition();
         }
-        PlayButton.Content = "▶";
+        PlayButton.Content = new Image { Source = (ImageSource)FindResource("Icon.Play"), Width = 16, Height = 16 };
+        PlaybackRate.Text = "Rate: 0.00";
         LeftMeter.Height = RightMeter.Height = 0;
     }
     private void PauseClick(object sender, RoutedEventArgs e) => Pause();
+    private void PlayFromStartClick(object sender, RoutedEventArgs e) { StartClick(sender, e); PlayClick(sender, e); }
     private void StopClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
     private void StartClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
     private void EndClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = vm.Project.DurationFrames; UpdatePosition(); RequestPreview(); }
     private void PreviousClick(object sender, RoutedEventArgs e) { Pause(); vm.Position--; UpdatePosition(); RequestPreview(); }
     private void NextClick(object sender, RoutedEventArgs e) { Pause(); vm.Position++; UpdatePosition(); RequestPreview(); }
-    private void MasterGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (playback is not null) playback.MasterGain = e.NewValue; }
+    private void MasterGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
+    {
+        if (MasterLevel is not null) MasterLevel.Text = masterMuted ? "Muted" : e.NewValue > 0 ? $"{20 * Math.Log10(e.NewValue):0.0} dB" : "−∞ dB";
+        if (playback is not null) playback.MasterGain = masterMuted ? 0 : e.NewValue;
+    }
+    private void ResetMasterClick(object sender, RoutedEventArgs e) { masterMuted = false; MasterGain.Value = 1; MasterGainChanged(sender, new(0, MasterGain.Value)); }
+    private void MuteMasterClick(object sender, RoutedEventArgs e) { masterMuted = !masterMuted; MasterGainChanged(sender, new(MasterGain.Value, MasterGain.Value)); }
     private void UndoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Undo(); });
     private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
     private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
     private void DeleteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Delete(); });
-    private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); }
+    private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);
+    private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
+    private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
+    private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 2; UpdateInspector(); }
+    private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
+    private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
+    private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }
     private void LinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.LinkClips(vm.Selection); });
     private void UnlinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.UnlinkClips(vm.Selection); });
     private void IgnoreGroupsClick(object sender, RoutedEventArgs e) { vm.IgnoreGroups = IgnoreGroupsMenu.IsChecked; }
@@ -422,7 +492,35 @@ public partial class MainWindow : Window
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
     private void TimelineScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (Timeline is null) return; Timeline.Offset = e.NewValue; Timeline.InvalidateVisual(); }
     private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) RequestPreview(); }
-    private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(7, GridUnitType.Star); MediaWidth.Width = new GridLength(.32, GridUnitType.Star); ToolsTabs.SelectedIndex = 0; }
+    private void GuidesClick(object sender, RoutedEventArgs e) { safeAreas = !safeAreas; RequestPreview(); }
+    private async Task<BitmapSource> CaptureFrameAsync()
+    {
+        var project = vm.Project.DeepClone(); var frame = vm.Position;
+        var pixels = await Task.Run(() => vm.Renderer.RenderFrame(project, frame, project.Width, project.Height));
+        var image = BitmapSource.Create(project.Width, project.Height, 96, 96, PixelFormats.Bgra32, null, pixels, project.Width * 4);
+        image.Freeze(); return image;
+    }
+    private async void CopySnapshotClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        Clipboard.SetImage(await CaptureFrameAsync()); vm.Status = "Copied the current frame.";
+    });
+    private async void SaveSnapshotClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new SaveFileDialog { Filter = "PNG image|*.png", DefaultExt = ".png", FileName = "Frame.png" };
+        if (dialog.ShowDialog(this) != true) return;
+        if (vm.Project.Media.Any(m => string.Equals(Path.GetFullPath(m.Path), Path.GetFullPath(dialog.FileName), StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Choose a snapshot destination different from the original media.");
+        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(await CaptureFrameAsync()));
+        var temporary = dialog.FileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var file = File.Create(temporary)) encoder.Save(file);
+            File.Move(temporary, dialog.FileName, overwrite: true);
+        }
+        finally { if (File.Exists(temporary)) File.Delete(temporary); }
+        vm.Status = "Saved " + Path.GetFileName(dialog.FileName) + ".";
+    });
+    private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(Math.Min(600, Math.Max(230, ActualHeight - 260))); MediaWidth.Width = new GridLength(1, GridUnitType.Star); PreviewWidth.Width = new GridLength(Math.Min(844, Math.Max(320, ActualWidth - 420))); ToolsTabs.SelectedIndex = 1; Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         var dialog = new ProjectSettingsWindow(vm.Project) { Owner = this };
@@ -453,6 +551,9 @@ public partial class MainWindow : Window
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
             Key.A when ctrl => () => SelectAllClick(this, e),
+            Key.C when ctrl => () => CopyClick(this, e),
+            Key.X when ctrl => () => CutClick(this, e),
+            Key.V when ctrl => () => PasteClick(this, e),
             Key.F when ctrl => () => FitClick(this, e),
             Key.Home when ctrl => () => StartClick(this, e),
             Key.End when ctrl => () => EndClick(this, e),
@@ -461,13 +562,12 @@ public partial class MainWindow : Window
             Key.Enter when alt => () => SettingsClick(this, e),
             Key.Enter => Pause,
             Key.Space => () => PlayClick(this, e),
-            Key.Escape => () => StopClick(this, e),
+            Key.Escape => () => { Timeline.CancelTrackLevelInput(); StopClick(this, e); },
             Key.S => () => SplitClick(this, e),
             Key.Delete => () => DeleteClick(this, e),
             Key.G => () => LinkClick(this, e),
             Key.U => () => UnlinkClick(this, e),
-            Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); }
-            ,
+            Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); },
             Key.Add or Key.OemPlus => () => ZoomInClick(this, e),
             Key.Subtract or Key.OemMinus => () => ZoomOutClick(this, e),
             _ => null
@@ -490,7 +590,7 @@ public partial class MainWindow : Window
     private void SaveWorkspace()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(WorkspacePath)!);
-        File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(Width, Height, MediaWidth.ActualWidth, WorkspaceHeight.ActualHeight, Timeline.PixelsPerSecond)));
+        File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(2, RestoreBounds.Width, RestoreBounds.Height, PreviewWidth.ActualWidth, WorkspaceHeight.ActualHeight, Timeline.PixelsPerSecond, WindowState == WindowState.Maximized)));
     }
     private void LoadWorkspace()
     {
@@ -499,14 +599,42 @@ public partial class MainWindow : Window
             if (!File.Exists(WorkspacePath)) return;
             var settings = System.Text.Json.JsonSerializer.Deserialize<WorkspaceSettings>(File.ReadAllText(WorkspacePath));
             if (settings is null) return;
+            if (settings.LayoutVersion != 2) return;
             Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width); Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
-            MediaWidth.Width = new GridLength(Math.Clamp(settings.MediaWidth, 280, Width - 480));
-            WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 230, Height - 300));
+            WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
+            PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 320, Math.Max(320, ActualWidth - 420)));
+            WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 230, Math.Max(230, ActualHeight - 260)));
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
         }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
     }
-    private sealed record WorkspaceSettings(double Width, double Height, double MediaWidth, double WorkspaceHeight, double Zoom);
+    private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth, double WorkspaceHeight, double Zoom, bool Maximized);
+    private static nint WindowMessage(nint hwnd, int message, nint wparam, nint lparam, ref bool handled)
+    {
+        if (message != 0x24) return 0;
+        var monitor = MonitorFromWindow(hwnd, 2);
+        var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (!GetMonitorInfo(monitor, ref info)) return 0;
+        var limits = System.Runtime.InteropServices.Marshal.PtrToStructure<MinMaxInfo>(lparam);
+        // Borderless maximized windows must use the work area, including on secondary monitors.
+        limits.MaxPosition = new NativePoint(info.Work.Left - info.Monitor.Left, info.Work.Top - info.Monitor.Top);
+        limits.MaxSize = new NativePoint(info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top);
+        System.Runtime.InteropServices.Marshal.StructureToPtr(limits, lparam, false);
+        handled = true;
+        return 0;
+    }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativePoint(int x, int y) { public int X = x, Y = y; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct NativeRect { public int Left, Top, Right, Bottom; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MinMaxInfo { public NativePoint Reserved, MaxSize, MaxPosition, MinTrackSize, MaxTrackSize; }
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+    private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

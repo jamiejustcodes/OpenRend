@@ -40,8 +40,63 @@ public sealed class TimelineAccessibilityTests
                 isVisible: action == "Visible" ? !track.IsVisible : null);
         };
         editor.Changed += (_, _) => view.Project = editor.Project;
+        view.TrackLevelRequested += gesture => editor.SetTrackLevels(gesture.TrackId, gain: gesture.Level == "Gain" ? gesture.Value : null,
+            opacity: gesture.Level == "Opacity" ? gesture.Value : null, pan: gesture.Level == "Pan" ? gesture.Value : null);
         return (view, editor);
     }
+
+    [Fact]
+    public void TrackLevelProvidersApplyUndoAndRejectLockedOrInvalidChanges() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var peer = UIElementAutomationPeer.CreatePeerForElement(view);
+        var picture = peer.GetChildren()[0]; var sound = peer.GetChildren()[1];
+        IRangeValueProvider Range(AutomationPeer parent, string name) => Assert.IsAssignableFrom<IRangeValueProvider>(parent.GetChildren().Single(c => c.GetAutomationId().EndsWith("_" + name)).GetPattern(PatternInterface.RangeValue));
+        var opacity = Range(picture, "Opacity"); var gain = Range(sound, "Gain"); var pan = Range(sound, "Pan");
+        opacity.SetValue(.35); gain.SetValue(.5); pan.SetValue(-.75);
+        Assert.Equal(.35, editor.Project.Tracks[0].Opacity);
+        Assert.Equal(.5, editor.Project.Tracks[1].Gain);
+        Assert.Equal(-.75, editor.Project.Tracks[1].Pan);
+        Assert.Equal(-.75, pan.Value);
+        editor.Undo(); Assert.Equal(0, pan.Value);
+        editor.Redo(); Assert.Equal(-.75, pan.Value);
+        Assert.Throws<ArgumentOutOfRangeException>(() => opacity.SetValue(1.1));
+        Assert.Throws<ArgumentOutOfRangeException>(() => gain.SetValue(double.NaN));
+        editor.SetTrackState(editor.Project.Tracks[1].Id, isLocked: true);
+        Assert.True(gain.IsReadOnly);
+        Assert.Throws<ElementNotEnabledException>(() => gain.SetValue(.25));
+        editor.Project.Validate();
+    });
+
+    [Fact]
+    public void FocusedTrackLevelAcceptsKeyboardAdjustmentsWithoutSelectingClips() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var peer = UIElementAutomationPeer.CreatePeerForElement(view);
+        var slider = peer.GetChildren()[0].GetChildren().Single(c => c.GetAutomationId().EndsWith("_Opacity"));
+        slider.SetFocus();
+        Assert.True(view.HandleKeyboardInput(Key.Left, ModifierKeys.None));
+        Assert.Equal(.99, editor.Project.Tracks[0].Opacity, 5);
+        Assert.Empty(view.Selection);
+        view.HandleKeyboardInput(Key.Home, ModifierKeys.None); Assert.Equal(0, editor.Project.Tracks[0].Opacity);
+        view.HandleKeyboardInput(Key.End, ModifierKeys.None); Assert.Equal(1, editor.Project.Tracks[0].Opacity);
+        view.HandleKeyboardInput(Key.Escape, ModifierKeys.None);
+        view.HandleKeyboardInput(Key.Right, ModifierKeys.None); Assert.Single(view.Selection);
+    });
+
+    [Fact]
+    public void ReplacingProjectClearsTrackLevelFocusAndStalePeersRejectChanges() => Sta(() =>
+    {
+        var (view, _) = Create();
+        var peer = UIElementAutomationPeer.CreatePeerForElement(view);
+        var slider = peer.GetChildren()[0].GetChildren().Single(c => c.GetAutomationId().EndsWith("_Opacity"));
+        slider.SetFocus();
+        view.Project = new ProjectDocument { Tracks = [new TimelineTrack { Kind = TrackKind.Video }] };
+        Assert.True(view.HandleKeyboardInput(Key.Right, ModifierKeys.None));
+        Assert.Empty(view.Selection);
+        var range = Assert.IsAssignableFrom<IRangeValueProvider>(slider.GetPattern(PatternInterface.RangeValue));
+        Assert.Throws<ElementNotAvailableException>(() => range.SetValue(.5));
+    });
 
     [Fact]
     public void VirtualClipSelectionUpdatesTheEditorSelectionAndSupportsMultipleItems() => Sta(() =>
@@ -162,13 +217,13 @@ public sealed class TimelineAccessibilityTests
             var track = peer.GetChildren()[0];
             var clip = track.GetChildren().First(c => c.GetAutomationControlType() == AutomationControlType.ListItem);
             var bounds = clip.GetBoundingRectangle();
-            var expected = view.PointToScreen(new Point(TimelineView.HeaderWidth, TimelineView.RulerHeight + 4));
+            var expected = view.PointToScreen(new Point(TimelineView.HeaderWidth, TimelineView.RulerHeight + 1));
             Assert.Equal(expected.X, bounds.X, 1);
             Assert.Equal(expected.Y, bounds.Y, 1);
             Assert.True(bounds.Width > 0);
             var mute = track.GetChildren().Single(c => c.GetAutomationId().EndsWith("_Mute"));
             var button = mute.GetBoundingRectangle();
-            Assert.Equal(view.PointToScreen(new Point(169, TimelineView.RulerHeight + 8)).X, button.X, 1);
+            Assert.Equal(view.PointToScreen(new Point(207, TimelineView.RulerHeight + 4)).X, button.X, 1);
             Assert.Equal(21 * VisualTreeDpi(view), button.Width, 1);
             view.Offset = 350;
             Assert.True(clip.IsOffscreen());
