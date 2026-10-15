@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Globalization;
 using System.Runtime.InteropServices;
 using OpenRend.Core;
 
@@ -54,13 +53,14 @@ public sealed class ExportService(TimelineRenderService renderer)
                 RedirectStandardOutput = true,
                 RedirectStandardError = true
             };
+            // Pipe EOF bounds video; a frame limit can stop muxing before AAC drains.
             string[] arguments =
             [
                 "-hide_banner", "-nostdin", "-y", "-loglevel", "error",
                 "-f", "rawvideo", "-pixel_format", "bgra", "-video_size", $"{project.Width}x{project.Height}",
                 "-framerate", project.FrameRate.ToString(), "-i", "pipe:0",
                 "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", temporaryAudio,
-                "-map", "0:v:0", "-map", "1:a:0", "-frames:v", totalFrames.ToString(CultureInfo.InvariantCulture),
+                "-map", "0:v:0", "-map", "1:a:0",
                 "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-f", "mp4", temporaryVideo
             ];

@@ -1,0 +1,9 @@
+{
+  "source": "https://github.com/BtbN/FFmpeg-Builds",
+  "release": "autobuild-2026-10-15-13-03",
+  "version": "N-127564-g3c92f003c7-20261015",
+  "archive": "ffmpeg-N-127564-g3c92f003c7-win64-gpl-shared.zip",
+  "url": "https://github.com/BtbN/FFmpeg-Builds/releases/download/autobuild-2026-10-15-13-03/ffmpeg-N-127564-g3c92f003c7-win64-gpl-shared.zip",
+  "sha256": "354af576d352cdcdbbbed1fc103e4ff80f1c05cccf2cc6847f4a66e59a1e1cea",
+  "license": "GPL-3.0-or-later; see the distribution LICENSE.txt and bundled component notices"
+}

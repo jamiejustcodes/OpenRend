@@ -6,7 +6,7 @@ set(FFMPEG_ROOT "${CMAKE_SOURCE_DIR}/.deps/ffmpeg" CACHE PATH "FFmpeg shared SDK
 if(NOT WIN32)
   message(FATAL_ERROR "OpenRend's D3D11 engine requires Windows")
 endif()
-add_library(OpenRend.Native SHARED src/OpenRend.Native/media.cpp src/OpenRend.Native/renderer.cpp)
+add_library(OpenRend.Native SHARED src/OpenRend.Native/media.cpp src/OpenRend.Native/renderer.cpp src/OpenRend.Native/compositor.cpp)
 target_compile_definitions(OpenRend.Native PRIVATE OPENREND_NATIVE_EXPORTS WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(OpenRend.Native PUBLIC src/OpenRend.Native)
 target_include_directories(OpenRend.Native SYSTEM PRIVATE "${FFMPEG_ROOT}/include")

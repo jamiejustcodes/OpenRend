@@ -4,6 +4,7 @@ using OpenRend.Core;
 using OpenRend.Media;
 using OpenRend.Timeline;
 using Xunit;
+using Xunit.Abstractions;
 
 namespace OpenRend.Media.Tests;
 
@@ -48,8 +49,29 @@ public sealed class MediaFixture : IDisposable
     }
 }
 
-public sealed class TimelineMediaTests(MediaFixture fixture) : IClassFixture<MediaFixture>
+public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper log) : IClassFixture<MediaFixture>
 {
+    [Fact]
+    public async Task D3DCompositorMatchesCpuAcrossResizesAndConcurrentCallers()
+    {
+        using var media = new MediaService();
+        var project = await EditedProject(media);
+        project.Tracks[0].Clips[0].Opacity = .37;
+        using var gpu = new TimelineRenderService(media, compositorCapacity: 2);
+        using var cpu = new TimelineRenderService(media, useGpuCompositing: false);
+        var sizes = new[] { (160, 90), (188, 100), (80, 44), (160, 90), (160, 92) };
+        await Task.WhenAll(sizes.Select(size => Task.Run(() =>
+        {
+            var expected = cpu.RenderFrame(project, 35, size.Item1, size.Item2);
+            var actual = gpu.RenderFrame(project, 35, size.Item1, size.Item2);
+            Assert.Equal(expected.Length, actual.Length);
+            for (var i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(expected[i] - actual[i]), 0, 1);
+        })));
+        Assert.True(gpu.IsD3DCompositing, gpu.GpuUnavailableReason);
+        Assert.False(cpu.IsD3DCompositing);
+        log.WriteLine($"D3D compositor: {(gpu.IsHardwareCompositing ? "hardware" : "WARP")}; five output sizes/concurrent callers agree with CPU within one byte.");
+    }
+
     [Fact]
     public async Task ProbeDecodeAndWaveformReadRealUnicodeMedia()
     {
@@ -76,7 +98,7 @@ public sealed class TimelineMediaTests(MediaFixture fixture) : IClassFixture<Med
     {
         using var media = new MediaService();
         var project = await EditedProject(media);
-        var renderer = new TimelineRenderService(media);
+        using var renderer = new TimelineRenderService(media);
         Pixel(renderer.RenderFrame(project, 10, 160, 90), red: 0, blue: 0);
         Pixel(renderer.RenderFrame(project, 20, 160, 90), red: 0, blue: 255);
         Pixel(renderer.RenderFrame(project, 35, 160, 90), red: 128, blue: 128);
@@ -123,7 +145,7 @@ public sealed class TimelineMediaTests(MediaFixture fixture) : IClassFixture<Med
         var a = editor.PlaceClip(asset.Id, audio.Id, 0, 30);
         editor.SetClipLevels(v.Id, fadeInFrames: 30);
         editor.SetClipLevels(a.Id, fadeInFrames: 30);
-        var renderer = new TimelineRenderService(media);
+        using var renderer = new TimelineRenderService(media);
         var beforeFrame = renderer.RenderFrame(project, 20, 160, 90);
         var beforeAudio = renderer.RenderAudio(project, .64, 4096);
         editor.SplitClip(v.Id, 15);
@@ -144,9 +166,40 @@ public sealed class TimelineMediaTests(MediaFixture fixture) : IClassFixture<Med
         await File.WriteAllBytesAsync(destination, original);
         using var cancellation = new CancellationTokenSource();
         var progress = new InlineProgress(value => { if (value > .22) cancellation.Cancel(); });
-        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new ExportService(new TimelineRenderService(media)).ExportAsync(project, destination, progress, cancellation.Token));
+        using var renderer = new TimelineRenderService(media);
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new ExportService(renderer).ExportAsync(project, destination, progress, cancellation.Token));
         Assert.Equal(original, await File.ReadAllBytesAsync(destination));
         Assert.Empty(System.IO.Directory.GetFiles(fixture.Directory, ".openrend-*.mp4"));
+    }
+
+    [Theory]
+    [InlineData(30000, 1001, 1)]
+    [InlineData(30000, 1001, 47)]
+    [InlineData(24000, 1001, 43)]
+    public async Task FractionalRateExportKeepsTheCompleteAudioTail(int numerator, int denominator, long frames)
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Source);
+        var project = new ProjectDocument { Width = 160, Height = 90, FrameRate = new Rational(numerator, denominator), Media = [asset] };
+        var editor = new TimelineEditor(project);
+        editor.PlaceClip(asset.Id, editor.AddTrack(TrackKind.Video).Id, 0, frames);
+        editor.PlaceClip(asset.Id, editor.AddTrack(TrackKind.Audio).Id, 0, frames);
+        var destination = Path.Combine(fixture.Directory, $"fractional-{numerator}-{frames}.mp4");
+        using var renderer = new TimelineRenderService(media);
+        await new ExportService(renderer).ExportAsync(project, destination);
+        using var inspection = JsonDocument.Parse(MediaFixture.Run("ffprobe", "-v", "error", "-count_frames", "-show_streams", "-of", "json", destination));
+        var streams = inspection.RootElement.GetProperty("streams").EnumerateArray().ToArray();
+        var video = streams.Single(stream => stream.GetProperty("codec_type").GetString() == "video");
+        var audio = streams.Single(stream => stream.GetProperty("codec_type").GetString() == "audio");
+        Assert.Equal(frames.ToString(), video.GetProperty("nb_read_frames").GetString());
+        Assert.Equal("1/48000", audio.GetProperty("time_base").GetString());
+        var expectedSamples = (long)Math.Ceiling(project.FrameRate.Seconds(frames) * MediaService.SampleRate);
+        Assert.InRange(Math.Abs(audio.GetProperty("duration_ts").GetInt64() - expectedSamples), 0, 1);
+        if (frames > 1)
+        {
+            var tail = media.GetAudio(destination, project.FrameRate.Seconds(frames) - .02, 480);
+            Assert.InRange(Rms(tail, 0), .035, .1);
+        }
     }
 
     [Fact]
@@ -158,7 +211,8 @@ public sealed class TimelineMediaTests(MediaFixture fixture) : IClassFixture<Med
         var destination = Path.Combine(fixture.Directory, "failed.mp4");
         byte[] original = [8, 7, 6];
         await File.WriteAllBytesAsync(destination, original);
-        await Assert.ThrowsAsync<MediaException>(() => new ExportService(new TimelineRenderService(media)).ExportAsync(project, destination));
+        using var renderer = new TimelineRenderService(media);
+        await Assert.ThrowsAsync<MediaException>(() => new ExportService(renderer).ExportAsync(project, destination));
         Assert.Equal(original, await File.ReadAllBytesAsync(destination));
         Assert.Empty(System.IO.Directory.GetFiles(fixture.Directory, ".openrend-*.mp4"));
     }

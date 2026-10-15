@@ -5,6 +5,7 @@
 #include <cmath>
 #include <numeric>
 #include <vector>
+#include <random>
 
 struct DecoderHandle { void* value{}; ~DecoderHandle() { or_decoder_close(value); } };
 TEST(Media, ReportsRealStreamMetadata) {
@@ -54,4 +55,42 @@ TEST(Preview, CreatesD3DDevicePresentsAndResizes) {
     EXPECT_EQ(0, or_renderer_present(renderer, pixels.data(), 160, 90, 640)) << or_last_error();
     EXPECT_TRUE(or_renderer_is_hardware(renderer) == 0 || or_renderer_is_hardware(renderer) == 1);
     or_renderer_close(renderer); DestroyWindow(hwnd);
+}
+struct CompositorHandle { void* value{}; ~CompositorHandle() { or_compositor_close(value); } };
+TEST(Compositor, BlendsOrderedLayersReadsOpaquePixelsAndClearsGaps) {
+    CompositorHandle c; ASSERT_EQ(0, or_compositor_create(4, 4, &c.value)) << or_last_error();
+    std::vector<uint8_t> red(4 * 4 * 4), blue(red.size()), result(red.size());
+    for (size_t i = 0; i < red.size(); i += 4) { red[i + 2] = red[i + 3] = 255; blue[i] = blue[i + 3] = 255; }
+    ASSERT_EQ(0, or_compositor_begin(c.value)); ASSERT_EQ(0, or_compositor_layer(c.value, red.data(), 4, 4, 16, 1)) << or_last_error();
+    ASSERT_EQ(0, or_compositor_layer(c.value, blue.data(), 4, 4, 16, 0.5)) << or_last_error();
+    ASSERT_EQ(0, or_compositor_readback(c.value, result.data(), static_cast<int>(result.size()))) << or_last_error();
+    for (size_t i = 0; i < result.size(); i += 4) { EXPECT_NEAR(128, result[i], 1); EXPECT_EQ(0, result[i + 1]); EXPECT_NEAR(128, result[i + 2], 1); EXPECT_EQ(255, result[i + 3]); }
+    ASSERT_EQ(0, or_compositor_begin(c.value)); ASSERT_EQ(0, or_compositor_readback(c.value, result.data(), static_cast<int>(result.size())));
+    for (size_t i = 0; i < result.size(); ++i) EXPECT_EQ(i % 4 == 3 ? 255 : 0, result[i]);
+    EXPECT_EQ(-1, or_compositor_readback(c.value, result.data(), 1)); EXPECT_EQ(-1, or_compositor_layer(c.value, blue.data(), 4, 4, 16, NAN));
+}
+TEST(Compositor, LetterboxesWideLayersAndAcceptsPaddedRows) {
+    CompositorHandle c; ASSERT_EQ(0, or_compositor_create(8, 8, &c.value)) << or_last_error();
+    std::vector<uint8_t> wide(40 * 4, 0), output(8 * 8 * 4);
+    for (int y = 0; y < 4; ++y) for (int x = 0; x < 8; ++x) { wide[y * 40 + x * 4 + 1] = 255; wide[y * 40 + x * 4 + 3] = 255; }
+    ASSERT_EQ(0, or_compositor_layer(c.value, wide.data(), 8, 4, 40, 1)) << or_last_error(); ASSERT_EQ(0, or_compositor_readback(c.value, output.data(), static_cast<int>(output.size())));
+    for (int y = 0; y < 8; ++y) for (int x = 0; x < 8; ++x) { const int p = (y * 8 + x) * 4; EXPECT_EQ(y >= 2 && y < 6 ? 255 : 0, output[p + 1]); EXPECT_EQ(255, output[p + 3]); }
+}
+TEST(Compositor, HardwareAndWarpMatchCpuStraightAlphaWithinOneByte) {
+    for (bool force_warp : { false, true }) {
+        SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", force_warp ? L"1" : nullptr);
+        CompositorHandle c; ASSERT_EQ(0, or_compositor_create(32, 16, &c.value)) << or_last_error();
+        if (force_warp) EXPECT_EQ(0, or_compositor_is_hardware(c.value));
+        std::mt19937 random(173); std::vector<uint8_t> layer(32 * 16 * 4), expected(layer.size(), 0), actual(layer.size());
+        for (size_t p = 3; p < expected.size(); p += 4) expected[p] = 255;
+        for (int index = 0; index < 8; ++index) {
+            const double opacity = index == 0 ? 1 : (index + 1) / 9.0;
+            for (auto& value : layer) value = static_cast<uint8_t>(random() & 255);
+            for (size_t p = 0; p < expected.size(); p += 4) { const double alpha = opacity * layer[p + 3] / 255; for (int channel = 0; channel < 3; ++channel) expected[p + channel] = static_cast<uint8_t>(std::nearbyint(layer[p + channel] * alpha + expected[p + channel] * (1 - alpha))); }
+            ASSERT_EQ(0, or_compositor_layer(c.value, layer.data(), 32, 16, 32 * 4, opacity)) << or_last_error();
+        }
+        ASSERT_EQ(0, or_compositor_readback(c.value, actual.data(), static_cast<int>(actual.size()))) << or_last_error();
+        int maximum_error = 0; for (size_t p = 0; p < expected.size(); ++p) maximum_error = std::max(maximum_error, std::abs(int(expected[p]) - actual[p])); EXPECT_LE(maximum_error, 1) << "force_warp=" << force_warp;
+    }
+    SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", nullptr);
 }

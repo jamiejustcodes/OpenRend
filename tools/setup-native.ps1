@@ -3,17 +3,39 @@ $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
 $deps = Join-Path $repo '.deps'
 $sdk = Join-Path $deps 'ffmpeg'
-New-Item -ItemType Directory -Force -Path $deps | Out-Null
-if (!(Test-Path -LiteralPath (Join-Path $sdk 'include/libavformat/avformat.h'))) {
-    $archive = Join-Path $deps 'ffmpeg.zip'
-    $extract = Join-Path $deps 'ffmpeg-extract'
-    Write-Host 'Downloading shared FFmpeg SDK from BtbN/FFmpeg-Builds...'
-    & curl.exe -L --fail --retry 3 -o $archive 'https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl-shared.zip'
-    if ($LASTEXITCODE -ne 0) { throw 'FFmpeg download failed' }
-    Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
-    $folder = Get-ChildItem -LiteralPath $extract -Directory | Select-Object -First 1
-    Move-Item -LiteralPath $folder.FullName -Destination $sdk
+$lockPath = Join-Path $repo 'src/OpenRend.Native/ffmpeg.lock.json'
+$lock = Get-Content -LiteralPath $lockPath -Raw | ConvertFrom-Json
+$archive = Join-Path $deps $lock.archive
+function Assert-ChildPath([string]$Path, [string]$Parent) {
+    $absolute = [IO.Path]::GetFullPath($Path)
+    $parentPath = [IO.Path]::GetFullPath($Parent).TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+    if (!$absolute.StartsWith($parentPath, [StringComparison]::OrdinalIgnoreCase)) { throw "Refusing path outside $Parent`: $absolute" }
+    return $absolute
 }
+New-Item -ItemType Directory -Force -Path $deps | Out-Null
+if (!(Test-Path -LiteralPath $archive)) {
+    Write-Host "Downloading pinned FFmpeg SDK $($lock.version)..."
+    & curl.exe -L --fail --retry 3 -o $archive $lock.url
+    if ($LASTEXITCODE -ne 0) { throw 'FFmpeg download failed' }
+}
+$actualSha = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
+if ($actualSha -ne $lock.sha256) { throw "FFmpeg archive checksum mismatch: expected $($lock.sha256), received $actualSha. The SDK was not installed." }
+if (!(Test-Path -LiteralPath (Join-Path $sdk 'include/libavformat/avformat.h'))) {
+    $extract = Join-Path $deps "ffmpeg-extract-$PID"
+    Expand-Archive -LiteralPath $archive -DestinationPath $extract -Force
+    $folders = @(Get-ChildItem -LiteralPath $extract -Directory)
+    if ($folders.Count -ne 1) { throw 'FFmpeg archive did not contain one SDK directory' }
+    $sourcePath = Assert-ChildPath (Resolve-Path -LiteralPath $folders[0].FullName).ProviderPath $extract
+    $destinationPath = Assert-ChildPath $sdk $deps
+    $null = Assert-ChildPath $deps $repo
+    if (!(Test-Path -LiteralPath (Join-Path $sourcePath 'include/libavformat/avformat.h'))) { throw 'FFmpeg archive has no SDK headers' }
+    if (Test-Path -LiteralPath $destinationPath) { throw "Incomplete SDK already exists at $destinationPath. Preserve or move it before installing the pinned SDK." }
+    Move-Item -LiteralPath $sourcePath -Destination $destinationPath
+}
+$versionLine = & (Join-Path $sdk 'bin/ffmpeg.exe') -version | Select-Object -First 1
+if ($versionLine -notlike "ffmpeg version $($lock.version) *") { throw "Installed FFmpeg differs from the pinned SDK: $versionLine" }
+Copy-Item -LiteralPath $lockPath -Destination (Join-Path $sdk 'provenance.json') -Force
+Copy-Item -LiteralPath $lockPath -Destination (Join-Path $deps 'ffmpeg-provenance.json') -Force
 $fixture = Join-Path $repo 'tests/native/fixture.mp4'
 $audio = Join-Path $repo 'tests/native/fixture.wav'
 $image = Join-Path $repo 'tests/native/fixture.png'

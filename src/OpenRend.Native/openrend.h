@@ -44,6 +44,16 @@ OR_API int or_renderer_present(void* renderer, const uint8_t* bgra, int width, i
 OR_API int or_renderer_resize(void* renderer, int width, int height);
 OR_API int or_renderer_is_hardware(void* renderer);
 OR_API void or_renderer_close(void* renderer);
+/* Fixed-size offscreen D3D11 compositor. begin clears opaque black; layers are
+   drawn in submission order with straight alpha and opacity, fitted/centered.
+   readback writes tightly packed opaque BGRA. Serialize each entire frame's
+   begin/layer/readback sequence when sharing a handle across callers. */
+OR_API int or_compositor_create(int width, int height, void** compositor);
+OR_API int or_compositor_begin(void* compositor);
+OR_API int or_compositor_layer(void* compositor, const uint8_t* bgra, int width, int height, int stride, double opacity);
+OR_API int or_compositor_readback(void* compositor, uint8_t* bgra, int capacity);
+OR_API int or_compositor_is_hardware(void* compositor);
+OR_API void or_compositor_close(void* compositor);
 #ifdef __cplusplus
 }
 #endif
