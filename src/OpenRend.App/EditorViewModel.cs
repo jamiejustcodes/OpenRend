@@ -49,6 +49,11 @@ public sealed class EditorViewModel : ObservableObject
     public bool Ripple { get; set; }
     public bool IgnoreGroups { get; set; }
     private long editRevision;
+    private List<CopiedClip> clipboard = [];
+    private List<MediaAsset> clipboardMedia = [];
+    private Rational clipboardRate = new(30, 1);
+    public bool CanPaste => clipboard.Count > 0;
+    private sealed record CopiedClip(Guid TrackId, string TrackName, TrackKind Kind, TimelineClip Clip);
 
     public EditorViewModel(MediaService media, TimelineRenderService renderer, ExportService exporter)
     {
@@ -152,4 +157,89 @@ public sealed class EditorViewModel : ObservableObject
         Status = revision == editRevision ? $"Saved {Path.GetFileName(path)}." : "Saved the earlier revision. Newer edits still need saving.";
     }
     public void MarkSaved() => Dirty = false;
+
+    public void Copy()
+    {
+        if (Selection.Count == 0) return;
+        var selected = Editor.ExpandSelection(Selection, IgnoreGroups);
+        clipboard = Project.Tracks.SelectMany(t => t.Clips.Where(c => selected.Contains(c.Id))
+            .Select(c => new CopiedClip(t.Id, t.Name, t.Kind, c.DeepClone()))).ToList();
+        var mediaIds = clipboard.Select(c => c.Clip.MediaId).ToHashSet();
+        clipboardMedia = Project.Media.Where(m => mediaIds.Contains(m.Id)).Select(m => m.DeepClone()).ToList();
+        clipboardRate = Project.FrameRate;
+        Status = $"Copied {clipboard.Count} clips."; Changed?.Invoke();
+    }
+    public void Cut()
+    {
+        if (Selection.Count == 0) return;
+        var selected = Editor.ExpandSelection(Selection, IgnoreGroups);
+        if (Project.Tracks.Any(t => t.IsLocked && t.Clips.Any(c => selected.Contains(c.Id))))
+            throw new InvalidOperationException("Unlock the selected tracks before cutting.");
+        Copy(); Delete();
+    }
+    public void Paste()
+    {
+        if (!CanPaste) return;
+        var origin = clipboard.Min(c => c.Clip.StartFrame);
+        var at = Position; var pasted = new List<TimelineClip>();
+        Editor.Execute(p =>
+        {
+            long ConvertFrame(long frame) => checked((long)decimal.Round((decimal)frame * p.FrameRate.Numerator * clipboardRate.Denominator
+                / (p.FrameRate.Denominator * (decimal)clipboardRate.Numerator), 0, MidpointRounding.AwayFromZero));
+            var assets = new Dictionary<Guid, Guid>();
+            foreach (var source in clipboardMedia)
+            {
+                var existing = p.Media.FirstOrDefault(m => string.Equals(m.Path, source.Path, StringComparison.OrdinalIgnoreCase));
+                if (existing is null)
+                {
+                    existing = source.DeepClone();
+                    if (p.Media.Any(m => m.Id == existing.Id)) existing.Id = Guid.NewGuid();
+                    p.Media.Add(existing);
+                }
+                assets[source.Id] = existing.Id;
+            }
+            var destinations = new Dictionary<Guid, TimelineTrack>(); var used = new HashSet<Guid>();
+            var groups = new Dictionary<Guid, Guid>();
+            foreach (var copied in clipboard)
+            {
+                if (!destinations.TryGetValue(copied.TrackId, out var track))
+                {
+                    track = p.Tracks.FirstOrDefault(t => t.Id == copied.TrackId)
+                        ?? p.Tracks.FirstOrDefault(t => t.Kind == copied.Kind && !used.Contains(t.Id) && !t.IsLocked);
+                    if (track is null)
+                    {
+                        track = new TimelineTrack { Kind = copied.Kind, Name = copied.TrackName };
+                        if (track.Kind == TrackKind.Video) p.Tracks.Insert(0, track); else p.Tracks.Add(track);
+                    }
+                    if (track.IsLocked) throw new InvalidOperationException("Unlock the destination track before pasting.");
+                    destinations.Add(copied.TrackId, track); used.Add(track.Id);
+                }
+                var clip = copied.Clip.DeepClone(); clip.Id = Guid.NewGuid(); clip.MediaId = assets[clip.MediaId];
+                var offset = ConvertFrame(clip.StartFrame - origin);
+                clip.DurationFrames = Math.Max(1, checked(ConvertFrame(clip.EndFrame - origin) - offset));
+                clip.StartFrame = checked(at + offset);
+                clip.SourceInFrame = ConvertFrame(copied.Clip.SourceInFrame);
+                var available = p.FrameRate.Frames(clipboardMedia.Single(m => m.Id == copied.Clip.MediaId).DurationSeconds);
+                if (available > 0)
+                {
+                    clip.DurationFrames = Math.Min(clip.DurationFrames, available);
+                    clip.SourceInFrame = Math.Min(clip.SourceInFrame, available - clip.DurationFrames);
+                }
+                clip.FadeOffsetFrames = ConvertFrame(copied.Clip.FadeOffsetFrames);
+                var envelope = copied.Clip.FadeDurationFrames is { } fadeDuration
+                    ? Math.Max(checked(clip.FadeOffsetFrames + clip.DurationFrames), ConvertFrame(fadeDuration)) : clip.DurationFrames;
+                clip.FadeDurationFrames = copied.Clip.FadeDurationFrames.HasValue ? envelope : null;
+                clip.FadeInFrames = Math.Min(envelope, ConvertFrame(copied.Clip.FadeInFrames));
+                clip.FadeOutFrames = Math.Min(envelope - clip.FadeInFrames, ConvertFrame(copied.Clip.FadeOutFrames));
+                if (clip.GroupId is { } group)
+                {
+                    if (!groups.TryGetValue(group, out var replacement)) groups[group] = replacement = Guid.NewGuid();
+                    clip.GroupId = replacement;
+                }
+                track.Clips.Add(clip); pasted.Add(clip);
+            }
+        });
+        Selection.Clear(); Selection.UnionWith(pasted.Select(c => c.Id));
+        Position = pasted.Max(c => c.EndFrame); Changed?.Invoke(); Status = $"Pasted {pasted.Count} clips.";
+    }
 }
