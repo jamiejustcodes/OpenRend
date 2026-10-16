@@ -66,6 +66,38 @@ public sealed class TimelineEditor
         return track;
     }
 
+    public TimelineTrack InsertTrack(int index, TrackKind kind)
+    {
+        var track = new TimelineTrack { Kind = kind, Name = $"{kind} {Project.Tracks.Count(t => t.Kind == kind) + 1}" };
+        Execute(p => p.Tracks.Insert(Math.Clamp(index, 0, p.Tracks.Count), track));
+        return track;
+    }
+
+    public TimelineTrack DuplicateTrack(Guid trackId)
+    {
+        var sourceIndex = Project.Tracks.FindIndex(t => t.Id == trackId);
+        if (sourceIndex < 0) throw new KeyNotFoundException("Track was not found.");
+        var source = Project.Tracks[sourceIndex];
+        var clone = source.DeepClone();
+        clone.Id = Guid.NewGuid();
+        clone.Name = $"{source.Name} (Copy)";
+        foreach (var c in clone.Clips)
+        {
+            c.Id = Guid.NewGuid();
+        }
+        Execute(p => p.Tracks.Insert(sourceIndex + 1, clone));
+        return clone;
+    }
+
+    public void DeleteTrack(Guid trackId)
+    {
+        Execute(p =>
+        {
+            var idx = p.Tracks.FindIndex(t => t.Id == trackId);
+            if (idx >= 0) p.Tracks.RemoveAt(idx);
+        });
+    }
+
     public void AddMedia(MediaAsset media)
     {
         ArgumentNullException.ThrowIfNull(media);

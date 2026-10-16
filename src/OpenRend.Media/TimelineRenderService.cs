@@ -1,8 +1,10 @@
+using System.Runtime.Versioning;
 using OpenRend.Core;
 using OpenRend.Timeline;
 
 namespace OpenRend.Media;
 
+[SupportedOSPlatform("windows")]
 public sealed class TimelineRenderService : IDisposable
 {
     private readonly MediaService media;
@@ -17,6 +19,7 @@ public sealed class TimelineRenderService : IDisposable
     public bool IsHardwareCompositing => Volatile.Read(ref backend) == 2;
     public bool IsD3DCompositing => Volatile.Read(ref backend) > 0;
     public string? GpuUnavailableReason { get; private set; }
+    public Guid? ActiveSubtitleClipId { get; set; }
 
     public TimelineRenderService(MediaService media, bool useGpuCompositing = true, int compositorCapacity = 3)
     {
@@ -43,6 +46,39 @@ public sealed class TimelineRenderService : IDisposable
             foreach (var layer in TimelineEvaluator.Evaluate(project, frame).Video)
             {
                 if (layer.Opacity <= 0) continue;
+                if (IsSubtitleLayer(layer))
+                {
+                    if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;
+                    var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
+                    var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
+                    var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
+                    if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                    {
+                        subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, frame);
+                    }
+                    if (compositor != null)
+                    {
+                        if (NativeMethods.CompositorLayer(compositor, subtitlePixels, width, height, width * 4, layer.Opacity) < 0)
+                            throw NativeMethods.Error("Could not composite subtitle timeline layer");
+                    }
+                    else Composite(output, width, height, subtitlePixels, width, height, layer.Opacity);
+                    continue;
+                }
+                if (IsColorGeneratorLayer(layer))
+                {
+                    var colorPixels = RenderColorGenerator(layer.Media.Path, width, height);
+                    if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                    {
+                        colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
+                    }
+                    if (compositor != null)
+                    {
+                        if (NativeMethods.CompositorLayer(compositor, colorPixels, width, height, width * 4, layer.Opacity) < 0)
+                            throw NativeMethods.Error("Could not composite color generator timeline layer");
+                    }
+                    else Composite(output, width, height, colorPixels, width, height, layer.Opacity);
+                    continue;
+                }
                 var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
                 var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
                 crop.Validate();
@@ -275,5 +311,112 @@ public sealed class TimelineRenderService : IDisposable
                     output[target + channel] = (byte)Math.Clamp((int)Math.Round(SampleColor(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
             }
         }
+    }
+
+    private static bool IsSubtitleLayer(EvaluatedClip layer)
+    {
+        return layer.Track.Name.StartsWith("Subtitle", StringComparison.OrdinalIgnoreCase)
+            || layer.Track.Name.Contains("Subtitles", StringComparison.OrdinalIgnoreCase)
+            || layer.Track.Name.StartsWith("Titles & Text", StringComparison.OrdinalIgnoreCase)
+            || layer.Track.Name.StartsWith("Text Media", StringComparison.OrdinalIgnoreCase)
+            || layer.Media.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase)
+            || layer.Media.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase)
+            || layer.Media.Path.EndsWith(".srt", StringComparison.OrdinalIgnoreCase)
+            || layer.Media.Name.Contains("Subtitle", StringComparison.OrdinalIgnoreCase)
+            || layer.Media.Name.Contains("Titles & Text", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static SubtitleStyle ExtractSubtitleStyle(string trackName, TimelineClip clip, string mediaPath, long frame)
+    {
+        SubtitleStyle style;
+        if (mediaPath.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase))
+        {
+            style = SubtitleStyle.FromQuery(mediaPath.Substring("openrend://text?".Length));
+        }
+        else
+        {
+            var styleName = "Classic White";
+            if (trackName.Contains("YouTube Yellow", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Shorts Yellow", StringComparison.OrdinalIgnoreCase))
+                styleName = "YouTube Shorts (Yellow)";
+            else if (trackName.Contains("YouTube White", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Shorts White", StringComparison.OrdinalIgnoreCase))
+                styleName = "YouTube Shorts (White)";
+            else if (trackName.Contains("Neon Pop", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Neon Green", StringComparison.OrdinalIgnoreCase))
+                styleName = "Neon Pop";
+            else if (trackName.Contains("Banner", StringComparison.OrdinalIgnoreCase))
+                styleName = "Banner Subtitle";
+            else if (trackName.Contains("Subtitles", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Default", StringComparison.OrdinalIgnoreCase))
+                styleName = "Subtitles";
+
+            style = SubtitleStyle.FromPreset(styleName);
+
+            // 9-point alignment parsing
+            if (trackName.Contains("Top Left", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Top_Left", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Top_Left";
+            else if (trackName.Contains("Top Right", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Top_Right", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Top_Right";
+            else if (trackName.Contains("Top Center", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Top_Center", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Top_Center";
+            else if (trackName.Contains("Middle Left", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Middle_Left", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Middle_Left";
+            else if (trackName.Contains("Middle Right", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Middle_Right", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Middle_Right";
+            else if (trackName.Contains("Middle Center", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Middle_Center", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Middle_Center";
+            else if (trackName.Contains("Bottom Left", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Bottom_Left", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Bottom_Left";
+            else if (trackName.Contains("Bottom Right", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Bottom_Right", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Bottom_Right";
+            else if (trackName.Contains("Bottom Center", StringComparison.OrdinalIgnoreCase) || trackName.Contains("Bottom_Center", StringComparison.OrdinalIgnoreCase))
+                style.AnchorAlignment = "Bottom_Center";
+        }
+
+        // Karaoke active word detection: calculate relative playhead offset within clip
+        if (trackName.Contains("Karaoke", StringComparison.OrdinalIgnoreCase) ||
+            trackName.Contains("Highlight", StringComparison.OrdinalIgnoreCase) ||
+            trackName.Contains("Automatic", StringComparison.OrdinalIgnoreCase))
+        {
+            style.AutomaticHighlight = true;
+        }
+
+        if (style.AutomaticHighlight && clip.DurationFrames > 0)
+        {
+            var words = clip.Name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (words.Length > 1)
+            {
+                var relFrame = Math.Clamp(frame - clip.StartFrame, 0, clip.DurationFrames - 1);
+                var activeIdx = (int)Math.Clamp((double)relFrame / clip.DurationFrames * words.Length, 0, words.Length - 1);
+                style.ActiveWordIndex = activeIdx;
+            }
+        }
+
+        return style;
+    }
+
+    private static bool IsColorGeneratorLayer(EvaluatedClip layer)
+    {
+        return layer.Media.Path.StartsWith("openrend://color", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static byte[] RenderColorGenerator(string mediaPath, int width, int height)
+    {
+        if (width <= 0 || height <= 0) return Array.Empty<byte>();
+
+        // Pure black solid generator matches Vegas Pro default
+        var hex = "#000000";
+        var idx = mediaPath.IndexOf("hex=", StringComparison.OrdinalIgnoreCase);
+        if (idx >= 0)
+        {
+            var end = mediaPath.IndexOf('&', idx);
+            hex = end >= 0 ? mediaPath.Substring(idx + 4, end - (idx + 4)) : mediaPath.Substring(idx + 4);
+            hex = Uri.UnescapeDataString(hex);
+        }
+
+        var color = SubtitleStyle.ParseColor(hex, System.Drawing.Color.Black);
+        var pixels = new byte[width * height * 4];
+
+        // Format32bppArgb / BGRA in memory: B is byte 0, G is byte 1, R is byte 2, A is byte 3
+        uint pixelValue = (uint)((color.A << 24) | (color.R << 16) | (color.G << 8) | color.B);
+        System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(pixels.AsSpan()).Fill(pixelValue);
+        return pixels;
     }
 }

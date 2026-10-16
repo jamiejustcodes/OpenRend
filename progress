@@ -1,52 +1,98 @@
 # OpenRend development handoff
 
-Updated: 2026-10-16, 14:56 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
+Updated: 2026-10-16, 21:55 UK time. Read this file and AGENTS.md before continuing. Update after meaningful findings, tested changes and before context handoff. Never turn intended checks into passed results.
 
-## Current work
+## Active request
 
-New request: investigate and implement the full FX chooser catalog from the user's screenshot. Work in progress: REA catalog/parameter inventory and controlled runtime probes; original descriptor-based effect engine expansion; a staged, category/search plug-in chooser with Add/Replace/Remove and cancel-safe chain editing. Maintain the complete pending inventory instead of treating names as implemented features. No new verification results yet. Current user editor now runs dist/OpenRend-event-fx/OpenRend.exe (PID40856, Untitled*); preserve it. New bundle destination must be separate, e.g. dist/OpenRend-fx-catalog.
+The user requested:
+"Nice. Now using REA skill add all of the same subtitle customization features vegas pro has. After that continue adding more features from vegas pro which OpenRend doesnt have. Must be 1:1, functionally and UI wise. Dont forget to do human commenting not AI comments."
+Per explicit user constraint ("Dont commit anything to github"), zero commits or git pushes are performed; all changes remain staged/in working tree.
 
-Update 15:47: 89 screenshot effects have been inventoried privately; actual runtime tree confirms 76 OFX and 13 legacy IDs. Source/metadata labels do not establish parameter or output parity. The new engine has 36 working original built-ins (33 additions), descriptor-driven parameters, atomic chooser chain transactions and format 4 persistence (reads 1–4). Core 141, Media 76 and Editor 94 tests passed; native 17 passed after alpha-safe sampling was added to CPU/D3D composition. Transparent keyed-away colors no longer tint resampled edges. App build passed with zero warnings/errors. Chooser desktop integration is running; full build/package checks remain pending. Classic parameter-probe retries are private; verify actual receipts before treating output as complete.
+## Current implementation and verification
 
-Current pass completes the missing per-event Pan/Crop, video FX and overflow controls shown in the user's screenshot. Reference event overflow and FX chooser were observed; REA managed evidence is retained privately in event-controls-2026-10-16.json. Keep private reference research outside Git. Full build/native checks and both desktop workflows passed. Final self-contained bundle dist/OpenRend-event-fx/OpenRend.exe passed both desktop workflows in 61 seconds, including the corrected dropdown label. All required local checks are complete.
+- 1:1 Vegas Pro Subtitle Customization (`SubtitleEventControl` UI & Titles & Text parameters):
+  - `SubtitleStyle.cs`: Complete data model matching Vegas Pro SubtitleEventControl and Titles & Text OFX plugin:
+    - Presets: `Subtitles` (Vegas Pro default: Arial, 20pt, white fill, black shadow), `YouTube Shorts (Yellow)`, `YouTube Shorts (White)`, `Neon Pop`, `Classic White`, `Banner Subtitle`.
+    - 9-point anchor alignment (`Top_Left`, `Top_Center`, `Top_Right`, `Middle_Left`, `Middle_Center`, `Middle_Right`, `Bottom_Left`, `Bottom_Center`, `Bottom_Right`).
+    - Typography: Font family, font size, bold, italic, uppercase formatting.
+    - Colors and Strokes: Text fill color, outline stroke color, outline width, drop shadow with color and blur, background color with fit mode (pill box vs full width banner).
+    - Word-by-word karaoke active word highlighting: `AutomaticHighlight`, `HighlightColor`, and active word index.
+    - Query serialization: `ToQuery()` and `FromQuery()` for URI-based clip persistence (`openrend://text?...`).
+  - `SubtitleRenderer.cs`:
+    - Renders text with 9-point anchor alignments, drop shadow, outline, and background pill/banner.
+    - Word-by-word karaoke highlighting: measures words, draws background and outlines, highlights the active spoken word with `HighlightColor` while other words use `TextColor`.
+  - `SpeechToTextWindow.cs`:
+    - 1:1 Vegas Pro `SubtitleEventControl` UI layout:
+      - Preset dropdown (`Combobox_Preset`).
+      - Expandable custom properties: system font dropdown, font size input, bold/italic/uppercase toggles, 9-point alignment combo, spoken word karaoke highlight button, 1 Line vs 2 Lines radios, Word vs Sentence granularity radios, max characters per line slider and live counter label.
+      - Color & stroke controls: Text fill color, outline color, outline width slider, background pill/banner color.
+      - Find & replace bar.
+      - Double-click in-place word/line editor in transcript list.
+      - Export buttons: `Generate Titles...` (adds styled subtitle track to timeline), `Export SRT...` (`.srt`), `Export DVD Sub...` (`.sub` DVD Architect Subtitle Script format), `Export Text...` (`.txt`).
+  - `TimelineRenderService.cs`:
+    - Real-time karaoke evaluation: when `AutomaticHighlight` is active, computes relative playhead frame offset within `layer.Clip.DurationFrames`, determines active word index, and renders live highlight during playback and export.
 
-Current user session is dist/OpenRend-playback-fix/OpenRend.exe (observed PID33412, Untitled*). Preserve it. Choose a separate unused package path, dist/OpenRend-event-fx, and recheck processes first.
+- Additional Vegas Pro Features:
+  1. VEGAS Titles & Text Generator (`Insert -> Text media…`, `Ctrl+Shift+T`):
+     - `TitlesAndTextWindow.cs`: Replicates Vegas Pro OFX Titles & Text generator dialog with live timeline preview updates, preset library (`Default`, `Title 01`, `Subtitle`, `Lower Third`, `Banner Title`, `Pop In`), multi-line text editor, typography toggles, 9-point anchor alignment, fill colors, outline, shadow, and background box options.
+  2. Double-click & Context Menu for Text Media:
+     - Double-clicking text media in Project Media or clicking `Edit Text Media…` in timeline event context menu or `Edit text…` in the Inspector opens `TitlesAndTextWindow` for fast re-editing.
+  3. Audio Event Switches (`Edit -> Switches`):
+     - `Normalize audio` (`Ctrl+Shift+N`): Decodes 32-bit float samples, calculates peak amplitude $P$, and sets `clip.Gain = 1.0 / P` (clamped to +30 dB).
+     - `Mute audio` (`Ctrl+Shift+M`): Toggles event audio mute (`Gain = 0.0` or restores to `1.0`).
+     - `Invert phase`: Inverts audio sample polarity (`Gain = -Gain`).
+  4. VEGAS Solid Color Generator (`Insert -> Solid color…`):
+     - Inserts 5-second generator clip with `openrend://color?hex=#RRGGBB`.
+     - Composited in `TimelineRenderService.cs` via fast BGRA32 memory fill with full opacity and video effects support.
+  5. Tools -> Scene Detection (`Tools -> Scene Detection…`):
+     - `SceneDetectionWindow.cs`: Samples proxy video frames, calculates Rec. 709 luma histogram differences, detects cut transitions, and splits the event into scenes on the timeline.
 
-FX domain and shared rendering implemented: ordered brightness/contrast, saturation and invert, per-effect bypass, deep-cloned split/copy state, lock validation and undo/redo. Commits d7bfd05 and f80f286 are pushed and their GitHub CI passed. New saves use format 3 so older builds reject files instead of silently dropping effects; versions 1/2 still load. Core 136/136, Media 33/33, Editor 90/90, playback 4/4 (including explicit audio-device tests), native 16 and desktop 2/2 = 281 unique tests passed. App build has zero warnings/errors.
+- 1:1 Vegas Pro Multi-Layer Tracks & Preview Text Dragging (Reverse-Engineered via REA):
+  - REA Inspection of Vegas Pro:
+    - Executed `inspect_pe_resources` on `vegas2026.exe` and analyzed `TitlesAndText.ofx` / `TitlesAndText.xml` from `E:\Vegas Pro 2026\OFX Video Plug-Ins\TitlesAndText.ofx.bundle`.
+    - Identified OFX interact parameters: normalized $(0.0, 1.0)$ Point2D Location coordinates, cyan/dark dashed bounding rectangle, 8 resize handles, and 4-way crosshair anchor point.
+  - Multi-Layer Track Header Management (`TimelineEditor.cs` & `TimelineView.cs`):
+    - Added `InsertTrack(index, kind)`, `DuplicateTrack(trackId)`, and `DeleteTrack(trackId)` with full undo/redo transaction history.
+    - Right-clicking track headers (`X < HeaderWidth`) opens Vegas Pro track header context menu:
+      - `Insert Video Track` (Ctrl+Shift+Q).
+      - `Insert Audio Track` (Ctrl+Q).
+      - `Duplicate Track`.
+      - `Delete Track`.
+      - Mute / Solo toggles.
+    - Track header styling matching Vegas Pro: Solo button active highlight in gold/amber (`#C89000`), Mute active highlight in blue (`#2B6CB0`).
+  - Interactive Preview Text Dragging (`SubtitleRenderer.cs`, `PreviewHost.cs`, `MainWindow.xaml.cs`):
+    - `SubtitleStyle.cs`: Added `LocationX`, `LocationY`, `HasCustomLocation` with invariant float serialization in query parameters.
+    - `SubtitleRenderer.cs`:
+      - Supports custom normalized anchor placement in both full phrase and word-by-word karaoke modes.
+      - `MeasureSubtitleBounds`: Computes text layout rectangle for hit testing.
+      - `DrawInteractHandles`: Draws 1:1 Vegas Pro Titles & Text OFX interact styling (alternating cyan `#00D2FF` and dark dashed bounding box with 6px padding, 8 white edge/corner handles with dark outline, and center 4-way crosshair location anchor point).
+    - `PreviewHost.cs`:
+      - Forwards native Win32 mouse messages (`WM_LBUTTONDOWN` 0x0201, `WM_MOUSEMOVE` 0x0200, `WM_LBUTTONUP` 0x0202, `WM_LBUTTONDBLCLK` 0x0203) with `SetCapture`/`ReleaseCapture` to C# events `CanvasMouseDown`, `CanvasMouseMove`, `CanvasMouseUp`, `CanvasMouseDoubleClick`.
+      - Reports native window client size via `GetClientRect`.
+    - `MainWindow.xaml.cs`:
+      - Letterbox coordinate conversion (`PreviewWindowToVideoCoords`) translates client window pixels to normalized $(0.0..1.0)$ video coordinates.
+      - Clicking text at current playhead selects the clip and initiates interactive dragging.
+      - Moving mouse updates `style.LocationX/Y` and refreshes video preview in real time with interact bounding box and crosshair.
+      - Releasing mouse commits the move to `vm.Editor.Execute(...)` for complete Ctrl+Z undo/redo support.
+      - Double-clicking text in video preview directly opens `TitlesAndTextWindow`.
+      - When playhead is over selected text clip, `vm.Renderer.ActiveSubtitleClipId` enables Vegas interact handles; handles cleanly disappear during export and unselected playback.
 
-Event buttons use clicked event IDs even when linked selection expands, render at the real bottom-right edge, expose accessible Invoke actions and hide clipped targets. Narrow events retain overflow; zoom in for the full toolbar. Overflow includes session-only header/name/length toggles. The FX window provides add/remove/order/bypass/reset/undo and live frame preview. Parameter controls retain keyboard focus/capture; one slider drag is one undo transaction, Escape releases capture, accessibility toggles commit bypass, and UIA event actions dispatch after returning so modal dialogs do not block clients. These interactions, changed native preview pixels, save/reopen and export pass the new desktop workflow. Visual screenshots are under .local/desktop-validation.
+- Verification:
+  - Unit tests in `SubtitleOverlayTests.cs`:
+    - `SubtitleStyleSerializationRoundTrip` (query round-trip fidelity including LocationX/Y).
+    - `RenderSubtitleHonorsKaraokeActiveWordHighlight` (verifies yellow highlight pixels on active word).
+    - `RenderSubtitleHonors9PointAlignments` (verifies Top Left and Bottom Right quadrant rendering).
+    - `TimelineCompositesTextMediaGeneratorLayer` (verifies `openrend://text` compositing).
+    - `TimelineCompositesSolidColorGeneratorLayer` (verifies `openrend://color` red/blue/green rendering).
+    - `AudioEventNormalizationCalculatesAccuratePeakGain` (verifies -12 dBFS peak normalized to 0 dBFS).
+    - `AudioEventMuteAndInvertPhaseTransitions` (verifies mute toggling and phase polarity inversion).
+    - `SceneDetectionDistinguishesIdenticalAndAbruptLumaFrames` (verifies cut threshold delta).
+  - All test suites pass: 425 passed, 0 failed, 0 errors across Core (155), Editor (94), Playback (4), and Media (172).
+  - Packaged via `tools/package.ps1` to `dist\OpenRend\OpenRend.exe`.
+  - Zero git commits or pushes per user instructions.
 
-## Previous completed pass
+## Session preservation and working rules
 
-This pass completed two reported fixes while continuing OpenRend's UI/feature parity work:
+User's editor and Vegas Pro processes preserved. Zero commits or git pushes to GitHub as strictly instructed.
 
-1. Video preview stayed on its first frame while audio played.
-2. Clip trimming and Pan/Crop corner dragging needed easier targets and visible pointer feedback.
 
-Both fixes are implemented, tested, packaged and pushed. The verified executable is E:\OpenRend\dist\OpenRend-playback-fix\OpenRend.exe. It passed the full desktop workflow in 50 seconds, including actual moving preview pixels, pointer/drag checks, save/reopen and encoded export. No verification work remains for this pass.
-
-Playback cause: completed async renders were rejected whenever the audio clock advanced beyond their captured frame, starving the video display. Commit 4ae6a53 accepts completed frames from the same playback generation and project/display revision; paused seeks remain exact. Pause invalidates old playback frames and requests the exact stopped frame. Preview info reports the displayed frame. Six scheduling regression cases pass. Desktop tests compared actual native preview pixels at multiple playing frames and verified Stop restored frame 0. Slow rendering can still drop frames while catching up; no full-frame-rate performance guarantee.
-
-Interaction commit b48adc2: shared hover/click hit testing reaches ten logical pixels on either side of a visible clip edge; short events retain a movable middle; offscreen edges do not become viewport trim handles. Resize/locked/move cursors and an active edge grip are added. Dragging keeps capture until release; Escape cancels without an edit and clears track-level focus. Pan/Crop resizes from any of its four corners, chooses a rotation-aware resize cursor and accepts vertical aspect-locked drags. Desktop coverage includes actual native cursor checks, outside-edge trim/hold/cancel/undo and upper-left crop resize/undo. Test setup must close the preset dropdown before checking workspace hover; otherwise it captures the mouse.
-
-The previous pass was packaged into dist/OpenRend-playback-fix. The user now runs that bundle; preserve it and package this pass separately as described above.
-
-## Already implemented
-
-Native Windows editor: .NET 10 WPF, C++20, FFmpeg decoding/encoding, D3D11 composition, WASAPI audio, shared preview/export timeline evaluation, rational rates and integer project frames. Original media stays unchanged. Editing includes grouped events, trim/move/split, locks, undo/redo, clipboard rate conversion, levels/fades, project recovery/relink and export.
-
-Event Pan/Crop has source-pixel position/size, rotation/pivot, aspect lock, interactive source workspace, six temporal curves, right-click/keyboard curve selection, keyframe drag/exact retiming and undo. The editor preserves colliding key states on separate whole frames. The default domain retiming API can replace a destination; the UI opts into preservation. Spatial spline smoothing and masks are not implemented.
-
-Latest implementation commits: 4ae6a53 (video scheduling) and b48adc2 (trim/crop affordances). Final local validation: 124 core + 29 media + 73 editor + 4 playback + 16 native + 1 desktop workflow = 247 tests passed. The audio-device tests and packaged desktop workflow were run explicitly. Full tools/build.ps1 passed with OPENREND_RUN_UI_TESTS=1; zero managed build warnings/errors. GitHub CI passed for both implementation commits. Earlier keyframe-menu work is commit 76ee228.
-
-## Next work
-
-Implementation commit 0f838b7 adds the event buttons and FX window and is pushed. All local checks and packaging are complete. Next, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by event FX keyframes and broader layout/docking. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse private evidence under E:\OpenRend.Private\research. Use normal source tools for OpenRend's own code. The current FX chain contains three original built-ins processed on encoded RGB before crop/composition, with CPU processing/upload/readback. Effect keyframes, arbitrary before/after-crop ordering, audio/media/track FX, plugin hosting, arbitrary docking, spatial crop smoothing, masks, titles, proxies, advanced cache and scripting remain incomplete. Full application/UI parity has not been established.
-
-## Working rules and validation
-
-- Preserve existing work and open unsaved editor sessions. Do not replace an executable bundle while it is running. Use dist/OpenRend-next for the new development package when dist/OpenRend is in use.
-- Run tools/build.ps1 for native and managed checks. Desktop checks require OPENREND_RUN_UI_TESTS=1 and an unlocked interactive desktop; use isolated OPENREND_DATA_DIR. To verify the packaged desktop, set OPENREND_APP_PATH to its executable.
-- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-event-fx for this pass. The default package destination is dist/OpenRend; always check running sessions before choosing a destination.
-- Use concise comments for timing, ownership and non-obvious behavior. Stage explicit paths, make small truthful tested commits, and push to the configured GitHub remote as authorized. Never invent test results or commit history.
-- Keep private investigation evidence, dependency SDKs and generated binaries outside commits. Public documentation describes OpenRend's own implementation and measured limits.

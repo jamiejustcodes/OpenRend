@@ -39,6 +39,12 @@
         <MenuItem Header="Link selected clips" InputGestureText="G" Click="LinkClick"/>
         <MenuItem Header="Unlink clip group" InputGestureText="U" Click="UnlinkClick"/>
         <MenuItem x:Name="IgnoreGroupsMenu" Header="Ignore clip groups" IsCheckable="True" Click="IgnoreGroupsClick"/>
+        <Separator/>
+        <MenuItem Header="Switches">
+          <MenuItem Header="Normalize audio" InputGestureText="Ctrl+Shift+N" Click="NormalizeAudioClipClick"/>
+          <MenuItem Header="Mute audio" InputGestureText="Ctrl+Shift+M" Click="MuteAudioClipClick"/>
+          <MenuItem Header="Invert phase" Click="InvertPhaseClipClick"/>
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>
@@ -46,8 +52,25 @@
         <MenuItem Header="Zoom out" InputGestureText="−" Click="ZoomOutClick"/>
         <MenuItem Header="Reset workspace" Click="ResetWorkspaceClick"/>
       </MenuItem>
-      <MenuItem Header="_Insert"><MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/><MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/></MenuItem>
-      <MenuItem Header="_Tools"><MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/><MenuItem x:Name="VideoEffectsMenu" Header="Video event FX…" Click="VideoEffectsClick"/><MenuItem Header="Clip properties" Click="ClipPropertiesClick"/><MenuItem Header="Render as…" Click="ExportClick"/></MenuItem>
+      <MenuItem Header="_Insert">
+        <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
+        <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
+        <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
+        <MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/>
+      </MenuItem>
+      <MenuItem Header="_Tools">
+        <MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/>
+        <MenuItem x:Name="VideoEffectsMenu" Header="Video event FX…" Click="VideoEffectsClick"/>
+        <MenuItem Header="Clip properties" Click="ClipPropertiesClick"/>
+        <Separator/>
+        <MenuItem Header="Scene Detection…" Click="SceneDetectionClick"/>
+        <Separator/>
+        <MenuItem x:Name="AiTextToSpeechMenu" Header="AI Text to S_peech" InputGestureText="Ctrl+Shift+P" Click="AiTextToSpeechClick"/>
+        <MenuItem x:Name="AiSpeechToTextMenu" Header="AI Speech to Tex_t" Click="AiSpeechToTextClick"/>
+        <MenuItem x:Name="AiAutoReframeMenu" Header="AI Auto _Reframe" Click="AiAutoReframeClick"/>
+        <Separator/>
+        <MenuItem Header="Render as…" Click="ExportClick"/>
+      </MenuItem>
       <MenuItem Header="_Options"><MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/><MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/></MenuItem>
       <MenuItem Header="_Help"><MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/><MenuItem Header="About OpenRend" Click="AboutClick"/></MenuItem>
     </Menu>
@@ -102,7 +125,7 @@
               <TextBlock Grid.Row="5" Text="Pan (−1 to 1)"/><TextBox x:Name="ClipPan" Grid.Row="5" Grid.Column="1"/>
               <TextBlock Grid.Row="6" Text="Fade in (frames)"/><TextBox x:Name="ClipFadeIn" Grid.Row="6" Grid.Column="1"/>
               <TextBlock Grid.Row="7" Text="Fade out (frames)"/><TextBox x:Name="ClipFadeOut" Grid.Row="7" Grid.Column="1"/>
-              <Button Grid.Row="8" Grid.Column="1" Content="Apply clip properties" Click="ApplyPropertiesClick" HorizontalAlignment="Left" Margin="2,10"/>
+              <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"><Button Content="Apply clip properties" Click="ApplyPropertiesClick" Margin="2,10"/><Button Content="Normalize (0 dB)" Click="NormalizeAudioClipClick" ToolTip="Normalize audio peak to 0 dB" Margin="4,10"/><Button Content="Mute" Click="MuteAudioClipClick" ToolTip="Toggle clip audio mute" Margin="4,10"/><Button x:Name="EditTextMediaButton" Content="Edit text…" Click="EditTextMediaClick" ToolTip="Edit Titles &amp; Text media properties" Margin="4,10" Visibility="Collapsed"/></StackPanel>
             </Grid>
           </StackPanel></ScrollViewer>
         </TabItem>

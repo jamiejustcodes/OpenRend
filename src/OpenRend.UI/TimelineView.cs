@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
@@ -64,6 +66,10 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? PanCropRequested;
     public event Action? VideoEffectsRequested;
     public event Action<Guid, string>? VideoEventActionRequested;
+    public event Action<int>? InsertVideoTrackRequested;
+    public event Action<int>? InsertAudioTrackRequested;
+    public event Action<Guid>? DuplicateTrackRequested;
+    public event Action<Guid>? DeleteTrackRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -453,7 +459,16 @@ public sealed partial class TimelineView : FrameworkElement
             foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
             {
                 var bounds = TrackButtonBounds(t.Id, action);
-                if (on) dc.DrawRectangle(Brush("#438AC8"), null, bounds);
+                if (on)
+                {
+                    var activeBrush = action switch
+                    {
+                        "Solo" => Brush("#C89000"), // VEGAS Pro amber/gold solo highlight
+                        "Mute" => Brush("#2B6CB0"), // VEGAS Pro blue mute highlight
+                        _ => Brush("#438AC8")
+                    };
+                    dc.DrawRectangle(activeBrush, null, bounds);
+                }
                 Text(dc, label, bounds.X + 5, bounds.Y + 1);
             }
             var gain = ReadTrackLevel(t.Id, "Gain"); var opacity = ReadTrackLevel(t.Id, "Opacity"); var pan = ReadTrackLevel(t.Id, "Pan");
@@ -615,5 +630,52 @@ public sealed partial class TimelineView : FrameworkElement
         else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) Offset = Math.Max(0, Offset - e.Delta);
         else VerticalOffset = Math.Clamp(VerticalOffset - e.Delta / 2, 0, Math.Max(0, Project.Tracks.Count * TrackHeight - ActualHeight + RulerHeight));
         InvalidateVisual(); e.Handled = true;
+    }
+    protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
+    {
+        base.OnMouseRightButtonUp(e);
+        var p = e.GetPosition(this);
+        if (p.X < HeaderWidth)
+        {
+            var track = TrackAt(p.Y);
+            var trackIndex = track is not null ? Project.Tracks.IndexOf(track) : 0;
+            var menu = new ContextMenu();
+
+            var insertVideo = new MenuItem { Header = "Insert Video Track", InputGestureText = "Ctrl+Shift+Q" };
+            insertVideo.Click += (_, _) => InsertVideoTrackRequested?.Invoke(trackIndex);
+            menu.Items.Add(insertVideo);
+
+            var insertAudio = new MenuItem { Header = "Insert Audio Track", InputGestureText = "Ctrl+Q" };
+            insertAudio.Click += (_, _) => InsertAudioTrackRequested?.Invoke(trackIndex >= 0 ? trackIndex + 1 : Project.Tracks.Count);
+            menu.Items.Add(insertAudio);
+
+            if (track is not null)
+            {
+                menu.Items.Add(new Separator());
+
+                var dup = new MenuItem { Header = "Duplicate Track" };
+                dup.Click += (_, _) => DuplicateTrackRequested?.Invoke(track.Id);
+                menu.Items.Add(dup);
+
+                var del = new MenuItem { Header = "Delete Track" };
+                del.Click += (_, _) => DeleteTrackRequested?.Invoke(track.Id);
+                menu.Items.Add(del);
+
+                menu.Items.Add(new Separator());
+
+                var mute = new MenuItem { Header = "Mute", IsCheckable = true, IsChecked = track.IsMuted };
+                mute.Click += (_, _) => InvokeTrackAction(track.Id, "Mute");
+                menu.Items.Add(mute);
+
+                var solo = new MenuItem { Header = "Solo", IsCheckable = true, IsChecked = track.IsSolo };
+                solo.Click += (_, _) => InvokeTrackAction(track.Id, "Solo");
+                menu.Items.Add(solo);
+            }
+
+            menu.PlacementTarget = this;
+            menu.Placement = PlacementMode.MousePoint;
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
     }
 }

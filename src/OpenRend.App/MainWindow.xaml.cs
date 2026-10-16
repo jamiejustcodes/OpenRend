@@ -10,6 +10,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Microsoft.Win32;
 using OpenRend.Core;
+using OpenRend.Media;
 using OpenRend.Project;
 using OpenRend.UI;
 
@@ -34,6 +35,11 @@ public partial class MainWindow : Window
     private bool initialized;
     private bool allowClose;
     private long lastPreview = -1;
+    private bool isDraggingTextInPreview;
+    private Guid? previewDraggedClipId;
+    private SubtitleStyle? previewDragOriginalStyle;
+    private Point previewDragStartMouse;
+    private (float X, float Y) previewDragStartLocation;
     private readonly string recoveryPath = Path.Combine(Environment.GetEnvironmentVariable("OPENREND_DATA_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend"), "recovery.openrend");
     private readonly Dictionary<Guid, string> cachedMediaPaths = [];
@@ -84,8 +90,18 @@ public partial class MainWindow : Window
         {
             if (action == "PanCrop") await OpenPanCropAsync(id);
             else if (action == "VideoEffects") OpenVideoEffects(id);
+            else if (action == "EditTextMedia") OpenEditTextMedia(id);
         };
         Timeline.DeleteRequested += () => Guard(vm.Delete);
+        Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
+        Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
+        Timeline.DuplicateTrackRequested += id => Guard(() => vm.Editor.DuplicateTrack(id));
+        Timeline.DeleteTrackRequested += id => Guard(() => vm.Editor.DeleteTrack(id));
+
+        Preview.CanvasMouseDown += OnPreviewMouseDown;
+        Preview.CanvasMouseMove += OnPreviewMouseMove;
+        Preview.CanvasMouseUp += OnPreviewMouseUp;
+        Preview.CanvasMouseDoubleClick += OnPreviewMouseDoubleClick;
         Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
         vm.Changed += Refresh;
         timer.Tick += async (_, _) =>
@@ -192,6 +208,16 @@ public partial class MainWindow : Window
             {
                 previewRequested = false;
                 var project = vm.Project.DeepClone(); var frame = vm.Position;
+                var activeClip = SelectedClip;
+                if (activeClip != null && frame >= activeClip.StartFrame && frame < activeClip.EndFrame &&
+                    vm.Project.Media.Any(m => m.Id == activeClip.MediaId && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) || m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase))))
+                {
+                    vm.Renderer.ActiveSubtitleClipId = activeClip.Id;
+                }
+                else
+                {
+                    vm.Renderer.ActiveSubtitleClipId = null;
+                }
                 var request = new PreviewFrameRequest(revision, playbackGeneration, frame);
                 var zoom = PreviewZoom.SelectedIndex switch { 1 => 2.0, 2 => .5, _ => 1.0 }; var guides = safeAreas;
                 var (width, height) = PreviewQuality.SelectedIndex switch
@@ -342,7 +368,19 @@ public partial class MainWindow : Window
         var used = p.Tracks.SelectMany(t => t.Clips).Select(c => c.MediaId).ToHashSet();
         p.Media.RemoveAll(m => !used.Contains(m.Id));
     }));
-    private void MediaDoubleClick(object sender, MouseButtonEventArgs e) => PlaceSelectedClick(sender, e);
+    private void MediaDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (MediaList.SelectedItem is MediaItem item && item.Asset.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))
+        {
+            var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.MediaId == item.Asset.Id);
+            Pause();
+            var win = new TitlesAndTextWindow(vm, clip, item.Asset) { Owner = this };
+            win.ShowDialog();
+            RequestPreview();
+            return;
+        }
+        PlaceSelectedClick(sender, e);
+    }
     private void MediaMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton == MouseButtonState.Pressed && MediaList.SelectedItem is MediaItem item)
@@ -375,10 +413,18 @@ public partial class MainWindow : Window
     private void UpdateInspector()
     {
         var clip = SelectedClip; Inspector.IsEnabled = clip is not null; ClipName.Text = clip?.Name ?? "Select a timeline clip";
-        if (clip is null) return;
+        if (clip is null)
+        {
+            EditTextMediaButton.Visibility = Visibility.Collapsed;
+            vm.Renderer.ActiveSubtitleClipId = null;
+            return;
+        }
         ClipStart.Text = clip.StartFrame.ToString(); ClipIn.Text = clip.SourceInFrame.ToString(); ClipDuration.Text = clip.DurationFrames.ToString();
         ClipOpacity.Text = clip.Opacity.ToString(CultureInfo.CurrentCulture); ClipGain.Text = clip.Gain.ToString(CultureInfo.CurrentCulture);
         ClipPan.Text = clip.Pan.ToString(CultureInfo.CurrentCulture); ClipFadeIn.Text = clip.FadeInFrames.ToString(); ClipFadeOut.Text = clip.FadeOutFrames.ToString();
+        var isText = vm.Project.Media.Any(m => m.Id == clip.MediaId && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) || m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase)));
+        EditTextMediaButton.Visibility = isText ? Visibility.Visible : Visibility.Collapsed;
+        vm.Renderer.ActiveSubtitleClipId = isText ? clip.Id : null;
     }
     private void ApplyPropertiesClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -517,6 +563,228 @@ public partial class MainWindow : Window
         Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
         new VideoEffectsWindow(vm, selected[0].Clip.Id) { Owner = this }.ShowDialog();
     });
+    private void AiTextToSpeechClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        new TextToSpeechWindow(vm) { Owner = this }.ShowDialog();
+    });
+    private void AiSpeechToTextClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        new SpeechToTextWindow(vm) { Owner = this }.ShowDialog();
+    });
+    private void AiAutoReframeClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        if (new AutoReframeWindow(vm) { Owner = this }.ShowDialog() == true)
+        {
+            Refresh();
+            RequestPreview();
+        }
+    });
+    private void InsertTextMediaClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        // If an existing Text Media event is selected, open editor for that event
+        var selectedText = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c)))
+            .FirstOrDefault(pair =>
+            {
+                var m = vm.Project.Media.FirstOrDefault(media => media.Id == pair.Clip.MediaId);
+                return m is not null && m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase);
+            });
+
+        if (selectedText.Clip is not null)
+        {
+            var media = vm.Project.Media.First(m => m.Id == selectedText.Clip.MediaId);
+            new TitlesAndTextWindow(vm, selectedText.Clip, media) { Owner = this }.ShowDialog();
+        }
+        else
+        {
+            new TitlesAndTextWindow(vm) { Owner = this }.ShowDialog();
+        }
+        Refresh();
+        RequestPreview();
+    });
+    private void NormalizeAudioClipClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selectedAudio = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+
+        if (selectedAudio.Length == 0)
+        {
+            var cursorClip = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+                .SelectMany(t => t.Clips.Where(c => vm.Position >= c.StartFrame && vm.Position < c.EndFrame).Select(c => (Track: t, Clip: c)))
+                .FirstOrDefault();
+            if (cursorClip.Clip != null)
+                selectedAudio = [(cursorClip.Track, cursorClip.Clip)];
+        }
+
+        if (selectedAudio.Length == 0)
+        {
+            vm.Status = "Select an audio event to normalize.";
+            return;
+        }
+
+        var normalizedCount = 0;
+        vm.Editor.Execute(_ =>
+        {
+            foreach (var (track, clip) in selectedAudio)
+            {
+                var media = vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
+                if (media is null || !media.HasAudio) continue;
+
+                var startSec = vm.Project.FrameRate.Seconds(clip.SourceInFrame);
+                var durSec = vm.Project.FrameRate.Seconds(clip.DurationFrames);
+                var totalFrames = (int)Math.Ceiling(durSec * MediaService.SampleRate);
+                if (totalFrames <= 0) continue;
+
+                var samples = vm.Media.GetAudio(media.Path, startSec, totalFrames);
+                var peak = 0f;
+                for (var i = 0; i < samples.Length; i++)
+                {
+                    var abs = Math.Abs(samples[i]);
+                    if (abs > peak) peak = abs;
+                }
+
+                if (peak > 0.00001f)
+                {
+                    var newGain = Math.Min(31.62, 1.0f / peak);
+                    clip.Gain = newGain;
+                    normalizedCount++;
+                }
+            }
+        });
+
+        if (normalizedCount > 0)
+        {
+            vm.Status = $"Normalized {normalizedCount} audio event(s) to 0.0 dB peak.";
+            UpdateInspector();
+        }
+        else
+        {
+            vm.Status = "Selected audio event is silent; gain unchanged.";
+        }
+    });
+    private void MuteAudioClipClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+
+        if (selected.Length == 0 && SelectedClip is { } anyClip)
+        {
+            var trk = vm.Project.Tracks.First(t => t.Clips.Contains(anyClip));
+            selected = [(trk, anyClip)];
+        }
+
+        if (selected.Length == 0) { vm.Status = "Select an event to mute/unmute."; return; }
+        Pause();
+        var allMuted = selected.All(s => s.Clip.Gain == 0.0);
+        vm.Editor.Execute(_ =>
+        {
+            foreach (var (_, c) in selected)
+            {
+                c.Gain = allMuted ? 1.0 : 0.0;
+            }
+        });
+        UpdateInspector();
+        vm.Status = allMuted ? "Unmuted selected event(s)." : "Muted selected event(s).";
+    });
+    private void InvertPhaseClipClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+
+        if (selected.Length == 0 && SelectedClip is { } anyClip)
+        {
+            var trk = vm.Project.Tracks.First(t => t.Clips.Contains(anyClip));
+            selected = [(trk, anyClip)];
+        }
+
+        if (selected.Length == 0) { vm.Status = "Select an audio event to invert phase."; return; }
+        Pause();
+        vm.Editor.Execute(_ =>
+        {
+            foreach (var (_, c) in selected)
+            {
+                c.Gain = -c.Gain;
+            }
+        });
+        UpdateInspector();
+        vm.Status = "Inverted audio phase for selected event(s).";
+    });
+    private void InsertSolidColorClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        var colorAsset = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            Path = "openrend://color?hex=#000000",
+            DurationSeconds = 86400.0,
+            Width = vm.Project.Width,
+            Height = vm.Project.Height,
+            FrameRate = vm.Project.FrameRate.Value,
+            HasVideo = true,
+            HasAudio = false
+        };
+
+        var cursorFrame = vm.Position;
+        // 5 seconds default matching Vegas Pro generated media length
+        var durFrames = vm.Project.FrameRate.Frames(5.0);
+        var colorClip = new TimelineClip
+        {
+            MediaId = colorAsset.Id,
+            Name = "Solid Color (Black)",
+            StartFrame = cursorFrame,
+            DurationFrames = durFrames
+        };
+
+        vm.Editor.Execute(p =>
+        {
+            p.Media.Add(colorAsset);
+            var vTrack = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
+            if (vTrack is null)
+            {
+                vTrack = new TimelineTrack { Name = "Generated Media", Kind = TrackKind.Video };
+                p.Tracks.Insert(0, vTrack);
+            }
+            vTrack.Clips.Add(colorClip);
+        });
+
+        vm.Selection.Clear();
+        vm.Selection.Add(colorClip.Id);
+        Timeline.Selection.Clear();
+        Timeline.Selection.Add(colorClip.Id);
+        Timeline.InvalidateVisual();
+        UpdateInspector();
+        RequestPreview();
+        vm.Status = "Inserted VEGAS Solid Color generator media.";
+    });
+    private void EditTextMediaClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (SelectedClip is not { } clip) return;
+        OpenEditTextMedia(clip.Id);
+    });
+    private void OpenEditTextMedia(Guid clipId)
+    {
+        var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        if (clip is null) return;
+        var media = vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
+        if (media is null) return;
+        Pause();
+        var win = new TitlesAndTextWindow(vm, clip, media) { Owner = this };
+        win.ShowDialog();
+        RequestPreview();
+    }
+    private void SceneDetectionClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        if (new SceneDetectionWindow(vm) { Owner = this }.ShowDialog() == true)
+        {
+            Refresh();
+            RequestPreview();
+        }
+    });
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }
@@ -579,7 +847,7 @@ public partial class MainWindow : Window
         if (vm.Busy) return;
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
-        if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key == Key.E)) return;
+        if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M)) return;
         Action? action = key switch
         {
             Key.I when ctrl => () => ImportClick(this, e),
@@ -593,6 +861,10 @@ public partial class MainWindow : Window
             Key.E when ctrl && shift => () => ExportClick(this, e),
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
+            Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
+            Key.N when ctrl && shift => () => NormalizeAudioClipClick(this, e),
+            Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
+            Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
             Key.X when ctrl => () => CutClick(this, e),
@@ -654,6 +926,175 @@ public partial class MainWindow : Window
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
     }
     private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth, double WorkspaceHeight, double Zoom, bool Maximized);
+
+    private (float u, float v, float vpWidth, float vpHeight)? PreviewWindowToVideoCoords(int mouseX, int mouseY)
+    {
+        var (winW, winH) = Preview.ClientSize;
+        if (winW <= 0 || winH <= 0 || previewWidth <= 0 || previewHeight <= 0) return null;
+
+        var scale = Math.Min((float)winW / previewWidth, (float)winH / previewHeight);
+        var vpW = previewWidth * scale;
+        var vpH = previewHeight * scale;
+        var vpX = (winW - vpW) * 0.5f;
+        var vpY = (winH - vpH) * 0.5f;
+
+        var u = (mouseX - vpX) / vpW;
+        var v = (mouseY - vpY) / vpH;
+        return (u, v, vpW, vpH);
+    }
+
+    private void OnPreviewMouseDown(int x, int y)
+    {
+        if (previewWidth <= 0 || previewHeight <= 0) return;
+        var norm = PreviewWindowToVideoCoords(x, y);
+        if (norm is null) return;
+        var (u, v, vpW, vpH) = norm.Value;
+
+        var curFrame = vm.Position;
+        var textClips = vm.Project.Tracks
+            .Where(t => t.Kind == TrackKind.Video && !t.IsMuted && t.IsVisible)
+            .SelectMany(t => t.Clips)
+            .Where(c => curFrame >= c.StartFrame && curFrame < c.EndFrame)
+            .Where(c =>
+            {
+                var m = vm.Project.Media.FirstOrDefault(m => m.Id == c.MediaId);
+                return m != null && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) ||
+                                     m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase) ||
+                                     m.Path.EndsWith(".srt", StringComparison.OrdinalIgnoreCase));
+            })
+            .ToList();
+
+        if (textClips.Count == 0) return;
+
+        var clip = textClips.FirstOrDefault(c => vm.Selection.Contains(c.Id)) ?? textClips.First();
+        var media = vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
+        if (media is null) return;
+
+        var style = media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase)
+            ? SubtitleStyle.FromQuery(media.Path.Substring("openrend://text?".Length))
+            : SubtitleStyle.FromPreset("Classic White");
+
+        var bounds = SubtitleRenderer.MeasureSubtitleBounds(clip.Name, previewWidth, previewHeight, style);
+        var clickPixelX = u * previewWidth;
+        var clickPixelY = v * previewHeight;
+
+        var hitPadding = 14f;
+        var expandedBounds = new System.Drawing.RectangleF(
+            bounds.X - hitPadding,
+            bounds.Y - hitPadding,
+            bounds.Width + hitPadding * 2,
+            bounds.Height + hitPadding * 2);
+
+        var anchorX = style.HasCustomLocation ? style.LocationX * previewWidth : bounds.X + bounds.Width * 0.5f;
+        var anchorY = style.HasCustomLocation ? style.LocationY * previewHeight : bounds.Y + bounds.Height * 0.5f;
+        var distToAnchor = Math.Sqrt(Math.Pow(clickPixelX - anchorX, 2) + Math.Pow(clickPixelY - anchorY, 2));
+
+        if (expandedBounds.Contains(clickPixelX, clickPixelY) || distToAnchor <= 20)
+        {
+            isDraggingTextInPreview = true;
+            previewDraggedClipId = clip.Id;
+            previewDragOriginalStyle = SubtitleStyle.FromQuery(style.ToQuery());
+            previewDragStartMouse = new Point(x, y);
+            previewDragStartLocation = (style.LocationX, style.LocationY);
+
+            if (!vm.Selection.Contains(clip.Id))
+            {
+                vm.Selection.Clear();
+                vm.Selection.Add(clip.Id);
+                Timeline.Selection.Clear();
+                Timeline.Selection.Add(clip.Id);
+                Timeline.InvalidateVisual();
+                UpdateInspector();
+            }
+
+            vm.Renderer.ActiveSubtitleClipId = clip.Id;
+            RequestPreview();
+        }
+    }
+
+    private void OnPreviewMouseMove(int x, int y, bool isDown)
+    {
+        if (!isDraggingTextInPreview || !isDown || previewDraggedClipId is not { } clipId) return;
+
+        var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        var media = clip is not null ? vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId) : null;
+        if (clip is null || media is null) return;
+
+        var (winW, winH) = Preview.ClientSize;
+        if (winW <= 0 || winH <= 0 || previewWidth <= 0 || previewHeight <= 0) return;
+
+        var scale = Math.Min((float)winW / previewWidth, (float)winH / previewHeight);
+        var vpW = previewWidth * scale;
+        var vpH = previewHeight * scale;
+
+        var deltaX = (float)((x - previewDragStartMouse.X) / vpW);
+        var deltaY = (float)((y - previewDragStartMouse.Y) / vpH);
+
+        var newLocX = Math.Clamp(previewDragStartLocation.X + deltaX, 0.02f, 0.98f);
+        var newLocY = Math.Clamp(previewDragStartLocation.Y + deltaY, 0.02f, 0.98f);
+
+        var currentStyle = media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase)
+            ? SubtitleStyle.FromQuery(media.Path.Substring("openrend://text?".Length))
+            : SubtitleStyle.FromPreset("Classic White");
+
+        currentStyle.LocationX = newLocX;
+        currentStyle.LocationY = newLocY;
+        currentStyle.HasCustomLocation = true;
+
+        media.Path = $"openrend://text?{currentStyle.ToQuery()}";
+        vm.Renderer.ActiveSubtitleClipId = clipId;
+        RequestPreview();
+    }
+
+    private void OnPreviewMouseUp(int x, int y)
+    {
+        if (!isDraggingTextInPreview) return;
+        isDraggingTextInPreview = false;
+
+        if (previewDraggedClipId is { } clipId && previewDragOriginalStyle is { } origStyle)
+        {
+            var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+            var media = clip is not null ? vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId) : null;
+            if (media != null && media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase))
+            {
+                var finalPath = media.Path;
+                media.Path = $"openrend://text?{origStyle.ToQuery()}";
+                vm.Editor.Execute(p =>
+                {
+                    var m = p.Media.FirstOrDefault(x => x.Id == media.Id);
+                    if (m != null) m.Path = finalPath;
+                });
+            }
+        }
+
+        previewDraggedClipId = null;
+        previewDragOriginalStyle = null;
+    }
+
+    private void OnPreviewMouseDoubleClick(int x, int y)
+    {
+        if (previewWidth <= 0 || previewHeight <= 0) return;
+        var norm = PreviewWindowToVideoCoords(x, y);
+        if (norm is null) return;
+
+        var curFrame = vm.Position;
+        var clip = vm.Project.Tracks
+            .Where(t => t.Kind == TrackKind.Video && !t.IsMuted && t.IsVisible)
+            .SelectMany(t => t.Clips)
+            .Where(c => curFrame >= c.StartFrame && curFrame < c.EndFrame)
+            .FirstOrDefault(c =>
+            {
+                var m = vm.Project.Media.FirstOrDefault(m => m.Id == c.MediaId);
+                return m != null && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) ||
+                                     m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase));
+            });
+
+        if (clip is not null)
+        {
+            OpenEditTextMedia(clip.Id);
+        }
+    }
+
     private static nint WindowMessage(nint hwnd, int message, nint wparam, nint lparam, ref bool handled)
     {
         if (message != 0x24) return 0;

@@ -32,7 +32,7 @@ Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V paste
 
 Video events have Pan/Crop, FX and event-options buttons at their lower-right corner. Narrow events show an overflow button; zoom in or use the context menu for the full controls. Event options toggle headers, names and lengths for the current session. Locked tracks disable event actions.
 
-Video event FX provides an ordered built-in chain of Brightness and Contrast, Saturation and Invert. Add, remove, reorder or bypass effects, drag a parameter or enter its value, and undo changes. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. These effects process encoded RGB values; effect keyframes and external plug-ins are not supported yet.
+Video event FX provides 53 built-in effects across color, blur, detail, distortion, keying, stylizing, glow and render. Use the Plug-in chooser to filter categories, search, and stage Add/Replace/Remove operations; OK applies the draft as one undo step and Cancel preserves the project. Reorder or bypass effects, drag a parameter or enter its value, and undo changes. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. See [video effects](docs/video-effects.md) for the supported catalog and processing limits. Effect keyframes and external plug-ins are not supported yet.
 
 Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
 
@@ -44,7 +44,7 @@ Preview zoom and safe area guides affect the monitor only. Snapshot buttons copy
 
 With the timeline focused, Up/Down selects a track and Left/Right selects a clip. M toggles track mute, Shift+M solo, L lock and V video visibility. Timeline clips expose selection and track controls expose their actions to Windows UI Automation.
 
-Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1–3 and saves version 3; older builds reject new saves to protect crop animation and effects from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
+Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1–4 and saves version 4; older builds reject new saves to protect crop animation and effect parameters from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
 
 Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps black gaps, mixes audio, applies clip levels/fades and finalizes MP4 before replacing the chosen destination. Cancellation and failure preserve an existing destination. Export cannot overwrite a source file.
 
