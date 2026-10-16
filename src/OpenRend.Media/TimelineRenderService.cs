@@ -48,12 +48,14 @@ public sealed class TimelineRenderService : IDisposable
                 crop.Validate();
                 var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
                     crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
-                if (transformed)
+                if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                 {
                     if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
-                        throw new MediaException("Source dimensions exceed crop rendering limits.");
-                    // Keep source detail when zooming. Decode honors display rotation before sampling.
+                        throw new MediaException("Source dimensions exceed video processing limits.");
+                    // Effects precede resampling, so preview size cannot change their source pixels.
+                    // Decode honors display rotation before sampling.
                     var sourcePixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
+                    sourcePixels = VideoEffectProcessor.Apply(sourcePixels, layer.Clip.VideoEffects);
                     var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
                     if (compositor != null)
                     {

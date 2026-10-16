@@ -5,6 +5,7 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="OpenRend.Media.Tests" />
     <ProjectReference Include="../OpenRend.Core/OpenRend.Core.csproj" />
     <ProjectReference Include="../OpenRend.Timeline/OpenRend.Timeline.csproj" />
   </ItemGroup>
