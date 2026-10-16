@@ -6,7 +6,7 @@ namespace OpenRend.Project;
 
 public static class ProjectStore
 {
-    public const int CurrentVersion = 1;
+    public const int CurrentVersion = 2;
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -57,7 +57,7 @@ public static class ProjectStore
         catch (JsonException error) { throw new InvalidDataException("Project JSON is invalid.", error); }
         catch (ArgumentOutOfRangeException error) { throw new InvalidDataException("Project contains an invalid frame rate.", error); }
         if (manifest == null || manifest.Format != "OpenRend" || manifest.Project == null) throw new InvalidDataException("This is not an OpenRend project.");
-        if (manifest.Version != CurrentVersion) throw new InvalidDataException($"Project version {manifest.Version} is not supported. Supported version: {CurrentVersion}.");
+        if (manifest.Version is < 1 or > CurrentVersion) throw new InvalidDataException($"Project version {manifest.Version} is not supported. Supported versions: 1–{CurrentVersion}.");
         var project = manifest.Project;
         project.Validate();
         var directory = System.IO.Path.GetDirectoryName(fullPath)!;

@@ -38,6 +38,25 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task VersionOneProjectsLoadAndNewSavesDeclareCropAwareVersionTwo()
+    {
+        var path = System.IO.Path.Combine(directory, "versioned.openrend");
+        var project = Create();
+        await ProjectStore.SaveAsync(project, path);
+        var manifest = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
+        Assert.Equal(2, (int)manifest["Version"]!);
+        manifest["Version"] = 1;
+        await File.WriteAllTextAsync(path, manifest.ToJsonString());
+        var loaded = await ProjectStore.LoadAsync(path);
+        Assert.Null(loaded.Tracks[0].Clips[0].Crop);
+        var editor = new TimelineEditor(loaded);
+        editor.SetCropKeyframe(loaded.Tracks[0].Clips[0].Id, 0, CropState.Identity(320, 180) with { RotationDegrees = 45 });
+        await ProjectStore.SaveAsync(loaded, path);
+        Assert.Equal(2, (int)JsonNode.Parse(await File.ReadAllTextAsync(path))!["Version"]!);
+        Assert.Equal(45, (await ProjectStore.LoadAsync(path)).Tracks[0].Clips[0].Crop!.Keyframes[0].State.RotationDegrees);
+    }
+
+    [Fact]
     public async Task CancelledSavePreservesExistingProjectAndCleansTemporaryFiles()
     {
         var path = System.IO.Path.Combine(directory, "edit.orproj");
