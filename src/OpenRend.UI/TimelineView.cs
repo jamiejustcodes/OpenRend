@@ -46,6 +46,7 @@ public sealed class TimelineView : FrameworkElement
     public event Action<Guid, Guid, long>? MediaDropped;
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
+    public event Action? PanCropRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -85,6 +86,10 @@ public sealed class TimelineView : FrameworkElement
             if (track is not null) { MediaDropped?.Invoke(media, track.Id, FrameAt(p.X)); e.Handled = true; }
         };
         var menu = new System.Windows.Controls.ContextMenu();
+        var crop = new System.Windows.Controls.MenuItem { Header = "Video event Pan/Crop…" };
+        crop.Click += (_, _) => PanCropRequested?.Invoke();
+        menu.Items.Add(crop);
+        menu.Opened += (_, _) => crop.IsEnabled = Project.Tracks.Any(track => track.Kind == TrackKind.Video && !track.IsLocked && track.Clips.Any(clip => Selection.Contains(clip.Id)));
         foreach (var label in new[] { "Split at cursor", "Delete selection" })
         {
             var item = new System.Windows.Controls.MenuItem { Header = label };

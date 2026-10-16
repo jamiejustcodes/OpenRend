@@ -47,7 +47,7 @@
         <MenuItem Header="Reset workspace" Click="ResetWorkspaceClick"/>
       </MenuItem>
       <MenuItem Header="_Insert"><MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/><MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/></MenuItem>
-      <MenuItem Header="_Tools"><MenuItem Header="Clip properties" Click="ClipPropertiesClick"/><MenuItem Header="Render as…" Click="ExportClick"/></MenuItem>
+      <MenuItem Header="_Tools"><MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/><MenuItem Header="Clip properties" Click="ClipPropertiesClick"/><MenuItem Header="Render as…" Click="ExportClick"/></MenuItem>
       <MenuItem Header="_Options"><MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/><MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/></MenuItem>
       <MenuItem Header="_Help"><MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/><MenuItem Header="About OpenRend" Click="AboutClick"/></MenuItem>
     </Menu>

@@ -78,6 +78,7 @@ public partial class MainWindow : Window
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
         Timeline.SplitRequested += () => Guard(vm.Split);
+        Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
         vm.Changed += Refresh;
@@ -474,6 +475,27 @@ public partial class MainWindow : Window
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
     private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 2; UpdateInspector(); }
+    private async void PanCropClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+        if (selected.Length != 1) { vm.Status = "Select one video event to edit Pan/Crop."; return; }
+        if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing Pan/Crop."; return; }
+        Pause();
+        var editor = vm.Editor; var source = vm.Project.Media.Single(media => media.Id == selected[0].Clip.MediaId);
+        if (source.Width <= 0 || source.Height <= 0)
+        {
+            var path = source.Path; MediaAsset metadata;
+            vm.Busy = true;
+            try { metadata = await vm.Media.ProbeAsync(path); }
+            finally { vm.Busy = false; }
+            if (!ReferenceEquals(editor, vm.Editor) || !ReferenceEquals(source, vm.Project.Media.SingleOrDefault(media => media.Id == source.Id)) || source.Path != path) return;
+            if (metadata.Width <= 0 || metadata.Height <= 0) throw new InvalidOperationException("The source has no readable video dimensions.");
+            editor.Execute(_ => { source.Width = metadata.Width; source.Height = metadata.Height; });
+        }
+        var dialog = new PanCropWindow(vm, selected[0].Clip.Id, frame => { vm.Position = frame; UpdatePosition(); RequestPreview(); }) { Owner = this };
+        dialog.ShowDialog();
+    });
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }
@@ -582,7 +604,9 @@ public partial class MainWindow : Window
         try
         {
             if (!await ConfirmUnsavedAsync()) return;
-            Pause(); autosave.Stop(); SaveWorkspace(); allowClose = true; Close();
+            Pause(); autosave.Stop(); SaveWorkspace(); allowClose = true;
+            // Complete the cancelled Closing event before requesting the final close.
+            _ = Dispatcher.BeginInvoke(Close);
         }
         catch (Exception ex) { ShowError(ex); }
     }

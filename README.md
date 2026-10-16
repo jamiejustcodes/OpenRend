@@ -32,13 +32,15 @@ Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V paste
 
 Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
 
+Select a video event and open Tools → Video event Pan/Crop, or use the timeline context menu. Edit source-pixel width, height, center, rotation and pivot; aspect lock links width and height. Drag the source overlay to pan and its lower right handle to resize. Crop keyframes use whole project frames with Linear or Hold interpolation. Frame navigation updates the timeline preview. Crop edits support undo, persistence, trimming, splitting and clipboard frame-rate conversion, and use the same GPU or CPU composition during preview and export.
+
 Space plays or pauses, Enter pauses, Escape stops, Alt+Left/Right steps a frame and Ctrl+Home/End seeks to the bounds. Ctrl+wheel zooms the timeline; Shift+wheel scrolls time; the wheel scrolls tracks. Splitters resize the workspace. Preview quality selects draft, preview or project resolution. Master Bus adjusts monitor gain.
 
 Preview zoom and safe area guides affect the monitor only. Snapshot buttons copy or save the current project-resolution frame. Monitor meters use a decibel scale; monitor mute and gain do not change the rendered export. Video backend details are available in the preview information tooltip.
 
 With the timeline focused, Up/Down selects a track and Left/Right selects a clip. M toggles track mute, Shift+M solo, L lock and V video visibility. Timeline clips expose selection and track controls expose their actions to Windows UI Automation.
 
-Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
+Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1 and 2 and saves version 2; older builds reject new saves to protect crop animation from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
 
 Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps black gaps, mixes audio, applies clip levels/fades and finalizes MP4 before replacing the chosen destination. Cancellation and failure preserve an existing destination. Export cannot overwrite a source file.
 
@@ -46,7 +48,7 @@ Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps b
 
 Tests exercise rational timing, edit transactions, fade preservation, persistence, legacy project import, native decoding, seeking, audio resampling, video composition and real encoded output. See [feature status](docs/feature-status.md) for evidence and remaining work.
 
-The current application is an early functional editor. Arbitrary docking, comprehensive effects/keyframes/titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development.
+The current application is an early functional editor. Arbitrary docking, broader effect automation, curve interpolation, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Transformed clips currently decode at source resolution and use CPU upload/readback around GPU composition.
 
 ## License
 

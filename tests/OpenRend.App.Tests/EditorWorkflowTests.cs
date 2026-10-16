@@ -42,7 +42,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(temporary);
         var projectPath = Path.Combine(temporary, "ui-workflow.openrend");
-        var media = new MediaAsset { Path = fixture, DurationSeconds = 3, Width = 320, Height = 180, FrameRate = 30, HasVideo = true, HasAudio = true };
+        var media = new MediaAsset { Path = fixture, DurationSeconds = 3, FrameRate = 30, HasVideo = true, HasAudio = true };
         var document = new ProjectDocument
         {
             Name = "UI integration",
@@ -69,6 +69,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 }
                 Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
                 Assert.True(Find(window, "CopyButton").IsEnabled);
+                await VerifyPanCropAsync(window, projectPath);
                 for (var i = 0; i < 30; i++) Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);
                 WaitFor(() => Find(window, "Timecode").Name == "00:00:01:00", "Frame stepping did not reach frame 30.");
                 Chord(window, VirtualKeyShort.KEY_S);
@@ -95,6 +96,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 AssertSplitRanges(await WaitForSavedClipsAsync(projectPath, 2));
                 WaitFor(() => !window.Title.Contains('*'), "Saving did not clear the modified indicator.");
                 RenderAndVerify(window, executable, Path.Combine(temporary, "edited.mp4"));
+                running.CloseGracefully();
             }
 
             using (var reopened = Launch(executable, projectPath, temporary))
@@ -110,6 +112,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 Assert.Equal("0", Find(reopened.Window, "ClipStart").AsTextBox().Text);
                 Assert.Equal("0", Find(reopened.Window, "ClipIn").AsTextBox().Text);
                 AssertSplitRanges(await ProjectStore.LoadAsync(projectPath));
+                reopened.CloseGracefully();
             }
         }
         finally { Directory.Delete(temporary, recursive: true); }
@@ -155,6 +158,49 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         Chord(window, VirtualKeyShort.ESCAPE);
         Chord(window, VirtualKeyShort.LEFT);
         Assert.Equal(1, opacity.Patterns.RangeValue.Pattern.Value.Value);
+    }
+
+    private async Task VerifyPanCropAsync(Window window, string projectPath)
+    {
+        Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.END);
+        var tools = window.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("Tools")));
+        Assert.NotNull(tools); tools.AsMenuItem().Expand();
+        Find(window, "PanCropMenu").AsMenuItem().Invoke();
+        Window? crop = null;
+        WaitFor(() => (crop = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event Pan/Crop")) is not null, "Pan/Crop did not open.");
+        Assert.NotNull(crop);
+        Assert.Equal("89", Find(crop, "CropFrame").AsTextBox().Text);
+        var initialFrame = Find(crop, "CropFrame").AsTextBox(); initialFrame.Focus(); initialFrame.Text = "0"; Chord(crop, VirtualKeyShort.RETURN);
+        var width = Find(crop, "CropWidth").AsTextBox();
+        Assert.Equal("320", width.Text);
+        var preset = crop.FindFirstDescendant(c => c.ByControlType(ControlType.ComboBox).And(c.ByName("Crop preset")));
+        Assert.NotNull(preset); preset.AsComboBox().Select(1);
+        WaitFor(() => width.Text == "160", "Half-size preset did not crop the source.");
+        preset.AsComboBox().Select(0);
+        WaitFor(() => width.Text == "320", "Full-frame preset did not restore the source.");
+        width.Focus(); width.Text = "160"; Find(crop, "CropFrame").Focus();
+        WaitFor(() => Find(crop, "CropHeight").AsTextBox().Text == "90", "Aspect lock did not resize crop height.");
+        var frame = Find(crop, "CropFrame").AsTextBox(); frame.Text = "60"; frame.Focus();
+        Chord(crop, VirtualKeyShort.RETURN);
+        width.Focus(); width.Text = "80"; frame.Focus();
+        WaitFor(() => Find(crop, "CropHeight").AsTextBox().Text == "45", "Second crop key was not applied.");
+        var angle = Find(crop, "CropRotationDegrees").AsTextBox(); angle.Focus(); angle.Text = "90"; frame.Focus();
+        WaitFor(() => angle.Text == "90", "Crop angle was not committed.");
+        crop.Close(); SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Clips[0].Crop?.Keyframes.Count == 2, "Crop keyframes were not saved.");
+        var saved = (await ProjectStore.LoadAsync(projectPath)).Tracks[0].Clips[0].Crop!;
+        Assert.Equal(new long[] { 0, 60 }, saved.Keyframes.Select(key => key.Frame));
+        Assert.Equal(160, saved.Keyframes[0].State.Width); Assert.Equal(80, saved.Keyframes[1].State.Width);
+        Assert.Equal(90, saved.Keyframes[1].State.RotationDegrees);
+        tools.AsMenuItem().Expand(); Find(window, "PanCropMenu").AsMenuItem().Invoke();
+        WaitFor(() => (crop = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event Pan/Crop")) is not null, "Saved Pan/Crop did not reopen.");
+        Assert.NotNull(crop);
+        Assert.Equal("80", Find(crop, "CropWidth").AsTextBox().Text);
+        var reset = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Reset Pan/Crop")));
+        Assert.NotNull(reset); reset.AsButton().Invoke();
+        WaitFor(() => Find(crop, "CropWidth").AsTextBox().Text == "320", "Reset did not restore the source crop.");
+        crop.Close(); Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.HOME); SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Clips[0].Crop is null, "Reset crop was not saved.");
     }
 
     private static async Task WaitForSavedStateAsync(string path, string action, bool expected)
@@ -325,10 +371,15 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
     private sealed class RunningApplication(Application app, UIA3Automation automation, Window window) : IDisposable
     {
         public Window Window { get; } = window;
+        public void CloseGracefully()
+        {
+            WaitFor(() => Find(Window, "RenderButton").IsEnabled, "Render did not finish before closing.");
+            Window.Close();
+            WaitFor(() => app.HasExited, "The clean project did not close gracefully.");
+        }
         public void Dispose()
         {
-            // Avoid persisting window preferences from the disposable test session.
-            app.Kill();
+            if (!app.HasExited) app.Kill();
             app.Dispose();
             automation.Dispose();
         }
