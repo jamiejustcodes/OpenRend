@@ -239,6 +239,13 @@ public sealed class EditorViewModel : ObservableObject
                 clip.FadeDurationFrames = copied.Clip.FadeDurationFrames.HasValue ? envelope : null;
                 clip.FadeInFrames = Math.Min(envelope, ConvertFrame(copied.Clip.FadeInFrames));
                 clip.FadeOutFrames = Math.Min(envelope - clip.FadeInFrames, ConvertFrame(copied.Clip.FadeOutFrames));
+                clip.CropOffsetFrames = ConvertFrame(copied.Clip.CropOffsetFrames);
+                if (clip.Crop is { } crop)
+                {
+                    // A lower destination rate can collapse several keys onto one frame.
+                    crop.Keyframes = crop.Keyframes.Select(key => new CropKeyframe { Frame = ConvertFrame(key.Frame), State = key.State, Interpolation = key.Interpolation })
+                        .GroupBy(key => key.Frame).Select(group => group.Last()).OrderBy(key => key.Frame).ToList();
+                }
                 if (clip.GroupId is { } group)
                 {
                     if (!groups.TryGetValue(group, out var replacement)) groups[group] = replacement = Guid.NewGuid();

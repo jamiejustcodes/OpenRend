@@ -229,5 +229,44 @@ public sealed class ClipboardRegressionTests
         vm.Project.Validate();
     }
 
+    [Fact]
+    public void ClipboardCropKeysKeepTheirSecondsAndIndependentGeometryAcrossRates()
+    {
+        using var session = new Session(); var vm = session.ViewModel;
+        var start = CropState.Identity(320, 180); var end = start with { Width = 160, Height = 90, RotationDegrees = 90 };
+        vm.Editor.SetCropKeyframe(session.VideoId, 0, start);
+        vm.Editor.SetCropKeyframe(session.VideoId, 30, end, CropInterpolation.Hold);
+        vm.Editor.TrimClip(session.VideoId, 66, 54);
+        vm.Copy();
+        vm.Editor.SetCropKeyframe(session.VideoId, 0, start with { CenterX = 42 });
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(60, 1), Tracks = [new TimelineTrack { Kind = TrackKind.Video }, new TimelineTrack { Kind = TrackKind.Audio }] }, "crop60.openrend");
+        vm.Paste();
+        var clip = Selected(vm).Single(c => c.Crop is not null);
+        Assert.Equal(12, clip.CropOffsetFrames);
+        Assert.Equal(new long[] { 0, 60 }, clip.Crop!.Keyframes.Select(key => key.Frame));
+        Assert.Equal(start, clip.Crop.Keyframes[0].State); Assert.Equal(end, clip.Crop.Keyframes[1].State);
+        Assert.Equal(CropInterpolation.Hold, clip.Crop.Keyframes[1].Interpolation);
+        vm.Paste();
+        Selected(vm).Single(c => c.Crop is not null).Crop!.Keyframes[0].State = end;
+        Assert.Equal(start, clip.Crop.Keyframes[0].State);
+        vm.Project.Validate();
+    }
+
+    [Fact]
+    public void DownsampledCropKeysResolveFrameCollisionsToTheLaterSourceKey()
+    {
+        using var session = new Session(); var vm = session.ViewModel;
+        var first = CropState.Identity(320, 180);
+        vm.Editor.SetCropKeyframe(session.VideoId, 0, first);
+        vm.Editor.SetCropKeyframe(session.VideoId, 1, first with { CenterX = 120 });
+        vm.Editor.SetCropKeyframe(session.VideoId, 2, first with { CenterX = 80 });
+        vm.Copy();
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(1, 1), Tracks = [new TimelineTrack { Kind = TrackKind.Video }, new TimelineTrack { Kind = TrackKind.Audio }] }, "crop1.openrend");
+        vm.Paste();
+        var key = Assert.Single(Selected(vm).Single(c => c.Crop is not null).Crop!.Keyframes);
+        Assert.Equal(0, key.Frame); Assert.Equal(80, key.State.CenterX);
+        vm.Project.Validate();
+    }
+
     private static TimelineClip[] Selected(EditorViewModel vm) => vm.Project.Tracks.SelectMany(t => t.Clips).Where(c => vm.Selection.Contains(c.Id)).OrderBy(c => c.StartFrame).ToArray();
 }
