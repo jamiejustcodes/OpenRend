@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
 using System.Windows.Automation.Provider;
+using System.Windows.Threading;
 using OpenRend.Core;
 
 namespace OpenRend.UI;
@@ -54,6 +55,12 @@ public sealed class TimelineAutomationPeer(TimelineView owner) : FrameworkElemen
     {
         foreach (var id in tracks.Keys.Where(id => View.Project.Tracks.All(t => t.Id != id)).ToArray()) tracks.Remove(id);
         foreach (var track in tracks.Values) track.RefreshState();
+        InvalidatePeer();
+    }
+
+    internal void RefreshGeometry()
+    {
+        foreach (var track in tracks.Values) track.RefreshGeometry();
         InvalidatePeer();
     }
 }
@@ -141,8 +148,16 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
     internal void RefreshState()
     {
         foreach (var clipId in clips.Keys.Where(clipId => !Track.Clips.Any(c => c.Id == clipId)).ToArray()) clips.Remove(clipId);
+        foreach (var clip in clips.Values) clip.RefreshGeometry();
         foreach (var button in buttons.Values) button.RefreshState();
         foreach (var slider in levels.Values) slider.RefreshState();
+        InvalidatePeer();
+    }
+    internal void RefreshGeometry()
+    {
+        foreach (var clip in clips.Values) clip.RefreshGeometry();
+        foreach (var button in buttons.Values) button.InvalidatePeer();
+        foreach (var slider in levels.Values) slider.InvalidatePeer();
         InvalidatePeer();
     }
     internal void NotifyLevelFocus(string level)
@@ -195,6 +210,7 @@ internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer ti
 
 internal sealed class TimelineClipAutomationPeer(TimelineAutomationPeer timeline, Guid trackId, Guid id) : TimelineChildAutomationPeer(timeline), ISelectionItemProvider
 {
+    private readonly Dictionary<string, TimelineEventButtonAutomationPeer> buttons = [];
     internal Guid Id => id;
     private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
     private TimelineClip Clip => Track.Clips.FirstOrDefault(c => c.Id == id) ?? throw new ElementNotAvailableException();
@@ -213,6 +229,24 @@ internal sealed class TimelineClipAutomationPeer(TimelineAutomationPeer timeline
     public void Select() { EnsureEnabled(); _ = Clip; View.SelectClip(id, false); }
     public void AddToSelection() { EnsureEnabled(); _ = Clip; View.SelectClip(id, true); }
     public void RemoveFromSelection() { EnsureEnabled(); _ = Clip; View.RemoveClipSelection(id); }
+    protected override List<AutomationPeer> GetChildrenCore()
+    {
+        var children = new List<AutomationPeer>();
+        foreach (var action in View.EventButtonActions(Track, Clip))
+        {
+            if (!buttons.TryGetValue(action, out var button)) buttons.Add(action, button = new TimelineEventButtonAutomationPeer(Timeline, trackId, id, action));
+            children.Add(button);
+        }
+        return children;
+    }
+
+    internal void RefreshGeometry()
+    {
+        // Button availability changes with zoom and clipping, even when the project is unchanged.
+        ResetChildrenCache();
+        foreach (var button in buttons.Values) button.InvalidatePeer();
+        InvalidatePeer();
+    }
 
     internal void RefreshSelection(bool previous)
     {
@@ -220,6 +254,35 @@ internal sealed class TimelineClipAutomationPeer(TimelineAutomationPeer timeline
         RaisePropertyChangedEvent(SelectionItemPatternIdentifiers.IsSelectedProperty, previous, IsSelected);
         var change = IsSelected ? (View.Selection.Count == 1 ? AutomationEvents.SelectionItemPatternOnElementSelected : AutomationEvents.SelectionItemPatternOnElementAddedToSelection) : AutomationEvents.SelectionItemPatternOnElementRemovedFromSelection;
         if (ListenerExists(change)) RaiseAutomationEvent(change);
+    }
+}
+
+internal sealed class TimelineEventButtonAutomationPeer(TimelineAutomationPeer timeline, Guid trackId, Guid clipId, string action) : TimelineChildAutomationPeer(timeline), IInvokeProvider
+{
+    private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
+    private TimelineClip Clip => Track.Clips.FirstOrDefault(c => c.Id == clipId) ?? throw new ElementNotAvailableException();
+    protected override string GetAutomationIdCore() => $"Clip_{clipId:N}_{action}";
+    protected override string GetClassNameCore() => "TimelineEventButton";
+    protected override string GetNameCore() => $"{TimelineView.EventButtonLabel(action)} {Clip.Name}";
+    protected override string GetHelpTextCore() => TimelineView.EventButtonLabel(action);
+    protected override string GetItemStatusCore() => action == "VideoEffects" ? $"{Clip.VideoEffects.Count(effect => effect.IsEnabled)} enabled effects" : "";
+    protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
+    protected override bool IsEnabledCore() => View.IsEnabled && !Track.IsLocked;
+    protected override Rect GetBoundingRectangleCore() => View.ToScreenBounds(View.EventButtonBounds(trackId, Clip, action), clipContent: true);
+    protected override void SetFocusCore() { EnsureEnabled(); View.SelectClip(clipId, false); View.Focus(); }
+    public override object? GetPattern(PatternInterface patternInterface) => patternInterface == PatternInterface.Invoke ? this : null;
+    public void Invoke()
+    {
+        EnsureEnabled(); _ = Clip;
+        if (Track.IsLocked) throw new ElementNotEnabledException();
+        // UIA must return before a dialog starts its modal message loop.
+        View.Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+        {
+            var track = View.Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (!View.IsEnabled || track is null || track.IsLocked || !track.Clips.Any(c => c.Id == clipId)) return;
+            if (action != "More" && track.Kind != TrackKind.Video) return;
+            View.InvokeEventAction(clipId, action);
+        }));
     }
 }
 

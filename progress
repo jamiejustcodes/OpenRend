@@ -1,14 +1,16 @@
 # OpenRend development handoff
 
-Updated: 2026-10-16, 14:30 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
+Updated: 2026-10-16, 14:53 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
 
 ## Current work
 
-New pass in progress: add the missing per-event Pan/Crop, video FX and overflow controls shown in the user's screenshot. Reference event overflow and FX chooser were observed; REA managed evidence is retained privately in event-controls-2026-10-16.json. Implement an original built-in ordered video FX chain (brightness/contrast, saturation, invert), bypass/reordering, shared preview/export processing, event buttons and real display options. Verification for these new changes is pending. Keep private reference research outside Git.
+Current pass completes the missing per-event Pan/Crop, video FX and overflow controls shown in the user's screenshot. Reference event overflow and FX chooser were observed; REA managed evidence is retained privately in event-controls-2026-10-16.json. Keep private reference research outside Git. Full build/native checks and both desktop workflows passed. Final self-contained bundle dist/OpenRend-event-fx/OpenRend.exe passed both desktop workflows in 61 seconds, including the corrected dropdown label. All required local checks are complete.
 
 Current user session is dist/OpenRend-playback-fix/OpenRend.exe (observed PID33412, Untitled*). Preserve it. Choose a separate unused package path, dist/OpenRend-event-fx, and recheck processes first.
 
-FX domain and shared rendering implemented: ordered brightness/contrast, saturation and invert, per-effect bypass, deep-cloned split/copy state, lock validation and undo/redo. New saves use format 3 so older builds reject files instead of silently dropping effects; versions 1/2 still load. Core 136/136 and Media 33/33 passed, including CPU/D3D pixels and encoded-export effects. App build passed with zero warnings/errors. Event toolbar/dialog desktop checks remain pending.
+FX domain and shared rendering implemented: ordered brightness/contrast, saturation and invert, per-effect bypass, deep-cloned split/copy state, lock validation and undo/redo. Commits d7bfd05 and f80f286 are pushed and their GitHub CI passed. New saves use format 3 so older builds reject files instead of silently dropping effects; versions 1/2 still load. Core 136/136, Media 33/33, Editor 90/90, playback 4/4 (including explicit audio-device tests), native 16 and desktop 2/2 = 281 unique tests passed. App build has zero warnings/errors.
+
+Event buttons use clicked event IDs even when linked selection expands, render at the real bottom-right edge, expose accessible Invoke actions and hide clipped targets. Narrow events retain overflow; zoom in for the full toolbar. Overflow includes session-only header/name/length toggles. The FX window provides add/remove/order/bypass/reset/undo and live frame preview. Parameter controls retain keyboard focus/capture; one slider drag is one undo transaction, Escape releases capture, accessibility toggles commit bypass, and UIA event actions dispatch after returning so modal dialogs do not block clients. These interactions, changed native preview pixels, save/reopen and export pass the new desktop workflow. Visual screenshots are under .local/desktop-validation.
 
 ## Previous completed pass
 
@@ -23,7 +25,7 @@ Playback cause: completed async renders were rejected whenever the audio clock a
 
 Interaction commit b48adc2: shared hover/click hit testing reaches ten logical pixels on either side of a visible clip edge; short events retain a movable middle; offscreen edges do not become viewport trim handles. Resize/locked/move cursors and an active edge grip are added. Dragging keeps capture until release; Escape cancels without an edit and clears track-level focus. Pan/Crop resizes from any of its four corners, chooses a rotation-aware resize cursor and accepts vertical aspect-locked drags. Desktop coverage includes actual native cursor checks, outside-edge trim/hold/cancel/undo and upper-left crop resize/undo. Test setup must close the preset dropdown before checking workspace hover; otherwise it captures the mouse.
 
-Session preservation update: the currently open unsaved user editor is now dist/OpenRend-next/OpenRend.exe (observed PID38392, Untitled*). Do not close it or overwrite that bundle. Package this pass into dist/OpenRend-playback-fix instead, and verify that new path. Recheck running sessions before packaging; PIDs and paths can change.
+The previous pass was packaged into dist/OpenRend-playback-fix. The user now runs that bundle; preserve it and package this pass separately as described above.
 
 ## Already implemented
 
@@ -35,12 +37,12 @@ Latest implementation commits: 4ae6a53 (video scheduling) and b48adc2 (trim/crop
 
 ## Next work
 
-Continue source aspect/fill controls and remaining Pan/Crop interactions, followed by broader editor layout/docking and effects. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse the local evidence under E:\OpenRend.Private\research for exact target identities, earlier findings and unknowns. Keep that research private. Use normal source tools for OpenRend's own code. Arbitrary docking, spatial crop smoothing, masks, effect chains, titles, proxies, advanced cache and plugin/script hosting remain incomplete. Full application/UI parity has not been established.
+After finishing package checks and pushing UI changes, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by event FX keyframes and broader layout/docking. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse private evidence under E:\OpenRend.Private\research. Use normal source tools for OpenRend's own code. The current FX chain contains three original built-ins processed on encoded RGB before crop/composition, with CPU processing/upload/readback. Effect keyframes, arbitrary before/after-crop ordering, audio/media/track FX, plugin hosting, arbitrary docking, spatial crop smoothing, masks, titles, proxies, advanced cache and scripting remain incomplete. Full application/UI parity has not been established.
 
 ## Working rules and validation
 
 - Preserve existing work and open unsaved editor sessions. Do not replace an executable bundle while it is running. Use dist/OpenRend-next for the new development package when dist/OpenRend is in use.
 - Run tools/build.ps1 for native and managed checks. Desktop checks require OPENREND_RUN_UI_TESTS=1 and an unlocked interactive desktop; use isolated OPENREND_DATA_DIR. To verify the packaged desktop, set OPENREND_APP_PATH to its executable.
-- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-playback-fix for this pass. The default package destination is dist/OpenRend; always check running sessions before choosing a destination.
+- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-event-fx for this pass. The default package destination is dist/OpenRend; always check running sessions before choosing a destination.
 - Use concise comments for timing, ownership and non-obvious behavior. Stage explicit paths, make small truthful tested commits, and push to the configured GitHub remote as authorized. Never invent test results or commit history.
 - Keep private investigation evidence, dependency SDKs and generated binaries outside commits. Public documentation describes OpenRend's own implementation and measured limits.

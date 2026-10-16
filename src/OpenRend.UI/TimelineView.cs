@@ -11,7 +11,7 @@ namespace OpenRend.UI;
 public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
 
-public sealed class TimelineView : FrameworkElement
+public sealed partial class TimelineView : FrameworkElement
 {
     private ProjectDocument project = new();
     public ProjectDocument Project
@@ -31,10 +31,25 @@ public sealed class TimelineView : FrameworkElement
     public HashSet<Guid> Selection { get; } = [];
     public Dictionary<Guid, float[]> Waveforms { get; } = [];
     public Dictionary<Guid, ImageSource> Thumbnails { get; } = [];
-    public double PixelsPerSecond { get; set; } = 13.4;
+    private double pixelsPerSecond = 13.4;
+    public double PixelsPerSecond
+    {
+        get => pixelsPerSecond;
+        set { if (pixelsPerSecond == value) return; pixelsPerSecond = value; RefreshGeometry(); }
+    }
     public bool Snapping { get; set; } = true;
-    public double Offset { get; set; }
-    public double VerticalOffset { get; set; }
+    private double offset;
+    public double Offset
+    {
+        get => offset;
+        set { if (offset == value) return; offset = value; RefreshGeometry(); }
+    }
+    private double verticalOffset;
+    public double VerticalOffset
+    {
+        get => verticalOffset;
+        set { if (verticalOffset == value) return; verticalOffset = value; RefreshGeometry(); }
+    }
     public const double HeaderWidth = 256;
     public const double RulerHeight = 46;
     public const double TrackHeight = 69;
@@ -47,6 +62,8 @@ public sealed class TimelineView : FrameworkElement
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
     public event Action? PanCropRequested;
+    public event Action? VideoEffectsRequested;
+    public event Action<Guid, string>? VideoEventActionRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -72,6 +89,7 @@ public sealed class TimelineView : FrameworkElement
     }
     public void CancelPointerInput()
     {
+        pressedEventButton = null;
         dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
         CancelTrackLevelInput();
         ReleaseMouseCapture(); ClearHover(); InvalidateVisual();
@@ -93,21 +111,22 @@ public sealed class TimelineView : FrameworkElement
             var track = TrackAt(p.Y);
             if (track is not null) { MediaDropped?.Invoke(media, track.Id, FrameAt(p.X)); e.Handled = true; }
         };
-        var menu = new System.Windows.Controls.ContextMenu();
-        var crop = new System.Windows.Controls.MenuItem { Header = "Video event Pan/Crop…" };
-        crop.Click += (_, _) => PanCropRequested?.Invoke();
-        menu.Items.Add(crop);
-        menu.Opened += (_, _) => crop.IsEnabled = Project.Tracks.Any(track => track.Kind == TrackKind.Video && !track.IsLocked && track.Clips.Any(clip => Selection.Contains(clip.Id)));
-        foreach (var label in new[] { "Split at cursor", "Delete selection" })
-        {
-            var item = new System.Windows.Controls.MenuItem { Header = label };
-            item.Click += (_, _) => { if (label.StartsWith("Split")) SplitRequested?.Invoke(); else DeleteRequested?.Invoke(); };
-            menu.Items.Add(item);
-        }
-        ContextMenu = menu;
+        ContextMenu = CreateEventMenu();
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
+
+    private void RefreshGeometry()
+    {
+        (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshGeometry();
+        InvalidateVisual();
+    }
+
+    protected override void OnRenderSizeChanged(SizeChangedInfo sizeInfo)
+    {
+        base.OnRenderSizeChanged(sizeInfo);
+        RefreshGeometry();
+    }
 
     public bool HandleKeyboardInput(Key key, ModifierKeys modifiers)
     {
@@ -313,19 +332,24 @@ public sealed class TimelineView : FrameworkElement
     }
     internal Cursor CursorAt(Point point)
     {
+        if (HitEventButton(point) is { } button) return button.Track.IsLocked ? Cursors.No : Cursors.Hand;
         var hit = HitClip(point);
         return hit is null ? Cursors.Arrow : hit.Value.Track.IsLocked ? Cursors.No : hit.Value.Mode == "Move" ? Cursors.Arrow : Cursors.SizeWE;
     }
     private void UpdateHover(Point point)
     {
+        var button = HitEventButton(point);
+        ToolTip = button is { } target ? EventButtonLabel(target.Action) : null;
+        var nextButton = button is { } hovered ? (hovered.Clip.Id, hovered.Action) : ((Guid, string)?)null;
+        if (hoverEventButton != nextButton) { hoverEventButton = nextButton; InvalidateVisual(); }
         var hit = HitClip(point);
-        var id = hit is { Track.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
+        var id = button is null && hit is { Track.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
         var nextMode = id is not null ? hit!.Value.Mode : "";
         Cursor = CursorAt(point);
         if (hoverClipId == id && hoverMode == nextMode) return;
         hoverClipId = id; hoverMode = nextMode; InvalidateVisual();
     }
-    private void ClearHover() { hoverClipId = null; hoverMode = ""; Cursor = null; InvalidateVisual(); }
+    private void ClearHover() { hoverClipId = null; hoverMode = ""; hoverEventButton = null; ToolTip = null; Cursor = null; InvalidateVisual(); }
     private void Text(DrawingContext dc, string text, double x, double y, Brush? color = null, double size = 12, double maxWidth = 10000)
     {
         var ft = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Face, size,
@@ -372,8 +396,8 @@ public sealed class TimelineView : FrameworkElement
                 dc.DrawRectangle(Brush(track.IsMuted ? "#414141" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
                     new Pen(selected ? Brush("#E4DF8F") : Brush("#5E737C"), 1), rect);
                 dc.PushClip(new RectangleGeometry(rect));
-                dc.DrawRectangle(Brush(selected ? "#4D5356" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
-                Text(dc, clip.Name, rect.X + 3, rect.Y + 1, size: 11, maxWidth: rect.Width - 6);
+                if (ShowEventHeaders) dc.DrawRectangle(Brush(selected ? "#4D5356" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
+                if (ShowEventNames) Text(dc, clip.Name, rect.X + 3, rect.Y + 1, size: 11, maxWidth: rect.Width - 6);
                 if (rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
                 {
                     var height = TrackHeight - 22;
@@ -408,6 +432,7 @@ public sealed class TimelineView : FrameworkElement
                     dc.DrawLine(new Pen(Brushes.WhiteSmoke, 2), new Point(edgeX, rect.Top + 2), new Point(edgeX, rect.Bottom - 2));
                     dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(edgeX - 2, rect.Top + rect.Height / 2 - 7, 4, 14));
                 }
+                if (dragging is null) DrawEventButtons(dc, track, clip, rect);
                 dc.Pop();
             }
         }
@@ -477,6 +502,7 @@ public sealed class TimelineView : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
+        if (BeginEventButton(origin)) { e.Handled = true; return; }
         if (origin.X < HeaderWidth)
         {
             var track = TrackAt(origin.Y);
@@ -512,6 +538,7 @@ public sealed class TimelineView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e); var p = e.GetPosition(this);
+        if (pressedEventButton is not null) { UpdateHover(p); return; }
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
         if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
         if (dragging is null) { UpdateHover(p); return; }
@@ -540,6 +567,10 @@ public sealed class TimelineView : FrameworkElement
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
+        if (pressedEventButton is not null)
+        {
+            CompleteEventButton(e.GetPosition(this)); e.Handled = true; return;
+        }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
         var clip = dragging; dragging = null;
@@ -563,6 +594,7 @@ public sealed class TimelineView : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        pressedEventButton = null;
         adjustingLevel = false; seeking = false;
         dragging = null; ClearHover();
         InvalidateVisual();

@@ -32,6 +32,106 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
 {
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]
+    public async Task EventButtonsEditAnOrderedEffectChainAndPersistIt()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(temporary);
+        var projectPath = Path.Combine(temporary, "event-fx.openrend");
+        var media = new MediaAsset { Path = Path.Combine(root, "tests", "native", "fixture.mp4"), Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true, HasAudio = true };
+        var clip = new TimelineClip { MediaId = media.Id, Name = "fixture.mp4", DurationFrames = 90 };
+        await ProjectStore.SaveAsync(new() { Name = "UI integration", Width = 320, Height = 180, Media = [media], Tracks = [new() { Kind = TrackKind.Video, Name = "Video 1", Clips = [clip] }] }, projectPath);
+        try
+        {
+            using (var running = Launch(executable, projectPath, temporary))
+            {
+                var window = running.Window; VerifyLoadedWorkspace(window);
+                Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+                WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId($"Clip_{clip.Id:N}_PanCrop")) is not null, "Fitting the timeline did not expose the event buttons.");
+                var cropButton = Find(window, $"Clip_{clip.Id:N}_PanCrop").AsButton();
+                cropButton.Invoke(); Window? crop = null;
+                WaitFor(() => (crop = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event Pan/Crop")) is not null, "The event Pan/Crop button did not open its editor.");
+                Assert.NotNull(crop); crop.Close();
+                Find(window, $"Clip_{clip.Id:N}_More").AsButton().Invoke();
+                AutomationElement? options = null;
+                WaitFor(() => (options = window.Automation.GetDesktop().FindFirstDescendant(c => c.ByControlType(ControlType.Menu).And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null, "Event options did not open.");
+                Assert.NotNull(options);
+                var lengths = options.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("Show event lengths"))); Assert.NotNull(lengths); lengths.AsMenuItem().Invoke();
+                var preview = Assert.Single(window.FindAllDescendants(c => c.ByClassName("OpenRend.Preview")));
+                WaitFor(() => PresentedFrame(window) == 0, "The initial event frame did not render."); var original = SamplePreview(preview);
+                var fxButton = Find(window, $"Clip_{clip.Id:N}_VideoEffects");
+                Mouse.Click(fxButton.GetClickablePoint());
+                Window? effects = null;
+                WaitFor(() => (effects = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null, "Clicking the event FX button did not open its editor.");
+                Assert.NotNull(effects);
+                Find(effects, "AddVideoEffect").AsButton().Invoke();
+                var amount = Find(effects, "VideoEffectAmount").AsTextBox(); amount.Focus(); amount.Text = "0.25"; Chord(effects, VirtualKeyShort.RETURN);
+                WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.25", "Brightness was not applied.");
+                var brightnessSlider = effects.FindFirstDescendant(c => c.ByControlType(ControlType.Slider).And(c.ByName("Brightness"))); Assert.NotNull(brightnessSlider);
+                var sliderBounds = brightnessSlider.BoundingRectangle;
+                Mouse.Drag(new System.Drawing.Point((int)(sliderBounds.Left + sliderBounds.Width * .625), (int)(sliderBounds.Top + sliderBounds.Height / 2)),
+                    new System.Drawing.Point((int)(sliderBounds.Left + sliderBounds.Width * .8), (int)(sliderBounds.Top + sliderBounds.Height / 2)), MouseButton.Left);
+                WaitFor(() => double.Parse(Find(effects, "VideoEffectAmount").AsTextBox().Text, System.Globalization.CultureInfo.InvariantCulture) > .3, "Dragging the brightness slider did not apply its value.");
+                Find(effects, "UndoVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.25", "One undo did not restore the entire slider drag.");
+                Mouse.MoveTo(new System.Drawing.Point((int)(sliderBounds.Left + sliderBounds.Width * .625), (int)(sliderBounds.Top + sliderBounds.Height / 2)));
+                Mouse.Down(MouseButton.Left);
+                try
+                {
+                    Mouse.MoveTo(new System.Drawing.Point((int)(sliderBounds.Left + sliderBounds.Width * .8), (int)(sliderBounds.Top + sliderBounds.Height / 2))); Wait.UntilInputIsProcessed();
+                    Chord(effects, VirtualKeyShort.ESCAPE);
+                    Mouse.MoveTo(new System.Drawing.Point((int)(sliderBounds.Left + sliderBounds.Width * .9), (int)(sliderBounds.Top + sliderBounds.Height / 2))); Wait.UntilInputIsProcessed();
+                }
+                finally { Mouse.Up(MouseButton.Left); }
+                Assert.Equal("0.25", Find(effects, "VideoEffectAmount").AsTextBox().Text);
+                brightnessSlider.Focus(); Chord(effects, VirtualKeyShort.RIGHT); Chord(effects, VirtualKeyShort.RIGHT);
+                WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.27", "Repeated keyboard slider steps lost focus.");
+                Find(effects, "UndoVideoEffect").AsButton().Invoke(); Find(effects, "UndoVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.25", "Undo did not restore the keyboard edits.");
+                var available = Find(effects, "AvailableVideoEffect").AsComboBox(); available.Select(2); available.Patterns.ExpandCollapse.Pattern.Collapse();
+                Find(effects, "AddVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 2, "Adding another effect did not extend the chain.");
+                Find(effects, "MoveVideoEffectUp").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items[0].Text.Contains("Invert"), "Moving the effect did not change its order.");
+                Find(effects, "VideoEffectEnabled").AsCheckBox().Toggle();
+                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items[0].Text.Contains("bypassed"), "Effect bypass was not applied.");
+                Find(effects, "VideoEffectEnabled").AsCheckBox().Toggle();
+                amount = Find(effects, "VideoEffectAmount").AsTextBox(); amount.Focus(); amount.Text = "2"; Chord(effects, VirtualKeyShort.RETURN);
+                Assert.Contains("from 0 to 1", string.Join(" ", effects.FindAllDescendants().Select(element => element.Name)));
+                amount.Text = "0.5"; Chord(effects, VirtualKeyShort.RETURN);
+                Find(effects, "UndoVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "1", "Undo did not restore the effect amount.");
+                var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+                using (var screenshot = Capture.Element(effects)) screenshot.ToFile(Path.Combine(artifact, "event-fx.png"));
+                Find(effects, "CloseVideoEffects").AsButton().Invoke();
+                WaitFor(() => PreviewDifference(original, SamplePreview(preview)) > 20, "The native timeline preview did not show the effect chain.");
+                SaveButton(window).Invoke();
+                WaitFor(() => !window.Title.Contains('*'), "Saving the effect chain did not clear the modified indicator.");
+                var saved = (await ProjectStore.LoadAsync(projectPath)).Tracks[0].Clips[0].VideoEffects;
+                Assert.Equal(new[] { VideoEffectKind.Invert, VideoEffectKind.BrightnessContrast }, saved.Select(effect => effect.Kind)); Assert.All(saved, effect => Assert.True(effect.IsEnabled)); Assert.Equal(.25, saved[1].Amount);
+                using (var screenshot = Capture.Element(window)) screenshot.ToFile(Path.Combine(artifact, "event-toolbar.png"));
+                RenderAndVerify(window, executable, Path.Combine(temporary, "effects.mp4"));
+                running.CloseGracefully();
+            }
+            using (var reopened = Launch(executable, projectPath, temporary))
+            {
+                var window = reopened.Window; Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+                Find(window, $"Clip_{clip.Id:N}_VideoEffects").AsButton().Invoke(); Window? effects = null;
+                WaitFor(() => (effects = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null, "Saved event effects did not reopen."); Assert.NotNull(effects);
+                Assert.Equal(2, Find(effects, "VideoEffectChain").AsListBox().Items.Length);
+                Find(effects, "RemoveVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 1, "Removing an effect did not update the chain.");
+                Find(effects, "UndoVideoEffect").AsButton().Invoke();
+                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 2, "Undo did not restore the removed effect.");
+                Find(effects, "CloseVideoEffects").AsButton().Invoke(); SaveButton(window).Invoke(); WaitFor(() => !window.Title.Contains('*'), "Saving restored effects did not finish."); reopened.CloseGracefully();
+            }
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
     public async Task SplitUndoRedoSaveAndReopenPreserveActualEditRanges()
     {
         var root = FindRepository();

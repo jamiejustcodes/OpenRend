@@ -79,6 +79,12 @@ public partial class MainWindow : Window
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
         Timeline.SplitRequested += () => Guard(vm.Split);
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
+        Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
+        Timeline.VideoEventActionRequested += async (id, action) =>
+        {
+            if (action == "PanCrop") await OpenPanCropAsync(id);
+            else if (action == "VideoEffects") OpenVideoEffects(id);
+        };
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
         vm.Changed += Refresh;
@@ -479,10 +485,11 @@ public partial class MainWindow : Window
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
     private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 2; UpdateInspector(); }
-    private async void PanCropClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    private async void PanCropClick(object sender, RoutedEventArgs e) => await OpenPanCropAsync();
+    private async Task OpenPanCropAsync(Guid? requestedClip = null) => await GuardAsync(async () =>
     {
         var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
-            .SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+            .SelectMany(track => track.Clips.Where(clip => requestedClip is { } id ? clip.Id == id : vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
         if (selected.Length != 1) { vm.Status = "Select one video event to edit Pan/Crop."; return; }
         if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing Pan/Crop."; return; }
         Pause();
@@ -499,6 +506,16 @@ public partial class MainWindow : Window
         }
         var dialog = new PanCropWindow(vm, selected[0].Clip.Id, frame => { vm.Position = frame; UpdatePosition(); RequestPreview(); }) { Owner = this };
         dialog.ShowDialog();
+    });
+    private void VideoEffectsClick(object sender, RoutedEventArgs e) => OpenVideoEffects();
+    private void OpenVideoEffects(Guid? requestedClip = null) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => requestedClip is { } id ? clip.Id == id : vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+        if (selected.Length != 1) { vm.Status = "Select one video event to edit its effects."; return; }
+        if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its effects."; return; }
+        Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
+        new VideoEffectsWindow(vm, selected[0].Clip.Id) { Owner = this }.ShowDialog();
     });
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
