@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net10.0-windows</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
@@ -8,5 +8,8 @@
     <InternalsVisibleTo Include="OpenRend.Media.Tests" />
     <ProjectReference Include="../OpenRend.Core/OpenRend.Core.csproj" />
     <ProjectReference Include="../OpenRend.Timeline/OpenRend.Timeline.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="System.Drawing.Common" Version="10.0.13" />
   </ItemGroup>
 </Project>

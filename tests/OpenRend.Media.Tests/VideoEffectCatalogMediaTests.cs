@@ -30,11 +30,32 @@ public sealed class VideoEffectCatalogMediaTests(MediaFixture fixture) : IClassF
             case VideoEffectKind.Levels: effect.SetParameter("Gamma", 2); break;
             case VideoEffectKind.ChannelBlend: effect.SetParameter("Crossfeed", .7); break;
             case VideoEffectKind.Pixelate: effect.Amount = 25; break;
+            case VideoEffectKind.LinearBlur: effect.Amount = .5; effect.SetParameter("Angle", 45); break;
+            case VideoEffectKind.RadialBlur: effect.Amount = .5; break;
+            case VideoEffectKind.ChromaBlur: effect.SetParameter("Horizontal", 3); effect.SetParameter("Vertical", 3); break;
+            case VideoEffectKind.Spherize: effect.Amount = .6; break;
+            case VideoEffectKind.PinchPunch: effect.Amount = .6; break;
+            case VideoEffectKind.TvSimulator: effect.Amount = .5; effect.SetParameter("Phosphorescence", .3); break;
+            case VideoEffectKind.Crop: effect.SetParameter("XCrop", .2); effect.SetParameter("YCrop", .2); break;
+            case VideoEffectKind.Newsprint: effect.Amount = 6; break;
+            case VideoEffectKind.GradientMap: effect.Amount = .8; break;
+            case VideoEffectKind.Defocus: effect.Amount = 4; break;
+            case VideoEffectKind.LabAdjust: effect.SetParameter("ChannelA", .3); break;
+            case VideoEffectKind.MaskGenerator: effect.SetParameter("Type", 0); effect.SetParameter("HighIn", .5); break;
+            case VideoEffectKind.Timecode: effect.Amount = 1; break;
+            case VideoEffectKind.PictureInPicture: effect.SetParameter("Scale", .5); break;
+            case VideoEffectKind.LightRays: effect.Amount = .6; break;
+            case VideoEffectKind.Starburst: effect.Amount = 50; break;
+            case VideoEffectKind.TinyPlanet: effect.SetParameter("Latitude", 45); break;
+            case VideoEffectKind.AiAutoReframe: effect.SetParameter("Preview", 2); break;
+            case VideoEffectKind.AiColorization: effect.SetParameter("ColorShiftA", .5); break;
+            case VideoEffectKind.AiZDepth: effect.SetParameter("Visualization", 2); break;
+            case VideoEffectKind.AiSmartMask: effect.SetParameter("Visualization", 1); break;
         }
         var source = Image(32, 24); var copy = (byte[])source.Clone();
         var result = VideoEffectProcessor.Apply(source, 32, 24, [effect], 5);
         Assert.Equal(source.Length, result.Length); Assert.False(source.SequenceEqual(result), $"{kind} did not affect the test image."); Assert.Equal(copy, source);
-        if (kind is not (VideoEffectKind.CookieCutter or VideoEffectKind.ChromaKeyer or VideoEffectKind.Mirror or VideoEffectKind.OffsetAndWrap or VideoEffectKind.Swirl or VideoEffectKind.RadialPixelate or VideoEffectKind.LensCorrection or VideoEffectKind.Wave))
+        if (kind is not (VideoEffectKind.CookieCutter or VideoEffectKind.ChromaKeyer or VideoEffectKind.Mirror or VideoEffectKind.OffsetAndWrap or VideoEffectKind.Swirl or VideoEffectKind.RadialPixelate or VideoEffectKind.LensCorrection or VideoEffectKind.Wave or VideoEffectKind.LinearBlur or VideoEffectKind.RadialBlur or VideoEffectKind.Spherize or VideoEffectKind.PinchPunch or VideoEffectKind.Crop or VideoEffectKind.Defocus or VideoEffectKind.MaskGenerator or VideoEffectKind.PictureInPicture or VideoEffectKind.TinyPlanet or VideoEffectKind.Timecode or VideoEffectKind.AiAutoReframe or VideoEffectKind.AiSmartMask))
             for (var i = 3; i < source.Length; i += 4) Assert.Equal(source[i], result[i]);
         effect.IsEnabled = false; Assert.Same(source, VideoEffectProcessor.Apply(source, 32, 24, [effect]));
         effect.IsEnabled = true;
