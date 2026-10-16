@@ -156,6 +156,49 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
         AssertRgb(media.GetFrame(destination, 20.0 / 30, 64, 48), 64, 32, 24, 0, 255, 255, 8);
     }
 
+    [Theory]
+    [InlineData(CropInterpolation.Linear, 48, 16)]
+    [InlineData(CropInterpolation.Hold, 64, 64)]
+    [InlineData(CropInterpolation.Slow, 60, 28)]
+    [InlineData(CropInterpolation.Fast, 36, 4)]
+    [InlineData(CropInterpolation.Smooth, 54, 10)]
+    [InlineData(CropInterpolation.Sharp, 36, 28)]
+    public async Task CropEasingMovesRealImageBoundaryInPreviewAndEncodedOutput(CropInterpolation interpolation, int quarterEdge, int threeQuarterEdge)
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Quadrants);
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 30, Crop = new() { Keyframes =
+            [new() { State = new(32,24,16,12,0,32,24), Interpolation = interpolation },
+             new() { Frame = 24, State = new(32,24,48,12,0,32,24) }] } };
+        var project = new ProjectDocument { Width = 64, Height = 48, Media = [asset], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }] };
+        project.Validate();
+        using var gpu = new TimelineRenderService(media);
+        using var cpu = new TimelineRenderService(media, useGpuCompositing: false);
+        var probes = new[] { (Frame: 6, Edge: quarterEdge), (Frame: 18, Edge: threeQuarterEdge) };
+        foreach (var probe in probes)
+        {
+            var actual = gpu.RenderFrame(project, probe.Frame, 64, 48);
+            var fallback = cpu.RenderFrame(project, probe.Frame, 64, 48);
+            Assert.Equal(probe.Edge, GreenEdge(actual));
+            for (var p = 0; p < actual.Length; p++) Assert.InRange(Math.Abs(actual[p] - fallback[p]), 0, 1);
+        }
+        Assert.True(gpu.IsD3DCompositing, gpu.GpuUnavailableReason);
+        var destination = Path.Combine(fixture.Directory, $"crop-easing-{interpolation}.mp4");
+        await new ExportService(gpu).ExportAsync(project, destination);
+        foreach (var probe in probes)
+        {
+            var encoded = media.GetFrame(destination, project.FrameRate.Seconds(probe.Frame), 64, 48);
+            Assert.InRange(GreenEdge(encoded), Math.Max(0, probe.Edge - 2), Math.Min(64, probe.Edge + 2));
+        }
+
+        // The moving red/yellow boundary measures geometry directly; no evaluator values are reused.
+        static int GreenEdge(byte[] pixels)
+        {
+            for (var x = 0; x < 64; x++) if (pixels[(12 * 64 + x) * 4 + 1] >= 128) return x;
+            return 64;
+        }
+    }
+
     [Fact]
     public async Task CropCoordinatesUseDisplayedDimensionsAfterQuarterTurnMetadata()
     {

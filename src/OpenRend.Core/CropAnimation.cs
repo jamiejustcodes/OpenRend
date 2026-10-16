@@ -1,6 +1,6 @@
 namespace OpenRend.Core;
 
-public enum CropInterpolation { Linear, Hold }
+public enum CropInterpolation { Linear, Hold, Slow, Fast, Smooth, Sharp }
 
 /// <summary>A source-pixel rectangle rotated clockwise about a source-pixel pivot.</summary>
 public readonly record struct CropState(double Width, double Height, double CenterX, double CenterY,
@@ -75,6 +75,16 @@ public sealed class CropAnimation
         var right = Keyframes[high];
         if (left.Interpolation == CropInterpolation.Hold) return left.State;
         // Subtract integer frames before converting, preserving precision on long projects.
-        return CropState.Lerp(left.State, right.State, (double)(frame - left.Frame) / (right.Frame - left.Frame));
+        var progress = (double)(frame - left.Frame) / (right.Frame - left.Frame);
+        var centered = progress - .5;
+        var weight = left.Interpolation switch
+        {
+            CropInterpolation.Slow => progress * progress,
+            CropInterpolation.Fast => 1 - (1 - progress) * (1 - progress),
+            CropInterpolation.Smooth => progress * progress * (3 - 2 * progress),
+            CropInterpolation.Sharp => .5 + 4 * centered * centered * centered,
+            _ => progress
+        };
+        return CropState.Lerp(left.State, right.State, weight);
     }
 }
