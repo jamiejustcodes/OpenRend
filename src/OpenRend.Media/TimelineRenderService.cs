@@ -55,7 +55,7 @@ public sealed class TimelineRenderService : IDisposable
                     // Effects precede resampling, so preview size cannot change their source pixels.
                     // Decode honors display rotation before sampling.
                     var sourcePixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
-                    sourcePixels = VideoEffectProcessor.Apply(sourcePixels, layer.Clip.VideoEffects);
+                    sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
                     var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
                     if (compositor != null)
                     {
@@ -260,12 +260,19 @@ public sealed class TimelineRenderService : IDisposable
                 var p01 = (y0 * sourceWidth + x1) * 4;
                 var p10 = (y1 * sourceWidth + x0) * 4;
                 var p11 = (y1 * sourceWidth + x1) * 4;
-                double Sample(int channel) => (layer[p00 + channel] * (1 - wx) + layer[p01 + channel] * wx) * (1 - wy) +
-                    (layer[p10 + channel] * (1 - wx) + layer[p11 + channel] * wx) * wy;
-                var alpha = opacity * Sample(3) / 255;
+                var a00 = layer[p00 + 3] * (1 - wx) * (1 - wy);
+                var a01 = layer[p01 + 3] * wx * (1 - wy);
+                var a10 = layer[p10 + 3] * (1 - wx) * wy;
+                var a11 = layer[p11 + 3] * wx * wy;
+                var coverage = a00 + a01 + a10 + a11;
+                if (coverage <= 0) continue;
+                // Filtering coverage and premultiplied color together prevents keyed-away RGB from creating fringes.
+                double SampleColor(int channel) => (layer[p00 + channel] * a00 + layer[p01 + channel] * a01 +
+                    layer[p10 + channel] * a10 + layer[p11 + channel] * a11) / coverage;
+                var alpha = opacity * coverage / 255;
                 var target = ((y + top) * width + x + left) * 4;
                 for (var channel = 0; channel < 3; channel++)
-                    output[target + channel] = (byte)Math.Clamp((int)Math.Round(Sample(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
+                    output[target + channel] = (byte)Math.Clamp((int)Math.Round(SampleColor(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
             }
         }
     }

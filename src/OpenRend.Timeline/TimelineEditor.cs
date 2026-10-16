@@ -488,6 +488,45 @@ public sealed class TimelineEditor
         Execute(_ => clip.VideoEffects.Remove(effect));
     }
 
+    public void UpdateVideoEffectParameters(Guid clipId, Guid effectId, IReadOnlyDictionary<string, double> parameters, bool isEnabled)
+    {
+        ArgumentNullException.ThrowIfNull(parameters);
+        var clip = EditableVideoClip(clipId);
+        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var updated = effect.DeepClone();
+        foreach (var (key, value) in parameters) updated.SetParameter(key, value);
+        updated.IsEnabled = isEnabled;
+        updated.Validate();
+        if (effect.IsEnabled == isEnabled && VideoEffectCatalog.Get(effect.Kind).Parameters.All(parameter => effect.GetParameter(parameter.Key) == updated.GetParameter(parameter.Key))) return;
+        Execute(_ => clip.VideoEffects[clip.VideoEffects.IndexOf(effect)] = updated);
+    }
+
+    public VideoEffect ReplaceVideoEffect(Guid clipId, Guid effectId, VideoEffectKind kind)
+    {
+        var clip = EditableVideoClip(clipId);
+        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var replacement = VideoEffect.Create(kind);
+        replacement.IsEnabled = effect.IsEnabled;
+        Execute(_ => clip.VideoEffects[clip.VideoEffects.IndexOf(effect)] = replacement);
+        return replacement;
+    }
+
+    public void SetVideoEffects(Guid clipId, IReadOnlyList<VideoEffect> effects)
+    {
+        ArgumentNullException.ThrowIfNull(effects);
+        var clip = EditableVideoClip(clipId);
+        if (effects.Any(effect => effect is null) || effects.Select(effect => effect.Id).Distinct().Count() != effects.Count)
+            throw new InvalidDataException("Video effects require unique identities.");
+        foreach (var effect in effects) effect.Validate();
+        var snapshot = effects.Select(effect => effect.DeepClone()).ToList();
+        var same = clip.VideoEffects.Count == snapshot.Count && clip.VideoEffects.Zip(snapshot).All(pair =>
+            pair.First.Id == pair.Second.Id && pair.First.Kind == pair.Second.Kind && pair.First.IsEnabled == pair.Second.IsEnabled &&
+            VideoEffectCatalog.Get(pair.First.Kind).Parameters.All(parameter => pair.First.GetParameter(parameter.Key) == pair.Second.GetParameter(parameter.Key)));
+        if (same) return;
+        // The chooser owns its working copy; a single accepted chain is one undo step.
+        Execute(_ => clip.VideoEffects = snapshot);
+    }
+
     public void MoveVideoEffect(Guid clipId, Guid effectId, int destinationIndex)
     {
         var clip = EditableVideoClip(clipId);
