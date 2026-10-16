@@ -59,6 +59,8 @@ public sealed class TimelineView : FrameworkElement
     private double pendingLevel;
     private bool adjustingLevel;
     private Guid? activeClipId;
+    private Guid? hoverClipId;
+    private string hoverMode = "";
     internal Guid? ActiveClipId => activeClipId;
     internal bool IsTrackLevelFocused(Guid trackId, string level) => IsKeyboardFocusWithin && levelTrack == trackId && levelKind == level;
     public void CancelTrackLevelInput()
@@ -67,6 +69,12 @@ public sealed class TimelineView : FrameworkElement
         adjustingLevel = false; levelTrack = null; levelKind = null;
         if (capturedLevel) ReleaseMouseCapture();
         InvalidateVisual();
+    }
+    public void CancelPointerInput()
+    {
+        dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
+        CancelTrackLevelInput();
+        ReleaseMouseCapture(); ClearHover(); InvalidateVisual();
     }
     private static readonly Brush BackgroundBrush = Brush("#1E1E1E");
     private static readonly Typeface Face = new("Segoe UI");
@@ -114,7 +122,7 @@ public sealed class TimelineView : FrameworkElement
             SetTrackLevel(levelId, level, Math.Clamp(value, min, max));
             return true;
         }
-        if (key == Key.Escape) { CancelTrackLevelInput(); return true; }
+        if (key == Key.Escape) { CancelPointerInput(); return true; }
         if (key is Key.Up or Key.Down)
         {
             ActivateTrack(Math.Clamp(ActiveTrackIndex + (key == Key.Down ? 1 : -1), 0, Project.Tracks.Count - 1));
@@ -283,6 +291,41 @@ public sealed class TimelineView : FrameworkElement
         var index = (int)Math.Floor((y - RulerHeight + VerticalOffset) / TrackHeight);
         return index >= 0 && index < Project.Tracks.Count ? Project.Tracks[index] : null;
     }
+    internal (TimelineTrack Track, TimelineClip Clip, string Mode)? HitClip(Point point)
+    {
+        if (point.X < HeaderWidth || point.X > ActualWidth || point.Y < RulerHeight || point.Y >= ActualHeight) return null;
+        var track = TrackAt(point.Y);
+        if (track is null) return null;
+        var inside = track.Clips.LastOrDefault(clip => X(clip.StartFrame) <= point.X && X(clip.EndFrame) >= point.X);
+        if (inside is not null)
+        {
+            var left = X(inside.StartFrame); var right = X(inside.EndFrame);
+            // Keep a usable middle on short events while enlarging normal trim targets.
+            var reach = Math.Min(10, Math.Max(2, (right - left) / 3));
+            var atLeft = left >= HeaderWidth && point.X - left <= reach;
+            var atRight = right <= ActualWidth && right - point.X <= reach;
+            return (track, inside, atLeft && (!atRight || point.X - left <= right - point.X) ? "TrimLeft" : atRight ? "TrimRight" : "Move");
+        }
+        var edge = track.Clips.SelectMany(clip => new[] { (Clip: clip, X: X(clip.StartFrame), Mode: "TrimLeft"), (Clip: clip, X: X(clip.EndFrame), Mode: "TrimRight") })
+            .Where(item => item.X >= HeaderWidth && item.X <= ActualWidth && Math.Abs(item.X - point.X) <= 10)
+            .OrderBy(item => Math.Abs(item.X - point.X)).ThenByDescending(item => Selection.Contains(item.Clip.Id)).FirstOrDefault();
+        return edge.Clip is null ? null : (track, edge.Clip, edge.Mode);
+    }
+    internal Cursor CursorAt(Point point)
+    {
+        var hit = HitClip(point);
+        return hit is null ? Cursors.Arrow : hit.Value.Track.IsLocked ? Cursors.No : hit.Value.Mode == "Move" ? Cursors.Arrow : Cursors.SizeWE;
+    }
+    private void UpdateHover(Point point)
+    {
+        var hit = HitClip(point);
+        var id = hit is { Track.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
+        var nextMode = id is not null ? hit!.Value.Mode : "";
+        Cursor = CursorAt(point);
+        if (hoverClipId == id && hoverMode == nextMode) return;
+        hoverClipId = id; hoverMode = nextMode; InvalidateVisual();
+    }
+    private void ClearHover() { hoverClipId = null; hoverMode = ""; Cursor = null; InvalidateVisual(); }
     private void Text(DrawingContext dc, string text, double x, double y, Brush? color = null, double size = 12, double maxWidth = 10000)
     {
         var ft = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Face, size,
@@ -358,6 +401,13 @@ public sealed class TimelineView : FrameworkElement
                 var fadePen = new Pen(Brush("#E4E4E4"), 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
+                var edgeMode = dragging?.Id == clip.Id ? mode : hoverClipId == clip.Id ? hoverMode : "";
+                if (edgeMode is "TrimLeft" or "TrimRight")
+                {
+                    var edgeX = edgeMode == "TrimLeft" ? rect.Left + 1 : rect.Right - 1;
+                    dc.DrawLine(new Pen(Brushes.WhiteSmoke, 2), new Point(edgeX, rect.Top + 2), new Point(edgeX, rect.Bottom - 2));
+                    dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(edgeX - 2, rect.Top + rect.Height / 2 - 7, 4, 14));
+                }
                 dc.Pop();
             }
         }
@@ -447,15 +497,16 @@ public sealed class TimelineView : FrameworkElement
             }
             return;
         }
-        dragTrack = origin.Y >= RulerHeight ? TrackAt(origin.Y) : null;
-        dragging = dragTrack?.Clips.LastOrDefault(c => X(c.StartFrame) <= origin.X && X(c.EndFrame) >= origin.X);
+        var hit = HitClip(origin);
+        dragTrack = hit?.Track; dragging = hit?.Clip;
         if (dragging is null)
         {
             seeking = true; SeekRequested?.Invoke(FrameAt(origin.X)); CaptureMouse(); return;
         }
         SelectClip(dragging.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
         if (dragTrack!.IsLocked) { dragging = null; return; }
-        mode = origin.X - X(dragging.StartFrame) < 7 ? "TrimLeft" : X(dragging.EndFrame) - origin.X < 7 ? "TrimRight" : "Move";
+        mode = hit!.Value.Mode;
+        Cursor = mode == "Move" ? Cursors.SizeAll : Cursors.SizeWE;
         destination = Project.Tracks.IndexOf(dragTrack); delta = 0; CaptureMouse();
     }
     protected override void OnMouseMove(MouseEventArgs e)
@@ -463,7 +514,7 @@ public sealed class TimelineView : FrameworkElement
         base.OnMouseMove(e); var p = e.GetPosition(this);
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
         if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
-        if (dragging is null) return;
+        if (dragging is null) { UpdateHover(p); return; }
         delta = Project.FrameRate.Frames((p.X - origin.X) / PixelsPerSecond);
         if (mode == "Move")
         {
@@ -491,13 +542,14 @@ public sealed class TimelineView : FrameworkElement
     {
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
+        var clip = dragging; dragging = null;
         base.OnMouseLeftButtonUp(e); seeking = false; ReleaseMouseCapture();
         if (commitLevel)
         {
             SetTrackLevel(levelTrack!.Value, levelKind!, pendingLevel);
+            UpdateHover(e.GetPosition(this));
             return;
         }
-        var clip = dragging; dragging = null;
         if (clip is not null && (delta != 0 || mode == "Move" && Project.Tracks[destination].Id != dragTrack?.Id))
         {
             var left = mode == "TrimLeft" ? delta : 0;
@@ -505,14 +557,20 @@ public sealed class TimelineView : FrameworkElement
                 mode == "Move" ? clip.StartFrame + delta : clip.StartFrame + left,
                 clip.SourceInFrame + left, clip.DurationFrames + (mode == "TrimRight" ? delta : -left), mode));
         }
+        UpdateHover(e.GetPosition(this));
         InvalidateVisual();
     }
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
         adjustingLevel = false; seeking = false;
-        if (Mouse.LeftButton == MouseButtonState.Pressed) dragging = null;
+        dragging = null; ClearHover();
         InvalidateVisual();
+    }
+    protected override void OnMouseLeave(MouseEventArgs e)
+    {
+        base.OnMouseLeave(e);
+        if (!IsMouseCaptured) ClearHover();
     }
     protected override void OnMouseWheel(MouseWheelEventArgs e)
     {

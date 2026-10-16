@@ -588,7 +588,7 @@ public partial class MainWindow : Window
             Key.Enter when alt => () => SettingsClick(this, e),
             Key.Enter => Pause,
             Key.Space => () => PlayClick(this, e),
-            Key.Escape => () => { Timeline.CancelTrackLevelInput(); StopClick(this, e); },
+            Key.Escape => () => { Timeline.CancelPointerInput(); StopClick(this, e); },
             Key.S => () => SplitClick(this, e),
             Key.Delete => () => DeleteClick(this, e),
             Key.G => () => LinkClick(this, e),

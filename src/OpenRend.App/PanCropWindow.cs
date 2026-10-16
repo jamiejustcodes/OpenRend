@@ -294,14 +294,14 @@ internal sealed class CropWorkspace : FrameworkElement
     public double Zoom { get => zoom; set { zoom = value; InvalidateVisual(); } }
     private CropState? dragState;
     private Point origin;
-    private bool resizing;
+    private int resizeCorner = -1;
     private Rect SourceRect => new((ActualWidth - SourceWidth * Scale) / 2, (ActualHeight - SourceHeight * Scale) / 2, SourceWidth * Scale, SourceHeight * Scale);
     private double Scale => Math.Max(.000001, Math.Min(Math.Max(1, ActualWidth - 60) / SourceWidth, Math.Max(1, ActualHeight - 60) / SourceHeight) * zoom);
     public CropWorkspace()
     {
         Focusable = true; ClipToBounds = true;
         AutomationProperties.SetName(this, "Pan/Crop source workspace");
-        AutomationProperties.SetHelpText(this, "Drag the crop to pan. Drag its lower right handle to resize. Arrow keys move one source pixel; Shift moves ten. Escape cancels a drag.");
+        AutomationProperties.SetHelpText(this, "Drag the crop to pan. Drag any corner handle to resize. Arrow keys move one source pixel; Shift moves ten. Escape cancels a drag.");
     }
     private Point ToDisplay(Point source) => new(SourceRect.X + source.X * Scale, SourceRect.Y + source.Y * Scale);
     private Point Rotate(Point source)
@@ -310,6 +310,19 @@ internal sealed class CropWorkspace : FrameworkElement
         return new(State.PivotX + Math.Cos(angle) * x - Math.Sin(angle) * y, State.PivotY + Math.Sin(angle) * x + Math.Cos(angle) * y);
     }
     private Point[] Corners() => new[] { new Point(State.CenterX - State.Width / 2, State.CenterY - State.Height / 2), new Point(State.CenterX + State.Width / 2, State.CenterY - State.Height / 2), new Point(State.CenterX + State.Width / 2, State.CenterY + State.Height / 2), new Point(State.CenterX - State.Width / 2, State.CenterY + State.Height / 2) }.Select(point => ToDisplay(Rotate(point))).ToArray();
+    private int CornerAt(Point point)
+    {
+        var corners = Corners(); var nearest = Enumerable.Range(0, corners.Length).OrderBy(i => (corners[i] - point).LengthSquared).First();
+        return (corners[nearest] - point).Length <= 14 ? nearest : -1;
+    }
+    private void UpdateCursor(Point point)
+    {
+        var corner = dragState is not null ? resizeCorner : CornerAt(point);
+        if (corner < 0) { Cursor = Cursors.SizeAll; return; }
+        var angle = State.RotationDegrees + (corner is 0 or 2 ? 45 : -45);
+        var direction = ((int)Math.Round(angle / 45) % 4 + 4) % 4;
+        Cursor = direction switch { 0 => Cursors.SizeWE, 1 => Cursors.SizeNWSE, 2 => Cursors.SizeNS, _ => Cursors.SizeNESW };
+    }
     protected override void OnRender(DrawingContext dc)
     {
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(225, 225, 225)), null, new Rect(RenderSize));
@@ -325,17 +338,24 @@ internal sealed class CropWorkspace : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         Focus(); origin = e.GetPosition(this); dragState = State;
-        resizing = (Corners()[2] - origin).Length < 12; CaptureMouse(); e.Handled = true;
+        resizeCorner = CornerAt(origin); UpdateCursor(origin); CaptureMouse(); e.Handled = true;
     }
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (dragState is not { } before) return;
+        if (dragState is not { } before) { UpdateCursor(e.GetPosition(this)); return; }
         var delta = (e.GetPosition(this) - origin) / Scale;
-        if (resizing)
+        if (resizeCorner >= 0)
         {
             var angle = -before.RotationDegrees * Math.PI / 180;
-            var width = Math.Max(.001, before.Width + 2 * (Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y));
-            var height = LockAspect?.Invoke() == true ? before.Height * width / before.Width : Math.Max(.001, before.Height + 2 * (Math.Sin(angle) * delta.X + Math.Cos(angle) * delta.Y));
+            var widthDelta = (resizeCorner is 0 or 3 ? -2 : 2) * (Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y);
+            var heightDelta = (resizeCorner is 0 or 1 ? -2 : 2) * (Math.Sin(angle) * delta.X + Math.Cos(angle) * delta.Y);
+            var width = Math.Max(.001, before.Width + widthDelta); var height = Math.Max(.001, before.Height + heightDelta);
+            if (LockAspect?.Invoke() == true)
+            {
+                // Either drag axis can drive an aspect-locked corner, including a vertical drag.
+                if (Math.Abs(heightDelta / before.Height) > Math.Abs(widthDelta / before.Width)) width = before.Width * height / before.Height;
+                else height = before.Height * width / before.Width;
+            }
             State = before with { Width = width, Height = height };
         }
         else
@@ -349,13 +369,14 @@ internal sealed class CropWorkspace : FrameworkElement
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         if (dragState is null) return;
-        var before = dragState.Value; dragState = null; ReleaseMouseCapture(); if (State != before) Committed?.Invoke(State); e.Handled = true;
+        var before = dragState.Value; dragState = null; ReleaseMouseCapture(); if (State != before) Committed?.Invoke(State); UpdateCursor(e.GetPosition(this)); e.Handled = true;
     }
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         if (dragState is not { } before) return;
-        dragState = null; State = before; Cancelled?.Invoke(); InvalidateVisual();
+        dragState = null; State = before; Cancelled?.Invoke(); Cursor = null; InvalidateVisual();
     }
+    protected override void OnMouseLeave(MouseEventArgs e) { base.OnMouseLeave(e); if (!IsMouseCaptured) Cursor = null; }
     protected override void OnKeyDown(KeyEventArgs e)
     {
         if (e.Key == Key.Escape && dragState is not null) { dragState = null; ReleaseMouseCapture(); Cancelled?.Invoke(); e.Handled = true; return; }

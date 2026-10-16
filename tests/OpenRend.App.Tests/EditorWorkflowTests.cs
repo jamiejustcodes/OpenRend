@@ -2,6 +2,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Runtime.InteropServices;
 using FlaUI.Core;
+using FlaUI.Core.Capturing;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
@@ -58,6 +59,8 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             {
                 var window = running.Window;
                 VerifyLoadedWorkspace(window);
+                VerifyVideoPlayback(window);
+                await VerifyTrimPointerAsync(window, projectPath);
                 try { await VerifyTimelineProvidersAsync(window, projectPath); }
                 catch
                 {
@@ -118,6 +121,79 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         finally { Directory.Delete(temporary, recursive: true); }
     }
 
+    private void VerifyVideoPlayback(Window window)
+    {
+        var preview = Assert.Single(window.FindAllDescendants(c => c.ByClassName("OpenRend.Preview")));
+        WaitFor(() => PresentedFrame(window) == 0, "The initial video frame was not presented.");
+        var first = SamplePreview(preview);
+        Find(window, "PlayButton").AsButton().Invoke();
+        WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 1.00", "Playback did not start.");
+        WaitFor(() => PresentedFrame(window) >= 6, "Video preview stayed on its first frame while the playback clock advanced.");
+        var firstPlayingFrame = PresentedFrame(window);
+        var duringPlayback = SamplePreview(preview);
+        Assert.Equal("Rate: 1.00", Find(window, "PlaybackRate").Name);
+        Assert.True(PreviewDifference(first, duringPlayback) > 1, "The native preview pixels did not change during playback.");
+        WaitFor(() => PresentedFrame(window) >= firstPlayingFrame + 6, "Video did not continue advancing during playback.");
+        var laterPlayingFrame = PresentedFrame(window);
+        var later = SamplePreview(preview);
+        Assert.Equal("Rate: 1.00", Find(window, "PlaybackRate").Name);
+        Assert.True(PreviewDifference(duringPlayback, later) > 1, "The native preview stopped updating after one playback frame.");
+        Chord(window, VirtualKeyShort.ESCAPE);
+        WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 0.00" && PresentedFrame(window) == 0, "Stop did not present the exact cursor frame.");
+        Assert.True(PreviewDifference(first, SamplePreview(preview)) < .5, "A late playback render replaced the stopped frame.");
+        output.WriteLine($"Visible native preview changed through playback frames {firstPlayingFrame} and {laterPlayingFrame}; Stop restored frame 0.");
+    }
+
+    private static long PresentedFrame(Window window)
+    {
+        var text = Find(window, "PreviewInfo").Name;
+        var marker = text.IndexOf("Frame: ", StringComparison.Ordinal);
+        return marker >= 0 && long.TryParse(text[(marker + 7)..].Split(' ', StringSplitOptions.RemoveEmptyEntries)[0], out var frame) ? frame : -1;
+    }
+
+    private static byte[] SamplePreview(AutomationElement preview)
+    {
+        using var image = Capture.Element(preview);
+        var pixels = new byte[32 * 18 * 3];
+        for (var y = 0; y < 18; y++)
+        for (var x = 0; x < 32; x++)
+        {
+            var color = image.Bitmap.GetPixel((2 * x + 1) * image.Bitmap.Width / 64, (2 * y + 1) * image.Bitmap.Height / 36);
+            var index = (y * 32 + x) * 3;
+            pixels[index] = color.R; pixels[index + 1] = color.G; pixels[index + 2] = color.B;
+        }
+        return pixels;
+    }
+
+    private static double PreviewDifference(byte[] left, byte[] right) => left.Zip(right, (a, b) => Math.Abs(a - b)).Average();
+
+    private static async Task VerifyTrimPointerAsync(Window window, string projectPath)
+    {
+        var timeline = Find(window, "Timeline");
+        var clip = Assert.Single(timeline.FindAllDescendants(c => c.ByClassName("TimelineClip")));
+        var bounds = clip.BoundingRectangle;
+        var scale = GetDpiForWindow(window.Properties.NativeWindowHandle.Value) / 96.0;
+        var outside = new System.Drawing.Point((int)Math.Round(bounds.Right + 8 * scale), bounds.Top + bounds.Height / 2);
+        var shortened = new System.Drawing.Point(outside.X - (int)Math.Round(bounds.Width / 3.0), outside.Y);
+        Mouse.MoveTo(outside); WaitForCursor(32644);
+        Mouse.Down(MouseButton.Left);
+        try { Mouse.MoveTo(shortened); Wait.UntilInputIsProcessed(); WaitForCursor(32644); }
+        finally { Mouse.Up(MouseButton.Left); }
+        SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Clips[0].DurationFrames < 90, "Dragging from outside the edge did not trim the clip.");
+        var trimmed = (await ProjectStore.LoadAsync(projectPath)).Tracks[0].Clips[0];
+        Assert.InRange(trimmed.DurationFrames, 55, 65); Assert.Equal(0, trimmed.StartFrame); Assert.Equal(0, trimmed.SourceInFrame);
+        Find(window, "UndoButton").AsButton().Invoke(); SaveButton(window).Invoke();
+        WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Clips[0].DurationFrames == 90, "Undo did not restore the trimmed clip.");
+        Mouse.MoveTo(outside); WaitForCursor(32644);
+        Mouse.Down(MouseButton.Left);
+        try { Mouse.MoveTo(shortened); Keyboard.Type(VirtualKeyShort.ESCAPE); Wait.UntilInputIsProcessed(); }
+        finally { Mouse.Up(MouseButton.Left); }
+        SaveButton(window).Invoke();
+        Assert.Equal(90, (await ProjectStore.LoadAsync(projectPath)).Tracks[0].Clips[0].DurationFrames);
+        Mouse.MoveTo(new System.Drawing.Point(bounds.Left + bounds.Width / 2, outside.Y)); WaitForCursor(32512);
+    }
+
     private async Task VerifyTimelineProvidersAsync(Window window, string projectPath)
     {
         var timeline = Find(window, "Timeline");
@@ -176,6 +252,26 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         var preset = crop.FindFirstDescendant(c => c.ByControlType(ControlType.ComboBox).And(c.ByName("Crop preset")));
         Assert.NotNull(preset); preset.AsComboBox().Select(1);
         WaitFor(() => width.Text == "160", "Half-size preset did not crop the source.");
+        preset.Patterns.ExpandCollapse.Pattern.Collapse();
+        var workspace = crop.FindFirstDescendant(c => c.ByName("Pan/Crop source workspace")); Assert.NotNull(workspace);
+        var workspaceBounds = workspace.BoundingRectangle;
+        var displayScale = GetDpiForWindow(crop.Properties.NativeWindowHandle.Value) / 96.0;
+        var sourceScale = Math.Min((workspaceBounds.Width - 60 * displayScale) / 320, (workspaceBounds.Height - 60 * displayScale) / 180);
+        var corner = new System.Drawing.Point((int)Math.Round(workspaceBounds.Left + workspaceBounds.Width / 2.0 - 80 * sourceScale), (int)Math.Round(workspaceBounds.Top + workspaceBounds.Height / 2.0 - 45 * sourceScale));
+        Mouse.MoveTo(corner);
+        try { WaitForCursor(32642); }
+        catch
+        {
+            var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() }; GetCursorInfo(ref info);
+            output.WriteLine($"Crop bounds={workspaceBounds}; source scale={sourceScale}; requested corner={corner}; pointer={info.X},{info.Y}; cursor={info.Cursor}; expected={LoadCursor(0, 32642)}; height={Find(crop, "CropHeight").AsTextBox().Text}; angle={Find(crop, "CropRotationDegrees").AsTextBox().Text}");
+            var diagnostic = Path.Combine(Path.GetTempPath(), "OpenRend-crop-pointer-" + Guid.NewGuid().ToString("N") + ".png");
+            using var screenshot = Capture.Element(crop); screenshot.ToFile(diagnostic); output.WriteLine("Crop pointer diagnostic: " + diagnostic);
+            throw;
+        }
+        Mouse.Drag(corner, new System.Drawing.Point(corner.X - (int)Math.Round(10 * sourceScale), corner.Y), MouseButton.Left);
+        WaitFor(() => double.Parse(width.Text, System.Globalization.CultureInfo.InvariantCulture) > 170, "Dragging the upper-left crop handle did not resize the crop.");
+        var undoResize = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Undo crop edit"))); Assert.NotNull(undoResize); undoResize.AsButton().Invoke();
+        WaitFor(() => width.Text == "160", "Undo did not restore the corner resize.");
         preset.AsComboBox().Select(0);
         WaitFor(() => width.Text == "320", "Full-frame preset did not restore the source.");
         width.Focus(); width.Text = "160"; Find(crop, "CropFrame").Focus();
@@ -344,6 +440,19 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
     private struct NativeRect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
     private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CursorInfo { public int Size; public uint Flags; public nint Cursor; public int X, Y; }
+    [DllImport("user32.dll")]
+    private static extern bool GetCursorInfo(ref CursorInfo info);
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern nint LoadCursor(nint instance, nint name);
+    [DllImport("user32.dll")]
+    private static extern uint GetDpiForWindow(nint hwnd);
+    private static void WaitForCursor(int id) => WaitFor(() =>
+    {
+        var info = new CursorInfo { Size = Marshal.SizeOf<CursorInfo>() };
+        return GetCursorInfo(ref info) && info.Cursor == LoadCursor(0, id);
+    }, "The pointer did not show the expected editing cursor (" + id + ").");
     [DllImport("user32.dll")]
     private static extern nint MonitorFromWindow(nint hwnd, uint flags);
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]

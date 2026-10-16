@@ -4,6 +4,7 @@
     <UseWPF>true</UseWPF>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="OpenRend.Editor.Tests" />
     <ProjectReference Include="../OpenRend.Core/OpenRend.Core.csproj" />
   </ItemGroup>
 </Project>

@@ -19,7 +19,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | D3D11 preview / D3D11VA decode | Tested locally | Actual hardware device/decoder verified on development machine; CPU transfer remains |
 | GPU timeline compositing | Tested locally | Hardware and WARP match CPU within one byte per channel; upload/readback remains |
 | WASAPI synchronized playback | Tested locally | Real output clock seek/pause/drain, underrun accounting and loopback tone verification |
-| WPF desktop editing | Tested locally | Live import/placement/decoded preview; FlaUI selection/track states/split/undo/redo/save/reopen/export and ffprobe validation |
+| WPF desktop editing | Tested locally | Native preview pixels advance during playback and restore on Stop; edge hover/held resize cursor, outside-edge trim, Escape cancellation, selection/track states/split/undo/redo/save/reopen/export and ffprobe validation |
 | Timeline accessibility | Tested | SelectionItem and Invoke/Toggle providers, track/clip keyboard navigation |
 | Track opacity / gain / pan | Tested | Atomic level edits, lock checks, persistence/default compatibility, accessible range sliders and actual encoded pixels/stereo samples |
 | Preview display controls | Tested | Monitor zoom, safe-area overlay and drop-frame timecode; snapshots use project-resolution render |
