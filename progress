@@ -1,6 +1,6 @@
 # OpenRend development handoff
 
-Updated: 2026-10-16, 14:53 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
+Updated: 2026-10-16, 14:56 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
 
 ## Current work
 
@@ -37,7 +37,7 @@ Latest implementation commits: 4ae6a53 (video scheduling) and b48adc2 (trim/crop
 
 ## Next work
 
-After finishing package checks and pushing UI changes, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by event FX keyframes and broader layout/docking. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse private evidence under E:\OpenRend.Private\research. Use normal source tools for OpenRend's own code. The current FX chain contains three original built-ins processed on encoded RGB before crop/composition, with CPU processing/upload/readback. Effect keyframes, arbitrary before/after-crop ordering, audio/media/track FX, plugin hosting, arbitrary docking, spatial crop smoothing, masks, titles, proxies, advanced cache and scripting remain incomplete. Full application/UI parity has not been established.
+Implementation commit 0f838b7 adds the event buttons and FX window and is pushed. All local checks and packaging are complete. Next, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by event FX keyframes and broader layout/docking. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse private evidence under E:\OpenRend.Private\research. Use normal source tools for OpenRend's own code. The current FX chain contains three original built-ins processed on encoded RGB before crop/composition, with CPU processing/upload/readback. Effect keyframes, arbitrary before/after-crop ordering, audio/media/track FX, plugin hosting, arbitrary docking, spatial crop smoothing, masks, titles, proxies, advanced cache and scripting remain incomplete. Full application/UI parity has not been established.
 
 ## Working rules and validation
 

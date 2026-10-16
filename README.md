@@ -30,6 +30,10 @@ Drag a clip to move it, or point near either edge to show a resize cursor and hi
 
 Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V pastes at the cursor as one undoable edit. Groups receive independent identities; pasting between projects converts positions and source ranges to the destination frame rate. The Project Media tree filters video, audio and missing sources.
 
+Video events have Pan/Crop, FX and event-options buttons at their lower-right corner. Narrow events show an overflow button; zoom in or use the context menu for the full controls. Event options toggle headers, names and lengths for the current session. Locked tracks disable event actions.
+
+Video event FX provides an ordered built-in chain of Brightness and Contrast, Saturation and Invert. Add, remove, reorder or bypass effects, drag a parameter or enter its value, and undo changes. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. These effects process encoded RGB values; effect keyframes and external plug-ins are not supported yet.
+
 Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
 
 Select a video event and open Tools → Video event Pan/Crop, or use the timeline context menu. Edit source-pixel width, height, center, rotation and pivot; aspect lock links width and height. Drag the source overlay to pan or any corner handle to resize; the pointer shows the handle's resize direction. Crop keyframes use whole project frames with Linear, Hold, Slow, Fast, Smooth or Sharp temporal interpolation. Right-click a diamond to choose its curve, or focus the keyframe lane at a key and press Shift+F10. Drag a diamond or enter its exact frame to retime it. Landing on an occupied frame keeps both keys by shifting the existing keys toward the next free frame, or backward when the end is full. Undo restores their previous times. Frame navigation updates the timeline preview. Crop edits support undo, persistence, trimming, splitting and clipboard frame-rate conversion, and use the same GPU or CPU composition during preview and export.
@@ -40,7 +44,7 @@ Preview zoom and safe area guides affect the monitor only. Snapshot buttons copy
 
 With the timeline focused, Up/Down selects a track and Left/Right selects a clip. M toggles track mute, Shift+M solo, L lock and V video visibility. Timeline clips expose selection and track controls expose their actions to Windows UI Automation.
 
-Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1 and 2 and saves version 2; older builds reject new saves to protect crop animation from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
+Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1–3 and saves version 3; older builds reject new saves to protect crop animation and effects from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
 
 Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps black gaps, mixes audio, applies clip levels/fades and finalizes MP4 before replacing the chosen destination. Cancellation and failure preserve an existing destination. Export cannot overwrite a source file.
 
@@ -48,7 +52,7 @@ Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps b
 
 Tests exercise rational timing, edit transactions, fade preservation, persistence, legacy project import, native decoding, seeking, audio resampling, video composition and real encoded output. See [feature status](docs/feature-status.md) for evidence and remaining work.
 
-The current application is an early functional editor. Arbitrary docking, broader effect automation, spatial spline smoothing, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Transformed clips currently decode at source resolution and use CPU upload/readback around GPU composition.
+The current application is an early functional editor. Arbitrary docking, broader effect automation, spatial spline smoothing, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Clips with transforms or active video effects decode at source resolution and use CPU upload/readback around GPU composition; the built-in effect operations run on the CPU.
 
 ## License
 

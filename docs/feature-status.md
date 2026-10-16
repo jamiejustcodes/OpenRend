@@ -21,10 +21,12 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | WASAPI synchronized playback | Tested locally | Real output clock seek/pause/drain, underrun accounting and loopback tone verification |
 | WPF desktop editing | Tested locally | Native preview pixels advance during playback and restore on Stop; edge hover/held resize cursor, outside-edge trim, Escape cancellation, selection/track states/split/undo/redo/save/reopen/export and ffprobe validation |
 | Timeline accessibility | Tested | SelectionItem and Invoke/Toggle providers, track/clip keyboard navigation |
+| Event buttons and options | Tested locally | Pan/Crop, video FX and overflow actions target the clicked event; locked/narrow/clipped cases, accessible actions after zoom/scroll/resize, and session-only header/name/length options |
 | Track opacity / gain / pan | Tested | Atomic level edits, lock checks, persistence/default compatibility, accessible range sliders and actual encoded pixels/stereo samples |
 | Preview display controls | Tested | Monitor zoom, safe-area overlay and drop-frame timecode; snapshots use project-resolution render |
 | Event Pan/Crop | Tested locally | Source-pixel rectangle, rotation/pivot, aspect lock, interactive workspace and six temporal curves with right-click/keyboard selection; integer-frame dragging/retiming and collision preservation, persistence, trim/split/clipboard continuity, GPU/CPU comparison and actual encoded output |
 | Docking | Partial | Splitters and persistent sizing; arbitrary redocking pending |
-| Effects | Partial | Opacity, gain, pan, fades and animated event crop; spatial spline smoothing, masks, effect chains and titles pending |
+| Event video effects | Tested | Ordered brightness/contrast, saturation and invert; bypass, locks, undo/redo, independent split state and version-3 persistence; source-stage RGB processing matches CPU/D3D composition and encoded export |
+| Effects | Partial | Opacity, gain, pan, fades, animated crop and built-in video FX; effect keyframes, spatial spline smoothing, masks and titles pending |
 | Proxies, advanced cache, scripting, plugin hosting | Planned | No placeholder UI controls |
 | Broad media/performance qualification | Pending | No professional-scale throughput or full format coverage claim |
