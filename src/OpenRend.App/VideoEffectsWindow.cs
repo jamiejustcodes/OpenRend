@@ -26,6 +26,7 @@ public sealed class VideoEffectsWindow : Window
     private readonly Image preview = new() { Stretch = Stretch.Uniform };
     private readonly Button remove, up, down, reset, undo, redo;
     private readonly List<(VideoEffectParameterDefinition Definition, Slider Slider, TextBox Input)> controls = [];
+    private readonly List<(VideoEffectParameterDefinition Definition, ComboBox Choice)> choiceControls = [];
     private Guid? selectedId;
     private Guid? parameterEffectId;
     private VideoEffectKind? parameterKind;
@@ -99,6 +100,8 @@ public sealed class VideoEffectsWindow : Window
         {
             if (e.Key == Key.Escape)
             {
+                if (choiceControls.FirstOrDefault(control => control.Choice.IsDropDownOpen).Choice is { } openChoice)
+                { openChoice.IsDropDownOpen = false; e.Handled = true; return; }
                 if (adjusting)
                 {
                     adjusting = false; Mouse.Capture(null); RefreshParameters(); RequestPreview();
@@ -170,9 +173,10 @@ public sealed class VideoEffectsWindow : Window
                     var value = effect.GetParameter(controls[i].Definition.Key);
                     controls[i].Slider.Value = value; controls[i].Input.Text = value.ToString("0.###", CultureInfo.InvariantCulture);
                 }
+                foreach (var control in choiceControls) control.Choice.SelectedIndex = (int)effect.GetParameter(control.Definition.Key);
                 return;
             }
-            parameters.Children.Clear(); controls.Clear(); parameterEffectId = effect?.Id; parameterKind = effect?.Kind;
+            parameters.Children.Clear(); controls.Clear(); choiceControls.Clear(); parameterEffectId = effect?.Id; parameterKind = effect?.Kind;
             if (effect is null) return;
             foreach (var parameter in VideoEffectCatalog.Get(effect.Kind).Parameters) AddParameter(parameter, effect.GetParameter(parameter.Key));
         }
@@ -180,6 +184,8 @@ public sealed class VideoEffectsWindow : Window
     }
     private void AddParameter(VideoEffectParameterDefinition definition, double value)
     {
+        if (definition.Choices is { } choices)
+        { AddChoiceParameter(definition, choices, value); return; }
         var label = definition.Name; var minimum = definition.Minimum; var maximum = definition.Maximum;
         var id = definition.Key switch { "Amount" => "VideoEffectAmount", "SecondaryAmount" => "VideoEffectSecondary", _ => "VideoEffect_" + definition.Key };
         var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
@@ -204,6 +210,17 @@ public sealed class VideoEffectsWindow : Window
         slider.PreviewMouseLeftButtonUp += (_, _) => Finish();
         slider.LostMouseCapture += (_, _) => Finish();
     }
+    private void AddChoiceParameter(VideoEffectParameterDefinition definition, IReadOnlyList<string> choices, double value)
+    {
+        var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(130) }); row.ColumnDefinitions.Add(new());
+        row.Children.Add(new TextBlock { Text = definition.Name });
+        var choice = new ComboBox { ItemsSource = choices, SelectedIndex = (int)value, Margin = new Thickness(6, 0, 0, 0), MinHeight = 23 };
+        AutomationProperties.SetName(choice, definition.Name); AutomationProperties.SetAutomationId(choice, "VideoEffect_" + definition.Key);
+        Grid.SetColumn(choice, 1); row.Children.Add(choice); parameters.Children.Add(row); choiceControls.Add((definition, choice));
+        // Keep this instance through refresh so a selection edit retains keyboard focus.
+        choice.SelectionChanged += (_, _) => { if (!refreshing) ApplyControls(); };
+    }
     private bool ReadControls(out Dictionary<string, double> values)
     {
         values = [];
@@ -213,6 +230,13 @@ public sealed class VideoEffectsWindow : Window
             if (!double.TryParse(control.Input.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value) || value < control.Slider.Minimum || value > control.Slider.Maximum)
             { status.Text = $"Enter a value from {control.Slider.Minimum} to {control.Slider.Maximum}."; return false; }
             values.Add(control.Definition.Key, value);
+        }
+        foreach (var control in choiceControls)
+        {
+            var index = control.Choice.SelectedIndex;
+            if (index < 0 || index >= control.Definition.Choices!.Count)
+            { status.Text = "Choose a value for " + control.Definition.Name + "."; return false; }
+            values.Add(control.Definition.Key, index);
         }
         return true;
     }

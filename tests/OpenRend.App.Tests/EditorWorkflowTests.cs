@@ -66,6 +66,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 WaitFor(() => (effects = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null, "Clicking the event FX button did not open its editor.");
                 Assert.NotNull(effects);
                 VerifyFxChooser(effects, root);
+                VerifyLevelsChannel(effects, root);
                 Find(effects, "AddVideoEffect").AsButton().Invoke();
                 var amount = Find(effects, "VideoEffectAmount").AsTextBox(); amount.Focus(); amount.Text = "0.25"; Chord(effects, VirtualKeyShort.RETURN);
                 WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.25", "Brightness was not applied.");
@@ -135,6 +136,36 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             }
         }
         finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    private static void VerifyLevelsChannel(Window effects, string root)
+    {
+        var available = Find(effects, "AvailableVideoEffect").AsComboBox();
+        available.Select((int)VideoEffectKind.Levels); available.Patterns.ExpandCollapse.Pattern.Collapse();
+        Find(effects, "AddVideoEffect").AsButton().Invoke();
+        var channel = Find(effects, "VideoEffect_Channel").AsComboBox();
+        Assert.Equal(new[] { "All", "Red", "Green", "Blue", "Alpha" }, channel.Items.Select(item => item.Text));
+        Assert.Equal("All", channel.SelectedItem?.Text);
+        channel.Focus(); Chord(effects, VirtualKeyShort.DOWN); Chord(effects, VirtualKeyShort.DOWN);
+        WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Green", "Consecutive channel steps lost focus or did not apply.");
+        Find(effects, "UndoVideoEffect").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Red", "Undo did not restore the previous channel.");
+        Find(effects, "ResetVideoEffect").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "All", "Reset did not restore All channels.");
+        Find(effects, "UndoVideoEffect").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Red", "Undo did not restore the channel before reset.");
+        channel = Find(effects, "VideoEffect_Channel").AsComboBox();
+        channel.Select(4); channel.Patterns.ExpandCollapse.Pattern.Collapse();
+        var white = Find(effects, "VideoEffect_OutputWhite").AsTextBox(); white.Focus(); white.Text = "0.5"; Chord(effects, VirtualKeyShort.RETURN);
+        Assert.Equal("Alpha", Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text);
+        channel = Find(effects, "VideoEffect_Channel").AsComboBox(); channel.Focus(); channel.Patterns.ExpandCollapse.Pattern.Expand();
+        Chord(effects, VirtualKeyShort.ESCAPE);
+        Assert.False(channel.IsOffscreen);
+        Assert.Equal(ExpandCollapseState.Collapsed, channel.Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value);
+        using (var screenshot = Capture.Element(effects)) screenshot.ToFile(Path.Combine(root, ".local", "desktop-validation", "fx-levels.png"));
+        Find(effects, "RemoveVideoEffect").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 0, "Removing Levels did not restore the empty chain.");
+        available = Find(effects, "AvailableVideoEffect").AsComboBox(); available.Select(0); available.Patterns.ExpandCollapse.Pattern.Collapse();
     }
 
     private static void VerifyFxChooser(Window effects, string root)

@@ -80,11 +80,11 @@ public sealed partial class TimelineView
         if (!IsEnabled || track.IsLocked) throw new ElementNotEnabledException();
         if (action != "More" && track.Kind != TrackKind.Video) throw new InvalidOperationException("This event has no video.");
         SelectClip(clipId, false, ensureVisible: false);
-        if (action is "PanCrop" or "VideoEffects")
+        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia")
         {
             if (VideoEventActionRequested is not null) VideoEventActionRequested.Invoke(clipId, action);
             else if (action == "PanCrop") PanCropRequested?.Invoke();
-            else VideoEffectsRequested?.Invoke();
+            else if (action == "VideoEffects") VideoEffectsRequested?.Invoke();
         }
         else if (action == "More")
         {
@@ -105,6 +105,11 @@ public sealed partial class TimelineView
         {
             var item = new MenuItem { Header = label };
             item.Click += (_, _) => action(); menu.Items.Add(item); return item;
+        }
+        MenuItem? editText = null;
+        if (clipId is { } id && Project.Tracks.SelectMany(t => t.Clips).Any(c => c.Id == id && Project.Media.Any(m => m.Id == c.MediaId && m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))))
+        {
+            editText = Add("Edit Text Media…", () => InvokeEventAction(id, "EditTextMedia"));
         }
         var crop = Add(EventButtonLabel("PanCrop"), () => { if (clipId is { } id) InvokeEventAction(id, "PanCrop"); else PanCropRequested?.Invoke(); });
         var fx = Add(EventButtonLabel("VideoEffects"), () => { if (clipId is { } id) InvokeEventAction(id, "VideoEffects"); else VideoEffectsRequested?.Invoke(); });
