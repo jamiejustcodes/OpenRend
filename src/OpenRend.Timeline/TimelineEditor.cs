@@ -383,6 +383,34 @@ public sealed class TimelineEditor
         Execute(_ => { clip.Crop = animation; clip.CropOffsetFrames = offset; });
     }
 
+    public void MoveCropKeyframe(Guid clipId, long fromLocalFrame, long toLocalFrame)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (fromLocalFrame < 0 || fromLocalFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(fromLocalFrame));
+        if (toLocalFrame < 0 || toLocalFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(toLocalFrame));
+        var from = checked(fromLocalFrame + clip.CropOffsetFrames);
+        var to = checked(toLocalFrame + clip.CropOffsetFrames);
+        if (clip.Crop is null || clip.Crop.Keyframes.All(key => key.Frame != from)) throw new InvalidOperationException("No crop keyframe exists at the source frame.");
+        if (fromLocalFrame == toLocalFrame) return;
+        var animation = clip.Crop.DeepClone();
+        // Keep the dragged key's geometry and curve when it lands on another key.
+        animation.Keyframes.RemoveAll(key => key.Frame == to);
+        animation.Keyframes.Single(key => key.Frame == from).Frame = to;
+        var offset = clip.CropOffsetFrames;
+        if (to < 0)
+        {
+            // Shift the retained curve and its origin together, preserving other local key times.
+            var shift = checked(-to);
+            foreach (var key in animation.Keyframes) key.Frame = checked(key.Frame + shift);
+            offset = checked(offset + shift);
+        }
+        animation.Keyframes.Sort((left, right) => left.Frame.CompareTo(right.Frame));
+        animation.Validate();
+        Execute(_ => { clip.Crop = animation; clip.CropOffsetFrames = offset; });
+    }
+
     public void RemoveCropKeyframe(Guid clipId, long localFrame)
     {
         var (track, clip) = FindClip(clipId);
