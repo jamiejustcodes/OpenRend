@@ -96,6 +96,70 @@ public sealed class CropKeyframeMovementTests
     }
 
     [Fact]
+    public void PreservingDestinationKeepsBothStatesAndUndoesTheirTimesTogether()
+    {
+        var (editor, clip, _, media) = Create();
+        editor.MoveCropKeyframe(clip.Id, 20, 40, preserveDestination: true);
+        Assert.Equal(new long[] { 0, 40, 41 }, clip.Crop!.Keyframes.Select(key => key.Frame));
+        Assert.Equal(Middle, TimelineEvaluator.CropAt(clip, media, 40));
+        Assert.Equal(End, TimelineEvaluator.CropAt(clip, media, 41));
+        Assert.Equal(CropInterpolation.Hold, clip.Crop.Keyframes[1].Interpolation);
+        Assert.True(editor.Undo());
+        Assert.Equal(new long[] { 0, 20, 40 }, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes.Select(key => key.Frame));
+        Assert.False(editor.CanUndo);
+        Assert.True(editor.Redo());
+        Assert.Equal(new long[] { 0, 40, 41 }, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes.Select(key => key.Frame));
+    }
+
+    [Fact]
+    public void PreservingDestinationShiftsAContiguousRunWithoutReorderingItsStates()
+    {
+        var (editor, clip, _, _) = Create();
+        clip.Crop!.Keyframes.Insert(2, new() { Frame = 21, State = Start, Interpolation = CropInterpolation.Slow });
+        clip.Crop.Keyframes.Insert(3, new() { Frame = 22, State = End, Interpolation = CropInterpolation.Fast });
+        editor.MoveCropKeyframe(clip.Id, 40, 20, preserveDestination: true);
+        Assert.Equal(new long[] { 0, 20, 21, 22, 23 }, clip.Crop.Keyframes.Select(key => key.Frame));
+        Assert.Equal(new[] { Start, End, Middle, Start, End }, clip.Crop.Keyframes.Select(key => key.State));
+        Assert.Equal(CropInterpolation.Slow, clip.Crop.Keyframes[3].Interpolation);
+        Assert.Equal(CropInterpolation.Fast, clip.Crop.Keyframes[4].Interpolation);
+    }
+
+    [Fact]
+    public void PreservingDestinationUsesABackwardGapWhenTheEventEndIsFull()
+    {
+        var (editor, clip, _, _) = Create();
+        clip.Crop!.Keyframes.AddRange([new() { Frame = 97, State = Start }, new() { Frame = 98, State = Middle }, new() { Frame = 99, State = End }]);
+        editor.MoveCropKeyframe(clip.Id, 20, 99, preserveDestination: true);
+        Assert.Equal(new long[] { 0, 40, 96, 97, 98, 99 }, clip.Crop.Keyframes.Select(key => key.Frame));
+        Assert.Equal(new[] { Start, End, Start, Middle, End, Middle }, clip.Crop.Keyframes.Select(key => key.State));
+    }
+
+    [Theory]
+    [InlineData(2, 0)]
+    [InlineData(0, 2)]
+    public void TheMovedKeysOldFrameProvidesAGapEvenWhenEveryFrameHasAKey(long from, long to)
+    {
+        var (editor, clip, _, _) = Create();
+        clip.DurationFrames = 3;
+        clip.Crop!.Keyframes[1].Frame = 1; clip.Crop.Keyframes[2].Frame = 2;
+        editor.MoveCropKeyframe(clip.Id, from, to, preserveDestination: true);
+        Assert.Equal(new long[] { 0, 1, 2 }, clip.Crop.Keyframes.Select(key => key.Frame));
+        Assert.Equal(to == 0 ? new[] { End, Start, Middle } : new[] { Middle, End, Start }, clip.Crop.Keyframes.Select(key => key.State));
+        Assert.True(editor.Undo());
+        Assert.Equal(new[] { Start, Middle, End }, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes.Select(key => key.State));
+    }
+
+    [Fact]
+    public void PreservingCollisionLeavesKeysBeforeTheTrimmedEventUntouched()
+    {
+        var (editor, clip, _, _) = Create(10);
+        editor.MoveCropKeyframe(clip.Id, 10, 30, preserveDestination: true);
+        Assert.Equal(10, clip.CropOffsetFrames);
+        Assert.Equal(new long[] { 0, 40, 41 }, clip.Crop!.Keyframes.Select(key => key.Frame));
+        Assert.Equal(new[] { Start, Middle, End }, clip.Crop.Keyframes.Select(key => key.State));
+    }
+
+    [Fact]
     public void MissingSourceIsRejectedAtomically()
     {
         var (editor, clip, _, _) = Create();
@@ -135,11 +199,13 @@ public sealed class CropKeyframeMovementTests
         Assert.False(editor.CanUndo);
     }
 
-    [Fact]
-    public void NegativeOffsetDestinationRebasesAllKeysWithoutChangingOtherLocalTimes()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void NegativeOffsetDestinationRebasesAllKeysWithoutChangingOtherLocalTimes(bool preserveDestination)
     {
         var (editor, clip, _, media) = Create(-10);
-        editor.MoveCropKeyframe(clip.Id, 30, 2);
+        editor.MoveCropKeyframe(clip.Id, 30, 2, preserveDestination);
         Assert.Equal(-2, clip.CropOffsetFrames);
         Assert.Equal(new long[] { 0, 8, 48 }, clip.Crop!.Keyframes.Select(key => key.Frame));
         Assert.Equal(Middle, TimelineEvaluator.CropAt(clip, media, 2));

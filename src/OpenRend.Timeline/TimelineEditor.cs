@@ -383,7 +383,7 @@ public sealed class TimelineEditor
         Execute(_ => { clip.Crop = animation; clip.CropOffsetFrames = offset; });
     }
 
-    public void MoveCropKeyframe(Guid clipId, long fromLocalFrame, long toLocalFrame)
+    public void MoveCropKeyframe(Guid clipId, long fromLocalFrame, long toLocalFrame, bool preserveDestination = false)
     {
         var (track, clip) = FindClip(clipId);
         EnsureUnlocked(track);
@@ -395,14 +395,40 @@ public sealed class TimelineEditor
         if (clip.Crop is null || clip.Crop.Keyframes.All(key => key.Frame != from)) throw new InvalidOperationException("No crop keyframe exists at the source frame.");
         if (fromLocalFrame == toLocalFrame) return;
         var animation = clip.Crop.DeepClone();
-        // Keep the dragged key's geometry and curve when it lands on another key.
-        animation.Keyframes.RemoveAll(key => key.Frame == to);
-        animation.Keyframes.Single(key => key.Frame == from).Frame = to;
+        var moved = animation.Keyframes.Single(key => key.Frame == from);
+        animation.Keyframes.Remove(moved);
+        if (preserveDestination)
+        {
+            var visible = animation.Keyframes.Select(key => (Key: key, Local: (Int128)key.Frame - clip.CropOffsetFrames))
+                .Where(item => item.Local >= 0 && item.Local < clip.DurationFrames).ToDictionary(item => (long)item.Local, item => item.Key);
+            if (visible.ContainsKey(toLocalFrame))
+            {
+                // Keep both edits on the frame grid. Move the occupied run toward the first gap.
+                var gap = toLocalFrame;
+                while (gap < clip.DurationFrames - 1 && visible.ContainsKey(gap)) gap++;
+                if (!visible.ContainsKey(gap))
+                {
+                    for (var frame = gap; frame > toLocalFrame; frame--)
+                        visible[frame - 1].Frame = checked(visible[frame - 1].Frame + 1);
+                }
+                else
+                {
+                    gap = toLocalFrame;
+                    while (gap > 0 && visible.ContainsKey(gap)) gap--;
+                    for (var frame = gap; frame < toLocalFrame; frame++)
+                        visible[frame + 1].Frame = checked(visible[frame + 1].Frame - 1);
+                }
+            }
+        }
+        else animation.Keyframes.RemoveAll(key => key.Frame == to);
+        moved.Frame = to;
+        animation.Keyframes.Add(moved);
         var offset = clip.CropOffsetFrames;
-        if (to < 0)
+        var earliest = animation.Keyframes.Min(key => key.Frame);
+        if (earliest < 0)
         {
             // Shift the retained curve and its origin together, preserving other local key times.
-            var shift = checked(-to);
+            var shift = checked(-earliest);
             foreach (var key in animation.Keyframes) key.Frame = checked(key.Frame + shift);
             offset = checked(offset + shift);
         }

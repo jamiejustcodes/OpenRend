@@ -191,7 +191,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => angle.Text == "90", "Crop angle was not committed.");
         var lane = crop.FindFirstDescendant(c => c.ByName("Crop keyframe timeline")); Assert.NotNull(lane);
         var bounds = lane.BoundingRectangle;
-        System.Drawing.Point KeyPoint(long at) => new((int)Math.Round(bounds.Left + 4 + (bounds.Width - 10) * at / 89.0), bounds.Top + 31);
+        System.Drawing.Point KeyPoint(long at) => new((int)Math.Round(bounds.Left + 4 + (bounds.Width - 10) * at / 90.0), bounds.Top + 31);
         Mouse.Drag(new System.Drawing.Point(KeyPoint(60).X, bounds.Top + 5), new System.Drawing.Point(KeyPoint(45).X, bounds.Top + 5), MouseButton.Left); Wait.UntilInputIsProcessed();
         Assert.Equal("60", Find(crop, "CropKeyframeFrame").AsTextBox().Text);
         Mouse.Drag(KeyPoint(60), KeyPoint(45), MouseButton.Left); Wait.UntilInputIsProcessed();
@@ -200,6 +200,8 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => frame.Text == "30", "Exact keyframe timing did not move the key.");
         keyTime.Focus(); keyTime.Text = "0"; frame.Focus();
         WaitFor(() => frame.Text == "0" && width.Text == "80", "Retiming onto an occupied frame did not keep the moved key.");
+        frame.Focus(); frame.Text = "1"; Chord(crop, VirtualKeyShort.RETURN);
+        WaitFor(() => width.Text == "160", "Retiming did not preserve the destination key on the next frame.");
         var undoCrop = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Undo crop edit")));
         Assert.NotNull(undoCrop); undoCrop.AsButton().Invoke();
         frame.Focus(); frame.Text = "30"; Chord(crop, VirtualKeyShort.RETURN);

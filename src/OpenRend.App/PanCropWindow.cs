@@ -232,7 +232,7 @@ public sealed class PanCropWindow : Window
     }
     private void MoveKeyframe(long from, long to) => Edit(() =>
     {
-        editor.MoveCropKeyframe(clipId, from, to);
+        editor.MoveCropKeyframe(clipId, from, to, preserveDestination: true);
         localFrame = to; seek(checked(EventClip.StartFrame + to));
     });
     private void SetFrame(long frame)
@@ -375,8 +375,9 @@ internal sealed class CropKeyframeLane : FrameworkElement
     public event Action<long, long>? MoveKeyframe;
     private long? dragging;
     private long pendingFrame;
-    private double FrameX(long frame) => 4 + frame * Math.Max(1, ActualWidth - 10) / Math.Max(1.0, Duration - 1);
-    private long FrameAt(double x) => (long)Math.Clamp(decimal.Round((decimal)Math.Clamp((x - 4) / Math.Max(1, ActualWidth - 10), 0, 1) * (Duration - 1), 0, MidpointRounding.AwayFromZero), 0, Duration - 1);
+    // The ruler reaches the event end; editable frames stop one frame before it.
+    private double FrameX(long frame) => 4 + frame * Math.Max(1, ActualWidth - 10) / Math.Max(1.0, Duration);
+    private long FrameAt(double x) => (long)Math.Clamp(decimal.Round((decimal)Math.Clamp((x - 4) / Math.Max(1, ActualWidth - 10), 0, 1) * Duration, 0, MidpointRounding.AwayFromZero), 0, Duration - 1);
     public CropKeyframeLane()
     {
         ClipToBounds = true; Focusable = true;
@@ -390,7 +391,7 @@ internal sealed class CropKeyframeLane : FrameworkElement
         var pen = new Pen(Brushes.Gray, 1); dc.DrawLine(pen, new Point(0, 19), new Point(ActualWidth, 19)); dc.DrawLine(pen, new Point(0, 43), new Point(ActualWidth, 43));
         for (var i = 0; i <= 6; i++)
         {
-            var frame = (long)((Int128)(Duration - 1) * i / 6); var x = i * Math.Max(1, ActualWidth - 10) / 6;
+            var frame = (long)((Int128)Duration * i / 6); var x = i * Math.Max(1, ActualWidth - 10) / 6;
             var text = new FormattedText(OpenRend.UI.TimelineView.FormatTimecode(frame, Rate), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 9, Brushes.Silver, VisualTreeHelper.GetDpi(this).PixelsPerDip);
             dc.DrawText(text, new Point(x + 3, 2));
         }
