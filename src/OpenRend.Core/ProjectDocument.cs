@@ -90,6 +90,14 @@ public sealed class ProjectDocument
                     clip.Crop.Validate();
                 }
                 else if (clip.CropOffsetFrames != 0) throw new InvalidDataException("A crop offset requires crop keyframes.");
+                if (clip.VideoEffects == null || track.Kind != TrackKind.Video && clip.VideoEffects.Count != 0)
+                    throw new InvalidDataException("Video effects require a video clip.");
+                var effectIds = new HashSet<Guid>();
+                foreach (var effect in clip.VideoEffects)
+                {
+                    if (effect == null || !effectIds.Add(effect.Id)) throw new InvalidDataException("Video effect IDs must be unique within a clip.");
+                    effect.Validate();
+                }
             }
         }
     }
@@ -144,10 +152,12 @@ public sealed class TimelineClip
     public double Pan { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CropAnimation? Crop { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long CropOffsetFrames { get; set; }
+    public List<VideoEffect> VideoEffects { get; set; } = [];
     public TimelineClip DeepClone()
     {
         var clone = (TimelineClip)MemberwiseClone();
         clone.Crop = Crop?.DeepClone();
+        clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
         return clone;
     }
 }

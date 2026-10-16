@@ -462,6 +462,49 @@ public sealed class TimelineEditor
         Execute(_ => { clip.Crop = null; clip.CropOffsetFrames = 0; });
     }
 
+    public VideoEffect AddVideoEffect(Guid clipId, VideoEffectKind kind)
+    {
+        var clip = EditableVideoClip(clipId);
+        var effect = VideoEffect.Create(kind);
+        Execute(_ => clip.VideoEffects.Add(effect));
+        return effect;
+    }
+
+    public void UpdateVideoEffect(Guid clipId, Guid effectId, double amount, double secondaryAmount, bool isEnabled)
+    {
+        var clip = EditableVideoClip(clipId);
+        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var updated = effect.DeepClone();
+        updated.Amount = amount; updated.SecondaryAmount = secondaryAmount; updated.IsEnabled = isEnabled;
+        updated.Validate();
+        if (effect.Amount == amount && effect.SecondaryAmount == secondaryAmount && effect.IsEnabled == isEnabled) return;
+        Execute(_ => { effect.Amount = amount; effect.SecondaryAmount = secondaryAmount; effect.IsEnabled = isEnabled; });
+    }
+
+    public void RemoveVideoEffect(Guid clipId, Guid effectId)
+    {
+        var clip = EditableVideoClip(clipId);
+        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        Execute(_ => clip.VideoEffects.Remove(effect));
+    }
+
+    public void MoveVideoEffect(Guid clipId, Guid effectId, int destinationIndex)
+    {
+        var clip = EditableVideoClip(clipId);
+        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        if (destinationIndex < 0 || destinationIndex >= clip.VideoEffects.Count) throw new ArgumentOutOfRangeException(nameof(destinationIndex));
+        if (clip.VideoEffects.IndexOf(effect) == destinationIndex) return;
+        Execute(_ => { clip.VideoEffects.Remove(effect); clip.VideoEffects.Insert(destinationIndex, effect); });
+    }
+
+    private TimelineClip EditableVideoClip(Guid clipId)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Video effects are only available for video clips.");
+        return clip;
+    }
+
     public long SnapFrame(long frame, long toleranceFrames, Guid? excludeClipId = null, long? playheadFrame = null)
     {
         if (toleranceFrames < 0) throw new ArgumentOutOfRangeException(nameof(toleranceFrames));

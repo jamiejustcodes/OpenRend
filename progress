@@ -4,6 +4,14 @@ Updated: 2026-10-16, 14:30 UK time. Read this file and AGENTS.md before continui
 
 ## Current work
 
+New pass in progress: add the missing per-event Pan/Crop, video FX and overflow controls shown in the user's screenshot. Reference event overflow and FX chooser were observed; REA managed evidence is retained privately in event-controls-2026-10-16.json. Implement an original built-in ordered video FX chain (brightness/contrast, saturation, invert), bypass/reordering, shared preview/export processing, event buttons and real display options. Verification for these new changes is pending. Keep private reference research outside Git.
+
+Current user session is dist/OpenRend-playback-fix/OpenRend.exe (observed PID33412, Untitled*). Preserve it. Choose a separate unused package path, dist/OpenRend-event-fx, and recheck processes first.
+
+FX domain and shared rendering implemented: ordered brightness/contrast, saturation and invert, per-effect bypass, deep-cloned split/copy state, lock validation and undo/redo. New saves use format 3 so older builds reject files instead of silently dropping effects; versions 1/2 still load. Core 136/136 and Media 33/33 passed, including CPU/D3D pixels and encoded-export effects. App build passed with zero warnings/errors. Event toolbar/dialog desktop checks remain pending.
+
+## Previous completed pass
+
 This pass completed two reported fixes while continuing OpenRend's UI/feature parity work:
 
 1. Video preview stayed on its first frame while audio played.
