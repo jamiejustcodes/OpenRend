@@ -106,6 +106,7 @@ public sealed class TimelineEditor
         EnsureUnlocked(track);
         Execute(_ =>
         {
+            if (clip.Crop is not null) clip.CropOffsetFrames = checked(clip.CropOffsetFrames + checked(sourceIn - clip.SourceInFrame));
             clip.SourceInFrame = sourceIn;
             clip.DurationFrames = duration;
             clip.FadeInFrames = Math.Min(clip.FadeInFrames, duration);
@@ -127,6 +128,7 @@ public sealed class TimelineEditor
         right.StartFrame = frame;
         right.SourceInFrame += leftDuration;
         right.DurationFrames -= leftDuration;
+        if (right.Crop is not null) right.CropOffsetFrames = checked(right.CropOffsetFrames + leftDuration);
         var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
         right.FadeOffsetFrames += leftDuration;
         right.FadeDurationFrames = envelope;
@@ -223,6 +225,7 @@ public sealed class TimelineEditor
             trimmed.StartFrame = checked(trimmed.StartFrame + startDelta);
             trimmed.SourceInFrame = checked(trimmed.SourceInFrame + sourceDelta);
             trimmed.DurationFrames = checked(trimmed.DurationFrames + durationDelta);
+            if (trimmed.Crop is not null) trimmed.CropOffsetFrames = checked(trimmed.CropOffsetFrames + sourceDelta);
             EnsureTimelineBounds(trimmed);
             EnsureSourceBounds(trimmed, Project.Media.Single(m => m.Id == trimmed.MediaId));
             trimmed.FadeInFrames = Math.Min(trimmed.FadeInFrames, trimmed.DurationFrames);
@@ -239,6 +242,7 @@ public sealed class TimelineEditor
                 item.Clip.StartFrame = change.StartFrame; item.Clip.SourceInFrame = change.SourceInFrame; item.Clip.DurationFrames = change.DurationFrames;
                 item.Clip.FadeInFrames = change.FadeInFrames; item.Clip.FadeOutFrames = change.FadeOutFrames;
                 item.Clip.FadeOffsetFrames = 0; item.Clip.FadeDurationFrames = null;
+                item.Clip.CropOffsetFrames = change.CropOffsetFrames;
             }
         });
     }
@@ -256,6 +260,7 @@ public sealed class TimelineEditor
             var envelope = item.Clip.FadeDurationFrames ?? item.Clip.DurationFrames;
             var right = item.Clip.DeepClone(); right.Id = Guid.NewGuid(); right.StartFrame = frame;
             right.SourceInFrame = checked(right.SourceInFrame + leftDuration); right.DurationFrames -= leftDuration;
+            if (right.Crop is not null) right.CropOffsetFrames = checked(right.CropOffsetFrames + leftDuration);
             right.FadeOffsetFrames = checked(right.FadeOffsetFrames + leftDuration); right.FadeDurationFrames = envelope;
             if (right.GroupId is Guid original)
             {
@@ -341,6 +346,68 @@ public sealed class TimelineEditor
         });
     }
 
+    public void SetCropKeyframe(Guid clipId, long localFrame, CropState state, CropInterpolation interpolation = CropInterpolation.Linear)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
+        if (!Enum.IsDefined(interpolation)) throw new ArgumentOutOfRangeException(nameof(interpolation));
+        state.Validate();
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        var existing = clip.Crop?.Keyframes.FirstOrDefault(key => key.Frame == frame);
+        if (existing is not null && existing.State == state && existing.Interpolation == interpolation) return;
+        var animation = clip.Crop?.DeepClone() ?? new CropAnimation();
+        var offset = clip.CropOffsetFrames;
+        if (clip.Crop is null && localFrame > 0)
+        {
+            var media = Project.Media.Single(item => item.Id == clip.MediaId);
+            animation.Keyframes.Add(new CropKeyframe { Frame = 0, State = CropState.Identity(media.Width, media.Height) });
+        }
+        if (frame < 0)
+        {
+            // Extending an event before its original start retains the curve and permits new keys.
+            var shift = checked(-frame);
+            foreach (var key in animation.Keyframes) key.Frame = checked(key.Frame + shift);
+            offset = checked(offset + shift);
+            frame = 0;
+        }
+        var keyframe = animation.Keyframes.FirstOrDefault(key => key.Frame == frame);
+        if (keyframe is null)
+        {
+            animation.Keyframes.Add(new CropKeyframe { Frame = frame, State = state, Interpolation = interpolation });
+            animation.Keyframes.Sort((left, right) => left.Frame.CompareTo(right.Frame));
+        }
+        else { keyframe.State = state; keyframe.Interpolation = interpolation; }
+        animation.Validate();
+        Execute(_ => { clip.Crop = animation; clip.CropOffsetFrames = offset; });
+    }
+
+    public void RemoveCropKeyframe(Guid clipId, long localFrame)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
+        if (clip.Crop is null) return;
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        if (clip.Crop.Keyframes.All(key => key.Frame != frame)) return;
+        Execute(_ =>
+        {
+            clip.Crop.Keyframes.RemoveAll(key => key.Frame == frame);
+            if (clip.Crop.Keyframes.Count == 0) { clip.Crop = null; clip.CropOffsetFrames = 0; }
+        });
+    }
+
+    public void ResetCrop(Guid clipId)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (clip.Crop is null) return;
+        Execute(_ => { clip.Crop = null; clip.CropOffsetFrames = 0; });
+    }
+
     public long SnapFrame(long frame, long toleranceFrames, Guid? excludeClipId = null, long? playheadFrame = null)
     {
         if (toleranceFrames < 0) throw new ArgumentOutOfRangeException(nameof(toleranceFrames));
@@ -368,6 +435,7 @@ public sealed class TimelineEditor
         throw new KeyNotFoundException("Clip was not found.");
     }
     private static void EnsureUnlocked(TimelineTrack track) { if (track.IsLocked) throw new InvalidOperationException("Track is locked."); }
+    private static void EnsureVideoCrop(TimelineTrack track) { if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Crop is only available for video clips."); }
     private static void EnsureCompatible(MediaAsset media, TimelineTrack track)
     {
         if (track.Kind == TrackKind.Video && !media.HasVideo || track.Kind == TrackKind.Audio && !media.HasAudio) throw new InvalidOperationException("The media has no stream for this track.");

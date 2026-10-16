@@ -84,6 +84,12 @@ public sealed class ProjectDocument
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
                 var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
+                if (clip.Crop is not null)
+                {
+                    if (track.Kind != TrackKind.Video || clip.CropOffsetFrames > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip crop range is invalid.");
+                    clip.Crop.Validate();
+                }
+                else if (clip.CropOffsetFrames != 0) throw new InvalidDataException("A crop offset requires crop keyframes.");
             }
         }
     }
@@ -136,5 +142,12 @@ public sealed class TimelineClip
     public long FadeOffsetFrames { get; set; }
     public long? FadeDurationFrames { get; set; }
     public double Pan { get; set; }
-    public TimelineClip DeepClone() => (TimelineClip)MemberwiseClone();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CropAnimation? Crop { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long CropOffsetFrames { get; set; }
+    public TimelineClip DeepClone()
+    {
+        var clone = (TimelineClip)MemberwiseClone();
+        clone.Crop = Crop?.DeepClone();
+        return clone;
+    }
 }

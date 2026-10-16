@@ -2,7 +2,10 @@ using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
-public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, MediaAsset Media, long SourceFrame, double Opacity, double Gain, double Pan);
+public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, MediaAsset Media, long SourceFrame, double Opacity, double Gain, double Pan)
+{
+    public CropState? Crop { get; init; }
+}
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
 
 public static class TimelineEvaluator
@@ -30,7 +33,7 @@ public static class TimelineEvaluator
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
                 var item = new EvaluatedClip(track, clip, asset, clip.SourceInFrame + local, clip.Opacity * track.Opacity * fade, clip.Gain * track.Gain * fade * peak, pan);
-                if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item);
+                if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with { Crop = CropAt(clip, asset, local) });
                 if (track.Kind == TrackKind.Audio && asset.HasAudio) audio.Add(item);
             }
         }
@@ -45,6 +48,13 @@ public static class TimelineEvaluator
         if (clip.FadeInFrames > 0) fade = Math.Min(fade, position / clip.FadeInFrames);
         if (clip.FadeOutFrames > 0) fade = Math.Min(fade, (envelope - position) / clip.FadeOutFrames);
         return Math.Clamp(fade, 0, 1);
+    }
+
+    public static CropState CropAt(TimelineClip clip, MediaAsset media, long localFrame)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        ArgumentNullException.ThrowIfNull(media);
+        return clip.Crop?.Evaluate(checked(localFrame + clip.CropOffsetFrames)) ?? CropState.Identity(media.Width, media.Height);
     }
 
     public static (double Left, double Right) AudioGains(TimelineTrack track, TimelineClip clip, double localFrame)
