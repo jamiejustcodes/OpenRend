@@ -185,6 +185,37 @@ TEST(Compositor, LetterboxesWideLayersAndAcceptsPaddedRows) {
     ASSERT_EQ(0, or_compositor_layer(c.value, wide.data(), 8, 4, 40, 1)) << or_last_error(); ASSERT_EQ(0, or_compositor_readback(c.value, output.data(), static_cast<int>(output.size())));
     for (int y = 0; y < 8; ++y) for (int x = 0; x < 8; ++x) { const int p = (y * 8 + x) * 4; EXPECT_EQ(y >= 2 && y < 6 ? 255 : 0, output[p + 1]); EXPECT_EQ(255, output[p + 3]); }
 }
+TEST(Compositor, AffineSamplingZoomsRotatesAndLeavesOutsideTransparent) {
+    for (bool warp : {false, true}) {
+        SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", warp ? L"1" : nullptr);
+        CompositorHandle c; ASSERT_EQ(0, or_compositor_create(8, 8, &c.value)) << or_last_error();
+        std::vector<uint8_t> image(8 * 8 * 4), bottom(image.size()), output(image.size());
+        for (int y = 0; y < 8; ++y) for (int x = 0; x < 8; ++x) {
+            const int p = (y * 8 + x) * 4;
+            image[p] = y >= 4 ? 255 : 0; image[p + 1] = x >= 4 ? 255 : 0; image[p + 2] = y < 4 ? 255 : 0; image[p + 3] = 255;
+            bottom[p + 1] = bottom[p + 3] = 255;
+        }
+        auto draw = [&](const or_layer_transform& transform) {
+            ASSERT_EQ(0, or_compositor_begin(c.value));
+            ASSERT_EQ(0, or_compositor_layer(c.value, bottom.data(), 8, 8, 32, 1));
+            ASSERT_EQ(0, or_compositor_layer_transform(c.value, image.data(), 8, 8, 32, 1, &transform)) << or_last_error();
+            ASSERT_EQ(0, or_compositor_readback(c.value, output.data(), static_cast<int>(output.size())));
+        };
+        auto pixel = [&](int x, int y, int b, int g, int r) {
+            const int p = (y * 8 + x) * 4;
+            EXPECT_EQ(b, output[p]); EXPECT_EQ(g, output[p + 1]); EXPECT_EQ(r, output[p + 2]); EXPECT_EQ(255, output[p + 3]);
+        };
+        draw({ .25,0,0, 0,.25,0, 8,8 }); pixel(0,0,0,0,255); pixel(7,7,0,0,255);
+        draw({ 0,-1,1, 1,0,0, 8,8 });
+        pixel(0,0,0,255,255); pixel(7,0,255,255,0); pixel(0,7,0,0,255); pixel(7,7,255,0,0);
+        draw({ 1,0,.5, 0,1,0, 8,8 }); pixel(0,0,0,255,255); pixel(7,0,0,255,0);
+        draw({ 1,0,2, 0,1,2, 8,4 }); pixel(0,0,0,255,0); pixel(4,4,0,255,0);
+        or_layer_transform invalid{1,0,NAN,0,1,0,8,8};
+        EXPECT_EQ(-1, or_compositor_layer_transform(c.value, image.data(), 8, 8, 32, 1, &invalid));
+        invalid = {1,0,0,0,1,0,9,8}; EXPECT_EQ(-1, or_compositor_layer_transform(c.value, image.data(), 8, 8, 32, 1, &invalid));
+    }
+    SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", nullptr);
+}
 TEST(Compositor, HardwareAndWarpMatchCpuStraightAlphaWithinOneByte) {
     for (bool force_warp : { false, true }) {
         SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", force_warp ? L"1" : nullptr);

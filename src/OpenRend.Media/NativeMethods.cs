@@ -45,6 +45,16 @@ internal static class NativeMethods
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl, EntryPoint = "or_compositor_layer")]
     internal static extern int CompositorLayer(CompositorHandle compositor, byte[] bgra, int width, int height, int stride, double opacity);
 
+    [StructLayout(LayoutKind.Sequential)]
+    internal struct LayerTransform
+    {
+        internal double Xx, Xy, Tx, Yx, Yy, Ty;
+        internal int DestinationWidth, DestinationHeight;
+    }
+
+    [DllImport(Library, CallingConvention = CallingConvention.Cdecl, EntryPoint = "or_compositor_layer_transform")]
+    internal static extern int CompositorLayerTransform(CompositorHandle compositor, byte[] bgra, int width, int height, int stride, double opacity, in LayerTransform transform);
+
     [DllImport(Library, CallingConvention = CallingConvention.Cdecl, EntryPoint = "or_compositor_readback")]
     internal static extern int CompositorReadback(CompositorHandle compositor, [Out] byte[] bgra, int capacity);
 

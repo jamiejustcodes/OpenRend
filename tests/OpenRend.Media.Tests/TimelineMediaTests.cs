@@ -18,6 +18,7 @@ public sealed class MediaFixture : IDisposable
     public string VariableRate => Path.Combine(Directory, "variable-rate.mkv");
     public string TimestampOffset => Path.Combine(Directory, "timestamp-offset.mkv");
     public string RotatedVideo => Path.Combine(Directory, "rotation-90.mp4");
+    public string Quadrants => Path.Combine(Directory, "quadrants.mkv");
     public MediaFixture()
     {
         System.IO.Directory.CreateDirectory(Directory);
@@ -43,6 +44,20 @@ public sealed class MediaFixture : IDisposable
         Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=red:s=32x32:r=1:d=1", "-f", "lavfi", "-i", "color=blue:s=32x32:r=1:d=1",
             "-filter_complex", "[0:v][1:v]hstack[v]", "-map", "[v]", "-c:v", "libx264", "-pix_fmt", "yuv420p", coded);
         Run("ffmpeg", "-v", "error", "-y", "-display_rotation:v:0", "90", "-i", coded, "-c", "copy", RotatedVideo);
+        var raw = Path.Combine(Directory, "quadrants.bgra");
+        var pixels = new byte[64 * 48 * 4 * 30];
+        for (var frame = 0; frame < 30; frame++)
+            for (var y = 0; y < 48; y++)
+                for (var x = 0; x < 64; x++)
+                {
+                    var p = ((frame * 48 + y) * 64 + x) * 4;
+                    pixels[p] = y >= 24 ? (byte)255 : (byte)0;
+                    pixels[p + 1] = x >= 32 ? (byte)255 : (byte)0;
+                    pixels[p + 2] = y < 24 ? (byte)255 : (byte)0;
+                    pixels[p + 3] = 255;
+                }
+        File.WriteAllBytes(raw, pixels);
+        Run("ffmpeg", "-v", "error", "-y", "-f", "rawvideo", "-pixel_format", "bgra", "-video_size", "64x48", "-framerate", "30", "-i", raw, "-c:v", "ffv1", "-pix_fmt", "bgra", Quadrants);
     }
 
     internal static string Run(string executable, params string[] arguments)
@@ -75,6 +90,126 @@ public sealed class MediaFixture : IDisposable
 
 public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper log) : IClassFixture<MediaFixture>
 {
+    [Fact]
+    public async Task CropSamplingMatchesCpuForZoomPanRotationPivotAndTransparentEdges()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Quadrants);
+        var bottom = await media.ProbeAsync(fixture.Source);
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 30 };
+        var project = new ProjectDocument { Width = 64, Height = 48, Media = [asset, bottom], Tracks =
+            [new TimelineTrack { Kind = TrackKind.Video, Clips = [clip] },
+             new TimelineTrack { Kind = TrackKind.Video, Clips = [new TimelineClip { MediaId = bottom.Id, SourceInFrame = 30, DurationFrames = 30 }] }] };
+        using var gpu = new TimelineRenderService(media);
+        using var cpu = new TimelineRenderService(media, useGpuCompositing: false);
+        var states = new[]
+        {
+            new CropState(32,24,16,12,0,32,24),
+            new CropState(64,48,48,24,0,32,24),
+            new CropState(64,48,32,24,90,32,24),
+            new CropState(39,29,30.25,19.5,17.7,13,31),
+            new CropState(23,41,19,39,-36.2,32,24),
+            new CropState(64,48,200,200,0,32,24)
+        };
+        clip.Opacity = .37;
+        foreach (var state in states)
+        {
+            clip.Crop = new() { Keyframes = [new() { State = state }] };
+            project.Validate();
+            var expected = cpu.RenderFrame(project, 0, 77, 59);
+            var actual = gpu.RenderFrame(project, 0, 77, 59);
+            for (var p = 0; p < actual.Length; p++) Assert.InRange(Math.Abs(actual[p] - expected[p]), 0, 2);
+        }
+        Assert.True(gpu.IsD3DCompositing, gpu.GpuUnavailableReason);
+        clip.Opacity = 1;
+        clip.Crop = new() { Keyframes = [new() { State = states[0] }] };
+        var zoom = gpu.RenderFrame(project, 0, 64, 48);
+        AssertRgb(zoom, 64, 16, 12, 255, 0, 0);
+        clip.Crop = new() { Keyframes = [new() { State = states[1] }] };
+        var pan = gpu.RenderFrame(project, 0, 64, 48);
+        AssertRgb(pan, 64, 20, 5, 255, 255, 0);
+        AssertRgb(pan, 64, 60, 20, 0, 0, 255);
+        clip.Crop = new() { Keyframes = [new() { State = states[2] }] };
+        var rotated = gpu.RenderFrame(project, 0, 64, 48);
+        AssertRgb(rotated, 64, 15, 5, 255, 255, 0);
+        AssertRgb(rotated, 64, 49, 5, 0, 255, 255);
+        AssertRgb(rotated, 64, 15, 42, 255, 0, 0);
+    }
+
+    [Fact]
+    public async Task AnimatedCropPreviewAndEncodedExportUseSameFramesAfterSplit()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Quadrants);
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 30, Crop = new() { Keyframes =
+            [new() { State = new(32,24,16,12,0,32,24) }, new() { Frame = 15, State = new(32,24,48,36,0,32,24), Interpolation = CropInterpolation.Hold }] } };
+        var project = new ProjectDocument { Width = 64, Height = 48, Media = [asset], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }] };
+        project.Validate();
+        using var renderer = new TimelineRenderService(media);
+        var before = renderer.RenderFrame(project, 20, 64, 48);
+        AssertRgb(before, 64, 32, 24, 0, 255, 255);
+        new TimelineEditor(project).SplitClip(clip.Id, 10);
+        Assert.Equal(before, renderer.RenderFrame(project, 20, 64, 48));
+        var destination = Path.Combine(fixture.Directory, "animated-crop.mp4");
+        await new ExportService(renderer).ExportAsync(project, destination);
+        AssertRgb(media.GetFrame(destination, 0, 64, 48), 64, 16, 12, 255, 0, 0, 8);
+        AssertRgb(media.GetFrame(destination, 20.0 / 30, 64, 48), 64, 32, 24, 0, 255, 255, 8);
+    }
+
+    [Fact]
+    public async Task CropCoordinatesUseDisplayedDimensionsAfterQuarterTurnMetadata()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.RotatedVideo);
+        var source = media.GetFrame(asset.Path, 0, 32, 64);
+        var project = new ProjectDocument { Width = 32, Height = 32, Media = [asset], Tracks =
+            [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = asset.Id, DurationFrames = 30, Crop = new() { Keyframes =
+                [new() { State = new(32,32,16,16,0,16,32) }] } }] }] };
+        project.Validate();
+        using var gpu = new TimelineRenderService(media);
+        using var cpu = new TimelineRenderService(media, useGpuCompositing: false);
+        var actual = gpu.RenderFrame(project, 0, 32, 32);
+        var fallback = cpu.RenderFrame(project, 0, 32, 32);
+        for (var p = 0; p < actual.Length; p++)
+        {
+            Assert.InRange(Math.Abs(source[p] - actual[p]), 0, 1);
+            Assert.InRange(Math.Abs(fallback[p] - actual[p]), 0, 1);
+        }
+    }
+
+    [Fact]
+    public async Task MissingLegacyDimensionsRenderOriginalAndCroppedSourcesWithoutChangingMetadata()
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Quadrants);
+        asset.Width = 0;
+        asset.Height = 0;
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 30 };
+        var project = new ProjectDocument { Width = 64, Height = 48, Media = [asset], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }] };
+        project.Validate();
+        using var gpu = new TimelineRenderService(media);
+        using var cpu = new TimelineRenderService(media, useGpuCompositing: false);
+        foreach (var cropped in new[] { false, true })
+        {
+            clip.Crop = cropped ? new() { Keyframes = [new() { State = new(32,24,48,36,0,32,24) }] } : null;
+            var actual = gpu.RenderFrame(project, 0, 64, 48);
+            var fallback = cpu.RenderFrame(project, 0, 64, 48);
+            AssertRgb(actual, 64, 16, 12, cropped ? 0 : 255, cropped ? 255 : 0, cropped ? 255 : 0);
+            for (var p = 0; p < actual.Length; p++) Assert.InRange(Math.Abs(actual[p] - fallback[p]), 0, 1);
+            Assert.Equal(0, asset.Width);
+            Assert.Equal(0, asset.Height);
+        }
+    }
+
+    private static void AssertRgb(byte[] pixels, int width, int x, int y, int red, int green, int blue, int tolerance = 1)
+    {
+        var p = (y * width + x) * 4;
+        Assert.InRange((int)pixels[p], blue - tolerance, blue + tolerance);
+        Assert.InRange((int)pixels[p + 1], green - tolerance, green + tolerance);
+        Assert.InRange((int)pixels[p + 2], red - tolerance, red + tolerance);
+        Assert.Equal(255, pixels[p + 3]);
+    }
+
     [Fact]
     public async Task TrackLevelsAffectActualPixelsStereoSamplesAndEncodedOutput()
     {

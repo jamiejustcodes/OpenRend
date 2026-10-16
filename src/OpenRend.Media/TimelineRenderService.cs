@@ -8,6 +8,7 @@ public sealed class TimelineRenderService : IDisposable
     private readonly MediaService media;
     private readonly object compositorGate = new();
     private readonly Dictionary<(int Width, int Height), CachedCompositor> compositors = new();
+    private readonly Dictionary<string, (int Width, int Height)> recoveredDimensions = new(StringComparer.OrdinalIgnoreCase);
     private readonly int compositorCapacity;
     private readonly bool useGpuCompositing;
     private bool disposed;
@@ -28,7 +29,7 @@ public sealed class TimelineRenderService : IDisposable
 
     public byte[] RenderFrame(ProjectDocument project, long frame, int width, int height)
     {
-        if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
+        if (width <= 0 || height <= 0 || width > 16384 || height > 16384 || (long)width * height * 4 > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(width));
         lock (compositorGate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
@@ -42,9 +43,29 @@ public sealed class TimelineRenderService : IDisposable
             foreach (var layer in TimelineEvaluator.Evaluate(project, frame).Video)
             {
                 if (layer.Opacity <= 0) continue;
-                var scale = Math.Min((double)width / Math.Max(1, layer.Media.Width), (double)height / Math.Max(1, layer.Media.Height));
-                var layerWidth = Math.Clamp((int)Math.Round(layer.Media.Width * scale), 1, width);
-                var layerHeight = Math.Clamp((int)Math.Round(layer.Media.Height * scale), 1, height);
+                var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
+                var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
+                crop.Validate();
+                var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
+                    crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
+                if (transformed)
+                {
+                    if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
+                        throw new MediaException("Source dimensions exceed crop rendering limits.");
+                    // Keep source detail when zooming. Decode honors display rotation before sampling.
+                    var sourcePixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
+                    var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
+                    if (compositor != null)
+                    {
+                        if (NativeMethods.CompositorLayerTransform(compositor, sourcePixels, sourceWidth, sourceHeight, checked(sourceWidth * 4), layer.Opacity, in transform) < 0)
+                            throw NativeMethods.Error("Could not composite cropped timeline layer");
+                    }
+                    else CompositeTransformed(output, width, height, sourcePixels, sourceWidth, sourceHeight, layer.Opacity, transform);
+                    continue;
+                }
+                var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
+                var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
+                var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
                 var pixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), layerWidth, layerHeight);
                 if (compositor != null)
                 {
@@ -57,6 +78,21 @@ public sealed class TimelineRenderService : IDisposable
                 throw NativeMethods.Error("Could not read composited timeline frame");
             return output;
         }
+    }
+
+    private (int Width, int Height) SourceDimensions(MediaAsset asset)
+    {
+        if (asset.Width > 0 && asset.Height > 0) return (asset.Width, asset.Height);
+        var path = Path.GetFullPath(asset.Path);
+        if (recoveredDimensions.TryGetValue(path, out var dimensions)) return dimensions;
+        // Older imports may omit dimensions. Inspect without changing their saved edit decisions.
+        var inspected = media.ProbeAsync(path).GetAwaiter().GetResult();
+        if (!inspected.HasVideo || inspected.Width <= 0 || inspected.Height <= 0)
+            throw new MediaException("Video source dimensions are unavailable.");
+        if (recoveredDimensions.Count >= 32) recoveredDimensions.Remove(recoveredDimensions.Keys.First());
+        dimensions = (inspected.Width, inspected.Height);
+        recoveredDimensions.Add(path, dimensions);
+        return dimensions;
     }
 
     private CompositorHandle? GetCompositor(int width, int height)
@@ -101,6 +137,7 @@ public sealed class TimelineRenderService : IDisposable
             disposed = true;
             foreach (var compositor in compositors.Values) compositor.Handle.Dispose();
             compositors.Clear();
+            recoveredDimensions.Clear();
         }
     }
 
@@ -171,6 +208,62 @@ public sealed class TimelineRenderService : IDisposable
                     for (var channel = 0; channel < 3; channel++)
                         output[target + channel] = (byte)Math.Clamp((int)Math.Round(layer[source + channel] * alpha + output[target + channel] * (1 - alpha)), 0, 255);
                 }
+            }
+        }
+    }
+
+    private static NativeMethods.LayerTransform SamplingTransform(CropState crop, int sourceWidth, int sourceHeight, int width, int height)
+    {
+        var radians = (crop.RotationDegrees % 360) * Math.PI / 180;
+        var cosine = Math.Cos(radians);
+        var sine = Math.Sin(radians);
+        var x = crop.CenterX - crop.Width / 2 - crop.PivotX;
+        var y = crop.CenterY - crop.Height / 2 - crop.PivotY;
+        var scale = Math.Min(width / crop.Width, height / crop.Height);
+        return new()
+        {
+            Xx = cosine * crop.Width / sourceWidth, Xy = -sine * crop.Height / sourceWidth,
+            Tx = (crop.PivotX + cosine * x - sine * y) / sourceWidth,
+            Yx = sine * crop.Width / sourceHeight, Yy = cosine * crop.Height / sourceHeight,
+            Ty = (crop.PivotY + sine * x + cosine * y) / sourceHeight,
+            DestinationWidth = Math.Clamp((int)Math.Round(crop.Width * scale), 1, width),
+            DestinationHeight = Math.Clamp((int)Math.Round(crop.Height * scale), 1, height)
+        };
+    }
+
+    private static void CompositeTransformed(byte[] output, int width, int height, byte[] layer, int sourceWidth, int sourceHeight, double opacity, NativeMethods.LayerTransform transform)
+    {
+        var left = (width - transform.DestinationWidth) / 2;
+        var top = (height - transform.DestinationHeight) / 2;
+        // Both paths sample texel centers with clamped bilinear filtering inside the image.
+        // Out-of-source samples are transparent, preserving lower timeline layers.
+        for (var y = 0; y < transform.DestinationHeight; y++)
+        {
+            var v = (y + .5) / transform.DestinationHeight;
+            for (var x = 0; x < transform.DestinationWidth; x++)
+            {
+                var u = (x + .5) / transform.DestinationWidth;
+                var sourceU = transform.Xx * u + transform.Xy * v + transform.Tx;
+                var sourceV = transform.Yx * u + transform.Yy * v + transform.Ty;
+                if (sourceU < 0 || sourceU > 1 || sourceV < 0 || sourceV > 1) continue;
+                var sx = Math.Clamp(sourceU * sourceWidth - .5, 0, sourceWidth - 1);
+                var sy = Math.Clamp(sourceV * sourceHeight - .5, 0, sourceHeight - 1);
+                var x0 = (int)sx;
+                var y0 = (int)sy;
+                var x1 = Math.Min(x0 + 1, sourceWidth - 1);
+                var y1 = Math.Min(y0 + 1, sourceHeight - 1);
+                var wx = sx - x0;
+                var wy = sy - y0;
+                var p00 = (y0 * sourceWidth + x0) * 4;
+                var p01 = (y0 * sourceWidth + x1) * 4;
+                var p10 = (y1 * sourceWidth + x0) * 4;
+                var p11 = (y1 * sourceWidth + x1) * 4;
+                double Sample(int channel) => (layer[p00 + channel] * (1 - wx) + layer[p01 + channel] * wx) * (1 - wy) +
+                    (layer[p10 + channel] * (1 - wx) + layer[p11 + channel] * wx) * wy;
+                var alpha = opacity * Sample(3) / 255;
+                var target = ((y + top) * width + x + left) * 4;
+                for (var channel = 0; channel < 3; channel++)
+                    output[target + channel] = (byte)Math.Clamp((int)Math.Round(Sample(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
             }
         }
     }

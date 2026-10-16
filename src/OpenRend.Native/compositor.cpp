@@ -26,14 +26,16 @@ template<class F> int safe(F&& operation) {
 constexpr char shader[] = R"(
 Texture2D image : register(t0);
 SamplerState linearSampler : register(s0);
-cbuffer Layer : register(b0) { float opacity; float3 padding; };
+cbuffer Layer : register(b0) { float4 uvX; float4 uvY; float opacity; float3 padding; };
 struct Vertex { float4 position : SV_POSITION; float2 uv : TEXCOORD0; };
 Vertex vs(uint id : SV_VertexID) {
     Vertex o; o.uv = float2((id << 1) & 2, id & 2);
     o.position = float4(o.uv * float2(2,-2) + float2(-1,1),0,1); return o;
 }
 float4 ps(Vertex i) : SV_TARGET {
-    float4 color = image.Sample(linearSampler, i.uv);
+    float2 uv = float2(dot(uvX.xyz, float3(i.uv,1)), dot(uvY.xyz, float3(i.uv,1)));
+    if (any(uv < 0) || any(uv > 1)) return float4(0,0,0,0);
+    float4 color = image.Sample(linearSampler, uv);
     color.a *= opacity; return color;
 }
 )";
@@ -76,7 +78,7 @@ int or_compositor_create(int width, int height, void** result) { return safe([&]
     check(D3DCompile(shader, sizeof(shader), "OpenRendCompositor", nullptr, nullptr, "ps", "ps_4_0", D3DCOMPILE_OPTIMIZATION_LEVEL3, 0, &ps, &errors), "Compile compositor pixel shader");
     check(c->device->CreateVertexShader(vs->GetBufferPointer(), vs->GetBufferSize(), nullptr, &c->vertex), "Create compositor vertex shader");
     check(c->device->CreatePixelShader(ps->GetBufferPointer(), ps->GetBufferSize(), nullptr, &c->pixel), "Create compositor pixel shader");
-    D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = 16; buffer.Usage = D3D11_USAGE_DYNAMIC; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER; buffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    D3D11_BUFFER_DESC buffer{}; buffer.ByteWidth = 48; buffer.Usage = D3D11_USAGE_DYNAMIC; buffer.BindFlags = D3D11_BIND_CONSTANT_BUFFER; buffer.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
     check(c->device->CreateBuffer(&buffer, nullptr, &c->constants), "Create compositor opacity buffer");
     D3D11_BLEND_DESC blend{}; auto& rt = blend.RenderTarget[0]; rt.BlendEnable = TRUE; rt.SrcBlend = D3D11_BLEND_SRC_ALPHA; rt.DestBlend = D3D11_BLEND_INV_SRC_ALPHA; rt.BlendOp = D3D11_BLEND_OP_ADD; rt.SrcBlendAlpha = D3D11_BLEND_ZERO; rt.DestBlendAlpha = D3D11_BLEND_ONE; rt.BlendOpAlpha = D3D11_BLEND_OP_ADD; rt.RenderTargetWriteMask = D3D11_COLOR_WRITE_ENABLE_ALL;
     check(c->device->CreateBlendState(&blend, &c->blend), "Create compositor alpha blend state");
@@ -86,9 +88,15 @@ int or_compositor_create(int width, int height, void** result) { return safe([&]
     check(c->device->CreateRasterizerState(&rasterizer, &c->rasterizer), "Create compositor rasterizer"); c->begin(); *result = c.release(); return 0;
 }); }
 int or_compositor_begin(void* handle) { return safe([&] { require(handle, "Missing compositor handle"); auto& c = *static_cast<Compositor*>(handle); std::lock_guard lock(c.mutex); c.begin(); return 0; }); }
-int or_compositor_layer(void* handle, const uint8_t* bgra, int width, int height, int stride, double opacity) { return safe([&] {
+int or_compositor_layer_transform(void* handle, const uint8_t* bgra, int width, int height, int stride, double opacity, const or_layer_transform* transform) { return safe([&] {
     require(handle && bgra && width > 0 && height > 0 && width <= 16384 && height <= 16384 && int64_t(stride) >= int64_t(width) * 4 && std::isfinite(opacity) && opacity >= 0 && opacity <= 1, "Invalid compositor layer arguments");
-    auto& c = *static_cast<Compositor*>(handle); std::lock_guard lock(c.mutex); require(c.started, "Begin the compositor frame before adding layers"); if (opacity == 0) return 0;
+    auto& c = *static_cast<Compositor*>(handle); std::lock_guard lock(c.mutex); require(c.started, "Begin the compositor frame before adding layers");
+    if (transform) {
+        require(transform->destination_width > 0 && transform->destination_width <= c.width && transform->destination_height > 0 && transform->destination_height <= c.height, "Invalid compositor destination dimensions");
+        for (double value : {transform->xx, transform->xy, transform->tx, transform->yx, transform->yy, transform->ty})
+            require(std::isfinite(value) && std::abs(value) <= 1e12, "Invalid compositor sampling transform");
+    }
+    if (opacity == 0) return 0;
     if (width != c.layer_width || height != c.layer_height) {
         ID3D11ShaderResourceView* empty{}; c.context->PSSetShaderResources(0, 1, &empty); c.source.Reset(); c.layer.Reset();
         D3D11_TEXTURE2D_DESC texture{}; texture.Width = width; texture.Height = height; texture.MipLevels = 1; texture.ArraySize = 1; texture.Format = DXGI_FORMAT_B8G8R8A8_UNORM; texture.SampleDesc.Count = 1; texture.Usage = D3D11_USAGE_DYNAMIC; texture.BindFlags = D3D11_BIND_SHADER_RESOURCE; texture.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
@@ -97,14 +105,23 @@ int or_compositor_layer(void* handle, const uint8_t* bgra, int width, int height
     D3D11_MAPPED_SUBRESOURCE mapped{}; check(c.context->Map(c.layer.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Upload compositor layer");
     for (int y = 0; y < height; ++y) std::memcpy(static_cast<uint8_t*>(mapped.pData) + static_cast<size_t>(y) * mapped.RowPitch, bgra + static_cast<size_t>(y) * stride, static_cast<size_t>(width) * 4);
     c.context->Unmap(c.layer.Get(), 0);
-    check(c.context->Map(c.constants.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Upload compositor opacity"); float values[] = { static_cast<float>(opacity), 0, 0, 0 }; std::memcpy(mapped.pData, values, sizeof(values)); c.context->Unmap(c.constants.Get(), 0);
+    check(c.context->Map(c.constants.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped), "Upload compositor sampling transform");
+    float values[] = { 1,0,0,0, 0,1,0,0, static_cast<float>(opacity),0,0,0 };
+    if (transform) {
+        values[0] = static_cast<float>(transform->xx); values[1] = static_cast<float>(transform->xy); values[2] = static_cast<float>(transform->tx);
+        values[4] = static_cast<float>(transform->yx); values[5] = static_cast<float>(transform->yy); values[6] = static_cast<float>(transform->ty);
+    }
+    std::memcpy(mapped.pData, values, sizeof(values)); c.context->Unmap(c.constants.Get(), 0);
     const double scale = std::min(static_cast<double>(c.width) / width, static_cast<double>(c.height) / height);
-    const int fitted_width = std::clamp(static_cast<int>(std::nearbyint(width * scale)), 1, c.width); const int fitted_height = std::clamp(static_cast<int>(std::nearbyint(height * scale)), 1, c.height);
+    const int fitted_width = transform ? transform->destination_width : std::clamp(static_cast<int>(std::nearbyint(width * scale)), 1, c.width); const int fitted_height = transform ? transform->destination_height : std::clamp(static_cast<int>(std::nearbyint(height * scale)), 1, c.height);
     D3D11_VIEWPORT viewport{}; viewport.Width = static_cast<float>(fitted_width); viewport.Height = static_cast<float>(fitted_height); viewport.TopLeftX = static_cast<float>((c.width - fitted_width) / 2); viewport.TopLeftY = static_cast<float>((c.height - fitted_height) / 2); viewport.MaxDepth = 1;
     c.context->RSSetViewports(1, &viewport); c.context->RSSetState(c.rasterizer.Get()); c.context->OMSetBlendState(c.blend.Get(), nullptr, 0xffffffff);
     ID3D11RenderTargetView* target = c.target.Get(); c.context->OMSetRenderTargets(1, &target, nullptr); c.context->IASetInputLayout(nullptr); c.context->IASetPrimitiveTopology(D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST); c.context->VSSetShader(c.vertex.Get(), nullptr, 0); c.context->PSSetShader(c.pixel.Get(), nullptr, 0);
     ID3D11ShaderResourceView* source = c.source.Get(); c.context->PSSetShaderResources(0, 1, &source); ID3D11SamplerState* sampler = c.sampler.Get(); c.context->PSSetSamplers(0, 1, &sampler); ID3D11Buffer* constants = c.constants.Get(); c.context->PSSetConstantBuffers(0, 1, &constants); c.context->Draw(3, 0); return 0;
 }); }
+int or_compositor_layer(void* handle, const uint8_t* bgra, int width, int height, int stride, double opacity) {
+    return or_compositor_layer_transform(handle, bgra, width, height, stride, opacity, nullptr);
+}
 int or_compositor_readback(void* handle, uint8_t* bgra, int capacity) { return safe([&] {
     require(handle && bgra, "Invalid compositor readback arguments"); auto& c = *static_cast<Compositor*>(handle); std::lock_guard lock(c.mutex); require(int64_t(c.width) * c.height * 4 <= capacity, "Compositor readback buffer is too small");
     c.context->CopyResource(c.staging.Get(), c.output.Get()); D3D11_MAPPED_SUBRESOURCE mapped{}; check(c.context->Map(c.staging.Get(), 0, D3D11_MAP_READ, 0, &mapped), "Read compositor output");

@@ -53,6 +53,14 @@ OR_API void or_renderer_close(void* renderer);
 OR_API int or_compositor_create(int width, int height, void** compositor);
 OR_API int or_compositor_begin(void* compositor);
 OR_API int or_compositor_layer(void* compositor, const uint8_t* bgra, int width, int height, int stride, double opacity);
+/* Map fitted destination UV to source UV: sx = xx*u + xy*v + tx,
+   sy = yx*u + yy*v + ty. Samples outside [0,1] are transparent.
+   Destination dimensions are centered output pixels, not source dimensions. */
+typedef struct or_layer_transform {
+    double xx, xy, tx, yx, yy, ty;
+    int32_t destination_width, destination_height;
+} or_layer_transform;
+OR_API int or_compositor_layer_transform(void* compositor, const uint8_t* bgra, int width, int height, int stride, double opacity, const or_layer_transform* transform);
 OR_API int or_compositor_readback(void* compositor, uint8_t* bgra, int capacity);
 OR_API int or_compositor_is_hardware(void* compositor);
 OR_API void or_compositor_close(void* compositor);
