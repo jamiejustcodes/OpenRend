@@ -19,6 +19,8 @@ public static class ProjectStore
         ArgumentNullException.ThrowIfNull(project);
         project.Validate();
         var fullPath = System.IO.Path.GetFullPath(path);
+        if (project.Media.Any(media => string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("A project file cannot overwrite source media.");
         var directory = System.IO.Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
         var saved = project.DeepClone();
@@ -35,7 +37,8 @@ public static class ProjectStore
                 stream.Flush(flushToDisk: true);
             }
             cancellationToken.ThrowIfCancellationRequested();
-            File.Move(temporary, fullPath, overwrite: true);
+            if (File.Exists(fullPath)) File.Replace(temporary, fullPath, destinationBackupFileName: null);
+            else File.Move(temporary, fullPath);
         }
         finally
         {
@@ -46,7 +49,8 @@ public static class ProjectStore
     public static async Task<ProjectDocument> LoadAsync(string path, CancellationToken cancellationToken = default)
     {
         var fullPath = System.IO.Path.GetFullPath(path);
-        await using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        // Readers keep their snapshot handle while a save replaces the directory entry.
+        await using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         if (stream.Length > 64 * 1024 * 1024) throw new InvalidDataException("Project manifest exceeds 64 MiB.");
         ProjectManifest? manifest;
         try { manifest = await JsonSerializer.DeserializeAsync<ProjectManifest>(stream, Options, cancellationToken); }

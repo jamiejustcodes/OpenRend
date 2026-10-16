@@ -68,6 +68,26 @@ public sealed class EditorRegressionTests
     }
 
     [Fact]
+    public async Task OverlappingSavesKeepTheLatestRequestedRevisionOnDisk()
+    {
+        using var media = new MediaService(); using var renderer = new TimelineRenderService(media);
+        var vm = new EditorViewModel(media, renderer, new ExportService(renderer));
+        vm.Editor.Execute(p => p.Name = new string('a', 2_000_000));
+        var path = Path.Combine(Path.GetTempPath(), $"openrend-save-order-{Guid.NewGuid():N}.openrend");
+        try
+        {
+            var earlier = vm.SaveAsync(path);
+            Assert.False(earlier.IsCompleted);
+            vm.Editor.Execute(p => p.Name = "Latest requested revision");
+            var latest = vm.SaveAsync(path);
+            await Task.WhenAll(earlier, latest);
+            Assert.Equal("Latest requested revision", (await ProjectStore.LoadAsync(path)).Name);
+            Assert.False(vm.Dirty);
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     public void UndoRelinkRebindsRetainedLibraryItemAndRecoveryNeedsSaving()
     {
         using var media = new MediaService(); using var renderer = new TimelineRenderService(media);

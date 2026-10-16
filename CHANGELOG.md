@@ -17,3 +17,4 @@
 - Corrected maximized work-area bounds and retained-frame repainting after preview exposure.
 - Preserved delayed stream starts, variable frame intervals, resampler tails and display rotation.
 - Added track opacity, gain and stereo balance with undo, persistence, accessible sliders and shared preview/export processing.
+- Corrected concurrent project reads and ordered overlapping saves; project saves reject source-media destinations.

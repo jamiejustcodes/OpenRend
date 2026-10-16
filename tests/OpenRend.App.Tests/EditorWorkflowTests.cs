@@ -58,7 +58,15 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             {
                 var window = running.Window;
                 VerifyLoadedWorkspace(window);
-                await VerifyTimelineProvidersAsync(window, projectPath);
+                try { await VerifyTimelineProvidersAsync(window, projectPath); }
+                catch
+                {
+                    output.WriteLine("Project at failure: " + await File.ReadAllTextAsync(projectPath));
+                    output.WriteLine("Editor title: " + window.Title);
+                    foreach (var modal in window.ModalWindows)
+                        output.WriteLine("Modal: " + string.Join(" | ", modal.FindAllDescendants().Select(e => e.Name)));
+                    throw;
+                }
                 Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_A);
                 Assert.True(Find(window, "CopyButton").IsEnabled);
                 for (var i = 0; i < 30; i++) Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);

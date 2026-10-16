@@ -8,7 +8,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | Placement, move, trim, split | Tested | Domain tests; splits preserve fade envelopes |
 | Undo/redo and locks | Tested | Validation failures roll back, redo branches reset |
 | Mute, solo, visibility | Tested | Shared evaluator and real media export tests |
-| JSON projects, autosave, relink | Tested | Relative paths, atomic failure, unknown-version rejection |
+| JSON projects, autosave, relink | Tested | Relative paths, concurrent reader snapshots, ordered save requests, blocked-save preservation, source overwrite rejection and unknown-version rejection |
 | Legacy project import | Tested | Read-only conversion with ordering/audio/fade/group preservation |
 | Linked groups | Tested | Atomic move/trim/split/delete, independent split groups, locked-member rollback |
 | Cut / copy / paste | Tested | Group identity remapping, cross-project media and frame-rate conversion, source-end rounding, undo and locked-cut failure |

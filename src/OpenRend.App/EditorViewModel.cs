@@ -49,6 +49,7 @@ public sealed class EditorViewModel : ObservableObject
     public bool Ripple { get; set; }
     public bool IgnoreGroups { get; set; }
     private long editRevision;
+    private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];
     private List<MediaAsset> clipboardMedia = [];
     private Rational clipboardRate = new(30, 1);
@@ -150,11 +151,18 @@ public sealed class EditorViewModel : ObservableObject
     {
         var editor = Editor;
         var revision = editRevision;
-        await ProjectStore.SaveAsync(Project.DeepClone(), path);
-        if (!ReferenceEquals(Editor, editor)) return;
-        ProjectPath = path;
-        if (revision == editRevision) Dirty = false;
-        Status = revision == editRevision ? $"Saved {Path.GetFileName(path)}." : "Saved the earlier revision. Newer edits still need saving.";
+        var snapshot = Project.DeepClone();
+        // Older snapshots must finish before a newer save can replace the same file.
+        await saveGate.WaitAsync();
+        try
+        {
+            await ProjectStore.SaveAsync(snapshot, path);
+            if (!ReferenceEquals(Editor, editor)) return;
+            ProjectPath = path;
+            if (revision == editRevision) Dirty = false;
+            Status = revision == editRevision ? $"Saved {Path.GetFileName(path)}." : "Saved the earlier revision. Newer edits still need saving.";
+        }
+        finally { saveGate.Release(); }
     }
     public void MarkSaved() => Dirty = false;
 
