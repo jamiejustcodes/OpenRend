@@ -23,7 +23,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | Timeline accessibility | Tested | SelectionItem and Invoke/Toggle providers, track/clip keyboard navigation |
 | Track opacity / gain / pan | Tested | Atomic level edits, lock checks, persistence/default compatibility, accessible range sliders and actual encoded pixels/stereo samples |
 | Preview display controls | Tested | Monitor zoom, safe-area overlay and drop-frame timecode; snapshots use project-resolution render |
-| Event Pan/Crop | Tested locally | Source-pixel rectangle, rotation/pivot, aspect lock, interactive workspace and six temporal keyframe curves; integer-frame dragging/retiming, persistence, trim/split/clipboard continuity, GPU/CPU comparison and actual encoded output |
+| Event Pan/Crop | Tested locally | Source-pixel rectangle, rotation/pivot, aspect lock, interactive workspace and six temporal curves with right-click/keyboard selection; integer-frame dragging/retiming and collision preservation, persistence, trim/split/clipboard continuity, GPU/CPU comparison and actual encoded output |
 | Docking | Partial | Splitters and persistent sizing; arbitrary redocking pending |
 | Effects | Partial | Opacity, gain, pan, fades and animated event crop; spatial spline smoothing, masks, effect chains and titles pending |
 | Proxies, advanced cache, scripting, plugin hosting | Planned | No placeholder UI controls |

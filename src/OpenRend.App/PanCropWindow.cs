@@ -115,6 +115,7 @@ public sealed class PanCropWindow : Window
         lane.Margin = new Thickness(145, 0, 8, 0); bottom.Children.Add(lane);
         lane.Seek += SetFrame;
         lane.MoveKeyframe += MoveKeyframe;
+        lane.InterpolationChanged += value => interpolation.SelectedItem = value;
         bottom.Children.Add(new TextBlock { Text = "Position", VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7, 24, 0, 0), Width = 130, HorizontalAlignment = HorizontalAlignment.Left });
         var transport = new DockPanel { LastChildFill = false }; Grid.SetRow(transport, 1); bottom.Children.Add(transport);
         frameField = new TextBox { Width = 105, TextAlignment = TextAlignment.Right, Margin = new Thickness(3, 5, 6, 5) };
@@ -146,7 +147,7 @@ public sealed class PanCropWindow : Window
         Loaded += (_, _) => { seek(checked(EventClip.StartFrame + localFrame)); Refresh(); };
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape && Keyboard.FocusedElement is not TextBox && !workspace.IsMouseCaptured && !lane.IsMouseCaptured) { Close(); e.Handled = true; }
+            if (e.Key == Key.Escape && Keyboard.FocusedElement is not TextBox && !workspace.IsMouseCaptured && !lane.IsMouseCaptured && lane.ContextMenu?.IsOpen != true) { Close(); e.Handled = true; }
             else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.Z or Key.Y && Keyboard.FocusedElement is not TextBox)
             { Edit(() => { if (e.Key == Key.Z) editor.Undo(); else editor.Redo(); }); e.Handled = true; }
         };
@@ -186,6 +187,7 @@ public sealed class PanCropWindow : Window
             keyframeField.IsEnabled = EventClip.Crop?.Keyframes.Any(key => key.Frame == current) == true;
             keyframeField.Text = keyframeField.IsEnabled ? localFrame.ToString(CultureInfo.InvariantCulture) : "";
             interpolation.SelectedItem = EventClip.Crop?.Keyframes.LastOrDefault(key => key.Frame <= current)?.Interpolation ?? CropInterpolation.Linear;
+            lane.Interpolation = CurrentInterpolation;
             workspace.State = state; workspace.SourceWidth = Math.Max(1, Source.Width); workspace.SourceHeight = Math.Max(1, Source.Height); workspace.InvalidateVisual();
             lane.Duration = EventClip.DurationFrames; lane.Position = localFrame;
             lane.CanMove = EventClip.Crop is not null;
@@ -370,9 +372,12 @@ internal sealed class CropKeyframeLane : FrameworkElement
     public long Position { get; set; }
     public long[] Keys { get; set; } = [0];
     public bool CanMove { get; set; }
+    public CropInterpolation Interpolation { get; set; }
     public Rational Rate { get; set; } = new(30, 1);
     public event Action<long>? Seek;
     public event Action<long, long>? MoveKeyframe;
+    public event Action<CropInterpolation>? InterpolationChanged;
+    private readonly Dictionary<CropInterpolation, MenuItem> curveItems = [];
     private long? dragging;
     private long pendingFrame;
     // The ruler reaches the event end; editable frames stop one frame before it.
@@ -382,7 +387,34 @@ internal sealed class CropKeyframeLane : FrameworkElement
     {
         ClipToBounds = true; Focusable = true;
         AutomationProperties.SetName(this, "Crop keyframe timeline");
-        AutomationProperties.SetHelpText(this, "Click to seek. Drag a keyframe diamond to change its frame. Arrow keys seek; Escape cancels a drag. Use the keyframe frame field for exact timing.");
+        AutomationProperties.SetHelpText(this, "Click to seek. Drag a keyframe diamond to change its frame; right-click for interpolation. Arrow keys seek; Shift+F10 opens the selected key's menu; Escape cancels a drag. Use the keyframe frame field for exact timing.");
+        ContextMenu = new ContextMenu();
+        AutomationProperties.SetName(ContextMenu, "Crop keyframe interpolation"); AutomationProperties.SetAutomationId(ContextMenu, "CropCurveMenu");
+        foreach (var curve in new[] { CropInterpolation.Linear, CropInterpolation.Fast, CropInterpolation.Slow, CropInterpolation.Smooth, CropInterpolation.Sharp, CropInterpolation.Hold })
+        {
+            var item = new MenuItem { Header = curve.ToString(), IsCheckable = true };
+            item.Click += (_, _) => InterpolationChanged?.Invoke(curve);
+            curveItems.Add(curve, item); ContextMenu.Items.Add(item);
+        }
+        ContextMenuOpening += (_, e) =>
+        {
+            var key = e.CursorLeft < 0 ? Keys.Contains(Position) ? Position : (long?)null : KeyAt(new Point(e.CursorLeft, e.CursorTop));
+            if (key is null) { e.Handled = true; return; }
+            PrepareCurveMenu(key.Value);
+            ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            ContextMenu.HorizontalOffset = 0; ContextMenu.VerticalOffset = 0;
+        };
+    }
+    private long? KeyAt(Point point)
+    {
+        if (Keys.Length == 0 || Math.Abs(point.Y - 31) > 10) return null;
+        var nearest = Keys.OrderBy(frame => Math.Abs(FrameX(frame) - point.X)).First();
+        return Math.Abs(FrameX(nearest) - point.X) < 7 ? nearest : null;
+    }
+    private void PrepareCurveMenu(long frame)
+    {
+        Seek?.Invoke(frame);
+        foreach (var (curve, item) in curveItems) item.IsChecked = curve == Interpolation;
     }
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
     protected override void OnRender(DrawingContext dc)
@@ -429,6 +461,16 @@ internal sealed class CropKeyframeLane : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e) { dragging = null; InvalidateVisual(); }
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Apps || e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+        {
+            if (Keys.Contains(Position))
+            {
+                PrepareCurveMenu(Position);
+                ContextMenu!.PlacementTarget = this; ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.RelativePoint;
+                ContextMenu.HorizontalOffset = FrameX(Position); ContextMenu.VerticalOffset = 43; ContextMenu.IsOpen = true;
+            }
+            e.Handled = true; return;
+        }
         if (e.Key == Key.Escape && dragging is not null) { dragging = null; ReleaseMouseCapture(); InvalidateVisual(); e.Handled = true; return; }
         if (e.Key is Key.Left or Key.Right or Key.Home or Key.End)
         {
