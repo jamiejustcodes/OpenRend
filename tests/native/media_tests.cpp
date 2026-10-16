@@ -216,6 +216,24 @@ TEST(Compositor, AffineSamplingZoomsRotatesAndLeavesOutsideTransparent) {
     }
     SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", nullptr);
 }
+TEST(Compositor, FilteredKeyEdgesIgnoreTransparentPixelColor) {
+    for (bool force_warp : { false, true }) {
+        SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", force_warp ? L"1" : nullptr);
+        CompositorHandle c; ASSERT_EQ(0, or_compositor_create(4, 1, &c.value)) << or_last_error();
+        // The hidden green texel must contribute coverage only, never green to the blue edge.
+        const uint8_t source[] = { 0,255,0,0, 255,0,0,255 };
+        std::vector<uint8_t> result(16);
+        const or_layer_transform transform{ 1,0,0, 0,1,0, 4,1 };
+        ASSERT_EQ(0, or_compositor_layer_transform(c.value, source, 2, 1, 8, 1, &transform)) << or_last_error();
+        ASSERT_EQ(0, or_compositor_readback(c.value, result.data(), static_cast<int>(result.size())));
+        const int blue[] = { 0,64,191,255 };
+        for (int x = 0; x < 4; ++x) {
+            EXPECT_NEAR(blue[x], result[x * 4], 1);
+            EXPECT_EQ(0, result[x * 4 + 1]); EXPECT_EQ(0, result[x * 4 + 2]); EXPECT_EQ(255, result[x * 4 + 3]);
+        }
+    }
+    SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", nullptr);
+}
 TEST(Compositor, HardwareAndWarpMatchCpuStraightAlphaWithinOneByte) {
     for (bool force_warp : { false, true }) {
         SetEnvironmentVariableW(L"OPENREND_FORCE_WARP", force_warp ? L"1" : nullptr);

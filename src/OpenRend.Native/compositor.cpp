@@ -32,10 +32,27 @@ Vertex vs(uint id : SV_VertexID) {
     Vertex o; o.uv = float2((id << 1) & 2, id & 2);
     o.position = float4(o.uv * float2(2,-2) + float2(-1,1),0,1); return o;
 }
+float4 coveredPixel(int2 coordinate) {
+    float4 color = image.Load(int3(coordinate, 0));
+    color.rgb *= color.a;
+    return color;
+}
 float4 ps(Vertex i) : SV_TARGET {
     float2 uv = float2(dot(uvX.xyz, float3(i.uv,1)), dot(uvY.xyz, float3(i.uv,1)));
     if (any(uv < 0) || any(uv > 1)) return float4(0,0,0,0);
-    float4 color = image.Sample(linearSampler, uv);
+    uint width, height;
+    image.GetDimensions(width, height);
+    float2 texel = uv * float2(width, height) - 0.5;
+    int2 base = int2(floor(texel));
+    float2 weight = frac(texel);
+    int2 limit = int2(width, height) - 1;
+    // Filter covered color so a transparent key pixel cannot tint its visible neighbor.
+    float4 top = lerp(coveredPixel(clamp(base, int2(0,0), limit)),
+        coveredPixel(clamp(base + int2(1,0), int2(0,0), limit)), weight.x);
+    float4 bottom = lerp(coveredPixel(clamp(base + int2(0,1), int2(0,0), limit)),
+        coveredPixel(clamp(base + int2(1,1), int2(0,0), limit)), weight.x);
+    float4 color = lerp(top, bottom, weight.y);
+    color.rgb = color.a > 0 ? color.rgb / color.a : float3(0,0,0);
     color.a *= opacity; return color;
 }
 )";
