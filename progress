@@ -1,14 +1,21 @@
 # OpenRend development handoff
 
-Updated: 2026-10-16. Read this file and AGENTS.md before continuing. Update this file after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
+Updated: 2026-10-16, 14:30 UK time. Read this file and AGENTS.md before continuing. Update it after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
 
 ## Current work
 
-The current priority is fixing two reported editor problems:
-1. Audio plays, but the video preview can remain on its first frame. Investigate asynchronous preview scheduling and prove that displayed video advances during playback, rather than testing the timecode alone.
-2. Clip edge trimming needs a wider, predictable drag target and resize cursor feedback. Also inspect the Pan/Crop workspace's drag/resize cursors so the interaction is clear in both places.
+This pass completed two reported fixes while continuing OpenRend's UI/feature parity work:
 
-Playback investigation is in progress. Clip hit testing currently accepts only points inside the clip and chooses an edge within seven pixels; no hover cursor is assigned. Do not assume either issue is fixed until its regression check passes.
+1. Video preview stayed on its first frame while audio played.
+2. Clip trimming and Pan/Crop corner dragging needed easier targets and visible pointer feedback.
+
+Both fixes are implemented, tested, packaged and pushed. The verified executable is E:\OpenRend\dist\OpenRend-playback-fix\OpenRend.exe. It passed the full desktop workflow in 50 seconds, including actual moving preview pixels, pointer/drag checks, save/reopen and encoded export. No verification work remains for this pass.
+
+Playback cause: completed async renders were rejected whenever the audio clock advanced beyond their captured frame, starving the video display. Commit 4ae6a53 accepts completed frames from the same playback generation and project/display revision; paused seeks remain exact. Pause invalidates old playback frames and requests the exact stopped frame. Preview info reports the displayed frame. Six scheduling regression cases pass. Desktop tests compared actual native preview pixels at multiple playing frames and verified Stop restored frame 0. Slow rendering can still drop frames while catching up; no full-frame-rate performance guarantee.
+
+Interaction commit b48adc2: shared hover/click hit testing reaches ten logical pixels on either side of a visible clip edge; short events retain a movable middle; offscreen edges do not become viewport trim handles. Resize/locked/move cursors and an active edge grip are added. Dragging keeps capture until release; Escape cancels without an edit and clears track-level focus. Pan/Crop resizes from any of its four corners, chooses a rotation-aware resize cursor and accepts vertical aspect-locked drags. Desktop coverage includes actual native cursor checks, outside-edge trim/hold/cancel/undo and upper-left crop resize/undo. Test setup must close the preset dropdown before checking workspace hover; otherwise it captures the mouse.
+
+Session preservation update: the currently open unsaved user editor is now dist/OpenRend-next/OpenRend.exe (observed PID38392, Untitled*). Do not close it or overwrite that bundle. Package this pass into dist/OpenRend-playback-fix instead, and verify that new path. Recheck running sessions before packaging; PIDs and paths can change.
 
 ## Already implemented
 
@@ -16,16 +23,16 @@ Native Windows editor: .NET 10 WPF, C++20, FFmpeg decoding/encoding, D3D11 compo
 
 Event Pan/Crop has source-pixel position/size, rotation/pivot, aspect lock, interactive source workspace, six temporal curves, right-click/keyboard curve selection, keyframe drag/exact retiming and undo. The editor preserves colliding key states on separate whole frames. The default domain retiming API can replace a destination; the UI opts into preservation. Spatial spline smoothing and masks are not implemented.
 
-Latest completed commit before this pass: 76ee228 (keyframe curve menu). Previous local validation: 124 core + 29 media + 53 editor + 4 playback + 16 native + 1 desktop workflow = 227 passed; zero managed build warnings/errors. GitHub CI passed. These results apply to that completed version, not to new edits in this pass.
+Latest implementation commits: 4ae6a53 (video scheduling) and b48adc2 (trim/crop affordances). Final local validation: 124 core + 29 media + 73 editor + 4 playback + 16 native + 1 desktop workflow = 247 tests passed. The audio-device tests and packaged desktop workflow were run explicitly. Full tools/build.ps1 passed with OPENREND_RUN_UI_TESTS=1; zero managed build warnings/errors. GitHub CI passed for both implementation commits. Earlier keyframe-menu work is commit 76ee228.
 
 ## Next work
 
-First finish and verify video playback and trimming feedback, then package and push small tested commits. After those fixes, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by broader editor layout/docking and effects. Arbitrary docking, spatial crop smoothing, masks, effect chains, titles, proxies, advanced cache and plugin/script hosting remain incomplete. Full application/UI parity has not been established.
+Continue source aspect/fill controls and remaining Pan/Crop interactions, followed by broader editor layout/docking and effects. Use the reverse-engineer-anything skill for shipped-artifact behavior questions and reuse the local evidence under E:\OpenRend.Private\research for exact target identities, earlier findings and unknowns. Keep that research private. Use normal source tools for OpenRend's own code. Arbitrary docking, spatial crop smoothing, masks, effect chains, titles, proxies, advanced cache and plugin/script hosting remain incomplete. Full application/UI parity has not been established.
 
 ## Working rules and validation
 
 - Preserve existing work and open unsaved editor sessions. Do not replace an executable bundle while it is running. Use dist/OpenRend-next for the new development package when dist/OpenRend is in use.
 - Run tools/build.ps1 for native and managed checks. Desktop checks require OPENREND_RUN_UI_TESTS=1 and an unlocked interactive desktop; use isolated OPENREND_DATA_DIR. To verify the packaged desktop, set OPENREND_APP_PATH to its executable.
-- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-next. The default package destination is dist/OpenRend, so check running sessions before using it.
+- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-playback-fix for this pass. The default package destination is dist/OpenRend; always check running sessions before choosing a destination.
 - Use concise comments for timing, ownership and non-obvious behavior. Stage explicit paths, make small truthful tested commits, and push to the configured GitHub remote as authorized. Never invent test results or commit history.
 - Keep private investigation evidence, dependency SDKs and generated binaries outside commits. Public documentation describes OpenRend's own implementation and measured limits.
