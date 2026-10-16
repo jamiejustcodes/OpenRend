@@ -149,7 +149,7 @@ public partial class MainWindow : Window
         var backend = $"Composite: {(vm.Renderer.IsHardwareCompositing ? "GPU" : vm.Renderer.IsD3DCompositing ? "WARP" : "CPU")}; display: Direct3D 11 {(Preview.IsHardware ? "hardware" : "software")}";
         PreviewInfo.ToolTip = backend;
         System.Windows.Automation.AutomationProperties.SetHelpText(PreviewInfo, Preview.IsReady ? backend : "Preview is starting.");
-        return $"Project: {vm.Project.Width}×{vm.Project.Height}, {vm.Project.FrameRate.Value:0.000}p     Preview: {previewWidth}×{previewHeight}     Frame: {vm.Position}     Display: {Preview.ActualWidth:0}×{Preview.ActualHeight:0}";
+        return $"Project: {vm.Project.Width}×{vm.Project.Height}, {vm.Project.FrameRate.Value:0.000}p     Preview: {previewWidth}×{previewHeight}     Frame: {(lastPreview < 0 ? "—" : lastPreview.ToString(CultureInfo.InvariantCulture))}     Display: {Preview.ActualWidth:0}×{Preview.ActualHeight:0}";
     }
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -185,7 +185,8 @@ public partial class MainWindow : Window
             while (previewRequested && IsLoaded)
             {
                 previewRequested = false;
-                var project = vm.Project.DeepClone(); var frame = vm.Position; var currentRevision = revision;
+                var project = vm.Project.DeepClone(); var frame = vm.Position;
+                var request = new PreviewFrameRequest(revision, playbackGeneration, frame);
                 var zoom = PreviewZoom.SelectedIndex switch { 1 => 2.0, 2 => .5, _ => 1.0 }; var guides = safeAreas;
                 var (width, height) = PreviewQuality.SelectedIndex switch
                 {
@@ -194,7 +195,9 @@ public partial class MainWindow : Window
                     _ => FitSize(project, 640)
                 };
                 var pixels = await Task.Run(() => PreviewDisplay.Apply(vm.Renderer.RenderFrame(project, frame, width, height), width, height, zoom, guides));
-                if (currentRevision == revision && frame == vm.Position)
+                // The audio clock can advance during decoding. Show completed playback frames,
+                // then catch up to its latest position instead of discarding every late frame.
+                if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
                     Preview.Present(pixels, width, height); previewWidth = width; previewHeight = height; lastPreview = frame; PreviewInfo.Text = PreviewDescription();
                 }
@@ -452,6 +455,7 @@ public partial class MainWindow : Window
         PlayButton.Content = new Image { Source = (ImageSource)FindResource("Icon.Play"), Width = 16, Height = 16 };
         PlaybackRate.Text = "Rate: 0.00";
         LeftMeter.Height = RightMeter.Height = 0;
+        RequestPreview();
     }
     private void PauseClick(object sender, RoutedEventArgs e) => Pause();
     private void PlayFromStartClick(object sender, RoutedEventArgs e) { StartClick(sender, e); PlayClick(sender, e); }
@@ -513,8 +517,8 @@ public partial class MainWindow : Window
     private void ZoomOutClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Max(5, Timeline.PixelsPerSecond / 1.25); Refresh(); }
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
     private void TimelineScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (Timeline is null) return; Timeline.Offset = e.NewValue; Timeline.InvalidateVisual(); }
-    private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) RequestPreview(); }
-    private void GuidesClick(object sender, RoutedEventArgs e) { safeAreas = !safeAreas; RequestPreview(); }
+    private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) { revision++; RequestPreview(); } }
+    private void GuidesClick(object sender, RoutedEventArgs e) { safeAreas = !safeAreas; revision++; RequestPreview(); }
     private async Task<BitmapSource> CaptureFrameAsync()
     {
         var project = vm.Project.DeepClone(); var frame = vm.Position;
