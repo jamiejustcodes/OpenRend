@@ -25,7 +25,7 @@ public sealed class VideoEffectsWindow : Window
     private readonly StackPanel parameters = new();
     private readonly Image preview = new() { Stretch = Stretch.Uniform };
     private readonly Button remove, up, down, reset, undo, redo;
-    private readonly List<(Slider Slider, TextBox Input)> controls = [];
+    private readonly List<(VideoEffectParameterDefinition Definition, Slider Slider, TextBox Input)> controls = [];
     private Guid? selectedId;
     private Guid? parameterEffectId;
     private VideoEffectKind? parameterKind;
@@ -52,6 +52,7 @@ public sealed class VideoEffectsWindow : Window
         {
             if (available.SelectedIndex >= 0) selectedId = editor.AddVideoEffect(clipId, BuiltInEffects[available.SelectedIndex]).Id;
         }), "AddVideoEffect"));
+        toolbar.Children.Add(MakeButton("Plug-in chooser…", "Open video FX plug-in chooser", OpenChooser, "OpenFxChooser"));
         undo = MakeButton("Undo", "Undo effect edit", () => Edit(() => editor.Undo()), "UndoVideoEffect");
         redo = MakeButton("Redo", "Redo effect edit", () => Edit(() => editor.Redo()), "RedoVideoEffect");
         DockPanel.SetDock(redo, Dock.Right); toolbar.Children.Add(redo); DockPanel.SetDock(undo, Dock.Right); toolbar.Children.Add(undo);
@@ -76,12 +77,12 @@ public sealed class VideoEffectsWindow : Window
         enabled.Checked += (_, _) => ApplyControls(); enabled.Unchecked += (_, _) => ApplyControls();
         var fieldHost = new StackPanel(); Grid.SetRow(fieldHost, 2); right.Children.Add(fieldHost);
         empty.Text = "Choose a built-in effect and click Add.\nEffects run from top to bottom."; empty.Margin = new Thickness(0, 4, 0, 10); empty.Foreground = (Brush)FindResource("MutedBrush"); fieldHost.Children.Add(empty);
-        fieldHost.Children.Add(parameters);
+        fieldHost.Children.Add(new ScrollViewer { Content = parameters, MaxHeight = 190, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled });
         reset = MakeButton("Reset effect", "Reset selected effect", () => Edit(() =>
         {
             if (SelectedEffect is not { } effect) return;
-            var defaults = VideoEffect.Create(effect.Kind);
-            editor.UpdateVideoEffect(clipId, effect.Id, defaults.Amount, defaults.SecondaryAmount, effect.IsEnabled);
+            var defaults = VideoEffectCatalog.Get(effect.Kind).Parameters.ToDictionary(parameter => parameter.Key, parameter => parameter.DefaultValue);
+            editor.UpdateVideoEffectParameters(clipId, effect.Id, defaults, effect.IsEnabled);
         }), "ResetVideoEffect");
         reset.HorizontalAlignment = HorizontalAlignment.Left; fieldHost.Children.Add(reset);
         var previewHost = new Border { Background = Brushes.Black, Margin = new Thickness(0, 10, 0, 0), Child = preview };
@@ -114,7 +115,13 @@ public sealed class VideoEffectsWindow : Window
     private sealed record ChainEntry(Guid Id, string Name);
     private TimelineClip EventClip => editor.Project.Tracks.SelectMany(t => t.Clips).Single(c => c.Id == clipId);
     private VideoEffect? SelectedEffect => EventClip.VideoEffects.SingleOrDefault(effect => effect.Id == selectedId);
-    private static string EffectName(VideoEffectKind kind) => kind switch { VideoEffectKind.BrightnessContrast => "Brightness and contrast", VideoEffectKind.Saturation => "Saturation", VideoEffectKind.Invert => "Invert", _ => kind.ToString() };
+    private static string EffectName(VideoEffectKind kind) => VideoEffectCatalog.Get(kind).Name;
+    private void OpenChooser()
+    {
+        var chooser = new VideoEffectChooserWindow(EventClip.VideoEffects) { Owner = this };
+        if (chooser.ShowDialog() == true && chooser.Result is { } result)
+            Edit(() => editor.SetVideoEffects(clipId, result));
+    }
     private static Button MakeButton(string text, string name, Action action, string id)
     {
         var button = new Button { Content = text, ToolTip = name, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2), MinHeight = 24, VerticalAlignment = VerticalAlignment.Center };
@@ -160,27 +167,28 @@ public sealed class VideoEffectsWindow : Window
             {
                 for (var i = 0; i < controls.Count; i++)
                 {
-                    var value = i == 0 ? effect.Amount : effect.SecondaryAmount;
+                    var value = effect.GetParameter(controls[i].Definition.Key);
                     controls[i].Slider.Value = value; controls[i].Input.Text = value.ToString("0.###", CultureInfo.InvariantCulture);
                 }
                 return;
             }
             parameters.Children.Clear(); controls.Clear(); parameterEffectId = effect?.Id; parameterKind = effect?.Kind;
             if (effect is null) return;
-            if (effect.Kind == VideoEffectKind.BrightnessContrast) { AddParameter("Brightness", -1, 1, effect.Amount, "VideoEffectAmount"); AddParameter("Contrast", -1, 1, effect.SecondaryAmount, "VideoEffectSecondary"); }
-            else AddParameter(effect.Kind == VideoEffectKind.Saturation ? "Saturation" : "Amount", 0, effect.Kind == VideoEffectKind.Saturation ? 2 : 1, effect.Amount, "VideoEffectAmount");
+            foreach (var parameter in VideoEffectCatalog.Get(effect.Kind).Parameters) AddParameter(parameter, effect.GetParameter(parameter.Key));
         }
         finally { refreshing = false; }
     }
-    private void AddParameter(string label, double minimum, double maximum, double value, string id)
+    private void AddParameter(VideoEffectParameterDefinition definition, double value)
     {
+        var label = definition.Name; var minimum = definition.Minimum; var maximum = definition.Maximum;
+        var id = definition.Key switch { "Amount" => "VideoEffectAmount", "SecondaryAmount" => "VideoEffectSecondary", _ => "VideoEffect_" + definition.Key };
         var row = new Grid { Margin = new Thickness(0, 3, 0, 3) };
-        row.ColumnDefinitions.Add(new() { Width = new GridLength(84) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(72) });
-        row.Children.Add(new TextBlock { Text = label });
-        var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = value, SmallChange = .01, LargeChange = .1, Margin = new Thickness(6, 0, 8, 0) };
+        row.ColumnDefinitions.Add(new() { Width = new GridLength(130) }); row.ColumnDefinitions.Add(new()); row.ColumnDefinitions.Add(new() { Width = new GridLength(72) });
+        row.Children.Add(new TextBlock { Text = label, TextTrimming = TextTrimming.CharacterEllipsis, ToolTip = label });
+        var slider = new Slider { Minimum = minimum, Maximum = maximum, Value = value, SmallChange = definition.Step, LargeChange = definition.Step * 10, Margin = new Thickness(6, 0, 8, 0) };
         var input = new TextBox { Text = value.ToString("0.###", CultureInfo.InvariantCulture) };
         AutomationProperties.SetName(slider, label); AutomationProperties.SetName(input, label + " value"); AutomationProperties.SetAutomationId(input, id);
-        Grid.SetColumn(slider, 1); row.Children.Add(slider); Grid.SetColumn(input, 2); row.Children.Add(input); parameters.Children.Add(row); controls.Add((slider, input));
+        Grid.SetColumn(slider, 1); row.Children.Add(slider); Grid.SetColumn(input, 2); row.Children.Add(input); parameters.Children.Add(row); controls.Add((definition, slider, input));
         input.GotKeyboardFocus += (_, _) => input.SelectAll();
         input.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyControls(); e.Handled = true; } };
         input.LostKeyboardFocus += (_, _) => { if (!closed && !refreshing) ApplyControls(); };
@@ -196,22 +204,22 @@ public sealed class VideoEffectsWindow : Window
         slider.PreviewMouseLeftButtonUp += (_, _) => Finish();
         slider.LostMouseCapture += (_, _) => Finish();
     }
-    private bool ReadControls(out double amount, out double secondary)
+    private bool ReadControls(out Dictionary<string, double> values)
     {
-        amount = secondary = 0;
+        values = [];
         for (var i = 0; i < controls.Count; i++)
         {
             var control = controls[i];
             if (!double.TryParse(control.Input.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var value) || !double.IsFinite(value) || value < control.Slider.Minimum || value > control.Slider.Maximum)
             { status.Text = $"Enter a value from {control.Slider.Minimum} to {control.Slider.Maximum}."; return false; }
-            if (i == 0) amount = value; else secondary = value;
+            values.Add(control.Definition.Key, value);
         }
         return true;
     }
     private void ApplyControls()
     {
-        if (refreshing || SelectedEffect is not { } effect || !ReadControls(out var amount, out var secondary)) return;
-        Edit(() => editor.UpdateVideoEffect(clipId, effect.Id, amount, secondary, enabled.IsChecked == true));
+        if (refreshing || SelectedEffect is not { } effect || !ReadControls(out var values)) return;
+        Edit(() => editor.UpdateVideoEffectParameters(clipId, effect.Id, values, enabled.IsChecked == true));
     }
     private void Move(int direction)
     {
@@ -230,9 +238,10 @@ public sealed class VideoEffectsWindow : Window
             {
                 previewPending = false; var request = previewRevision;
                 var project = editor.Project.DeepClone(); var clip = project.Tracks.SelectMany(track => track.Clips).Single(item => item.Id == clipId);
-                if (adjusting && selectedId is { } id && ReadControls(out var amount, out var secondary))
+                if (adjusting && selectedId is { } id && ReadControls(out var values))
                 {
-                    var effect = clip.VideoEffects.Single(item => item.Id == id); effect.Amount = amount; effect.SecondaryAmount = secondary;
+                    var effect = clip.VideoEffects.Single(item => item.Id == id);
+                    foreach (var (key, value) in values) effect.SetParameter(key, value);
                 }
                 var frame = Math.Clamp(vm.Position, clip.StartFrame, clip.EndFrame - 1);
                 var scale = Math.Min(480.0 / project.Width, 270.0 / project.Height);

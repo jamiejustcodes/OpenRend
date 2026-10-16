@@ -65,6 +65,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 Window? effects = null;
                 WaitFor(() => (effects = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null, "Clicking the event FX button did not open its editor.");
                 Assert.NotNull(effects);
+                VerifyFxChooser(effects, root);
                 Find(effects, "AddVideoEffect").AsButton().Invoke();
                 var amount = Find(effects, "VideoEffectAmount").AsTextBox(); amount.Focus(); amount.Text = "0.25"; Chord(effects, VirtualKeyShort.RETURN);
                 WaitFor(() => Find(effects, "VideoEffectAmount").AsTextBox().Text == "0.25", "Brightness was not applied.");
@@ -123,11 +124,63 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
                 Find(effects, "RemoveVideoEffect").AsButton().Invoke();
                 WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 1, "Removing an effect did not update the chain.");
                 Find(effects, "UndoVideoEffect").AsButton().Invoke();
-                WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 2, "Undo did not restore the removed effect.");
+                var effectBounds = effects.BoundingRectangle;
+                try { WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 2, "Undo did not restore the removed effect."); }
+                catch
+                {
+                    using var diagnostic = Capture.Rectangle(effectBounds); diagnostic.ToFile(Path.Combine(root, ".local", "desktop-validation", "fx-undo-failure.png"));
+                    throw;
+                }
                 Find(effects, "CloseVideoEffects").AsButton().Invoke(); SaveButton(window).Invoke(); WaitFor(() => !window.Title.Contains('*'), "Saving restored effects did not finish."); reopened.CloseGracefully();
             }
         }
         finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    private static void VerifyFxChooser(Window effects, string root)
+    {
+        Window Open()
+        {
+            Find(effects, "OpenFxChooser").AsButton().Invoke(); Window? chooser = null;
+            WaitFor(() => (chooser = effects.ModalWindows.SingleOrDefault(window => window.Title == "Plug-In Chooser - Video Event FX")) is not null, "The FX chooser did not open.");
+            return chooser!;
+        }
+        static void Select(Window chooser, string name)
+        {
+            Find(chooser, "FxChooserSearch").AsTextBox().Text = name;
+            AutomationElement? item = null;
+            WaitFor(() => (item = Find(chooser, "FxChooserCatalog").FindFirstDescendant(c => c.ByControlType(ControlType.ListItem).And(c.ByName(name)))) is not null, "The FX catalog did not find " + name + ".");
+            item!.Patterns.SelectionItem.Pattern.Select();
+        }
+        var chooser = Open();
+        Select(chooser, "Gaussian Blur"); Find(chooser, "FxChooserAdd").AsButton().Invoke();
+        Assert.Single(Find(chooser, "FxChooserChain").AsListBox().Items);
+        Find(chooser, "FxChooserCancel").AsButton().Invoke();
+        WaitFor(() => effects.ModalWindows.Length == 0, "Cancel did not close the FX chooser.");
+        Assert.Empty(Find(effects, "VideoEffectChain").AsListBox().Items);
+        chooser = Open();
+        var color = Find(chooser, "FxChooserCategories").FindFirstDescendant(c => c.ByControlType(ControlType.TreeItem).And(c.ByName("Color"))); Assert.NotNull(color);
+        color.Patterns.SelectionItem.Pattern.Select();
+        Find(chooser, "FxChooserSearch").AsTextBox().Text = "Gaussian";
+        WaitFor(() => Find(chooser, "FxChooserCatalog").AsListBox().Items.Length == 0, "The category filter did not restrict search results.");
+        var all = Find(chooser, "FxChooserCategories").FindFirstDescendant(c => c.ByControlType(ControlType.TreeItem).And(c.ByName("FX"))); Assert.NotNull(all); all.Patterns.SelectionItem.Pattern.Select();
+        Select(chooser, "Black and White"); Find(chooser, "FxChooserAdd").AsButton().Invoke();
+        Select(chooser, "Gaussian Blur"); Find(chooser, "FxChooserAdd").AsButton().Invoke();
+        Assert.Equal(2, Find(chooser, "FxChooserChain").AsListBox().Items.Length);
+        Find(chooser, "FxChooserChain").AsListBox().Items[0].Patterns.SelectionItem.Pattern.Select();
+        Select(chooser, "Sepia"); Find(chooser, "FxChooserReplace").AsButton().Invoke();
+        Assert.Equal("Sepia", Find(chooser, "FxChooserChain").AsListBox().Items[0].Text);
+        Find(chooser, "FxChooserRemove").AsButton().Invoke();
+        Assert.Single(Find(chooser, "FxChooserChain").AsListBox().Items);
+        Find(chooser, "FxChooserSearch").AsTextBox().Text = "";
+        WaitFor(() => Find(chooser, "FxChooserCatalog").AsListBox().Items.Length >= VideoEffectCatalog.Definitions.Count, "Clearing search did not restore the catalog.");
+        var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+        using (var screenshot = Capture.Element(chooser)) screenshot.ToFile(Path.Combine(artifact, "fx-chooser.png"));
+        Find(chooser, "FxChooserAccept").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 1, "Accept did not apply the staged chain.");
+        Assert.Contains("Gaussian Blur", Find(effects, "VideoEffectChain").AsListBox().Items[0].Text);
+        Find(effects, "UndoVideoEffect").AsButton().Invoke();
+        WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 0, "One undo did not restore the complete chain from before the chooser.");
     }
 
     [WindowsDesktopFact]
