@@ -557,4 +557,115 @@ public sealed class SubtitleOverlayTests
         Assert.Equal(255.0, avgDiffCut);
         Assert.True(avgDiffCut >= 32.0, "Abrupt cut delta must exceed scene detection threshold");
     }
+
+    [Fact]
+    public void HitTestInteractDifferentiatesResizeHandlesFromMoveAnchor()
+    {
+        // 200x50 text rectangle centered at (400, 300)
+        var bounds = new System.Drawing.RectangleF(300, 275, 200, 50);
+        var cx = 400f;
+        var cy = 300f;
+        var pad = 6f;
+        var box = new System.Drawing.RectangleF(bounds.X - pad, bounds.Y - pad, bounds.Width + pad * 2, bounds.Height + pad * 2);
+
+        // Clicking on TopLeft corner handle returns TopLeft handle, not Move
+        var (hTopLeft, ptTopLeft, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, box.Left, box.Top, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.TopLeft, hTopLeft);
+        Assert.Equal(box.Left, ptTopLeft.X);
+        Assert.Equal(box.Top, ptTopLeft.Y);
+
+        // Clicking on BottomRight corner handle returns BottomRight handle
+        var (hBottomRight, ptBottomRight, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, box.Right, box.Bottom, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.BottomRight, hBottomRight);
+        Assert.Equal(box.Right, ptBottomRight.X);
+        Assert.Equal(box.Bottom, ptBottomRight.Y);
+
+        // Clicking on TopCenter edge handle returns TopCenter handle
+        var (hTopCenter, _, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, box.Left + box.Width * 0.5f, box.Top, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.TopCenter, hTopCenter);
+
+        // Clicking on center anchor crosshair returns Move
+        var (hCenter, _, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, cx, cy, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.Move, hCenter);
+
+        // Clicking text body returns Move
+        var (hBody, _, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, 350, 290, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.Move, hBody);
+
+        // Clicking outside text bounding box returns None
+        var (hOutside, _, _) = SubtitleRenderer.HitTestInteract(bounds, cx, cy, 50, 50, handleHitRadius: 10f);
+        Assert.Equal(TextInteractHandle.None, hOutside);
+    }
+
+    [Fact]
+    public void HandleResizeCalculatesProportionalFontSizeAccurately()
+    {
+        // Text centered at (500, 500) with BottomRight handle at (600, 600)
+        var center = new System.Drawing.PointF(500f, 500f);
+        var initialHandle = new System.Drawing.PointF(600f, 600f);
+        var startFontSize = 24.0f;
+
+        var v0x = initialHandle.X - center.X; // 100
+        var v0y = initialHandle.Y - center.Y; // 100
+        var len0Sq = v0x * v0x + v0y * v0y;   // 20000
+
+        // User drags further out to (700, 700): 2x distance from center
+        var mouseVideoX = 700f;
+        var mouseVideoY = 700f;
+        var vx = mouseVideoX - center.X; // 200
+        var vy = mouseVideoY - center.Y; // 200
+
+        var scaleFactor = (vx * v0x + vy * v0y) / len0Sq; // (20000 + 20000) / 20000 = 2.0
+        var newFontSize = Math.Clamp((float)Math.Round(startFontSize * scaleFactor, 1), 8f, 300f);
+
+        Assert.Equal(2.0f, scaleFactor);
+        Assert.Equal(48.0f, newFontSize);
+
+        // User drags inward halfway toward center to (550, 550): 0.5x distance
+        var inwardMouseX = 550f;
+        var inwardMouseY = 550f;
+        var inVx = inwardMouseX - center.X; // 50
+        var inVy = inwardMouseY - center.Y; // 50
+        var inScaleFactor = (inVx * v0x + inVy * v0y) / len0Sq; // 10000 / 20000 = 0.5
+        var inFontSize = Math.Clamp((float)Math.Round(startFontSize * inScaleFactor, 1), 8f, 300f);
+
+        Assert.Equal(0.5f, inScaleFactor);
+        Assert.Equal(12.0f, inFontSize);
+    }
+
+    [Fact]
+    public void SubtitleStyleQuerySerializationPreservesFontSizeAndLocationAcrossCultures()
+    {
+        var originalCulture = System.Threading.Thread.CurrentThread.CurrentCulture;
+        try
+        {
+            // Set German culture where comma is standard decimal separator
+            System.Threading.Thread.CurrentThread.CurrentCulture = new System.Globalization.CultureInfo("de-DE");
+
+            var style = new SubtitleStyle
+            {
+                FontSize = 36.5f,
+                OutlineWidth = 4.25f,
+                LocationX = 0.4567f,
+                LocationY = 0.7891f,
+                HasCustomLocation = true
+            };
+
+            var query = style.ToQuery();
+            Assert.Contains("size=36.5", query);
+            Assert.Contains("outlinewidth=4.25", query);
+            Assert.Contains("locx=0.4567", query);
+
+            var parsed = SubtitleStyle.FromQuery(query);
+            Assert.Equal(36.5f, parsed.FontSize);
+            Assert.Equal(4.25f, parsed.OutlineWidth);
+            Assert.True(parsed.HasCustomLocation);
+            Assert.Equal(0.4567f, parsed.LocationX, 4);
+            Assert.Equal(0.7891f, parsed.LocationY, 4);
+        }
+        finally
+        {
+            System.Threading.Thread.CurrentThread.CurrentCulture = originalCulture;
+        }
+    }
 }

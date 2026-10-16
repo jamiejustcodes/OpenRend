@@ -18,6 +18,25 @@ public sealed class PreviewHost : HwndHost
     public event Action<int, int>? CanvasMouseUp;
     public event Action<int, int>? CanvasMouseDoubleClick;
 
+    public const int IDC_ARROW = 32512;
+    public const int IDC_SIZENWSE = 32642;
+    public const int IDC_SIZENESW = 32643;
+    public const int IDC_SIZEWE = 32644;
+    public const int IDC_SIZENS = 32645;
+    public const int IDC_SIZEALL = 32646;
+
+    private nint currentCursorHandle;
+
+    public void SetPreviewCursor(int cursorId)
+    {
+        var newHandle = cursorId == 0 ? 0 : Native.LoadCursor(0, (nint)cursorId);
+        if (newHandle != currentCursorHandle)
+        {
+            currentCursorHandle = newHandle;
+            Native.SetCursor(currentCursorHandle != 0 ? currentCursorHandle : Native.LoadCursor(0, (nint)IDC_ARROW));
+        }
+    }
+
     public (int Width, int Height) ClientSize
     {
         get
@@ -104,6 +123,15 @@ public sealed class PreviewHost : HwndHost
             {
                 switch (message)
                 {
+                    case 0x0020: // WM_SETCURSOR
+                    {
+                        if (host.currentCursorHandle != 0)
+                        {
+                            SetCursor(host.currentCursorHandle);
+                            return 1;
+                        }
+                        break;
+                    }
                     case 0x0201: // WM_LBUTTONDOWN
                     {
                         SetCapture(hwnd);
@@ -156,6 +184,8 @@ public sealed class PreviewHost : HwndHost
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         internal static extern nint CreateWindowEx(int ex, string cls, string name, int style, int x, int y, int w, int h, nint parent, nint menu, nint instance, nint param);
         [DllImport("user32.dll")] internal static extern bool DestroyWindow(nint hwnd);
+        [DllImport("user32.dll")] internal static extern nint SetCursor(nint hCursor);
+        [DllImport("user32.dll", CharSet = CharSet.Unicode)] internal static extern nint LoadCursor(nint hInstance, nint lpCursorName);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_create(nint hwnd, int width, int height, out nint renderer);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_present(nint renderer, byte[] bgra, int width, int height, int stride);
         [DllImport("OpenRend.Native", CallingConvention = CallingConvention.Cdecl)] internal static extern int or_renderer_resize(nint renderer, int width, int height);

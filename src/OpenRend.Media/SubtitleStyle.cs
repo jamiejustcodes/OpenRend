@@ -272,7 +272,7 @@ public sealed class SubtitleStyle
 
     public string ToQuery()
     {
-        var q = $"preset={Uri.EscapeDataString(PresetName)}&font={Uri.EscapeDataString(FontFamily)}&size={FontSize}&bold={Bold}&italic={Italic}&uppercase={Uppercase}&align={AnchorAlignment}&color={Uri.EscapeDataString(TextColor)}&outline={Uri.EscapeDataString(OutlineColor)}&outlinewidth={OutlineWidth}&shadow={ShadowEnabled}&shadowcolor={Uri.EscapeDataString(ShadowColor)}&bg={Uri.EscapeDataString(BackgroundColor)}&fitbg={FitBackgroundColor}";
+        var q = $"preset={Uri.EscapeDataString(PresetName)}&font={Uri.EscapeDataString(FontFamily)}&size={FontSize.ToString(System.Globalization.CultureInfo.InvariantCulture)}&bold={Bold}&italic={Italic}&uppercase={Uppercase}&align={AnchorAlignment}&color={Uri.EscapeDataString(TextColor)}&outline={Uri.EscapeDataString(OutlineColor)}&outlinewidth={OutlineWidth.ToString(System.Globalization.CultureInfo.InvariantCulture)}&shadow={ShadowEnabled}&shadowcolor={Uri.EscapeDataString(ShadowColor)}&bg={Uri.EscapeDataString(BackgroundColor)}&fitbg={FitBackgroundColor}";
         if (HasCustomLocation)
             q += $"&locx={LocationX.ToString(System.Globalization.CultureInfo.InvariantCulture)}&locy={LocationY.ToString(System.Globalization.CultureInfo.InvariantCulture)}";
         return q;
@@ -294,14 +294,14 @@ public sealed class SubtitleStyle
             {
                 case "preset": style = FromPreset(val); break;
                 case "font": style.FontFamily = val; break;
-                case "size" when float.TryParse(val, out var sz): style.FontSize = sz; break;
+                case "size" when float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var sz): style.FontSize = sz; break;
                 case "bold" when bool.TryParse(val, out var b): style.Bold = b; break;
                 case "italic" when bool.TryParse(val, out var it): style.Italic = it; break;
                 case "uppercase" when bool.TryParse(val, out var u): style.Uppercase = u; break;
                 case "align": style.AnchorAlignment = val; break;
                 case "color": style.TextColor = val.StartsWith("#") ? val : "#" + val; break;
                 case "outline": style.OutlineColor = val.StartsWith("#") ? val : "#" + val; break;
-                case "outlinewidth" when float.TryParse(val, out var ow): style.OutlineWidth = ow; break;
+                case "outlinewidth" when float.TryParse(val, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var ow): style.OutlineWidth = ow; break;
                 case "shadow" when bool.TryParse(val, out var sh): style.ShadowEnabled = sh; break;
                 case "shadowcolor": style.ShadowColor = val.StartsWith("#") ? val : "#" + val; break;
                 case "bg": style.BackgroundColor = val.StartsWith("#") ? val : "#" + val; break;

@@ -1,14 +1,34 @@
 # OpenRend development handoff
 
-Updated: 2026-10-16, 21:55 UK time. Read this file and AGENTS.md before continuing. Update after meaningful findings, tested changes and before context handoff. Never turn intended checks into passed results.
+Updated: 2026-10-16, 23:45 UK time. Read this file and AGENTS.md before continuing. Update after meaningful findings, tested changes and before context handoff. Never turn intended checks into passed results.
 
 ## Active request
 
 The user requested:
-"Nice. Now using REA skill add all of the same subtitle customization features vegas pro has. After that continue adding more features from vegas pro which OpenRend doesnt have. Must be 1:1, functionally and UI wise. Dont forget to do human commenting not AI comments."
-Per explicit user constraint ("Dont commit anything to github"), zero commits or git pushes are performed; all changes remain staged/in working tree.
+"ok push this to github https://github.com/jamiejustcodes/OpenRend using stealth commit and then AFTER fix that when u want to change text size on the preview screen it does not work when u try drag the corners it just drags the text across the screen and then push that and save as a bug fix with human comments in code and commits."
 
 ## Current implementation and verification
+
+- Text Resize Handle Hit-Testing and Scaling Fix:
+  - `SubtitleRenderer.cs`:
+    - Defined `TextInteractHandle` enum (`None`, `Move`, `TopLeft`, `TopCenter`, `TopRight`, `MiddleRight`, `BottomRight`, `BottomCenter`, `BottomLeft`, `MiddleLeft`).
+    - Added `GetInteractHandles(RectangleF bounds)` calculating exact positions of all 8 perimeter handles.
+    - Added `HitTestInteract(bounds, cx, cy, px, py, handleHitRadius)` which prioritizes resize handles before checking the center location anchor crosshair or bounding box body.
+  - `PreviewHost.cs`:
+    - Added dynamic Win32 cursor support (`SetPreviewCursor`) on `WM_SETCURSOR` (0x0020) so hovering over corner/edge handles shows standard diagonal/horizontal/vertical resize cursors (`IDC_SIZENWSE`, `IDC_SIZENESW`, `IDC_SIZEWE`, `IDC_SIZENS`), and body shows 4-way move (`IDC_SIZEALL`).
+  - `MainWindow.xaml.cs`:
+    - Tracks drag mode (`previewDragHandle`), grab start font size (`previewDragStartFontSize`), initial handle coordinates (`previewDragInitialHandlePos`), and center anchor point (`previewDragCenter`).
+    - In `OnPreviewMouseMove`: when dragging a resize handle, projects the mouse vector onto the initial handle ray from center using vector dot product projection ($scaleFactor = \frac{\vec{V} \cdot \vec{V}_0}{\|\vec{V}_0\|^2}$) and updates `FontSize = Math.Clamp(Round(startFontSize * scaleFactor, 1), 8f, 300f)` while keeping the center anchored.
+    - Dragging the text body or anchor crosshair continues moving `LocationX` and `LocationY`.
+    - `OnPreviewMouseUp` commits changes via `vm.Editor.Execute(...)` preserving full Undo/Redo history.
+  - `SubtitleStyle.cs`:
+    - Fixed `ToQuery()` and `FromQuery()` to use `CultureInfo.InvariantCulture` and `NumberStyles.Float` so font sizes and stroke widths serialize and parse safely across all locales.
+  - Unit tests in `SubtitleOverlayTests.cs`:
+    - `HitTestInteractDifferentiatesResizeHandlesFromMoveAnchor`: Verifies corners/edges return resize handles while center anchor and text body return `Move`.
+    - `HandleResizeCalculatesProportionalFontSizeAccurately`: Verifies vector projection math for scaling up and down.
+    - `SubtitleStyleQuerySerializationPreservesFontSizeAndLocationAcrossCultures`: Verifies culture-safe round-tripping under comma-decimal cultures.
+  - All 428 unit tests pass (Core: 155, Playback: 4, Editor: 94, Media: 175).
+  - Local development bundle packaged via `tools/package.ps1` to `dist\OpenRend\OpenRend.exe`.
 
 - 1:1 Vegas Pro Subtitle Customization (`SubtitleEventControl` UI & Titles & Text parameters):
   - `SubtitleStyle.cs`: Complete data model matching Vegas Pro SubtitleEventControl and Titles & Text OFX plugin:

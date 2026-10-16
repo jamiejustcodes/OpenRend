@@ -38,8 +38,13 @@ public partial class MainWindow : Window
     private bool isDraggingTextInPreview;
     private Guid? previewDraggedClipId;
     private SubtitleStyle? previewDragOriginalStyle;
+    private string? previewDragOriginalPath;
     private Point previewDragStartMouse;
     private (float X, float Y) previewDragStartLocation;
+    private TextInteractHandle previewDragHandle;
+    private float previewDragStartFontSize;
+    private System.Drawing.PointF previewDragInitialHandlePos;
+    private System.Drawing.PointF previewDragCenter;
     private readonly string recoveryPath = Path.Combine(Environment.GetEnvironmentVariable("OPENREND_DATA_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend"), "recovery.openrend");
     private readonly Dictionary<Guid, string> cachedMediaPaths = [];
@@ -978,43 +983,56 @@ public partial class MainWindow : Window
         var clickPixelX = u * previewWidth;
         var clickPixelY = v * previewHeight;
 
-        var hitPadding = 14f;
-        var expandedBounds = new System.Drawing.RectangleF(
-            bounds.X - hitPadding,
-            bounds.Y - hitPadding,
-            bounds.Width + hitPadding * 2,
-            bounds.Height + hitPadding * 2);
-
         var anchorX = style.HasCustomLocation ? style.LocationX * previewWidth : bounds.X + bounds.Width * 0.5f;
         var anchorY = style.HasCustomLocation ? style.LocationY * previewHeight : bounds.Y + bounds.Height * 0.5f;
-        var distToAnchor = Math.Sqrt(Math.Pow(clickPixelX - anchorX, 2) + Math.Pow(clickPixelY - anchorY, 2));
 
-        if (expandedBounds.Contains(clickPixelX, clickPixelY) || distToAnchor <= 20)
+        var (winW, winH) = Preview.ClientSize;
+        var scale = (winW > 0 && winH > 0) ? Math.Min((float)winW / previewWidth, (float)winH / previewHeight) : 1f;
+        // Hit radius scaled to ~14 screen pixels so corners and edges are effortless to grab
+        var hitRadius = Math.Clamp(14f / Math.Max(scale, 0.05f), 12f, 60f);
+
+        var (handle, handlePos, center) = SubtitleRenderer.HitTestInteract(bounds, anchorX, anchorY, clickPixelX, clickPixelY, hitRadius);
+        if (handle == TextInteractHandle.None) return;
+
+        isDraggingTextInPreview = true;
+        previewDraggedClipId = clip.Id;
+        previewDragOriginalStyle = SubtitleStyle.FromQuery(style.ToQuery());
+        previewDragOriginalPath = media.Path;
+        previewDragStartMouse = new Point(x, y);
+        previewDragStartLocation = (style.HasCustomLocation ? style.LocationX : anchorX / previewWidth,
+                                    style.HasCustomLocation ? style.LocationY : anchorY / previewHeight);
+        previewDragHandle = handle;
+        previewDragInitialHandlePos = handlePos;
+        previewDragCenter = center;
+
+        // Resolve 0 (auto-calculated) font size to actual pixel height for proportional scaling
+        previewDragStartFontSize = style.FontSize > 0f
+            ? style.FontSize
+            : (style.PresetName.Contains("Shorts", StringComparison.OrdinalIgnoreCase) || style.PresetName.Contains("YouTube", StringComparison.OrdinalIgnoreCase))
+                ? Math.Clamp(previewHeight * 0.065f, 18f, 130f)
+                : Math.Clamp(previewHeight * 0.048f, 16f, 96f);
+
+        if (!vm.Selection.Contains(clip.Id))
         {
-            isDraggingTextInPreview = true;
-            previewDraggedClipId = clip.Id;
-            previewDragOriginalStyle = SubtitleStyle.FromQuery(style.ToQuery());
-            previewDragStartMouse = new Point(x, y);
-            previewDragStartLocation = (style.LocationX, style.LocationY);
-
-            if (!vm.Selection.Contains(clip.Id))
-            {
-                vm.Selection.Clear();
-                vm.Selection.Add(clip.Id);
-                Timeline.Selection.Clear();
-                Timeline.Selection.Add(clip.Id);
-                Timeline.InvalidateVisual();
-                UpdateInspector();
-            }
-
-            vm.Renderer.ActiveSubtitleClipId = clip.Id;
-            RequestPreview();
+            vm.Selection.Clear();
+            vm.Selection.Add(clip.Id);
+            Timeline.Selection.Clear();
+            Timeline.Selection.Add(clip.Id);
+            Timeline.InvalidateVisual();
+            UpdateInspector();
         }
+
+        vm.Renderer.ActiveSubtitleClipId = clip.Id;
+        RequestPreview();
     }
 
     private void OnPreviewMouseMove(int x, int y, bool isDown)
     {
-        if (!isDraggingTextInPreview || !isDown || previewDraggedClipId is not { } clipId) return;
+        if (!isDraggingTextInPreview || !isDown || previewDraggedClipId is not { } clipId)
+        {
+            UpdatePreviewCursor(x, y);
+            return;
+        }
 
         var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
         var media = clip is not null ? vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId) : null;
@@ -1023,27 +1041,134 @@ public partial class MainWindow : Window
         var (winW, winH) = Preview.ClientSize;
         if (winW <= 0 || winH <= 0 || previewWidth <= 0 || previewHeight <= 0) return;
 
-        var scale = Math.Min((float)winW / previewWidth, (float)winH / previewHeight);
-        var vpW = previewWidth * scale;
-        var vpH = previewHeight * scale;
-
-        var deltaX = (float)((x - previewDragStartMouse.X) / vpW);
-        var deltaY = (float)((y - previewDragStartMouse.Y) / vpH);
-
-        var newLocX = Math.Clamp(previewDragStartLocation.X + deltaX, 0.02f, 0.98f);
-        var newLocY = Math.Clamp(previewDragStartLocation.Y + deltaY, 0.02f, 0.98f);
-
         var currentStyle = media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase)
             ? SubtitleStyle.FromQuery(media.Path.Substring("openrend://text?".Length))
             : SubtitleStyle.FromPreset("Classic White");
 
-        currentStyle.LocationX = newLocX;
-        currentStyle.LocationY = newLocY;
-        currentStyle.HasCustomLocation = true;
+        if (previewDragHandle == TextInteractHandle.Move)
+        {
+            // Move text position across video preview
+            var scale = Math.Min((float)winW / previewWidth, (float)winH / previewHeight);
+            var vpW = previewWidth * scale;
+            var vpH = previewHeight * scale;
+
+            var deltaX = (float)((x - previewDragStartMouse.X) / vpW);
+            var deltaY = (float)((y - previewDragStartMouse.Y) / vpH);
+
+            var newLocX = Math.Clamp(previewDragStartLocation.X + deltaX, 0.02f, 0.98f);
+            var newLocY = Math.Clamp(previewDragStartLocation.Y + deltaY, 0.02f, 0.98f);
+
+            currentStyle.LocationX = newLocX;
+            currentStyle.LocationY = newLocY;
+            currentStyle.HasCustomLocation = true;
+        }
+        else
+        {
+            // Scale font size proportionally by projecting mouse position along handle ray from text center
+            var norm = PreviewWindowToVideoCoords(x, y);
+            if (norm is null) return;
+
+            var mouseVideoX = norm.Value.u * previewWidth;
+            var mouseVideoY = norm.Value.v * previewHeight;
+
+            var v0x = previewDragInitialHandlePos.X - previewDragCenter.X;
+            var v0y = previewDragInitialHandlePos.Y - previewDragCenter.Y;
+            var len0Sq = v0x * v0x + v0y * v0y;
+
+            if (len0Sq > 1e-4f)
+            {
+                var vx = mouseVideoX - previewDragCenter.X;
+                var vy = mouseVideoY - previewDragCenter.Y;
+
+                // Dot product projection gives scale ratio relative to initial grab point
+                var scaleFactor = (vx * v0x + vy * v0y) / len0Sq;
+
+                var targetFontSize = previewDragStartFontSize * scaleFactor;
+                var newFontSize = Math.Clamp((float)Math.Round(targetFontSize, 1), 8f, 300f);
+
+                currentStyle.FontSize = newFontSize;
+                // Pin center so text scales symmetrically around anchor point
+                currentStyle.LocationX = previewDragCenter.X / previewWidth;
+                currentStyle.LocationY = previewDragCenter.Y / previewHeight;
+                currentStyle.HasCustomLocation = true;
+            }
+        }
 
         media.Path = $"openrend://text?{currentStyle.ToQuery()}";
         vm.Renderer.ActiveSubtitleClipId = clipId;
         RequestPreview();
+    }
+
+    private void UpdatePreviewCursor(int x, int y)
+    {
+        if (previewWidth <= 0 || previewHeight <= 0)
+        {
+            Preview.SetPreviewCursor(0);
+            return;
+        }
+
+        var norm = PreviewWindowToVideoCoords(x, y);
+        if (norm is null)
+        {
+            Preview.SetPreviewCursor(0);
+            return;
+        }
+
+        var curFrame = vm.Position;
+        var textClips = vm.Project.Tracks
+            .Where(t => t.Kind == TrackKind.Video && !t.IsMuted && t.IsVisible)
+            .SelectMany(t => t.Clips)
+            .Where(c => curFrame >= c.StartFrame && curFrame < c.EndFrame)
+            .Where(c =>
+            {
+                var m = vm.Project.Media.FirstOrDefault(m => m.Id == c.MediaId);
+                return m != null && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) ||
+                                     m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase) ||
+                                     m.Path.EndsWith(".srt", StringComparison.OrdinalIgnoreCase));
+            })
+            .ToList();
+
+        if (textClips.Count == 0)
+        {
+            Preview.SetPreviewCursor(0);
+            return;
+        }
+
+        var clip = textClips.FirstOrDefault(c => vm.Selection.Contains(c.Id)) ?? textClips.First();
+        var media = vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
+        if (media is null)
+        {
+            Preview.SetPreviewCursor(0);
+            return;
+        }
+
+        var style = media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase)
+            ? SubtitleStyle.FromQuery(media.Path.Substring("openrend://text?".Length))
+            : SubtitleStyle.FromPreset("Classic White");
+
+        var bounds = SubtitleRenderer.MeasureSubtitleBounds(clip.Name, previewWidth, previewHeight, style);
+        var clickPixelX = norm.Value.u * previewWidth;
+        var clickPixelY = norm.Value.v * previewHeight;
+
+        var anchorX = style.HasCustomLocation ? style.LocationX * previewWidth : bounds.X + bounds.Width * 0.5f;
+        var anchorY = style.HasCustomLocation ? style.LocationY * previewHeight : bounds.Y + bounds.Height * 0.5f;
+
+        var (winW, winH) = Preview.ClientSize;
+        var scale = (winW > 0 && winH > 0) ? Math.Min((float)winW / previewWidth, (float)winH / previewHeight) : 1f;
+        var hitRadius = Math.Clamp(14f / Math.Max(scale, 0.05f), 12f, 60f);
+
+        var (handle, _, _) = SubtitleRenderer.HitTestInteract(bounds, anchorX, anchorY, clickPixelX, clickPixelY, hitRadius);
+        var cursorId = handle switch
+        {
+            TextInteractHandle.TopLeft or TextInteractHandle.BottomRight => PreviewHost.IDC_SIZENWSE,
+            TextInteractHandle.TopRight or TextInteractHandle.BottomLeft => PreviewHost.IDC_SIZENESW,
+            TextInteractHandle.TopCenter or TextInteractHandle.BottomCenter => PreviewHost.IDC_SIZENS,
+            TextInteractHandle.MiddleLeft or TextInteractHandle.MiddleRight => PreviewHost.IDC_SIZEWE,
+            TextInteractHandle.Move => PreviewHost.IDC_SIZEALL,
+            _ => 0
+        };
+
+        Preview.SetPreviewCursor(cursorId);
     }
 
     private void OnPreviewMouseUp(int x, int y)
@@ -1051,14 +1176,14 @@ public partial class MainWindow : Window
         if (!isDraggingTextInPreview) return;
         isDraggingTextInPreview = false;
 
-        if (previewDraggedClipId is { } clipId && previewDragOriginalStyle is { } origStyle)
+        if (previewDraggedClipId is { } clipId && previewDragOriginalPath is { } origPath)
         {
             var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
             var media = clip is not null ? vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId) : null;
-            if (media != null && media.Path.StartsWith("openrend://text?", StringComparison.OrdinalIgnoreCase))
+            if (media != null && media.Path != origPath)
             {
                 var finalPath = media.Path;
-                media.Path = $"openrend://text?{origStyle.ToQuery()}";
+                media.Path = origPath;
                 vm.Editor.Execute(p =>
                 {
                     var m = p.Media.FirstOrDefault(x => x.Id == media.Id);
@@ -1069,6 +1194,9 @@ public partial class MainWindow : Window
 
         previewDraggedClipId = null;
         previewDragOriginalStyle = null;
+        previewDragOriginalPath = null;
+        previewDragHandle = TextInteractHandle.None;
+        Preview.SetPreviewCursor(0);
     }
 
     private void OnPreviewMouseDoubleClick(int x, int y)

@@ -417,6 +417,78 @@ public static class SubtitleRenderer
         }
     }
 
+    public static (TextInteractHandle Handle, PointF Point)[] GetInteractHandles(RectangleF bounds)
+    {
+        var pad = 6f;
+        var box = new RectangleF(bounds.X - pad, bounds.Y - pad, bounds.Width + pad * 2, bounds.Height + pad * 2);
+        return
+        [
+            (TextInteractHandle.TopLeft, new PointF(box.Left, box.Top)),
+            (TextInteractHandle.TopCenter, new PointF(box.Left + box.Width * 0.5f, box.Top)),
+            (TextInteractHandle.TopRight, new PointF(box.Right, box.Top)),
+            (TextInteractHandle.MiddleRight, new PointF(box.Right, box.Top + box.Height * 0.5f)),
+            (TextInteractHandle.BottomRight, new PointF(box.Right, box.Bottom)),
+            (TextInteractHandle.BottomCenter, new PointF(box.Left + box.Width * 0.5f, box.Bottom)),
+            (TextInteractHandle.BottomLeft, new PointF(box.Left, box.Bottom)),
+            (TextInteractHandle.MiddleLeft, new PointF(box.Left, box.Top + box.Height * 0.5f))
+        ];
+    }
+
+    public static (TextInteractHandle Handle, PointF HandlePos, PointF Center) HitTestInteract(
+        RectangleF bounds, float cx, float cy, float px, float py, float handleHitRadius = 12f)
+    {
+        var center = new PointF(cx, cy);
+        if (bounds.Width <= 0 || bounds.Height <= 0)
+            return (TextInteractHandle.None, PointF.Empty, center);
+
+        var pad = 6f;
+        var box = new RectangleF(bounds.X - pad, bounds.Y - pad, bounds.Width + pad * 2, bounds.Height + pad * 2);
+
+        // Check corner and edge resize handles first so scaling takes precedence over dragging
+        var handles = GetInteractHandles(bounds);
+        var closestHandle = TextInteractHandle.None;
+        var closestPt = PointF.Empty;
+        var minDistanceSq = float.MaxValue;
+        var radiusSq = handleHitRadius * handleHitRadius;
+
+        foreach (var (h, pt) in handles)
+        {
+            var dx = px - pt.X;
+            var dy = py - pt.Y;
+            var dSq = dx * dx + dy * dy;
+            if (dSq <= radiusSq && dSq < minDistanceSq)
+            {
+                minDistanceSq = dSq;
+                closestHandle = h;
+                closestPt = pt;
+            }
+        }
+
+        if (closestHandle != TextInteractHandle.None)
+        {
+            return (closestHandle, closestPt, center);
+        }
+
+        // Check center location crosshair anchor
+        var cdx = px - cx;
+        var cdy = py - cy;
+        var anchorRadius = Math.Max(handleHitRadius, 14f);
+        if (cdx * cdx + cdy * cdy <= anchorRadius * anchorRadius)
+        {
+            return (TextInteractHandle.Move, center, center);
+        }
+
+        // Check inside bounding box
+        var hitPadding = 8f;
+        var expandedBox = new RectangleF(box.X - hitPadding, box.Y - hitPadding, box.Width + hitPadding * 2, box.Height + hitPadding * 2);
+        if (expandedBox.Contains(px, py))
+        {
+            return (TextInteractHandle.Move, center, center);
+        }
+
+        return (TextInteractHandle.None, PointF.Empty, center);
+    }
+
     private static void DrawInteractHandles(Graphics g, RectangleF bounds, float cx, float cy, int width, int height)
     {
         // VEGAS Pro Titles & Text OFX interact styling:
@@ -436,23 +508,12 @@ public static class SubtitleRenderer
         g.DrawRectangle(cyanPen, box.X, box.Y, box.Width, box.Height);
 
         // 8 handle points: corners and edge midpoints
-        var handlePts = new PointF[]
-        {
-            new(box.Left, box.Top),
-            new(box.Left + box.Width * 0.5f, box.Top),
-            new(box.Right, box.Top),
-            new(box.Right, box.Top + box.Height * 0.5f),
-            new(box.Right, box.Bottom),
-            new(box.Left + box.Width * 0.5f, box.Bottom),
-            new(box.Left, box.Bottom),
-            new(box.Left, box.Top + box.Height * 0.5f)
-        };
-
+        var handles = GetInteractHandles(bounds);
         var handleSize = 6.5f;
         using var handleBrush = new SolidBrush(Color.White);
         using var handleBorderPen = new Pen(Color.FromArgb(240, 20, 20, 20), 1f);
 
-        foreach (var pt in handlePts)
+        foreach (var (_, pt) in handles)
         {
             var hRect = new RectangleF(pt.X - handleSize * 0.5f, pt.Y - handleSize * 0.5f, handleSize, handleSize);
             g.FillRectangle(handleBrush, hRect);
@@ -481,4 +542,18 @@ public static class SubtitleRenderer
         g.DrawLine(crosshairPen, cx, cy + radius, cx, cy + radius + tick);
         g.FillEllipse(handleBrush, cx - 1.5f, cy - 1.5f, 3f, 3f);
     }
+}
+
+public enum TextInteractHandle
+{
+    None = 0,
+    Move = 1,
+    TopLeft = 2,
+    TopCenter = 3,
+    TopRight = 4,
+    MiddleRight = 5,
+    BottomRight = 6,
+    BottomCenter = 7,
+    BottomLeft = 8,
+    MiddleLeft = 9
 }
