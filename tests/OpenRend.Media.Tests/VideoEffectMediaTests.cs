@@ -33,7 +33,7 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
         Assert.Equal(new byte[] { 54, 54, 54, 128 }, VideoEffectProcessor.Apply([0, 0, 255, 128], [saturation]));
         var invert = VideoEffect.Create(VideoEffectKind.Invert);
         invert.Amount = .5;
-        Assert.Equal(new byte[] { 128, 128, 128, 128 }, VideoEffectProcessor.Apply([0, 10, 255, 128], [invert]));
+        Assert.Equal(new byte[] { 127, 127, 127, 128 }, VideoEffectProcessor.Apply([0, 10, 255, 128], [invert]));
     }
 
     [Fact]

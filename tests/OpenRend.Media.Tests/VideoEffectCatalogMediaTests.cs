@@ -45,7 +45,7 @@ public sealed class VideoEffectCatalogMediaTests(MediaFixture fixture) : IClassF
     public void ColorOperationsHaveKnownEndpointsAndHslRotatesPrimaryColors()
     {
         var bw = VideoEffect.Create(VideoEffectKind.BlackAndWhite);
-        Assert.Equal(new byte[] { 54, 54, 54, 77 }, VideoEffectProcessor.Apply([0, 0, 255, 77], [bw]));
+        Assert.Equal(new byte[] { 85, 85, 85, 77 }, VideoEffectProcessor.Apply([0, 0, 255, 77], [bw]));
         var hsl = VideoEffect.Create(VideoEffectKind.HslAdjust); hsl.SetParameter("Hue", 120);
         Assert.Equal(new byte[] { 0, 255, 0, 77 }, VideoEffectProcessor.Apply([0, 0, 255, 77], [hsl]));
         var levels = VideoEffect.Create(VideoEffectKind.Levels); levels.SetParameter("InputBlack", .2); levels.SetParameter("InputWhite", .8);

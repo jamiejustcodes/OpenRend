@@ -145,10 +145,11 @@ internal static partial class VideoEffectProcessor
         switch (effect.Kind)
         {
             case VideoEffectKind.BrightnessContrast: operation = (r, g, b) => ((r - .5) * (1 + secondary) + .5 + a, (g - .5) * (1 + secondary) + .5 + a, (b - .5) * (1 + secondary) + .5 + a); break;
-            case VideoEffectKind.Invert: operation = (r, g, b) => (r + (1 - 2 * r) * a, g + (1 - 2 * g) * a, b + (1 - 2 * b) * a); break;
-            case VideoEffectKind.Saturation:
+            case VideoEffectKind.Invert:
             case VideoEffectKind.BlackAndWhite:
-                var saturation = effect.Kind == VideoEffectKind.Saturation ? a : 1 - a;
+                return ApplyBoundedBlend(source, effect.Kind, a);
+            case VideoEffectKind.Saturation:
+                var saturation = a;
                 operation = (r, g, b) => { var l = .2126 * r + .7152 * g + .0722 * b; return (l + (r - l) * saturation, l + (g - l) * saturation, l + (b - l) * saturation); }; break;
             case VideoEffectKind.Sepia: operation = (r, g, b) => (r * (1 - a) + (.393 * r + .769 * g + .189 * b) * a, g * (1 - a) + (.349 * r + .686 * g + .168 * b) * a, b * (1 - a) + (.272 * r + .534 * g + .131 * b) * a); break;
             case VideoEffectKind.ColorBalance:
@@ -175,6 +176,23 @@ internal static partial class VideoEffectProcessor
             default: throw new InvalidDataException("Video effect has no renderer.");
         }
         return Color(source, operation);
+    }
+
+    private static byte[] ApplyBoundedBlend(byte[] source, VideoEffectKind kind, double amount)
+    {
+        var output = (byte[])source.Clone();
+        for (var i = 0; i < source.Length; i += 4)
+        {
+            var gray = (source[i] + source[i + 1] + source[i + 2]) / 3.0;
+            for (var channel = 0; channel < 3; channel++)
+            {
+                var value = source[i + channel];
+                var target = kind == VideoEffectKind.Invert ? 255 - value : gray;
+                // Blend in byte space, then truncate once. Alpha remains the original source coverage.
+                output[i + channel] = (byte)(value + (target - value) * amount);
+            }
+        }
+        return output;
     }
 
     private static byte[] Color(byte[] source, Func<double, double, double, (double R, double G, double B)> operation)
