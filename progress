@@ -1,0 +1,31 @@
+# OpenRend development handoff
+
+Updated: 2026-10-16. Read this file and AGENTS.md before continuing. Update this file after meaningful findings, tested changes, and before a context handoff. Keep unresolved work explicit; do not turn intended checks into passed results.
+
+## Current work
+
+The current priority is fixing two reported editor problems:
+1. Audio plays, but the video preview can remain on its first frame. Investigate asynchronous preview scheduling and prove that displayed video advances during playback, rather than testing the timecode alone.
+2. Clip edge trimming needs a wider, predictable drag target and resize cursor feedback. Also inspect the Pan/Crop workspace's drag/resize cursors so the interaction is clear in both places.
+
+Playback investigation is in progress. Clip hit testing currently accepts only points inside the clip and chooses an edge within seven pixels; no hover cursor is assigned. Do not assume either issue is fixed until its regression check passes.
+
+## Already implemented
+
+Native Windows editor: .NET 10 WPF, C++20, FFmpeg decoding/encoding, D3D11 composition, WASAPI audio, shared preview/export timeline evaluation, rational rates and integer project frames. Original media stays unchanged. Editing includes grouped events, trim/move/split, locks, undo/redo, clipboard rate conversion, levels/fades, project recovery/relink and export.
+
+Event Pan/Crop has source-pixel position/size, rotation/pivot, aspect lock, interactive source workspace, six temporal curves, right-click/keyboard curve selection, keyframe drag/exact retiming and undo. The editor preserves colliding key states on separate whole frames. The default domain retiming API can replace a destination; the UI opts into preservation. Spatial spline smoothing and masks are not implemented.
+
+Latest completed commit before this pass: 76ee228 (keyframe curve menu). Previous local validation: 124 core + 29 media + 53 editor + 4 playback + 16 native + 1 desktop workflow = 227 passed; zero managed build warnings/errors. GitHub CI passed. These results apply to that completed version, not to new edits in this pass.
+
+## Next work
+
+First finish and verify video playback and trimming feedback, then package and push small tested commits. After those fixes, continue source aspect/fill controls and remaining Pan/Crop interactions, followed by broader editor layout/docking and effects. Arbitrary docking, spatial crop smoothing, masks, effect chains, titles, proxies, advanced cache and plugin/script hosting remain incomplete. Full application/UI parity has not been established.
+
+## Working rules and validation
+
+- Preserve existing work and open unsaved editor sessions. Do not replace an executable bundle while it is running. Use dist/OpenRend-next for the new development package when dist/OpenRend is in use.
+- Run tools/build.ps1 for native and managed checks. Desktop checks require OPENREND_RUN_UI_TESTS=1 and an unlocked interactive desktop; use isolated OPENREND_DATA_DIR. To verify the packaged desktop, set OPENREND_APP_PATH to its executable.
+- Package separately with tools/package.ps1 -OutputDirectory E:\OpenRend\dist\OpenRend-next. The default package destination is dist/OpenRend, so check running sessions before using it.
+- Use concise comments for timing, ownership and non-obvious behavior. Stage explicit paths, make small truthful tested commits, and push to the configured GitHub remote as authorized. Never invent test results or commit history.
+- Keep private investigation evidence, dependency SDKs and generated binaries outside commits. Public documentation describes OpenRend's own implementation and measured limits.
