@@ -6,7 +6,10 @@ public enum VideoEffectKind
     WhiteBalance, Levels, Threshold, BroadcastColors, BlackRestore, ChannelBlend,
     GaussianBlur, QuickBlur, Median, Sharpen, UnsharpMask, Pixelate, Mirror, Border,
     Vignette, SoftContrast, Glow, AddNoise, FilmGrain, RadialPixelate, Swirl, Wave,
-    LensCorrection, ConvolutionKernel, FillLight, ChromaKeyer, CookieCutter, MinAndMax, OffsetAndWrap
+    LensCorrection, ConvolutionKernel, FillLight, ChromaKeyer, CookieCutter, MinAndMax, OffsetAndWrap,
+    LinearBlur, RadialBlur, ChromaBlur, Spherize, PinchPunch, TvSimulator, Crop, Newsprint, GradientMap,
+    Defocus, LabAdjust, MaskGenerator, PictureInPicture, LightRays, Starburst, Timecode, TinyPlanet,
+    AiAutoReframe, AiColorization, AiDehaze, AiSharpen, AiSmooth, AiStyleTransfer, AiUpscale, AiZDepth, AiSmartMask
 }
 
 public sealed class VideoEffect
@@ -43,7 +46,7 @@ public sealed class VideoEffect
     {
         var definition = VideoEffectCatalog.Get(Kind).Parameters.FirstOrDefault(parameter => parameter.Key == key)
             ?? throw new ArgumentException("Unknown video effect parameter.", nameof(key));
-        if (!double.IsFinite(value) || value < definition.Minimum || value > definition.Maximum)
+        if (!IsValidValue(definition, value))
             throw new InvalidDataException("Video effect parameter is outside its supported range.");
         if (key == "Amount") Amount = value;
         else if (key == "SecondaryAmount") SecondaryAmount = value;
@@ -67,7 +70,7 @@ public sealed class VideoEffect
         foreach (var definition in definitions)
         {
             var value = GetParameter(definition.Key);
-            if (!double.IsFinite(value) || value < definition.Minimum || value > definition.Maximum)
+            if (!IsValidValue(definition, value))
                 throw new InvalidDataException("Video effect parameters are outside their supported range.");
         }
         if ((!definitions.Any(parameter => parameter.Key == "Amount") && Amount != 0) ||
@@ -76,4 +79,8 @@ public sealed class VideoEffect
         if (Kind == VideoEffectKind.Levels && GetParameter("InputBlack") >= GetParameter("InputWhite"))
             throw new InvalidDataException("Input white must be greater than input black.");
     }
+
+    private static bool IsValidValue(VideoEffectParameterDefinition definition, double value) =>
+        double.IsFinite(value) && value >= definition.Minimum && value <= definition.Maximum &&
+        (definition.Choices is not { } choices || value == Math.Truncate(value) && value >= 0 && value < choices.Count);
 }
