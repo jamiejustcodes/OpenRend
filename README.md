@@ -32,7 +32,7 @@ Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V paste
 
 Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
 
-Select a video event and open Tools → Video event Pan/Crop, or use the timeline context menu. Edit source-pixel width, height, center, rotation and pivot; aspect lock links width and height. Drag the source overlay to pan and its lower right handle to resize. Crop keyframes use whole project frames with Linear or Hold interpolation. Frame navigation updates the timeline preview. Crop edits support undo, persistence, trimming, splitting and clipboard frame-rate conversion, and use the same GPU or CPU composition during preview and export.
+Select a video event and open Tools → Video event Pan/Crop, or use the timeline context menu. Edit source-pixel width, height, center, rotation and pivot; aspect lock links width and height. Drag the source overlay to pan and its lower right handle to resize. Crop keyframes use whole project frames with Linear, Hold, Slow, Fast, Smooth or Sharp temporal interpolation. Drag a keyframe diamond or enter its exact frame to retime it. Landing on an occupied frame replaces that key; undo restores both keys. Frame navigation updates the timeline preview. Crop edits support undo, persistence, trimming, splitting and clipboard frame-rate conversion, and use the same GPU or CPU composition during preview and export.
 
 Space plays or pauses, Enter pauses, Escape stops, Alt+Left/Right steps a frame and Ctrl+Home/End seeks to the bounds. Ctrl+wheel zooms the timeline; Shift+wheel scrolls time; the wheel scrolls tracks. Splitters resize the workspace. Preview quality selects draft, preview or project resolution. Master Bus adjusts monitor gain.
 
@@ -48,7 +48,7 @@ Ctrl+Shift+E renders the edited timeline. The renderer composites video, keeps b
 
 Tests exercise rational timing, edit transactions, fade preservation, persistence, legacy project import, native decoding, seeking, audio resampling, video composition and real encoded output. See [feature status](docs/feature-status.md) for evidence and remaining work.
 
-The current application is an early functional editor. Arbitrary docking, broader effect automation, curve interpolation, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Transformed clips currently decode at source resolution and use CPU upload/readback around GPU composition.
+The current application is an early functional editor. Arbitrary docking, broader effect automation, spatial spline smoothing, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Transformed clips currently decode at source resolution and use CPU upload/readback around GPU composition.
 
 ## License
 

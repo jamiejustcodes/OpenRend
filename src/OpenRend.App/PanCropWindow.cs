@@ -21,6 +21,7 @@ public sealed class PanCropWindow : Window
     private readonly CropWorkspace workspace = new();
     private readonly CropKeyframeLane lane = new();
     private readonly TextBox frameField;
+    private readonly TextBox keyframeField;
     private readonly ComboBox interpolation;
     private readonly ComboBox presets;
     private readonly CheckBox lockAspect;
@@ -113,6 +114,7 @@ public sealed class PanCropWindow : Window
         Grid.SetRow(bottom, 4); root.Children.Add(bottom);
         lane.Margin = new Thickness(145, 0, 8, 0); bottom.Children.Add(lane);
         lane.Seek += SetFrame;
+        lane.MoveKeyframe += MoveKeyframe;
         bottom.Children.Add(new TextBlock { Text = "Position", VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7, 24, 0, 0), Width = 130, HorizontalAlignment = HorizontalAlignment.Left });
         var transport = new DockPanel { LastChildFill = false }; Grid.SetRow(transport, 1); bottom.Children.Add(transport);
         frameField = new TextBox { Width = 105, TextAlignment = TextAlignment.Right, Margin = new Thickness(3, 5, 6, 5) };
@@ -121,6 +123,14 @@ public sealed class PanCropWindow : Window
         frameField.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyFrame(); e.Handled = true; } };
         frameField.LostKeyboardFocus += (_, _) => { if (!closed) ApplyFrame(); };
         DockPanel.SetDock(frameField, Dock.Right); transport.Children.Add(frameField);
+        var keyTime = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+        keyTime.Children.Add(new TextBlock { Text = "Keyframe:", Margin = new Thickness(4, 0, 3, 0) });
+        keyframeField = new TextBox { Width = 70, TextAlignment = TextAlignment.Right };
+        AutomationProperties.SetName(keyframeField, "Crop keyframe frame"); AutomationProperties.SetAutomationId(keyframeField, "CropKeyframeFrame");
+        keyframeField.GotKeyboardFocus += (_, _) => keyframeField.SelectAll();
+        keyframeField.KeyDown += (_, e) => { if (e.Key == Key.Enter) { ApplyKeyframeTime(); e.Handled = true; } else if (e.Key == Key.Escape) { Refresh(); e.Handled = true; } };
+        keyframeField.LostKeyboardFocus += (_, _) => { if (!closed) ApplyKeyframeTime(); };
+        keyTime.Children.Add(keyframeField); DockPanel.SetDock(keyTime, Dock.Right); transport.Children.Add(keyTime);
         transport.Children.Add(Button("|◀", "Previous crop keyframe", () => SeekKey(-1)));
         transport.Children.Add(Button("◀", "Previous crop frame", () => SetFrame(localFrame - 1)));
         transport.Children.Add(Button("▶", "Next crop frame", () => SetFrame(localFrame + 1)));
@@ -136,7 +146,7 @@ public sealed class PanCropWindow : Window
         Loaded += (_, _) => { seek(checked(EventClip.StartFrame + localFrame)); Refresh(); };
         PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Escape && Keyboard.FocusedElement is not TextBox && !workspace.IsMouseCaptured) { Close(); e.Handled = true; }
+            if (e.Key == Key.Escape && Keyboard.FocusedElement is not TextBox && !workspace.IsMouseCaptured && !lane.IsMouseCaptured) { Close(); e.Handled = true; }
             else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control) && e.Key is Key.Z or Key.Y && Keyboard.FocusedElement is not TextBox)
             { Edit(() => { if (e.Key == Key.Z) editor.Undo(); else editor.Redo(); }); e.Handled = true; }
         };
@@ -173,9 +183,12 @@ public sealed class PanCropWindow : Window
             presets.SelectedIndex = state == identity ? 0 : state == (identity with { Width = identity.Width / 2, Height = identity.Height / 2 }) ? 1
                 : state == (identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) }) ? 2 : -1;
             var current = checked(localFrame + EventClip.CropOffsetFrames);
+            keyframeField.IsEnabled = EventClip.Crop?.Keyframes.Any(key => key.Frame == current) == true;
+            keyframeField.Text = keyframeField.IsEnabled ? localFrame.ToString(CultureInfo.InvariantCulture) : "";
             interpolation.SelectedItem = EventClip.Crop?.Keyframes.LastOrDefault(key => key.Frame <= current)?.Interpolation ?? CropInterpolation.Linear;
             workspace.State = state; workspace.SourceWidth = Math.Max(1, Source.Width); workspace.SourceHeight = Math.Max(1, Source.Height); workspace.InvalidateVisual();
             lane.Duration = EventClip.DurationFrames; lane.Position = localFrame;
+            lane.CanMove = EventClip.Crop is not null;
             lane.Rate = editor.Project.FrameRate;
             lane.Keys = EventClip.Crop?.Keyframes.Select(key => (Int128)key.Frame - EventClip.CropOffsetFrames).Where(frame => frame >= 0 && frame < EventClip.DurationFrames).Select(frame => (long)frame).ToArray() ?? [0];
             lane.InvalidateVisual();
@@ -211,6 +224,17 @@ public sealed class PanCropWindow : Window
         if (long.TryParse(frameField.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var frame)) SetFrame(frame);
         else { status.Text = "Enter a whole project frame."; Refresh(); }
     }
+    private void ApplyKeyframeTime()
+    {
+        if (refreshing || !keyframeField.IsEnabled) return;
+        if (!long.TryParse(keyframeField.Text, NumberStyles.Integer, CultureInfo.InvariantCulture, out var frame)) { status.Text = "Enter a whole project frame."; Refresh(); return; }
+        if (frame != localFrame) MoveKeyframe(localFrame, frame);
+    }
+    private void MoveKeyframe(long from, long to) => Edit(() =>
+    {
+        editor.MoveCropKeyframe(clipId, from, to);
+        localFrame = to; seek(checked(EventClip.StartFrame + to));
+    });
     private void SetFrame(long frame)
     {
         localFrame = Math.Clamp(frame, 0, EventClip.DurationFrames - 1);
@@ -345,32 +369,70 @@ internal sealed class CropKeyframeLane : FrameworkElement
     public long Duration { get; set; } = 1;
     public long Position { get; set; }
     public long[] Keys { get; set; } = [0];
+    public bool CanMove { get; set; }
     public Rational Rate { get; set; } = new(30, 1);
     public event Action<long>? Seek;
-    public CropKeyframeLane() { ClipToBounds = true; }
+    public event Action<long, long>? MoveKeyframe;
+    private long? dragging;
+    private long pendingFrame;
+    private double FrameX(long frame) => 4 + frame * Math.Max(1, ActualWidth - 10) / Math.Max(1.0, Duration - 1);
+    private long FrameAt(double x) => (long)Math.Clamp(decimal.Round((decimal)Math.Clamp((x - 4) / Math.Max(1, ActualWidth - 10), 0, 1) * (Duration - 1), 0, MidpointRounding.AwayFromZero), 0, Duration - 1);
+    public CropKeyframeLane()
+    {
+        ClipToBounds = true; Focusable = true;
+        AutomationProperties.SetName(this, "Crop keyframe timeline");
+        AutomationProperties.SetHelpText(this, "Click to seek. Drag a keyframe diamond to change its frame. Arrow keys seek; Escape cancels a drag. Use the keyframe frame field for exact timing.");
+    }
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
     protected override void OnRender(DrawingContext dc)
     {
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(45, 45, 45)), null, new Rect(RenderSize));
         var pen = new Pen(Brushes.Gray, 1); dc.DrawLine(pen, new Point(0, 19), new Point(ActualWidth, 19)); dc.DrawLine(pen, new Point(0, 43), new Point(ActualWidth, 43));
         for (var i = 0; i <= 6; i++)
         {
-            var frame = (long)((Duration - 1) * (i / 6.0)); var x = i * Math.Max(1, ActualWidth - 10) / 6;
+            var frame = (long)((Int128)(Duration - 1) * i / 6); var x = i * Math.Max(1, ActualWidth - 10) / 6;
             var text = new FormattedText(OpenRend.UI.TimelineView.FormatTimecode(frame, Rate), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 9, Brushes.Silver, VisualTreeHelper.GetDpi(this).PixelsPerDip);
             dc.DrawText(text, new Point(x + 3, 2));
         }
         foreach (var frame in Keys)
         {
-            var x = 4 + frame * Math.Max(1, ActualWidth - 10) / Math.Max(1.0, Duration - 1);
+            var x = FrameX(dragging == frame ? pendingFrame : frame);
             dc.PushTransform(new RotateTransform(45, x, 31)); dc.DrawRectangle(frame == Position ? Brushes.White : Brushes.Silver, pen, new Rect(x - 3, 28, 6, 6)); dc.Pop();
         }
-        var cursor = 4 + Position * Math.Max(1, ActualWidth - 10) / Math.Max(1.0, Duration - 1);
+        var cursor = FrameX(Position);
         dc.DrawLine(new Pen(Brushes.White, 1), new Point(cursor, 0), new Point(cursor, ActualHeight));
     }
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
-        var frame = (long)Math.Round(Math.Clamp((e.GetPosition(this).X - 4) / Math.Max(1, ActualWidth - 10), 0, 1) * (Duration - 1));
+        Focus(); var point = e.GetPosition(this); var frame = FrameAt(point.X);
         var near = Keys.OrderBy(key => Math.Abs((double)key - frame)).FirstOrDefault();
-        if (Math.Abs((double)near - frame) * Math.Max(1, ActualWidth - 10) / Math.Max(1, Duration - 1) < 7) frame = near;
+        if (Keys.Length > 0 && Math.Abs(FrameX(near) - e.GetPosition(this).X) < 7)
+        {
+            frame = near;
+            if (CanMove && Math.Abs(point.Y - 31) <= 10) { dragging = near; pendingFrame = near; CaptureMouse(); }
+        }
         Seek?.Invoke(frame); e.Handled = true;
+    }
+    protected override void OnMouseMove(MouseEventArgs e)
+    {
+        if (dragging is null) return;
+        pendingFrame = FrameAt(e.GetPosition(this).X); InvalidateVisual();
+    }
+    protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
+    {
+        if (dragging is not { } from) return;
+        dragging = null; ReleaseMouseCapture();
+        if (pendingFrame != from) MoveKeyframe?.Invoke(from, pendingFrame);
+        InvalidateVisual(); e.Handled = true;
+    }
+    protected override void OnLostMouseCapture(MouseEventArgs e) { dragging = null; InvalidateVisual(); }
+    protected override void OnKeyDown(KeyEventArgs e)
+    {
+        if (e.Key == Key.Escape && dragging is not null) { dragging = null; ReleaseMouseCapture(); InvalidateVisual(); e.Handled = true; return; }
+        if (e.Key is Key.Left or Key.Right or Key.Home or Key.End)
+        {
+            Seek?.Invoke(e.Key switch { Key.Home => 0, Key.End => Duration - 1, Key.Left => Math.Max(0, Position - 1), _ => Math.Min(Duration - 1, Position + 1) });
+            e.Handled = true;
+        }
     }
 }
