@@ -145,6 +145,20 @@ public sealed class TimelineEditor
         });
     }
 
+    public void RemoveVideoTransition(Guid clipId, bool fadeOut = false)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Transitions are only available for video clips.");
+        if ((fadeOut ? clip.FadeOutTransition : clip.FadeInTransition) is null) return;
+        Execute(_ =>
+        {
+            // Removing the plug-in leaves the event's fade and overlap edit decisions intact.
+            if (fadeOut) clip.FadeOutTransition = null;
+            else clip.FadeInTransition = null;
+        });
+    }
+
     public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds)
     {
         var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
