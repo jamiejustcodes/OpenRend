@@ -8,6 +8,7 @@ internal static partial class VideoEffectProcessor
 
     private static bool IsIdentity(VideoEffect effect) => effect.Kind switch
     {
+        VideoEffectKind.Lut3D => effect.Lut is null || effect.Amount == 0,
         VideoEffectKind.BrightnessContrast => effect.Amount == 0 && effect.SecondaryAmount == 0,
         VideoEffectKind.Saturation => effect.Amount == 1,
         VideoEffectKind.Invert or VideoEffectKind.BlackAndWhite or VideoEffectKind.Sepia or VideoEffectKind.BlackRestore or
@@ -59,6 +60,7 @@ internal static partial class VideoEffectProcessor
             var amount = effect.Amount;
             switch (effect.Kind)
             {
+                case VideoEffectKind.Lut3D: output = ApplyLut(output, effect.Lut!, amount, P("Interpolation") == 1); break;
                 case VideoEffectKind.GaussianBlur:
                 case VideoEffectKind.QuickBlur:
                     output = Blur(output, width, height, Radius(amount, width, height), effect.Kind == VideoEffectKind.GaussianBlur); break;

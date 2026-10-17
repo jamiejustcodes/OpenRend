@@ -11,6 +11,7 @@ public static class VideoEffectCatalog
     public static IReadOnlyList<VideoEffectDefinition> Definitions { get; } = Array.AsReadOnly(new[]
     {
         D(VideoEffectKind.BrightnessContrast, "Brightness and Contrast", "Color", P("Amount", "Brightness", -1, 1, 0), P("SecondaryAmount", "Contrast", -1, 1, 0)),
+        D(VideoEffectKind.Lut3D, "LUT Filter", "Color", P("Amount", "Strength", 0, 1, 1), Choice("Interpolation", "Interpolation", "Trilinear", "Tetrahedral")),
         D(VideoEffectKind.Saturation, "Saturation Adjust", "Color", P("Amount", "Saturation", 0, 2, 1)),
         D(VideoEffectKind.Invert, "Invert", "Color", P("Amount", "Blend amount", 0, 1, 1)),
         D(VideoEffectKind.BlackAndWhite, "Black and White", "Color", P("Amount", "Blend amount", 0, 1, 1)),

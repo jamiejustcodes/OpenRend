@@ -6,7 +6,7 @@ namespace OpenRend.Project;
 
 public static class ProjectStore
 {
-    public const int CurrentVersion = 5;
+    public const int CurrentVersion = 6;
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,

@@ -9,7 +9,7 @@ public enum VideoEffectKind
     LensCorrection, ConvolutionKernel, FillLight, ChromaKeyer, CookieCutter, MinAndMax, OffsetAndWrap,
     LinearBlur, RadialBlur, ChromaBlur, Spherize, PinchPunch, TvSimulator, Crop, Newsprint, GradientMap,
     Defocus, LabAdjust, MaskGenerator, PictureInPicture, LightRays, Starburst, Timecode, TinyPlanet,
-    AiAutoReframe, AiColorization, AiDehaze, AiSharpen, AiSmooth, AiStyleTransfer, AiUpscale, AiZDepth, AiSmartMask
+    AiAutoReframe, AiColorization, AiDehaze, AiSharpen, AiSmooth, AiStyleTransfer, AiUpscale, AiZDepth, AiSmartMask, Lut3D
 }
 
 public sealed class VideoEffect
@@ -17,6 +17,7 @@ public sealed class VideoEffect
     public Guid Id { get; set; } = Guid.NewGuid();
     public VideoEffectKind Kind { get; set; }
     public bool IsEnabled { get; set; } = true;
+    public CubeLut? Lut { get; set; }
     public double Amount { get; set; }
     public double SecondaryAmount { get; set; }
     public Dictionary<string, double> Parameters { get; set; } = [];
@@ -57,6 +58,7 @@ public sealed class VideoEffect
     {
         var copy = (VideoEffect)MemberwiseClone();
         copy.Parameters = new(Parameters, StringComparer.Ordinal);
+        copy.Lut = Lut?.DeepClone();
         return copy;
     }
 
@@ -64,6 +66,8 @@ public sealed class VideoEffect
     {
         if (Id == Guid.Empty || !Enum.IsDefined(Kind) || Parameters is null || !double.IsFinite(Amount) || !double.IsFinite(SecondaryAmount))
             throw new InvalidDataException("Video effect is invalid.");
+        if (Kind != VideoEffectKind.Lut3D && Lut is not null) throw new InvalidDataException("Only a LUT effect can contain LUT data.");
+        Lut?.Validate();
         var definitions = VideoEffectCatalog.Get(Kind).Parameters;
         if (Parameters.Any(pair => pair.Key is "Amount" or "SecondaryAmount" || !definitions.Any(parameter => parameter.Key == pair.Key)))
             throw new InvalidDataException("Video effect contains an unknown parameter.");
