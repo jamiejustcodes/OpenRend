@@ -211,9 +211,18 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         Find(effects, "AddVideoEffect").AsButton().Invoke();
         var channel = Find(effects, "VideoEffect_Channel").AsComboBox();
         Assert.Equal(new[] { "All", "Red", "Green", "Blue", "Alpha" }, channel.Items.Select(item => item.Text));
+        // FlaUI expands the list to enumerate Items; close it before testing committed arrow-key edits.
+        channel.Patterns.ExpandCollapse.Pattern.Collapse();
         Assert.Equal("All", channel.SelectedItem?.Text);
         channel.Focus(); Chord(effects, VirtualKeyShort.DOWN); Chord(effects, VirtualKeyShort.DOWN);
-        WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Green", "Consecutive channel steps lost focus or did not apply.");
+        try { WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Green", "Consecutive channel steps lost focus or did not apply."); }
+        catch
+        {
+            var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+            using var screenshot = Capture.Element(effects);
+            screenshot.ToFile(Path.Combine(artifact, "fx-channel-failure.png"));
+            throw;
+        }
         Find(effects, "UndoVideoEffect").AsButton().Invoke();
         WaitFor(() => Find(effects, "VideoEffect_Channel").AsComboBox().SelectedItem?.Text == "Red", "Undo did not restore the previous channel.");
         Find(effects, "ResetVideoEffect").AsButton().Invoke();
