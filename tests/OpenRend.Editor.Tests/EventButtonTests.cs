@@ -104,6 +104,46 @@ public sealed class EventButtonTests
     });
 
     [Fact]
+    public void TransitionStripButtonTargetsTheIncomingFadeAndReleasesCaptureBeforeOpening() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        clip.FadeInFrames = 15; clip.FadeInTransition = new();
+        var strip = view.TransitionStripBounds(track.Id, clip);
+        Assert.Equal(50, strip.Width, 6);
+        var button = view.EventButtonBounds(track.Id, clip, "Transition");
+        Assert.Equal(strip.Right, button.Right);
+        Assert.Equal("Transition", view.HitEventButton(Center(button))!.Value.Action);
+        Assert.Same(Cursors.Hand, view.CursorAt(Center(button)));
+        var invoked = false;
+        view.TransitionPropertiesRequested += id =>
+        {
+            Assert.Equal(clip.Id, id); Assert.False(view.IsMouseCaptured); invoked = true;
+        };
+        Assert.True(view.BeginEventButton(Center(button)));
+        view.CompleteEventButton(Center(button)); Assert.True(invoked);
+        track.IsLocked = true;
+        Assert.Same(Cursors.No, view.CursorAt(Center(button)));
+        Assert.Throws<ElementNotEnabledException>(() => view.InvokeEventAction(clip.Id, "Transition"));
+    });
+
+    [Fact]
+    public void TransitionButtonsFollowSplitEnvelopesAndHideAtClippedOrNarrowEdges() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        clip.FadeInFrames = 30; clip.FadeInTransition = new();
+        clip.FadeOffsetFrames = 15; clip.FadeDurationFrames = 75;
+        Assert.Equal(50, view.TransitionStripBounds(track.Id, clip).Width, 6);
+        view.Offset = 155;
+        Assert.True(view.EventButtonBounds(track.Id, clip, "Transition").IsEmpty);
+        view.Offset = 0; clip.FadeOffsetFrames = 25;
+        Assert.True(view.EventButtonBounds(track.Id, clip, "Transition").IsEmpty);
+        clip.FadeOffsetFrames = 30;
+        Assert.True(view.TransitionStripBounds(track.Id, clip).IsEmpty);
+        clip.FadeOffsetFrames = 0; clip.FadeInTransition = null;
+        Assert.True(view.TransitionStripBounds(track.Id, clip).IsEmpty);
+    });
+
+    [Fact]
     public void OverlappingLaterEventOwnsThePointerInsteadOfCoveredButtons() => Sta(() =>
     {
         var (view, track, clip) = Create();

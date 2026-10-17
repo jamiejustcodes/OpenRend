@@ -20,11 +20,13 @@ public sealed partial class TimelineView
     {
         "PanCrop" => "Video event Pan/Crop…",
         "VideoEffects" => "Video Event FX…",
+        "Transition" => "Transition Properties…",
         _ => "Event options"
     };
 
     internal IEnumerable<string> EventButtonActions(TimelineTrack track, TimelineClip clip)
     {
+        if (!EventButtonBounds(track.Id, clip, "Transition").IsEmpty) yield return "Transition";
         if (track.Kind == TrackKind.Video && !EventButtonBounds(track.Id, clip, "PanCrop").IsEmpty) yield return "PanCrop";
         if (track.Kind == TrackKind.Video && !EventButtonBounds(track.Id, clip, "VideoEffects").IsEmpty) yield return "VideoEffects";
         if (!EventButtonBounds(track.Id, clip, "More").IsEmpty) yield return "More";
@@ -33,9 +35,17 @@ public sealed partial class TimelineView
     internal Rect EventButtonBounds(Guid trackId, TimelineClip clip, string action)
     {
         var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId);
-        if (track is null || !track.Clips.Contains(clip) || action is not ("PanCrop" or "VideoEffects" or "More")) return Rect.Empty;
+        if (track is null || !track.Clips.Contains(clip) || action is not ("PanCrop" or "VideoEffects" or "More" or "Transition")) return Rect.Empty;
         if (action != "More" && track.Kind != TrackKind.Video) return Rect.Empty;
         var rect = ClipBounds(trackId, clip);
+        if (action == "Transition")
+        {
+            var strip = TransitionStripBounds(trackId, clip);
+            if (strip.IsEmpty || strip.Width < EventButtonSize + 4) return Rect.Empty;
+            var button = new Rect(strip.Right - EventButtonSize, strip.Top, EventButtonSize, EventButtonSize);
+            return button.Left >= HeaderWidth && button.Right <= ActualWidth && button.Top >= RulerHeight && button.Bottom <= ActualHeight
+                ? button : Rect.Empty;
+        }
         if (rect.Width < (action == "More" ? 22 : 60)) return Rect.Empty;
         var slot = action switch { "PanCrop" => 3, "VideoEffects" => 2, _ => 1 };
         var bounds = new Rect(rect.Right - 2 - slot * EventButtonSize, rect.Bottom - EventButtonSize - 2, EventButtonSize, EventButtonSize);
@@ -46,6 +56,11 @@ public sealed partial class TimelineView
 
     internal (TimelineTrack Track, TimelineClip Clip, string Action)? HitEventButton(Point point)
     {
+        var track = TrackAt(point.Y);
+        if (track is not null)
+            foreach (var clip in track.Clips.AsEnumerable().Reverse())
+                if (EventButtonBounds(track.Id, clip, "Transition") is { IsEmpty: false } button && button.Contains(point))
+                    return (track, clip, "Transition");
         var hit = HitClip(point);
         if (hit is null || !ClipBounds(hit.Value.Track.Id, hit.Value.Clip).Contains(point)) return null;
         foreach (var action in EventButtonActions(hit.Value.Track, hit.Value.Clip))
@@ -80,6 +95,12 @@ public sealed partial class TimelineView
         if (!IsEnabled || track.IsLocked) throw new ElementNotEnabledException();
         if (action != "More" && track.Kind != TrackKind.Video) throw new InvalidOperationException("This event has no video.");
         SelectClip(clipId, false, ensureVisible: false);
+        if (action == "Transition")
+        {
+            if (track.Clips.Single(clip => clip.Id == clipId).FadeInTransition is null) throw new ElementNotAvailableException();
+            TransitionPropertiesRequested?.Invoke(clipId);
+            return;
+        }
         if (action is "PanCrop" or "VideoEffects" or "EditTextMedia")
         {
             if (VideoEventActionRequested is not null) VideoEventActionRequested.Invoke(clipId, action);
@@ -145,7 +166,8 @@ public sealed partial class TimelineView
 
     private void DrawEventButtons(DrawingContext dc, TimelineTrack track, TimelineClip clip, Rect rect)
     {
-        var actions = EventButtonActions(track, clip).ToArray();
+        DrawTransitionStrip(dc, track, clip);
+        var actions = EventButtonActions(track, clip).Where(action => action != "Transition").ToArray();
         var left = actions.Length == 0 ? rect.Right : actions.Min(action => EventButtonBounds(track.Id, clip, action).Left);
         if (ShowEventLengths && left - rect.Left > 90)
             Text(dc, FormatTimecode(clip.DurationFrames, Project.FrameRate), rect.Left + 3, rect.Bottom - 18, Brushes.WhiteSmoke, 10, left - rect.Left - 6);
@@ -171,5 +193,36 @@ public sealed partial class TimelineView
             else foreach (var dx in new[] { 5, 9, 13 }) dc.DrawEllipse(ink, null, new Point(x + dx, y + 9), 1, 1);
             if (pressedEventButton == (clip.Id, action)) dc.DrawRectangle(null, new Pen(Brushes.WhiteSmoke, 1), bounds);
         }
+    }
+
+    internal Rect TransitionStripBounds(Guid trackId, TimelineClip clip)
+    {
+        if (clip.FadeInTransition is null || clip.FadeInFrames <= 0) return Rect.Empty;
+        var track = Project.Tracks.FirstOrDefault(track => track.Id == trackId);
+        if (track?.Kind != TrackKind.Video || !track.Clips.Contains(clip)) return Rect.Empty;
+        var remaining = clip.FadeInFrames - clip.FadeOffsetFrames;
+        if (remaining <= 0) return Rect.Empty;
+        var rect = ClipBounds(trackId, clip);
+        var right = Math.Min(rect.Right, X(checked(clip.StartFrame + Math.Min(remaining, clip.DurationFrames))));
+        return right > rect.Left ? new Rect(rect.Left, rect.Top + (rect.Height - EventButtonSize) / 2, right - rect.Left, EventButtonSize) : Rect.Empty;
+    }
+
+    private void DrawTransitionStrip(DrawingContext dc, TimelineTrack track, TimelineClip clip)
+    {
+        var strip = TransitionStripBounds(track.Id, clip);
+        if (strip.IsEmpty) return;
+        dc.DrawRectangle(Brush(track.IsLocked ? "#485B69" : "#438AC8"), new Pen(Brush("#84BBE4"), .5), strip);
+        var button = EventButtonBounds(track.Id, clip, "Transition");
+        var labelWidth = strip.Width - (button.IsEmpty ? 0 : EventButtonSize);
+        if (labelWidth > 24) Text(dc, "Dissolve", strip.Left + 2, strip.Top + 1, Brushes.WhiteSmoke, 10, labelWidth - 4, TextAlignment.Center);
+        if (button.IsEmpty) return;
+        var hovered = hoverEventButton == (clip.Id, "Transition");
+        dc.DrawRectangle(Brush(hovered && !track.IsLocked ? "#C2DDF1" : "#95BBD8"), new Pen(Brush("#1D3F59"), .5), button);
+        var pen = new Pen(Brush("#183448"), 1);
+        var x = button.Left + 3; var y = button.Top + 4;
+        dc.DrawLine(pen, new Point(x, y), new Point(x + 12, y + 10));
+        dc.DrawLine(pen, new Point(x, y + 10), new Point(x + 12, y));
+        dc.DrawLine(pen, new Point(x, y), new Point(x, y + 10));
+        dc.DrawLine(pen, new Point(x + 12, y), new Point(x + 12, y + 10));
     }
 }

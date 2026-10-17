@@ -33,6 +33,14 @@ public sealed partial class EditorWorkflowTests
             using var running = Launch(executable, path, temporary);
             var window = running.Window;
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+            var artifacts = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifacts);
+            using (var screenshot = Capture.Element(window)) screenshot.ToFile(Path.Combine(artifacts, "transition-strip.png"));
+            Find(window, $"Clip_{incoming.Id:N}_Transition").AsButton().Invoke();
+            Window? stripDialog = null;
+            WaitFor(() => (stripDialog = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null,
+                "The overlap properties button did not open its dialog.");
+            Find(stripDialog!, "CloseTransitionProperties").AsButton().Invoke();
+            WaitFor(() => window.ModalWindows.Length == 0, "The strip properties window did not close.");
             Find(window, $"Clip_{incoming.Id:N}_More").AsButton().Invoke();
             AutomationElement? menu = null;
             WaitFor(() => (menu = window.Automation.GetDesktop().FindFirstDescendant(c =>
@@ -43,7 +51,6 @@ public sealed partial class EditorWorkflowTests
             Window? dialog = null;
             WaitFor(() => (dialog = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null,
                 "Transition Properties did not open.");
-            var artifacts = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifacts);
             using (var screenshot = Capture.Element(dialog!)) screenshot.ToFile(Path.Combine(artifacts, "transition-properties.png"));
             Find(dialog!, "RemoveTransitionPlugin").AsButton().Invoke();
             WaitFor(() => !Find(dialog!, "RemoveTransitionPlugin").IsEnabled, "The transition plug-in was not removed.");
@@ -52,6 +59,7 @@ public sealed partial class EditorWorkflowTests
             Find(dialog!, "RedoTransitionEdit").AsButton().Invoke();
             WaitFor(() => !Find(dialog!, "RemoveTransitionPlugin").IsEnabled, "Redo did not remove the plug-in.");
             Find(dialog!, "CloseTransitionProperties").AsButton().Invoke();
+            WaitFor(() => window.ModalWindows.Length == 0, "Transition Properties did not close after the edit.");
             SaveButton(window).Invoke();
             WaitFor(() => !window.Title.Contains('*'), "The removal was not saved.");
             var loaded = await ProjectStore.LoadAsync(path);

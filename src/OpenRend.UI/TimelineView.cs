@@ -384,11 +384,12 @@ public sealed partial class TimelineView : FrameworkElement
         hoverClipId = id; hoverMode = nextMode; InvalidateVisual();
     }
     private void ClearHover() { hoverClipId = null; hoverMode = ""; hoverEventButton = null; ToolTip = null; Cursor = null; InvalidateVisual(); }
-    private void Text(DrawingContext dc, string text, double x, double y, Brush? color = null, double size = 12, double maxWidth = 10000)
+    private void Text(DrawingContext dc, string text, double x, double y, Brush? color = null, double size = 12, double maxWidth = 10000,
+        TextAlignment alignment = TextAlignment.Left)
     {
         var ft = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight, Face, size,
             color ?? Brushes.WhiteSmoke, VisualTreeHelper.GetDpi(this).PixelsPerDip)
-        { MaxTextWidth = Math.Max(1, maxWidth), MaxTextHeight = 28, Trimming = TextTrimming.CharacterEllipsis };
+        { MaxTextWidth = Math.Max(1, maxWidth), MaxTextHeight = 28, Trimming = TextTrimming.CharacterEllipsis, TextAlignment = alignment };
         dc.DrawText(ft, new Point(x, y));
     }
     protected override void OnRender(DrawingContext dc)
