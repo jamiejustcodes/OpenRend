@@ -119,4 +119,19 @@ public sealed class ClipPointerTests
         track.Clips.Add(new TimelineClip { StartFrame = 76, DurationFrames = 3 });
         Assert.Null(view.TransitionAt(point, preset));
     });
+
+    [Fact]
+    public void TransitionDropFindsACutOnlyWithinItsEdgeTarget() => Sta(() =>
+    {
+        var (view, track, outgoing) = Create();
+        var incoming = new TimelineClip { StartFrame = outgoing.EndFrame, DurationFrames = 60 };
+        track.Clips.Add(incoming);
+        var cutX = TimelineView.HeaderWidth + view.Project.FrameRate.Seconds(incoming.StartFrame) * view.PixelsPerSecond;
+        var target = view.TransitionAt(new Point(cutX + 5, 80), new VideoTransition());
+        Assert.NotNull(target);
+        Assert.True(target.IsCut);
+        Assert.Equal(outgoing.Id, target.OutgoingClipId);
+        Assert.Equal(incoming.Id, target.IncomingClipId);
+        Assert.Null(view.TransitionAt(new Point(cutX + 7, 80), new VideoTransition()));
+    });
 }

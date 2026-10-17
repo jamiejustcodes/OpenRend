@@ -92,8 +92,14 @@ public partial class MainWindow : Window
         {
             gesture.Transition.Validate();
             Pause();
-            vm.Editor.ApplyDissolve(gesture.OutgoingClipId, gesture.IncomingClipId);
-            vm.Status = "Default Dissolve applied to the dropped overlap.";
+            if (gesture.IsCut)
+            {
+                var settings = EditingPreferencesStore.Load(EditingPreferencesPath);
+                vm.Editor.ConvertCutToDissolve(gesture.OutgoingClipId, gesture.IncomingClipId,
+                    settings.OverlapFrames(vm.Project.FrameRate), settings.CutOverlapAlignment);
+            }
+            else vm.Editor.ApplyDissolve(gesture.OutgoingClipId, gesture.IncomingClipId);
+            vm.Status = gesture.IsCut ? "Cut converted to Default Dissolve." : "Default Dissolve applied to the dropped overlap.";
         });
         Timeline.SplitRequested += () => Guard(vm.Split);
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());

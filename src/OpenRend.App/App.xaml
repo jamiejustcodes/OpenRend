@@ -68,6 +68,35 @@
       <Style TargetType="ProgressBar"><Setter Property="Height" Value="5"/><Setter Property="Foreground" Value="{DynamicResource AccentBrush}"/><Setter Property="Background" Value="#333333"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar"><Border Background="{TemplateBinding Background}"><Grid x:Name="PART_Track" ClipToBounds="True"><Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}"/></Grid></Border></ControlTemplate></Setter.Value></Setter></Style>
       <Style TargetType="GridSplitter"><Setter Property="Background" Value="{DynamicResource DividerBrush}"/></Style>
       <Style TargetType="ToolTip"><Setter Property="Background" Value="#303030"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="BorderBrush" Value="#737373"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="7,4"/><Setter Property="FontSize" Value="11"/></Style>
+      <Style x:Key="PreferencesGroup" TargetType="GroupBox">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/>
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="GroupBox">
+          <Grid>
+            <Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1" Margin="0,7,0,0"><ContentPresenter ContentSource="Content" Margin="0,10,0,0"/></Border>
+            <Border Background="{TemplateBinding Background}" Padding="5,0" Margin="8,0,0,0" HorizontalAlignment="Left" VerticalAlignment="Top"><ContentPresenter ContentSource="Header"/></Border>
+          </Grid>
+        </ControlTemplate></Setter.Value></Setter>
+      </Style>
+      <Style x:Key="PreferencesTabs" TargetType="TabControl">
+        <Setter Property="Background" Value="{DynamicResource PanelBrush}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl">
+          <Grid Background="{TemplateBinding Background}">
+            <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <TabPanel IsItemsHost="True" KeyboardNavigation.TabIndex="1"/>
+            <ContentPresenter x:Name="PART_SelectedContentHost" Grid.Row="1" ContentSource="SelectedContent" KeyboardNavigation.TabIndex="2"/>
+          </Grid>
+        </ControlTemplate></Setter.Value></Setter>
+      </Style>
+      <Style x:Key="NumericSpinButton" TargetType="RepeatButton">
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="Background" Value="#303030"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="RepeatButton">
+          <Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border>
+          <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource HoverBrush}"/></Trigger><Trigger Property="IsPressed" Value="True"><Setter TargetName="Surface" Property="Background" Value="{DynamicResource PressedBrush}"/></Trigger></ControlTemplate.Triggers>
+        </ControlTemplate></Setter.Value></Setter>
+      </Style>
     </ResourceDictionary>
   </Application.Resources>
 </Application>

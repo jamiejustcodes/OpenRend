@@ -12,7 +12,7 @@ namespace OpenRend.UI;
 
 public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
-public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition);
+public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition, bool IsCut = false);
 
 public sealed partial class TimelineView : FrameworkElement
 {

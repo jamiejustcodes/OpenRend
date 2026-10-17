@@ -71,7 +71,7 @@
         <Separator/>
         <MenuItem Header="Render as…" Click="ExportClick"/>
       </MenuItem>
-      <MenuItem Header="_Options"><MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/><MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/></MenuItem>
+      <MenuItem Header="_Options"><MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/><MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/><Separator/><MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/></MenuItem>
       <MenuItem Header="_Help"><MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/><MenuItem Header="About OpenRend" Click="AboutClick"/></MenuItem>
     </Menu>
       </DockPanel>

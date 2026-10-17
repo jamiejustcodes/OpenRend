@@ -42,6 +42,10 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
     [Trait("Category", "Desktop")]
     public Task TransitionPresetDragTargetsOverlapIndependentlyOfSelection() => VerifyTransitionPlacement("drag");
 
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public Task TransitionPresetDragConvertsCutUsingSavedEditingPreferences() => VerifyTransitionPlacement("cut-drag");
+
     private async Task VerifyTransitionPlacement(string action)
     {
         var root = FindRepository();
@@ -52,10 +56,13 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         var projectPath = Path.Combine(temporary, "transitions.openrend");
         var media = new MediaAsset { Path = Path.Combine(root, "tests", "native", "fixture.mp4"), Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true };
         var outgoing = new TimelineClip { MediaId = media.Id, Name = "Outgoing", DurationFrames = 60 };
-        var incoming = new TimelineClip { MediaId = media.Id, Name = "Incoming", StartFrame = 45, DurationFrames = 45 };
+        var convertCut = action == "cut-drag";
+        var isDrag = action is "drag" or "cut-drag";
+        var incoming = new TimelineClip { MediaId = media.Id, Name = "Incoming", StartFrame = convertCut ? 60 : 45,
+            SourceInFrame = convertCut ? 15 : 0, DurationFrames = 45 };
         var unrelated = new TimelineClip { MediaId = media.Id, Name = "Unrelated", StartFrame = 120, DurationFrames = 30 };
         var clips = new List<TimelineClip> { outgoing, incoming };
-        if (action == "drag") clips.Add(unrelated);
+        if (isDrag) clips.Add(unrelated);
         await ProjectStore.SaveAsync(new ProjectDocument { Name = "UI integration", Width = 320, Height = 180,
             Media = [media], Tracks = [new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1", Clips = clips }] }, projectPath);
         try
@@ -66,6 +73,23 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             Mouse.Click(Find(window, $"Clip_{outgoing.Id:N}").GetClickablePoint());
             Assert.True(Find(window, $"Clip_{outgoing.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
             Assert.False(Find(window, $"Clip_{incoming.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
+            if (convertCut)
+            {
+                var options = window.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("Options")));
+                Assert.NotNull(options);
+                options.Patterns.ExpandCollapse.Pattern.Expand();
+                Find(window, "EditingPreferencesMenu").AsMenuItem().Invoke();
+                Window? preferences = null;
+                WaitFor(() => (preferences = window.ModalWindows.SingleOrDefault(dialog => dialog.Title == "Preferences")) is not null,
+                    "Editing preferences did not open.");
+                Find(preferences!, "CutOverlapSeconds").AsTextBox().Text = "0.5";
+                var alignment = Find(preferences!, "CutOverlapAlignment").AsComboBox();
+                alignment.Select(0); alignment.Patterns.ExpandCollapse.Pattern.Collapse();
+                var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+                using (var screenshot = Capture.Element(preferences!)) screenshot.ToFile(Path.Combine(artifact, "editing-preferences.png"));
+                Find(preferences!, "EditingPreferencesOk").AsButton().Invoke();
+                WaitFor(() => window.ModalWindows.Length == 0, "Saving editing preferences did not close the dialog.");
+            }
             var transitions = window.FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Transitions")));
             Assert.NotNull(transitions);
             transitions.Patterns.SelectionItem.Pattern.Select();
@@ -90,7 +114,16 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
             Assert.Equal(15, loaded.Tracks[0].Clips[1].FadeInFrames);
             Assert.Equal(VideoTransitionKind.Dissolve, loaded.Tracks[0].Clips[1].FadeInTransition!.Kind);
-            if (action == "drag") Assert.Null(loaded.Tracks[0].Clips[2].FadeInTransition);
+            if (isDrag) Assert.Null(loaded.Tracks[0].Clips[2].FadeInTransition);
+            if (convertCut)
+            {
+                Assert.Equal(45, loaded.Tracks[0].Clips[1].StartFrame);
+                Assert.Equal(0, loaded.Tracks[0].Clips[1].SourceInFrame);
+                Assert.Equal(105, loaded.Tracks[0].Clips[1].EndFrame);
+                var settings = EditingPreferencesStore.Load(Path.Combine(temporary, "editing.json"));
+                Assert.Equal(.5, settings.CutOverlapSeconds);
+                Assert.Equal(CutTransitionAlignment.BeforeCut, settings.CutOverlapAlignment);
+            }
             running.CloseGracefully();
         }
         finally { Directory.Delete(temporary, recursive: true); }

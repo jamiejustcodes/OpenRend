@@ -2,7 +2,9 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.IO;
 using OpenRend.Core;
+using OpenRend.Project;
 using OpenRend.UI;
 
 namespace OpenRend.App;
@@ -11,6 +13,15 @@ public partial class MainWindow
 {
     private Point transitionDragStart;
     private bool transitionDragReady;
+    private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
+
+    private void EditingPreferencesClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var dialog = new EditingPreferencesWindow(EditingPreferencesStore.Load(EditingPreferencesPath)) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        EditingPreferencesStore.Save(dialog.Result, EditingPreferencesPath);
+        vm.Status = "Editing preferences saved.";
+    });
 
     private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
     {
