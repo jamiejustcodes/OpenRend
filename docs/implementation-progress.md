@@ -10,7 +10,7 @@ This is the importance-ordered work list for OpenRend's editor. A feature is che
 - [ ] Evaluate each supported transition identically in preview and export.
 - [ ] Verify the desktop workflow and encoded output.
 
-Status: research in progress. No implementation committed.
+Status: default Dissolve slice in progress. OpenRend now stores a transition on the two event fades, applies it to a selected overlap, shows one supported preset in a docked browser, and uses the timeline evaluator for preview and export. The full preset catalog, one-event/adjacent/ripple workflows, drag placement, and edit preservation still need work.
 
 ## 2. Render templates and range options — critical
 
@@ -87,3 +87,4 @@ Status: queued.
 ## Work log
 
 - 2026-10-17: Ranked the nine feature gaps and defined completion criteria. The initial source and shipped-artifact audit is complete; no feature is checked yet. Baseline native integration and Release build passed. The aggregate managed test run ran out of memory; the serial run passed 426 tests with two desktop tests skipped.
+- 2026-10-17: Implemented and pushed the first default Dissolve slice in `b960feb`, `903e8ac`, `4d2f8e6`, `8576c45`, and `0e7d27f`. Focused Core, Media, and desktop transition tests passed, including project save/reopen, undo/redo, CPU/D3D frame agreement, and encoded video pixels. The native integration test, Release build, and Core/Editor/Playback/Media suites passed under `tools/build.ps1`. Its desktop effects workflow failed at keyboard channel selection; a separate rerun of that test also failed, while the two other desktop tests passed. Full transition parity remains open.
