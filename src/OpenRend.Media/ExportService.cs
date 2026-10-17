@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.Runtime.InteropServices;
 using OpenRend.Core;
 
@@ -16,16 +17,17 @@ public sealed class ExportService(TimelineRenderService renderer)
         var snapshot = project.DeepClone();
         snapshot.Validate();
         if (snapshot.DurationFrames <= 0) throw new InvalidOperationException("The timeline is empty.");
-        var range = options.Range ?? new RenderRange(0, snapshot.DurationFrames);
+        var range = options.Range ?? new FrameRange(0, snapshot.DurationFrames);
         range.Validate(snapshot.DurationFrames);
+        var template = RenderTemplateCatalog.Find(options.TemplateId);
         if ((snapshot.Width & 1) != 0 || (snapshot.Height & 1) != 0) throw new InvalidOperationException("H.264 export requires even project dimensions.");
         var destination = Path.GetFullPath(output);
         if (snapshot.Media.Any(asset => string.Equals(Path.GetFullPath(asset.Path), destination, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Choose an export destination different from the original media.");
-        return Task.Run(() => ExportCoreAsync(snapshot, destination, range, progress, cancellationToken), cancellationToken);
+        return Task.Run(() => ExportCoreAsync(snapshot, destination, range, template, progress, cancellationToken), cancellationToken);
     }
 
-    private async Task ExportCoreAsync(ProjectDocument project, string destination, RenderRange range, IProgress<double>? progress, CancellationToken cancellationToken)
+    private async Task ExportCoreAsync(ProjectDocument project, string destination, FrameRange range, RenderTemplate template, IProgress<double>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var directory = Path.GetDirectoryName(destination)!;
@@ -69,8 +71,8 @@ public sealed class ExportService(TimelineRenderService renderer)
                 "-framerate", project.FrameRate.ToString(), "-i", "pipe:0",
                 "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", temporaryAudio,
                 "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "libx264", "-preset", "fast", "-crf", "20", "-pix_fmt", "yuv420p",
-                "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", "-f", "mp4", temporaryVideo
+                "-c:v", "libx264", "-preset", "fast", "-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p",
+                "-c:a", "aac", "-b:a", template.AudioBitrateKbps.ToString(CultureInfo.InvariantCulture) + "k", "-movflags", "+faststart", "-f", "mp4", temporaryVideo
             ];
             foreach (var argument in arguments) start.ArgumentList.Add(argument);
             using var process = new Process { StartInfo = start };

@@ -554,7 +554,8 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
         editor.PlaceClip(asset.Id, editor.AddTrack(TrackKind.Audio).Id, 0, duration);
         using var renderer = new TimelineRenderService(media, false);
         var destination = Path.Combine(fixture.Directory, $"range-{numerator}.mp4");
-        await new ExportService(renderer).ExportAsync(project, destination, new ExportOptions { Range = new RenderRange(startFrame, frames) });
+        await new ExportService(renderer).ExportAsync(project, destination, new ExportOptions { Range = new FrameRange(startFrame, frames),
+            TemplateId = numerator == 24000 ? "project-mp4-high" : RenderTemplateCatalog.DefaultId });
         using var inspection = JsonDocument.Parse(MediaFixture.Run("ffprobe", "-v", "error", "-count_frames", "-show_streams", "-of", "json", destination));
         var streams = inspection.RootElement.GetProperty("streams").EnumerateArray().ToArray();
         var video = streams.Single(stream => stream.GetProperty("codec_type").GetString() == "video");
@@ -596,7 +597,7 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
             Clips = [new() { MediaId = asset.Id, DurationFrames = 60 }] }] };
         var path = Path.Combine(fixture.Directory, "invalid-range.mp4");
         Assert.Throws<ArgumentOutOfRangeException>(() => { _ = new ExportService(renderer).ExportAsync(project, path,
-            new ExportOptions { Range = new RenderRange(start, count) }); });
+            new ExportOptions { Range = new FrameRange(start, count) }); });
         Assert.False(File.Exists(path));
     }
 
