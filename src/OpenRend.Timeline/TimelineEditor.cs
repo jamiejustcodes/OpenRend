@@ -28,7 +28,7 @@ public sealed class TimelineEditor
         try
         {
             mutation(Project);
-            SynchronizeDissolveOverlaps(Project);
+            SynchronizeDissolveOverlaps(Project, before);
             Project.Validate();
             undo.Push(before);
             redo.Clear();
@@ -827,16 +827,31 @@ public sealed class TimelineEditor
     {
         if (track.Kind == TrackKind.Video && !media.HasVideo || track.Kind == TrackKind.Audio && !media.HasAudio) throw new InvalidOperationException("The media has no stream for this track.");
     }
-    private static void SynchronizeDissolveOverlaps(ProjectDocument project)
+    private static void SynchronizeDissolveOverlaps(ProjectDocument project, ProjectDocument before)
     {
         foreach (var track in project.Tracks.Where(track => track.Kind == TrackKind.Video))
         {
             if (track.IsLocked) continue;
+            var previousTrack = before.Tracks.FirstOrDefault(previous => previous.Id == track.Id);
+            var plainPairs = new Dictionary<Guid, Guid>();
+            if (previousTrack is not null)
+                foreach (var incoming in previousTrack.Clips.Where(clip => clip.FadeInFrames > 0 &&
+                    clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null))
+                {
+                    var outgoing = previousTrack.Clips.FirstOrDefault(clip => clip.Id != incoming.Id &&
+                        clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null &&
+                        clip.StartFrame < incoming.StartFrame && clip.EndFrame <= incoming.EndFrame &&
+                        clip.EndFrame - incoming.StartFrame == incoming.FadeInFrames && clip.FadeOutFrames == incoming.FadeInFrames);
+                    if (outgoing is not null && !previousTrack.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
+                        clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame))
+                        plainPairs[incoming.Id] = outgoing.Id;
+                }
             // Unsplit fade envelopes follow the edited overlap; split pieces retain their original envelope.
-            foreach (var incoming in track.Clips.Where(clip => clip.FadeInTransition is not null &&
+            foreach (var incoming in track.Clips.Where(clip => (clip.FadeInTransition is not null || plainPairs.ContainsKey(clip.Id)) &&
                 clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null))
             {
-                var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.FadeOutFrames > 0 &&
+                var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id &&
+                    (plainPairs.TryGetValue(incoming.Id, out var partner) ? clip.Id == partner : clip.FadeOutFrames > 0) &&
                     clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null &&
                     clip.StartFrame < incoming.StartFrame && clip.EndFrame > incoming.StartFrame &&
                     clip.EndFrame <= incoming.EndFrame)

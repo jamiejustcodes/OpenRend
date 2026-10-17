@@ -99,6 +99,25 @@ public sealed class VideoTransitionRemovalTests
         Assert.All(TimelineEvaluator.Evaluate(project, 20).Video, layer => Assert.Null(layer.Dissolve));
     }
 
+    [Fact]
+    public void MovingAndTrimmingAPlainCrossfadeKeepsItsOverlapLengthsAligned()
+    {
+        var project = CreateProject();
+        var track = project.Tracks[0];
+        var outgoing = track.Clips[0]; var incoming = track.Clips[1];
+        var editor = new TimelineEditor(project);
+        editor.RemoveVideoTransition(incoming.Id);
+        editor.MoveClip(incoming.Id, track.Id, 15);
+        Assert.Equal(15, outgoing.FadeOutFrames); Assert.Equal(15, incoming.FadeInFrames);
+        Assert.NotNull(TimelineEvaluator.Evaluate(project, 20).Video[0].Dissolve);
+        editor.TrimClip(outgoing.Id, 0, 25);
+        Assert.Equal(10, outgoing.FadeOutFrames); Assert.Equal(10, incoming.FadeInFrames);
+        Assert.NotNull(TimelineEvaluator.Evaluate(project, 20).Video[0].Dissolve);
+        Assert.Null(incoming.FadeInTransition);
+        Assert.True(editor.Undo());
+        Assert.Equal(15, project.Tracks[0].Clips[1].FadeInFrames);
+    }
+
     private static ProjectDocument CreateProject()
     {
         var asset = new MediaAsset { Path = "openrend://color?hex=#FF0000", DurationSeconds = 5, HasVideo = true };
