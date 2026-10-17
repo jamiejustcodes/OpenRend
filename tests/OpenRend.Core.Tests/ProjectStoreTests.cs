@@ -38,6 +38,26 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task RoundTripPreservesDissolveSettingsAndIntegerFadeFrames()
+    {
+        var project = Create();
+        var editor = new TimelineEditor(project);
+        var track = project.Tracks[0];
+        var outgoing = track.Clips[0];
+        var incoming = editor.PlaceClip(project.Media[0].Id, track.Id, 55, 30);
+        editor.ApplyDissolve(outgoing.Id, incoming.Id);
+
+        var path = System.IO.Path.Combine(directory, "dissolve.orproj");
+        await ProjectStore.SaveAsync(project, path);
+        var loaded = await ProjectStore.LoadAsync(path);
+
+        Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
+        Assert.Equal(15, loaded.Tracks[0].Clips[1].FadeInFrames);
+        Assert.Equal(VideoTransitionKind.Dissolve, loaded.Tracks[0].Clips[0].FadeOutTransition!.Kind);
+        Assert.Equal("Default", loaded.Tracks[0].Clips[1].FadeInTransition!.Preset);
+    }
+
+    [Fact]
     public async Task EarlierProjectsLoadAndNewSavesDeclareParameterizedEffectVersionFour()
     {
         var path = System.IO.Path.Combine(directory, "versioned.openrend");
