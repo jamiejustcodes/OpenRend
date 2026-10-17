@@ -28,6 +28,7 @@ public sealed class TimelineEditor
         try
         {
             mutation(Project);
+            SynchronizeDissolveOverlaps(Project);
             Project.Validate();
             undo.Push(before);
             redo.Clear();
@@ -635,6 +636,30 @@ public sealed class TimelineEditor
     private static void EnsureCompatible(MediaAsset media, TimelineTrack track)
     {
         if (track.Kind == TrackKind.Video && !media.HasVideo || track.Kind == TrackKind.Audio && !media.HasAudio) throw new InvalidOperationException("The media has no stream for this track.");
+    }
+    private static void SynchronizeDissolveOverlaps(ProjectDocument project)
+    {
+        foreach (var track in project.Tracks.Where(track => track.Kind == TrackKind.Video))
+        {
+            if (track.IsLocked) continue;
+            // Unsplit fade envelopes follow the edited overlap; split pieces retain their original envelope.
+            foreach (var incoming in track.Clips.Where(clip => clip.FadeInTransition is not null &&
+                clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null))
+            {
+                var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.FadeOutTransition is not null &&
+                    clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null &&
+                    clip.FadeOutTransition.Kind == incoming.FadeInTransition!.Kind &&
+                    clip.FadeOutTransition.Preset == incoming.FadeInTransition.Preset &&
+                    clip.StartFrame < incoming.StartFrame && clip.EndFrame > incoming.StartFrame &&
+                    clip.EndFrame <= incoming.EndFrame)
+                    .OrderByDescending(clip => clip.StartFrame).FirstOrDefault();
+                if (outgoing is null || track.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
+                    clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame)) continue;
+                var overlap = outgoing.EndFrame - incoming.StartFrame;
+                outgoing.FadeOutFrames = overlap;
+                incoming.FadeInFrames = overlap;
+            }
+        }
     }
     private void EnsureSourceBounds(TimelineClip clip, MediaAsset media)
     {

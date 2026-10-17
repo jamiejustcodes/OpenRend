@@ -129,6 +129,25 @@ public sealed class TimelineTests
     }
 
     [Fact]
+    public void MovingAndTrimmingOverlapKeepsDissolveFadeFramesAligned()
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 45, 60);
+        editor.ApplyDissolve(outgoing.Id, incoming.Id);
+
+        editor.MoveClip(incoming.Id, track.Id, 40);
+        Assert.Equal(20, outgoing.FadeOutFrames);
+        Assert.Equal(20, incoming.FadeInFrames);
+        Assert.Equal(.5, TimelineEvaluator.Evaluate(editor.Project, 50).Video[1].Opacity, 12);
+
+        editor.TrimClip(outgoing.Id, 0, 55);
+        Assert.Equal(15, outgoing.FadeOutFrames);
+        Assert.Equal(15, incoming.FadeInFrames);
+        Assert.Equal(10.0 / 15, TimelineEvaluator.Evaluate(editor.Project, 50).Video[1].Opacity, 12);
+    }
+
+    [Fact]
     public void UndoRedoAndBranchingRestoreWholeProject()
     {
         var (editor, media, track) = Create();
