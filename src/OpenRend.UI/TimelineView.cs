@@ -65,6 +65,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
     public event Action<TransitionGesture>? TransitionDropped;
+    public event Action<Guid, Guid>? OverlapToCutRequested;
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
     public event Action? PanCropRequested;
@@ -155,6 +156,11 @@ public sealed partial class TimelineView : FrameworkElement
 
     public bool HandleKeyboardInput(Key key, ModifierKeys modifiers)
     {
+        if (key == Key.Divide && modifiers == ModifierKeys.Control)
+        {
+            RequestOverlapToCut();
+            return true;
+        }
         if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) return false;
         if (Project.Tracks.Count == 0) return false;
         if (modifiers == ModifierKeys.None && key is Key.I or Key.O)

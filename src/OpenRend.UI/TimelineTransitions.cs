@@ -7,6 +7,19 @@ public sealed partial class TimelineView
 {
     public const string TransitionDataFormat = "OpenRend.Transition";
 
+    private void RequestOverlapToCut()
+    {
+        if (Project.Tracks.Count == 0) return;
+        var track = Project.Tracks[ActiveTrackIndex];
+        if (track.Kind != TrackKind.Video || track.IsLocked) return;
+        // The cursor and active track choose the overlap, independently of event selection.
+        var events = track.Clips.Where(clip => clip.StartFrame <= Position && Position < clip.EndFrame)
+            .OrderBy(clip => clip.StartFrame).ToArray();
+        if (events.Length != 2 || events[0].StartFrame >= events[1].StartFrame ||
+            events[0].EndFrame >= events[1].EndFrame) return;
+        OverlapToCutRequested?.Invoke(events[0].Id, events[1].Id);
+    }
+
     internal TransitionGesture? TransitionAt(Point point, VideoTransition transition)
     {
         if (point.X < HeaderWidth || point.Y < RulerHeight ||

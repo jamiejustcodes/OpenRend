@@ -16,6 +16,14 @@ Dragging Default to an existing cut instead extends the events' source handles. 
 
 Click the properties icon on the overlap's Dissolve strip, or open the incoming event's options menu and choose Transition Properties. Remove Selected Plug-In clears the preset while preserving the overlap and fades. Undo and Redo are available in that window. The result remains an ordinary crossfade; removal does not convert it to a cut.
 
+## Convert an overlap to a cut
+
+Focus the timeline, activate the video track and place the cursor inside a complete two-event crossfade. Press Ctrl + numeric keypad /. The saved Editing alignment chooses the cut: Before cut uses the overlap end, After cut uses its start, and Centered on cut uses its midpoint. The overlap amount preference does not set the cut position.
+
+Conversion trims the outgoing tail and incoming head, advances the incoming source/crop offsets, and removes the two overlap fades and their plug-ins. Outer event bounds, independent outer fades, later events and other tracks retain their timing. The complete edit is one undo step; it also works after removing the Dissolve plug-in.
+
+Centered conversion requires an even number of overlap frames. An odd overlap would require a half-frame cut, so OpenRend reports the limitation and leaves the project unchanged. Split envelopes, nested/contained or three-way overlaps and locked tracks are unsupported for this command.
+
 ## Rendering and preservation
 
 Preview and export use the same paired interpolation of source color and alpha coverage. Event opacity contributes to each participant's weight; track opacity is applied once to the resulting layer. Transparent pixels, alpha effects, letterboxing and crop boundaries reveal lower tracks. The mixture currently runs on the CPU before final CPU/D3D composition.

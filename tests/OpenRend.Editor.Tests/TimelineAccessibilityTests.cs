@@ -254,6 +254,54 @@ public sealed class TimelineAccessibilityTests
         Assert.Throws<ArgumentOutOfRangeException>(() => view.LoopRegion = new FrameRange(149, 2));
     });
 
+    [Fact]
+    public void OverlapCutShortcutUsesCursorAndActiveTrackWithoutChangingSelection() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var clips = editor.Project.Tracks[0].Clips;
+        var outgoing = clips.Single(clip => clip.Name == "First");
+        var incoming = clips.Single(clip => clip.Name == "Second");
+        outgoing.DurationFrames = 75;
+        view.Position = 65;
+        var unrelated = clips.Single(clip => clip.Name == "Third").Id;
+        view.Selection.Add(unrelated);
+        (Guid, Guid)? requested = null;
+        view.OverlapToCutRequested += (left, right) => requested = (left, right);
+        Assert.True(view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control));
+        Assert.Equal((outgoing.Id, incoming.Id), requested);
+        Assert.Equal(unrelated, Assert.Single(view.Selection));
+        Assert.False(editor.CanUndo);
+        requested = null;
+        view.Position = 75;
+        Assert.True(view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control));
+        Assert.Null(requested);
+        view.Position = 65;
+        Assert.False(view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control | ModifierKeys.Shift));
+        Assert.False(view.HandleKeyboardInput(Key.OemQuestion, ModifierKeys.Control));
+        Assert.Null(requested);
+    });
+
+    [Fact]
+    public void OverlapCutShortcutIgnoresLockedAudioAndAmbiguousTracks() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var track = editor.Project.Tracks[0];
+        track.Clips.Single(clip => clip.Name == "First").DurationFrames = 75;
+        view.Position = 65;
+        var requests = 0; view.OverlapToCutRequested += (_, _) => requests++;
+        track.IsLocked = true;
+        view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control);
+        track.IsLocked = false;
+        view.HandleKeyboardInput(Key.Down, ModifierKeys.None);
+        view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control);
+        view.HandleKeyboardInput(Key.Up, ModifierKeys.None);
+        track.Clips.Add(new() { MediaId = track.Clips[0].MediaId, StartFrame = 64, DurationFrames = 4 });
+        view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control);
+        Assert.Equal(0, requests);
+        view.Project = new();
+        Assert.True(view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control));
+    });
+
     private static void Sta(Action action)
     {
         Exception? failure = null;
