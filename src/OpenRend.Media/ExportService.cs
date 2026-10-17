@@ -19,7 +19,10 @@ public sealed class ExportService(TimelineRenderService renderer)
         if (snapshot.DurationFrames <= 0) throw new InvalidOperationException("The timeline is empty.");
         var range = options.Range ?? new FrameRange(0, snapshot.DurationFrames);
         range.Validate(snapshot.DurationFrames);
-        var template = RenderTemplateCatalog.Find(options.TemplateId);
+        var template = options.CustomTemplate ?? RenderTemplateCatalog.Find(options.TemplateId);
+        template.Validate(requireCustom: options.CustomTemplate is not null);
+        if (template.Id != options.TemplateId)
+            throw new InvalidDataException("The custom render template does not match the selected template ID.");
         if ((snapshot.Width & 1) != 0 || (snapshot.Height & 1) != 0) throw new InvalidOperationException("H.264 export requires even project dimensions.");
         var destination = Path.GetFullPath(output);
         if (snapshot.Media.Any(asset => string.Equals(Path.GetFullPath(asset.Path), destination, StringComparison.OrdinalIgnoreCase)))
@@ -71,7 +74,7 @@ public sealed class ExportService(TimelineRenderService renderer)
                 "-framerate", project.FrameRate.ToString(), "-i", "pipe:0",
                 "-f", "f32le", "-ar", "48000", "-ac", "2", "-i", temporaryAudio,
                 "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "libx264", "-preset", "fast", "-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p",
+                "-c:v", "libx264", "-preset", template.EncoderSpeed.ToString().ToLowerInvariant(), "-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p",
                 "-c:a", "aac", "-b:a", template.AudioBitrateKbps.ToString(CultureInfo.InvariantCulture) + "k", "-movflags", "+faststart", "-f", "mp4", temporaryVideo
             ];
             foreach (var argument in arguments) start.ArgumentList.Add(argument);

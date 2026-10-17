@@ -6,4 +6,5 @@ public sealed record ExportOptions
 {
     public FrameRange? Range { get; init; }
     public string TemplateId { get; init; } = RenderTemplateCatalog.DefaultId;
+    public RenderTemplate? CustomTemplate { get; init; }
 }
