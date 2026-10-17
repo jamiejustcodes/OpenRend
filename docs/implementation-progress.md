@@ -37,6 +37,8 @@ Verified parts:
 - [x] Clipboard preserves split Default Dissolve evaluation through save/reopen, independent repeated pastes and undo/redo at matching rates and doubled integer/rational rates. Canonical overlap fades follow converted endpoints when downsampling.
 - [x] Remove Selected Plug-In preserves fades, overlap, split envelopes and pixels, with undo/redo and save/reopen. Plain crossfades follow later moves/trims. Desktop properties/removal workflow is tested; full properties layout is pending.
 - [x] Automatic single-event placement adjusts take edges without ripple, or moves later same-track events with ripple. Core, desktop and encoded tests distinguish source timing at fractional project rates and preserve original media.
+- [x] The overlap strip opens properties through an accessible button; pointer/lock/clipping/split-envelope checks and desktop removal workflow are tested.
+- [x] The supported plug-in's favorite star persists independently of the project; Favorites and search combine, relaunch restores the star, and corrupt preference fallback preserves the old file until an explicit preference edit.
 
 Automatic placement rejects missing source handles instead of wrapping the source. Same-start overlaps after clamping at project zero are unsupported, and a displacement exactly equal to the gap is a no-op. Event-level locks and the complete native exception/fallback path remain pending. The current properties window exposes the supported plug-in removal and undo controls; it does not establish complete target UI parity.
 

@@ -117,13 +117,26 @@
         <TabItem Header="Transitions">
           <Grid Background="#262626">
             <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="32"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <TabControl Grid.Row="0" Background="#262626" BorderThickness="0" AutomationProperties.Name="Transition categories">
-              <TabItem Header="All Plug-ins" IsSelected="True"/>
+            <TabControl x:Name="TransitionCategories" Grid.Row="0" Background="#262626" BorderThickness="0" SelectionChanged="TransitionCategoryChanged" AutomationProperties.Name="Transition categories">
+              <TabItem Header="All Plug-ins" IsSelected="True" AutomationProperties.AutomationId="AllTransitionPlugins"/>
+              <TabItem x:Name="FavoriteTransitionsCategory" Header="Favorites" AutomationProperties.AutomationId="FavoriteTransitions"/>
               <TabItem Header="Fades"/>
             </TabControl>
             <TextBox x:Name="TransitionSearch" Grid.Row="1" Margin="5,3" Padding="5,1" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions"/>
             <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" AutomationProperties.Name="Transition plug-ins"><ListBoxItem x:Name="DissolvePluginItem" Content="Dissolve" IsSelected="True"/></ListBox>
+              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" AutomationProperties.Name="Transition plug-ins">
+                <ListBoxItem x:Name="DissolvePluginItem" IsSelected="True" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Dissolve">
+                  <DockPanel>
+                    <ToggleButton x:Name="FavoriteDissolve" Content="☆" Width="22" Height="20" Padding="0" Margin="0,0,4,0" Foreground="#E3C454" FocusVisualStyle="{StaticResource KeyboardFocus}" Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve" AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve">
+                      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
+                        <Border x:Name="StarSurface" Background="Transparent"><TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" FontFamily="Segoe UI Symbol" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/></Border>
+                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="StarSurface" Property="Background" Value="#46535B"/></Trigger></ControlTemplate.Triggers>
+                      </ControlTemplate></ToggleButton.Template>
+                    </ToggleButton>
+                    <TextBlock Text="Dissolve" VerticalAlignment="Center"/>
+                  </DockPanel>
+                </ListBoxItem>
+              </ListBox>
               <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
               <ListBox x:Name="TransitionPresets" Grid.Column="2" Padding="7" BorderThickness="0" Background="#262626" ScrollViewer.HorizontalScrollBarVisibility="Disabled" KeyDown="TransitionPresetKeyDown" PreviewMouseMove="TransitionPresetMouseMove" AutomationProperties.Name="Transition presets">
                 <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
@@ -133,6 +146,7 @@
                   </Grid>
                 </ListBoxItem>
               </ListBox>
+              <TextBlock x:Name="EmptyTransitions" Grid.Column="2" Text="No transitions match your search." Foreground="#B8B8B8" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
             </Grid>
           </Grid>
         </TabItem>

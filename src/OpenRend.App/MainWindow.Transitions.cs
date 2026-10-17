@@ -13,7 +13,43 @@ public partial class MainWindow
 {
     private Point transitionDragStart;
     private bool transitionDragReady;
+    private bool transitionBrowserLoaded;
+    private bool transitionFavoriteValue;
     private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
+    private string TransitionPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "transitions.json");
+
+    private void InitializeTransitionBrowser()
+    {
+        try { transitionFavoriteValue = TransitionBrowserPreferencesStore.Load(TransitionPreferencesPath).FavoriteDissolve; }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        { vm.Status = "Transition favorites could not be loaded: " + error.Message; }
+        FavoriteDissolve.IsChecked = transitionFavoriteValue;
+        transitionBrowserLoaded = true;
+        RefreshTransitionBrowser();
+    }
+
+    private void TransitionFavoriteChanged(object sender, RoutedEventArgs e)
+    {
+        if (!transitionBrowserLoaded) return;
+        try
+        {
+            TransitionBrowserPreferencesStore.Save(new() { FavoriteDissolve = FavoriteDissolve.IsChecked == true }, TransitionPreferencesPath);
+            transitionFavoriteValue = FavoriteDissolve.IsChecked == true;
+        }
+        catch (Exception error)
+        {
+            transitionBrowserLoaded = false;
+            FavoriteDissolve.IsChecked = transitionFavoriteValue;
+            transitionBrowserLoaded = true;
+            ShowError(error);
+        }
+        RefreshTransitionBrowser();
+    }
+
+    private void TransitionCategoryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ReferenceEquals(e.Source, TransitionCategories)) RefreshTransitionBrowser();
+    }
 
     private void EditingPreferencesClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -24,12 +60,20 @@ public partial class MainWindow
     });
 
     private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
+        => RefreshTransitionBrowser();
+
+    private void RefreshTransitionBrowser()
     {
-        if (DissolvePluginItem is null || DefaultDissolvePreset is null) return;
+        if (DissolvePluginItem is null || DefaultDissolvePreset is null || FavoriteDissolve is null || EmptyTransitions is null) return;
         var query = TransitionSearch.Text.Trim();
-        var visible = query.Length == 0 || "Dissolve".Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            "Default".Contains(query, StringComparison.OrdinalIgnoreCase);
+        var favorite = FavoriteDissolve.IsChecked == true;
+        FavoriteDissolve.Content = favorite ? "★" : "☆";
+        var visible = (FavoriteTransitionsCategory?.IsSelected != true || favorite) &&
+            (query.Length == 0 || "Dissolve Default Fades".Contains(query, StringComparison.OrdinalIgnoreCase));
         DissolvePluginItem.Visibility = DefaultDissolvePreset.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        EmptyTransitions.Text = FavoriteTransitionsCategory?.IsSelected == true && !favorite
+            ? "No favorite transitions." : "No transitions match your search.";
+        EmptyTransitions.Visibility = visible ? Visibility.Collapsed : Visibility.Visible;
     }
 
     private void ApplyDefaultDissolveClick(object sender, RoutedEventArgs e)
@@ -62,7 +106,7 @@ public partial class MainWindow
 
     private void TransitionPresetKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter && TransitionPresets.SelectedItem is not null)
+        if (e.Key == Key.Enter && DefaultDissolvePreset.Visibility == Visibility.Visible && TransitionPresets.SelectedItem is not null)
             ApplyDefaultDissolveClick(sender, e);
     }
 

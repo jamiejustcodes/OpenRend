@@ -2,6 +2,8 @@
 
 Open the Transitions tab and select Dissolve > Default. A click selects the preset without editing the project. Use its + button, double-click it, or drag it to a video overlap. Two selected video events target their own pair; a single selected event can affect existing adjacent overlaps.
 
+The star beside Dissolve adds or removes it from Favorites. The choice survives relaunch and is stored in `transitions.json` under the application data directory, or `OPENREND_DATA_DIR`. Search combines with the selected category and matches the supported plug-in, preset and category names. These browser choices do not edit the project.
+
 ## Create an overlap
 
 With one video event selected and no existing fades, applying Default can move it earlier to overlap the nearest preceding event. Options > Preferences > Editing sets the overlap amount. A small gap reduces the resulting overlap by that gap's length.
@@ -12,7 +14,7 @@ Dragging Default to an existing cut instead extends the events' source handles. 
 
 ## Remove the plug-in
 
-Open the incoming event's options menu and choose Transition Properties. Remove Selected Plug-In clears the preset while preserving the overlap and fades. Undo and Redo are available in that window. The result remains an ordinary crossfade; removal does not convert it to a cut.
+Click the properties icon on the overlap's Dissolve strip, or open the incoming event's options menu and choose Transition Properties. Remove Selected Plug-In clears the preset while preserving the overlap and fades. Undo and Redo are available in that window. The result remains an ordinary crossfade; removal does not convert it to a cut.
 
 ## Rendering and preservation
 
@@ -22,6 +24,6 @@ Project save/reopen, undo/redo, split envelopes and tested clipboard rate conver
 
 ## Current limits
 
-Only Default Dissolve is supported. The broader transition catalog, favorites, progress curves and full browser/properties layout remain pending. The current properties window exposes plug-in removal and history controls.
+Only Default Dissolve is supported. The broader transition catalog, progress curves and full browser/properties layout remain pending. The current properties window exposes plug-in removal and history controls.
 
 Automatic placement rejects missing source handles rather than wrapping the source. Same-start overlaps at project zero, event-level locks and exact-gap displacement remain limited. Initial Editing preferences use 0.25 seconds centered; factory-default matching has not been established. Exact reference-editor pixel math, color management and professional-scale throughput remain unverified.

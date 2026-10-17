@@ -149,7 +149,7 @@ public partial class MainWindow : Window
             try { await ProjectStore.SaveAsync(vm.Project.DeepClone(), recoveryPath); }
             catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
         };
-        Loaded += (_, _) => { initialized = true; LoadWorkspace(); Refresh(); autosave.Start(); };
+        Loaded += (_, _) => { initialized = true; LoadWorkspace(); InitializeTransitionBrowser(); Refresh(); autosave.Start(); };
     }
 
     private void Guard(Action action)
