@@ -156,7 +156,9 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
             Assert.NotNull(transitions);
             transitions.Patterns.SelectionItem.Pattern.Select();
             var preset = Find(window, "DefaultDissolvePreset");
-            Mouse.Click(preset.GetClickablePoint());
+            // A setup click can turn the drag's mouse-down into a double-click on a fast desktop.
+            if (action == "add") Mouse.Click(preset.GetClickablePoint());
+            else preset.Patterns.SelectionItem.Pattern.Select();
             Wait.UntilInputIsProcessed();
             Assert.DoesNotContain('*', window.Title);
             if (action == "add") Find(window, "AddDefaultDissolve").AsButton().Invoke();
@@ -169,7 +171,14 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
                 var target = new System.Drawing.Point((int)((right.Left + left.Right) / 2), (int)(left.Top + left.Height / 2));
                 Mouse.Drag(preset.GetClickablePoint(), target, MouseButton.Left);
             }
-            WaitFor(() => window.Title.Contains('*'), "The transition preset did not change the project.");
+            try { WaitFor(() => window.Title.Contains('*'), "The transition preset did not change the project."); }
+            catch
+            {
+                var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+                using (var screenshot = Capture.Element(window)) screenshot.ToFile(Path.Combine(artifact, $"transition-{action}-failure.png"));
+                output.WriteLine("Transition status: " + string.Join(" | ", window.FindAllDescendants(c => c.ByControlType(ControlType.StatusBar)).Select(item => item.Name)));
+                throw;
+            }
             SaveButton(window).Invoke();
             WaitFor(() => !window.Title.Contains('*'), "The transition was not saved.");
             var loaded = await ProjectStore.LoadAsync(projectPath);
@@ -418,7 +427,8 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
                 try { await VerifyTimelineProvidersAsync(window, projectPath); }
                 catch
                 {
-                    output.WriteLine("Project at failure: " + await File.ReadAllTextAsync(projectPath));
+                    try { output.WriteLine("Project at failure: " + await File.ReadAllTextAsync(projectPath)); }
+                    catch (IOException diagnosticError) { output.WriteLine("Could not read failure snapshot: " + diagnosticError.Message); }
                     output.WriteLine("Editor title: " + window.Title);
                     foreach (var modal in window.ModalWindows)
                         output.WriteLine("Modal: " + string.Join(" | ", modal.FindAllDescendants().Select(e => e.Name)));
