@@ -12,7 +12,7 @@ using OpenRend.Timeline;
 namespace OpenRend.App;
 
 // Keep the effect order visible while adjusting a selected effect and its preview.
-public sealed class VideoEffectsWindow : Window
+public sealed partial class VideoEffectsWindow : Window
 {
     private static readonly VideoEffectKind[] BuiltInEffects = Enum.GetValues<VideoEffectKind>();
     private readonly EditorViewModel vm;
@@ -160,6 +160,7 @@ public sealed class VideoEffectsWindow : Window
         try
         {
             var effect = SelectedEffect; var index = EventClip.VideoEffects.FindIndex(item => item.Id == selectedId);
+            UpdateLutDetails();
             heading.Text = effect is null ? "No effects in chain" : EffectName(effect.Kind);
             enabled.Visibility = reset.Visibility = effect is null ? Visibility.Collapsed : Visibility.Visible;
             empty.Visibility = effect is null ? Visibility.Visible : Visibility.Collapsed;
@@ -177,7 +178,9 @@ public sealed class VideoEffectsWindow : Window
                 return;
             }
             parameters.Children.Clear(); controls.Clear(); choiceControls.Clear(); parameterEffectId = effect?.Id; parameterKind = effect?.Kind;
+            lutDetails = null; clearLut = null;
             if (effect is null) return;
+            if (effect.Kind == VideoEffectKind.Lut3D) AddLutControls();
             foreach (var parameter in VideoEffectCatalog.Get(effect.Kind).Parameters) AddParameter(parameter, effect.GetParameter(parameter.Key));
         }
         finally { refreshing = false; }

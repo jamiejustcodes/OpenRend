@@ -62,4 +62,39 @@ public sealed class CubeLutMediaTests
         effect.Amount = 0; byte[] source = [11, 22, 33, 44]; Assert.Same(source, VideoEffectProcessor.Apply(source, [effect]));
         effect.Amount = 1; effect.IsEnabled = false; Assert.Same(source, VideoEffectProcessor.Apply(source, [effect]));
     }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(1)]
+    public async Task ImportedLutMatchesCpuD3DAndEncodedFramesOverALowerTrack(int interpolation)
+    {
+        var effect = VideoEffect.Create(VideoEffectKind.Lut3D);
+        effect.Lut = Lattice((r, g, b) => (b, g, r));
+        effect.SetParameter("Interpolation", interpolation);
+        var red = new MediaAsset { Path = "openrend://color?hex=#FF0000", HasVideo = true, DurationSeconds = 1 };
+        var green = new MediaAsset { Path = "openrend://color?hex=#00FF00", HasVideo = true, DurationSeconds = 1 };
+        var project = new ProjectDocument { Width = 32, Height = 24, Media = [red, green], Tracks = [
+            new() { Kind = TrackKind.Video, Clips = [new() { MediaId = red.Id, DurationFrames = 3, Opacity = .5, VideoEffects = [effect] }] },
+            new() { Kind = TrackKind.Video, Clips = [new() { MediaId = green.Id, DurationFrames = 3 }] }
+        ] };
+        var directory = Path.Combine(Path.GetTempPath(), "OpenRendTests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory);
+        try
+        {
+            using var media = new MediaService();
+            using var cpu = new TimelineRenderService(media, false);
+            using var gpu = new TimelineRenderService(media);
+            var expected = cpu.RenderFrame(project, 0, 32, 24);
+            Assert.InRange((int)expected[0], 127, 128);
+            Assert.InRange((int)expected[1], 127, 128);
+            Assert.Equal(0, expected[2]); Assert.Equal(255, expected[3]);
+            var actual = gpu.RenderFrame(project, 0, 32, 24);
+            Assert.True(gpu.IsD3DCompositing, gpu.GpuUnavailableReason);
+            for (var i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(expected[i] - actual[i]), 0, 1);
+            var path = Path.Combine(directory, "lut.mp4");
+            await new ExportService(cpu).ExportAsync(project, path);
+            var encoded = media.GetFrame(path, 0, 32, 24);
+            for (var channel = 0; channel < 3; channel++) Assert.InRange(Math.Abs(expected[channel] - encoded[channel]), 0, 8);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
 }
