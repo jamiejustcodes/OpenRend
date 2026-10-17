@@ -10,7 +10,17 @@ This is the importance-ordered work list for OpenRend's editor. A feature is che
 - [ ] Evaluate each supported transition identically in preview and export.
 - [ ] Verify the desktop workflow and encoded output.
 
-Status: default Dissolve slice in progress. OpenRend now stores a transition on the two event fades, applies it to a selected overlap, shows one supported preset in a docked browser, and uses the timeline evaluator for preview and export. The full preset catalog, one-event/adjacent/ripple workflows, drag placement, and edit preservation still need work.
+Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target existing adjacent overlaps; two selected events target their pair. Single-click selects a preset; add, double-click, and overlap drag are functional. The full preset catalog, cut conversion preferences/UI, automatic overlap creation/ripple, source alpha processing, and complete UI matching remain open.
+
+Verified parts:
+
+- [x] Default Dissolve save/reopen and undo/redo.
+- [x] Default Dissolve pixels agree across CPU/D3D and encoded video for opaque sources.
+- [x] Reduced event opacity preserves the lower track's blend weight.
+- [x] Default Dissolve frame output survives splitting either event; unsplit fade lengths follow moves and trims.
+- [x] Existing adjacent overlaps apply atomically; a two-event selection affects only that pair.
+- [x] Preset selection leaves the project untouched; add, double-click, and drag-to-overlap survive save/reopen in desktop tests.
+- [x] Cut conversion engine extends source handles with before/center/after alignment, rejects missing handles, and undoes atomically. Preferences and cut drop wiring remain pending.
 
 ## 2. Render templates and range options — critical
 
@@ -88,3 +98,5 @@ Status: queued.
 
 - 2026-10-17: Ranked the nine feature gaps and defined completion criteria. The initial source and shipped-artifact audit is complete; no feature is checked yet. Baseline native integration and Release build passed. The aggregate managed test run ran out of memory; the serial run passed 426 tests with two desktop tests skipped.
 - 2026-10-17: Implemented and pushed the first default Dissolve slice in `b960feb`, `903e8ac`, `4d2f8e6`, `8576c45`, and `0e7d27f`. Focused Core, Media, and desktop transition tests passed, including project save/reopen, undo/redo, CPU/D3D frame agreement, and encoded video pixels. The native integration test, Release build, and Core/Editor/Playback/Media suites passed under `tools/build.ps1`. Its desktop effects workflow failed at keyboard channel selection; a separate rerun of that test also failed, while the two other desktop tests passed. Full transition parity remains open.
+- 2026-10-17 continuation: `2db8362`, `8a06a96`, `5e98cb4`, `3b41ce6`, and `957d0c0` added reduced-opacity blending, split preservation, overlap edit alignment, and adjacent placement. `5113b76` corrected preset ownership and selection routing. Seven focused Core checks and four focused Media checks passed; the app Release build passed with zero warnings/errors. Next: match preset selection/add/drag gestures and implement automatic overlap/ripple with verified timing.
+- 2026-10-17 continuation: `d208fcd` added the preset selection/add/double-click/drag paths. The add and double-click desktop tests passed; drag passed after moving drag detection to the list that owns mouse capture. The target hit-test check passed for valid overlaps, locked tracks, and three-event ambiguity. `66a04d7` added cut conversion timing; four focused Core cases passed, covering all alignments, unchanged content timing, undo, and insufficient source handles. Next: expose cut conversion through editing preferences and drop placement, then finish one-event automatic placement/ripple and alpha processing.
