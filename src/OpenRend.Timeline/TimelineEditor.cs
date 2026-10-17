@@ -176,6 +176,66 @@ public sealed class TimelineEditor
         return ApplyDissolvesToAdjacent(selected.Select(item => item.Clip.Id));
     }
 
+    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds, long automaticOverlapFrames, bool ripple)
+    {
+        if (automaticOverlapFrames <= 0) throw new ArgumentOutOfRangeException(nameof(automaticOverlapFrames));
+        var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
+        var selected = Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => ids.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+        if (selected.Length != 1) return ApplyDissolveToSelection(ids);
+        var (track, incoming) = selected[0];
+        if (incoming.FadeInFrames != 0 || incoming.FadeOutFrames != 0 || track.Clips.Any(clip =>
+            clip.Id != incoming.Id && clip.StartFrame < incoming.EndFrame && clip.EndFrame > incoming.StartFrame))
+            return ApplyDissolvesToAdjacent(ids);
+        var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.EndFrame <= incoming.StartFrame)
+            .OrderByDescending(clip => clip.EndFrame).ThenByDescending(clip => clip.StartFrame).FirstOrDefault();
+        // A displacement that only closes the gap cannot create a dissolve.
+        if (outgoing is null || incoming.StartFrame - outgoing.EndFrame >= automaticOverlapFrames) return 0;
+        EnsureUnlocked(track);
+        var start = Math.Max(0, incoming.StartFrame - automaticOverlapFrames);
+        if (start >= outgoing.EndFrame) return 0;
+        var delta = start - incoming.StartFrame;
+        var changes = track.Clips.Where(clip => clip.Id == incoming.Id || ripple && clip.StartFrame >= incoming.StartFrame)
+            .ToDictionary(clip => clip.Id, clip => clip.DeepClone());
+        foreach (var change in changes.Values)
+        {
+            change.StartFrame = checked(change.StartFrame + delta);
+            EnsureTimelineBounds(change);
+        }
+        var moved = changes[incoming.Id];
+        if (!ripple)
+        {
+            // Adjusting take edges keeps existing source content and crop keys at their timeline times.
+            moved.SourceInFrame = checked(moved.SourceInFrame + delta);
+            if (moved.Crop is not null) moved.CropOffsetFrames = checked(moved.CropOffsetFrames + delta);
+            // Source looping is not modeled, so an unavailable head handle rejects the complete edit.
+            EnsureSourceBounds(moved, Project.Media.Single(media => media.Id == moved.MediaId));
+        }
+        var overlap = outgoing.EndFrame - moved.StartFrame;
+        if (outgoing.StartFrame >= moved.StartFrame || outgoing.EndFrame > moved.EndFrame ||
+            outgoing.FadeInFrames > outgoing.DurationFrames - overlap)
+            throw new InvalidOperationException("The automatic overlap conflicts with an existing fade or event boundary.");
+        if (track.Clips.Any(clip => clip.Id != incoming.Id && clip.Id != outgoing.Id &&
+            (changes.GetValueOrDefault(clip.Id) ?? clip).StartFrame < outgoing.EndFrame &&
+            (changes.GetValueOrDefault(clip.Id) ?? clip).EndFrame > moved.StartFrame))
+            throw new InvalidOperationException("A dissolve requires exactly two events in the overlap.");
+        Execute(_ =>
+        {
+            foreach (var clip in track.Clips.Where(clip => changes.ContainsKey(clip.Id)))
+            {
+                var change = changes[clip.Id];
+                clip.StartFrame = change.StartFrame;
+                clip.SourceInFrame = change.SourceInFrame;
+                clip.CropOffsetFrames = change.CropOffsetFrames;
+            }
+            outgoing.FadeOutFrames = incoming.FadeInFrames = overlap;
+            incoming.FadeInTransition = new VideoTransition();
+            outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
+            outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
+        });
+        return 1;
+    }
+
     public void ConvertCutToDissolve(Guid outgoingClipId, Guid incomingClipId, long overlapFrames, CutTransitionAlignment alignment)
     {
         if (overlapFrames <= 0) throw new ArgumentOutOfRangeException(nameof(overlapFrames));
@@ -802,3 +862,5 @@ public sealed class TimelineEditor
         Project.Media = copy.Media; Project.Tracks = copy.Tracks;
     }
 }
+
+

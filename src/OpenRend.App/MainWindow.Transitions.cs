@@ -39,7 +39,8 @@ public partial class MainWindow
         {
             if (vm.Selection.Count == 0) { vm.Status = "Select a video event to apply Dissolve."; return; }
             Pause();
-            var count = vm.Editor.ApplyDissolveToSelection(vm.Selection);
+            var settings = EditingPreferencesStore.Load(EditingPreferencesPath);
+            var count = vm.Editor.ApplyDissolveToSelection(vm.Selection, settings.OverlapFrames(vm.Project.FrameRate), vm.Ripple);
             vm.Status = count == 0 ? "No adjacent video overlap found for the selection." :
                 $"Default Dissolve applied to {count} overlap{(count == 1 ? "" : "s")}.";
         });
