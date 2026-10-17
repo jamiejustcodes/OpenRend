@@ -1,6 +1,7 @@
 using OpenRend.App;
 using OpenRend.Core;
 using OpenRend.Media;
+using OpenRend.Timeline;
 using Xunit;
 
 namespace OpenRend.Editor.Tests;
@@ -269,4 +270,37 @@ public sealed class ClipboardRegressionTests
     }
 
     private static TimelineClip[] Selected(EditorViewModel vm) => vm.Project.Tracks.SelectMany(t => t.Clips).Where(c => vm.Selection.Contains(c.Id)).OrderBy(c => c.StartFrame).ToArray();
+
+    [Fact]
+    public void DownsampledDissolveUsesTheRoundedOverlapEvenWhenItsDurationRoundsToZero()
+    {
+        using var session = new Session();
+        var vm = session.ViewModel;
+        var media = new MediaAsset { Path = "transition.mp4", DurationSeconds = 10, HasVideo = true };
+        var outgoing = new TimelineClip { MediaId = media.Id, DurationFrames = 4 };
+        var incoming = new TimelineClip { MediaId = media.Id, StartFrame = 3, SourceInFrame = 10, DurationFrames = 4 };
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(60, 1), Media = [media], Tracks = [
+            new TimelineTrack { Kind = TrackKind.Video, Clips = [outgoing, incoming] }
+        ] }, "transition60.openrend");
+        vm.Editor.ApplyDissolve(outgoing.Id, incoming.Id);
+        vm.Selection.UnionWith([outgoing.Id, incoming.Id]);
+        vm.Copy();
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(24, 1), Tracks = [
+            new TimelineTrack { Kind = TrackKind.Video }
+        ] }, "transition24.openrend");
+        vm.Paste();
+        var pasted = Selected(vm);
+        Assert.Equal(1, pasted[1].StartFrame);
+        Assert.Equal(2, pasted[0].EndFrame);
+        Assert.Equal(1, pasted[0].FadeOutFrames);
+        Assert.Equal(1, pasted[1].FadeInFrames);
+        Assert.NotNull(pasted[1].FadeInTransition);
+        var frame = TimelineEvaluator.Evaluate(vm.Project, 1);
+        Assert.Equal(1, frame.Video[0].Opacity);
+        Assert.Equal(0, frame.Video[1].Opacity);
+        Assert.True(vm.Editor.Undo());
+        Assert.Empty(vm.Project.Tracks[0].Clips);
+        Assert.True(vm.Editor.Redo());
+        Assert.Equal(1, vm.Project.Tracks[0].Clips[1].FadeInFrames);
+    }
 }

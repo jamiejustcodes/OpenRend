@@ -208,6 +208,7 @@ public sealed class EditorViewModel : ObservableObject
             }
             var destinations = new Dictionary<Guid, TimelineTrack>(); var used = new HashSet<Guid>();
             var groups = new Dictionary<Guid, Guid>();
+            var copies = new Dictionary<Guid, TimelineClip>();
             foreach (var copied in clipboard)
             {
                 if (!destinations.TryGetValue(copied.TrackId, out var track))
@@ -252,6 +253,24 @@ public sealed class EditorViewModel : ObservableObject
                     clip.GroupId = replacement;
                 }
                 track.Clips.Add(clip); pasted.Add(clip);
+                copies.Add(copied.Clip.Id, clip);
+            }
+            foreach (var incoming in clipboard.Where(item => item.Clip.FadeInTransition is not null &&
+                item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null))
+            {
+                var source = incoming.Clip;
+                var outgoing = clipboard.Where(item => item.TrackId == incoming.TrackId && item.Clip.Id != source.Id &&
+                    item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null &&
+                    item.Clip.StartFrame < source.StartFrame && item.Clip.EndFrame > source.StartFrame &&
+                    item.Clip.EndFrame <= source.EndFrame && item.Clip.FadeOutFrames == source.FadeInFrames &&
+                    item.Clip.EndFrame - source.StartFrame == source.FadeInFrames)
+                    .OrderByDescending(item => item.Clip.StartFrame).FirstOrDefault();
+                if (outgoing is null) continue;
+                var pastedOutgoing = copies[outgoing.Clip.Id];
+                var pastedIncoming = copies[source.Id];
+                // Rounding a duration alone can lose an overlap whose converted endpoints still differ.
+                var overlap = Math.Max(0, pastedOutgoing.EndFrame - pastedIncoming.StartFrame);
+                pastedOutgoing.FadeOutFrames = pastedIncoming.FadeInFrames = overlap;
             }
         });
         Selection.Clear(); Selection.UnionWith(pasted.Select(c => c.Id));

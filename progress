@@ -137,4 +137,10 @@ User's editor and Vegas Pro processes preserved. Zero commits or git pushes to G
 - Next: verify factory defaults and native take-edge behavior before automatic one-event placement/ripple; finish source alpha handling, transition removal/properties and clipboard/rate conversion checks; expand the preset catalog, categories/favorites and full UI. Then continue the remaining eight features in tracker order.
 - Unresolved: full 1:1 transition parity remains open. Current preferences initialize to OpenRend's 0.25-second centered choice; matching factory defaults has not been verified. Source alpha, one-event creation/ripple and the wider transition catalog/UI remain incomplete. The effects desktop test failure is resolved. No top-level feature is fully checked off yet.
 
+## Clipboard continuation — 17 October
+
+- Restored the five-record REA bundle and checked its retained transition identity. Static placement evidence remains unchanged; no new live Vegas behavior is claimed.
+- Found and reproduced a rate-conversion defect: a one-frame dissolve at 60 fps could retain a one-frame overlap at 24 fps while both converted fade durations became zero. Paste now derives canonical copied-pair fades from the converted endpoints. Split envelopes retain their separate conversion path.
+- Verification: the new regression failed before the fix, then all 14 clipboard regressions passed, including undo/redo. Next: check split transition copying, save/reopen and rational rates, then run the required build gate. Full transition UI/function parity remains open.
+
 
