@@ -1,6 +1,7 @@
 using System.Text.Json;
 using OpenRend.Core;
 using OpenRend.Project;
+using OpenRend.Timeline;
 using Xunit;
 
 namespace OpenRend.Core.Tests;
@@ -8,6 +9,30 @@ namespace OpenRend.Core.Tests;
 public sealed class CubeLutTests
 {
     private const string Identity = "LUT_3D_SIZE 2\n0 0 0\n1 0 0\n0 1 0\n1 1 0\n0 0 1\n1 0 1\n0 1 1\n1 1 1";
+
+    [Fact]
+    public void ReplacingOnlyTheLutPayloadIsAnUndoableEditAndEqualCopiesAreNoOps()
+    {
+        var effect = VideoEffect.Create(VideoEffectKind.Lut3D);
+        var media = new MediaAsset { Path = "source.mp4", HasVideo = true, DurationSeconds = 3 };
+        var clip = new TimelineClip { MediaId = media.Id, DurationFrames = 90, VideoEffects = [effect] };
+        var project = new ProjectDocument { Media = [media], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }] };
+        var editor = new TimelineEditor(project);
+        VideoEffect Current() => project.Tracks[0].Clips[0].VideoEffects[0];
+        var imported = effect.DeepClone(); imported.Lut = CubeLutParser.Parse(Identity);
+        editor.SetVideoEffects(clip.Id, [imported]);
+        Assert.NotNull(Current().Lut);
+        editor.SetVideoEffects(clip.Id, [imported.DeepClone()]);
+        Assert.True(editor.Undo()); Assert.Null(Current().Lut); Assert.False(editor.CanUndo);
+        Assert.True(editor.Redo());
+        var changed = imported.DeepClone(); changed.Lut!.Samples[0] = .25; changed.Lut.DomainMinimum[0] = -.1;
+        editor.SetVideoEffects(clip.Id, [changed]);
+        Assert.Equal(.25, Current().Lut!.Samples[0]);
+        Assert.True(editor.Undo()); Assert.Equal(0, Current().Lut!.Samples[0]); Assert.Equal(0, Current().Lut!.DomainMinimum[0]);
+        var cleared = Current().DeepClone(); cleared.Lut = null;
+        editor.SetVideoEffects(clip.Id, [cleared]); Assert.Null(Current().Lut);
+        Assert.True(editor.Undo()); Assert.NotNull(Current().Lut);
+    }
 
     [Fact]
     public void ParsesTitleCommentsDomainsAndIndependentClones()

@@ -697,6 +697,7 @@ public sealed class TimelineEditor
         var snapshot = effects.Select(effect => effect.DeepClone()).ToList();
         var same = clip.VideoEffects.Count == snapshot.Count && clip.VideoEffects.Zip(snapshot).All(pair =>
             pair.First.Id == pair.Second.Id && pair.First.Kind == pair.Second.Kind && pair.First.IsEnabled == pair.Second.IsEnabled &&
+            (pair.First.Lut is { } lut ? lut.ContentEquals(pair.Second.Lut) : pair.Second.Lut is null) &&
             VideoEffectCatalog.Get(pair.First.Kind).Parameters.All(parameter => pair.First.GetParameter(parameter.Key) == pair.Second.GetParameter(parameter.Key)));
         if (same) return;
         // The chooser owns its working copy; a single accepted chain is one undo step.

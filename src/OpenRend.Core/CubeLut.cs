@@ -17,6 +17,9 @@ public sealed class CubeLut
         DomainMaximum = (double[])DomainMaximum.Clone(), Samples = (double[])Samples.Clone()
     };
 
+    public bool ContentEquals(CubeLut? other) => other is not null && Title == other.Title && Size == other.Size &&
+        DomainMinimum.SequenceEqual(other.DomainMinimum) && DomainMaximum.SequenceEqual(other.DomainMaximum) && Samples.SequenceEqual(other.Samples);
+
     public void Validate()
     {
         if (Title is null || Title.Length > 1024 || Size is < 2 or > MaximumSize ||
