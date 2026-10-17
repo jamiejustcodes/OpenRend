@@ -7,19 +7,25 @@ namespace OpenRend.Media;
 public sealed class ExportService(TimelineRenderService renderer)
 {
     public Task ExportAsync(ProjectDocument project, string output, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
+        => ExportAsync(project, output, new ExportOptions(), progress, cancellationToken);
+
+    public Task ExportAsync(ProjectDocument project, string output, ExportOptions options, IProgress<double>? progress = null, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
+        ArgumentNullException.ThrowIfNull(options);
         var snapshot = project.DeepClone();
         snapshot.Validate();
         if (snapshot.DurationFrames <= 0) throw new InvalidOperationException("The timeline is empty.");
+        var range = options.Range ?? new RenderRange(0, snapshot.DurationFrames);
+        range.Validate(snapshot.DurationFrames);
         if ((snapshot.Width & 1) != 0 || (snapshot.Height & 1) != 0) throw new InvalidOperationException("H.264 export requires even project dimensions.");
         var destination = Path.GetFullPath(output);
         if (snapshot.Media.Any(asset => string.Equals(Path.GetFullPath(asset.Path), destination, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Choose an export destination different from the original media.");
-        return Task.Run(() => ExportCoreAsync(snapshot, destination, progress, cancellationToken), cancellationToken);
+        return Task.Run(() => ExportCoreAsync(snapshot, destination, range, progress, cancellationToken), cancellationToken);
     }
 
-    private async Task ExportCoreAsync(ProjectDocument project, string destination, IProgress<double>? progress, CancellationToken cancellationToken)
+    private async Task ExportCoreAsync(ProjectDocument project, string destination, RenderRange range, IProgress<double>? progress, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var directory = Path.GetDirectoryName(destination)!;
@@ -28,8 +34,10 @@ public sealed class ExportService(TimelineRenderService renderer)
         var temporaryAudio = Path.Combine(Path.GetTempPath(), $"openrend-{Guid.NewGuid():N}.f32le");
         try
         {
-            var totalFrames = project.DurationFrames;
-            var totalSamples = checked((long)Math.Ceiling(project.FrameRate.Seconds(totalFrames) * MediaService.SampleRate));
+            var totalFrames = range.FrameCount;
+            // Count sample instants in the half-open frame range without rounding its rational duration to a double.
+            var totalSamples = checked((long)decimal.Ceiling((decimal)totalFrames * project.FrameRate.Denominator * MediaService.SampleRate / project.FrameRate.Numerator));
+            var startSeconds = project.FrameRate.Seconds(range.StartFrame);
             progress?.Report(0);
             await using (var audioFile = new FileStream(temporaryAudio, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
@@ -38,7 +46,7 @@ public sealed class ExportService(TimelineRenderService renderer)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
                     var count = (int)Math.Min(blockSize, totalSamples - sample);
-                    var samples = renderer.RenderAudio(project, (double)sample / MediaService.SampleRate, count);
+                    var samples = renderer.RenderAudio(project, startSeconds + (double)sample / MediaService.SampleRate, count);
                     var bytes = MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();
                     await audioFile.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
                     progress?.Report(0.2 * (sample + count) / totalSamples);
@@ -76,7 +84,7 @@ public sealed class ExportService(TimelineRenderService renderer)
                 for (long frame = 0; frame < totalFrames; frame++)
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-                    var pixels = renderer.RenderFrame(project, frame, project.Width, project.Height);
+                    var pixels = renderer.RenderFrame(project, range.StartFrame + frame, project.Width, project.Height);
                     await process.StandardInput.BaseStream.WriteAsync(pixels, cancellationToken).ConfigureAwait(false);
                     progress?.Report(0.2 + 0.75 * (frame + 1) / totalFrames);
                 }

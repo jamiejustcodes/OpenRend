@@ -539,6 +539,67 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
         Assert.Empty(System.IO.Directory.GetFiles(fixture.Directory, ".openrend-*.mp4"));
     }
 
+    [Theory]
+    [InlineData(30, 1, 33, 15)]
+    [InlineData(30000, 1001, 33, 17)]
+    [InlineData(24000, 1001, 27, 13)]
+    public async Task RenderRangeStartsVideoAndAudioAtTheRequestedProjectFrame(int numerator, int denominator, long startFrame, long frames)
+    {
+        using var media = new MediaService();
+        var asset = await media.ProbeAsync(fixture.Source);
+        var project = new ProjectDocument { Width = 160, Height = 90, FrameRate = new Rational(numerator, denominator), Media = [asset] };
+        var editor = new TimelineEditor(project);
+        var duration = project.FrameRate.Frames(asset.DurationSeconds);
+        editor.PlaceClip(asset.Id, editor.AddTrack(TrackKind.Video).Id, 0, duration);
+        editor.PlaceClip(asset.Id, editor.AddTrack(TrackKind.Audio).Id, 0, duration);
+        using var renderer = new TimelineRenderService(media, false);
+        var destination = Path.Combine(fixture.Directory, $"range-{numerator}.mp4");
+        await new ExportService(renderer).ExportAsync(project, destination, new ExportOptions { Range = new RenderRange(startFrame, frames) });
+        using var inspection = JsonDocument.Parse(MediaFixture.Run("ffprobe", "-v", "error", "-count_frames", "-show_streams", "-of", "json", destination));
+        var streams = inspection.RootElement.GetProperty("streams").EnumerateArray().ToArray();
+        var video = streams.Single(stream => stream.GetProperty("codec_type").GetString() == "video");
+        var audio = streams.Single(stream => stream.GetProperty("codec_type").GetString() == "audio");
+        Assert.Equal(frames.ToString(), video.GetProperty("nb_read_frames").GetString());
+        Assert.Equal(project.FrameRate.ToString(), video.GetProperty("r_frame_rate").GetString());
+        var expectedSamples = (long)decimal.Ceiling((decimal)frames * denominator * 48000 / numerator);
+        Assert.InRange(Math.Abs(audio.GetProperty("duration_ts").GetInt64() - expectedSamples), 0, 1);
+        Pixel(media.GetFrame(destination, 0, 160, 90), red: 0, blue: 255, tolerance: 10);
+        var samples = media.GetAudio(destination, .1, 4096);
+        double ToneEnergy(int frequency)
+        {
+            double real = 0, imaginary = 0;
+            for (var i = 0; i < samples.Length / 2; i++)
+            {
+                var angle = 2 * Math.PI * frequency * i / MediaService.SampleRate;
+                real += samples[i * 2] * Math.Cos(angle);
+                imaginary += samples[i * 2] * Math.Sin(angle);
+            }
+            return real * real + imaginary * imaginary;
+        }
+        Assert.True(ToneEnergy(880) > 10 * ToneEnergy(440), "The range must start in the second source tone.");
+        Assert.Equal(duration, project.DurationFrames);
+        Assert.Equal(0, project.Tracks[0].Clips[0].StartFrame);
+    }
+
+    [Theory]
+    [InlineData(-1, 1)]
+    [InlineData(0, 0)]
+    [InlineData(0, -1)]
+    [InlineData(59, 2)]
+    [InlineData(long.MaxValue, 1)]
+    public void InvalidRenderRangesFailBeforeCreatingOutput(long start, long count)
+    {
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, false);
+        var asset = new MediaAsset { Path = "openrend://color?hex=#FF0000", DurationSeconds = 2, HasVideo = true };
+        var project = new ProjectDocument { Media = [asset], Tracks = [new() { Kind = TrackKind.Video,
+            Clips = [new() { MediaId = asset.Id, DurationFrames = 60 }] }] };
+        var path = Path.Combine(fixture.Directory, "invalid-range.mp4");
+        Assert.Throws<ArgumentOutOfRangeException>(() => { _ = new ExportService(renderer).ExportAsync(project, path,
+            new ExportOptions { Range = new RenderRange(start, count) }); });
+        Assert.False(File.Exists(path));
+    }
+
     private async Task<ProjectDocument> EditedProject(MediaService media)
     {
         var asset = await media.ProbeAsync(fixture.Source);
