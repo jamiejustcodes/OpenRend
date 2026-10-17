@@ -16,6 +16,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | Stream timing / orientation | Tested | Delayed audio/video, nonzero origin, VFR holds, resampler EOF drain and quarter-turn matrices |
 | Thumbnails / waveform peaks | Implemented | Source decoding; waveform is bounded sampled windows |
 | Multitrack preview / export | Tested | Real trim/offset/split/opacity/mute/mix encoded output; ffprobe frame count |
+| Render templates / ranges | Partial, tested locally | Two project-size/rate H.264/AAC presets, property search, saved favorites/choices, loop selection by ruler or I/O, encoded frame/sample checks at integer and rational rates, and desktop loop export. Full format/custom template catalog, mapping, metadata/log options and loop persistence/playback remain open. See [rendering](rendering.md). |
 | D3D11 preview / D3D11VA decode | Tested locally | Actual hardware device/decoder verified on development machine; CPU transfer remains |
 | GPU timeline compositing | Tested locally | Hardware and WARP match CPU within one byte per channel; upload/readback remains |
 | WASAPI synchronized playback | Tested locally | Real output clock seek/pause/drain, underrun accounting and loopback tone verification |

@@ -34,7 +34,14 @@ OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered
 - [ ] Persist render presets and validate options before starting an export.
 - [ ] Verify duration, frame count, audio and output metadata against actual files.
 
-Status: queued.
+Status: partial. Render As now exposes the supported H.264/AAC presets, property search, favorites, output folder/name and loop-region rendering. The timeline provides ruler/edge drags and I/O in/out points. Full catalog/custom templates, channel mapping, metadata/log options and complete UI matching remain open. Loop selection is session state and is currently bounded to the timeline; project persistence and loop playback remain open.
+
+Verified parts:
+
+- [x] Integer-frame range export uses the shared evaluator at absolute project frames and starts audio at the same project time.
+- [x] Encoded ranges have the requested frame count/rate, rational audio duration, first-frame pixels and source-tone identity at integer and fractional rates.
+- [x] Supported template property search requires each semicolon-separated term; favorites and selected template/folder choices survive preference reload.
+- [x] Desktop workflow drags a loop region, searches/favorites a preset, rejects an invalid extension and renders a 30-frame file; reopening the dialog restores its saved choices.
 
 ## 3. Color grading, curves and LUTs — high
 
