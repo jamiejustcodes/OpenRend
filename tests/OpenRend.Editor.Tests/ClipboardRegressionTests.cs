@@ -1,6 +1,7 @@
 using OpenRend.App;
 using OpenRend.Core;
 using OpenRend.Media;
+using OpenRend.Project;
 using OpenRend.Timeline;
 using Xunit;
 
@@ -302,5 +303,59 @@ public sealed class ClipboardRegressionTests
         Assert.Empty(vm.Project.Tracks[0].Clips);
         Assert.True(vm.Editor.Redo());
         Assert.Equal(1, vm.Project.Tracks[0].Clips[1].FadeInFrames);
+    }
+
+    [Theory]
+    [InlineData(30, 1, 1)]
+    [InlineData(30, 1, 2)]
+    [InlineData(30000, 1001, 2)]
+    public async Task SplitDissolveClipboardPreservesEvaluationAndIndependentPresetsAfterReopen(int numerator, int denominator, int scale)
+    {
+        using var session = new Session();
+        var vm = session.ViewModel;
+        var media = new MediaAsset { Path = "split-transition.mp4", DurationSeconds = 10, HasVideo = true };
+        var outgoing = new TimelineClip { Name = "Outgoing", MediaId = media.Id, SourceInFrame = 15, DurationFrames = 60 };
+        var incoming = new TimelineClip { Name = "Incoming", MediaId = media.Id, StartFrame = 30, SourceInFrame = 90, DurationFrames = 60 };
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(numerator, denominator), Media = [media], Tracks = [
+            new TimelineTrack { Kind = TrackKind.Video, Clips = [outgoing, incoming] }
+        ] }, "split-source.openrend");
+        vm.Editor.ApplyDissolve(outgoing.Id, incoming.Id);
+        vm.Editor.SplitClip(outgoing.Id, 45);
+        vm.Editor.SplitClip(incoming.Id, 45);
+        var source = vm.Project.DeepClone();
+        vm.Selection.UnionWith(vm.Project.Tracks[0].Clips.Select(clip => clip.Id));
+        vm.Copy();
+        vm.Replace(new ProjectDocument { FrameRate = new Rational(numerator * scale, denominator), Tracks = [
+            new TimelineTrack { Kind = TrackKind.Video }
+        ] }, "split-destination.openrend");
+        vm.Paste();
+        var first = Selected(vm);
+        vm.Paste();
+        var second = Selected(vm);
+        var firstPreset = first.First(clip => clip.FadeInTransition is not null).FadeInTransition;
+        Assert.All(second.Where(clip => clip.FadeInTransition is not null), clip => Assert.NotSame(firstPreset, clip.FadeInTransition));
+        var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"openrend-transition-{Guid.NewGuid():N}.openrend");
+        try
+        {
+            await ProjectStore.SaveAsync(vm.Project, path);
+            var reopened = await ProjectStore.LoadAsync(path);
+            for (var frame = 0; frame < 90; frame++)
+            {
+                var expected = TimelineEvaluator.Evaluate(source, frame).Video;
+                var actual = TimelineEvaluator.Evaluate(reopened, frame * scale).Video;
+                Assert.Equal(expected.Count, actual.Count);
+                for (var layer = 0; layer < expected.Count; layer++)
+                {
+                    Assert.Equal(expected[layer].Clip.Name, actual[layer].Clip.Name);
+                    Assert.Equal(expected[layer].SourceFrame * scale, actual[layer].SourceFrame);
+                    Assert.Equal(expected[layer].Opacity, actual[layer].Opacity, 10);
+                }
+            }
+            Assert.True(vm.Editor.Undo());
+            Assert.Equal(4, vm.Project.Tracks[0].Clips.Count);
+            Assert.True(vm.Editor.Redo());
+            Assert.Equal(8, vm.Project.Tracks[0].Clips.Count);
+        }
+        finally { System.IO.File.Delete(path); }
     }
 }

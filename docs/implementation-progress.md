@@ -23,6 +23,7 @@ Verified parts:
 - [x] Cut conversion engine extends source handles with before/center/after alignment, rejects missing handles, and undoes atomically.
 - [x] Cut drops use saved Editing preferences; a desktop test sets duration/alignment through the dialog, drops, saves, and verifies source/timeline ranges.
 - [x] Version 5 projects preserve transition decisions and reject unsupported newer formats in older readers.
+- [x] Clipboard preserves split Default Dissolve evaluation through save/reopen, independent repeated pastes and undo/redo at matching rates and doubled integer/rational rates. Canonical overlap fades follow converted endpoints when downsampling.
 
 OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered on the cut. Factory-default parity is still unverified.
 
