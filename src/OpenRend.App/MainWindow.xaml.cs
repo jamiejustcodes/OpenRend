@@ -104,6 +104,11 @@ public partial class MainWindow : Window
         Timeline.SplitRequested += () => Guard(vm.Split);
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
+        Timeline.TransitionPropertiesRequested += id => Guard(() =>
+        {
+            Pause();
+            new TransitionPropertiesWindow(vm, id) { Owner = this }.ShowDialog();
+        });
         Timeline.VideoEventActionRequested += async (id, action) =>
         {
             if (action == "PanCrop") await OpenPanCropAsync(id);

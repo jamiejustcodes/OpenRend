@@ -113,6 +113,13 @@ public sealed partial class TimelineView
         }
         var crop = Add(EventButtonLabel("PanCrop"), () => { if (clipId is { } id) InvokeEventAction(id, "PanCrop"); else PanCropRequested?.Invoke(); });
         var fx = Add(EventButtonLabel("VideoEffects"), () => { if (clipId is { } id) InvokeEventAction(id, "VideoEffects"); else VideoEffectsRequested?.Invoke(); });
+        var transition = Add("Transition Properties…", () =>
+        {
+            var id = clipId ?? Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+                .SelectMany(track => track.Clips).Single(clip => Selection.Contains(clip.Id)).Id;
+            TransitionPropertiesRequested?.Invoke(id);
+        });
+        AutomationProperties.SetAutomationId(transition, "TransitionProperties");
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
@@ -127,6 +134,9 @@ public sealed partial class TimelineView
             var selected = Project.Tracks.SelectMany(t => t.Clips.Where(c => Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
             var video = selected.Where(item => item.Track.Kind == TrackKind.Video && (clipId is null || item.Clip.Id == clipId)).ToArray();
             crop.IsEnabled = fx.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
+                ? Visibility.Visible : Visibility.Collapsed;
+            transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
         };
