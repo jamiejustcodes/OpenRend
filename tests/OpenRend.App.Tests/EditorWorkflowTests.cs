@@ -32,6 +32,47 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
 {
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]
+    public async Task TransitionPresetAppliesToSelectedOverlapAndSurvivesSave()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        var projectPath = Path.Combine(temporary, "transitions.openrend");
+        var media = new MediaAsset { Path = Path.Combine(root, "tests", "native", "fixture.mp4"), Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true };
+        var outgoing = new TimelineClip { MediaId = media.Id, Name = "Outgoing", DurationFrames = 60 };
+        var incoming = new TimelineClip { MediaId = media.Id, Name = "Incoming", StartFrame = 45, DurationFrames = 45 };
+        await ProjectStore.SaveAsync(new ProjectDocument { Name = "UI integration", Width = 320, Height = 180,
+            Media = [media], Tracks = [new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1", Clips = [outgoing, incoming] }] }, projectPath);
+        try
+        {
+            using var running = Launch(executable, projectPath, temporary);
+            var window = running.Window;
+            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+            Mouse.Click(Find(window, $"Clip_{outgoing.Id:N}").GetClickablePoint());
+            using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
+                Mouse.Click(Find(window, $"Clip_{incoming.Id:N}").GetClickablePoint());
+            Assert.True(Find(window, $"Clip_{outgoing.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
+            Assert.True(Find(window, $"Clip_{incoming.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
+            var transitions = window.FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Transitions")));
+            Assert.NotNull(transitions);
+            transitions.Patterns.SelectionItem.Pattern.Select();
+            Find(window, "DefaultDissolvePreset").AsButton().Invoke();
+            WaitFor(() => window.Title.Contains('*'), "The transition preset did not change the project.");
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The transition was not saved.");
+            var loaded = await ProjectStore.LoadAsync(projectPath);
+            Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
+            Assert.Equal(15, loaded.Tracks[0].Clips[1].FadeInFrames);
+            Assert.Equal(VideoTransitionKind.Dissolve, loaded.Tracks[0].Clips[1].FadeInTransition!.Kind);
+            running.CloseGracefully();
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
     public async Task EventButtonsEditAnOrderedEffectChainAndPersistIt()
     {
         var root = FindRepository();

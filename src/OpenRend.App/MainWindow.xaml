@@ -113,6 +113,25 @@
             </Grid>
           </DockPanel>
         </TabItem>
+        <TabItem Header="Transitions">
+          <Grid Background="#262626">
+            <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="32"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+            <TabControl Grid.Row="0" Background="#262626" BorderThickness="0" AutomationProperties.Name="Transition categories">
+              <TabItem Header="All Plug-ins" IsSelected="True"/>
+              <TabItem Header="Fades"/>
+            </TabControl>
+            <TextBox x:Name="TransitionSearch" Grid.Row="1" Margin="5,3" Padding="5,1" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions"/>
+            <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" AutomationProperties.Name="Transition plug-ins"><ListBoxItem x:Name="DissolvePluginItem" Content="Dissolve" IsSelected="True"/></ListBox>
+              <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
+              <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto"><WrapPanel Margin="7">
+                <Button x:Name="DefaultDissolvePreset" Width="124" Height="103" Padding="4" Margin="2" Click="ApplyDefaultDissolveClick" AutomationProperties.Name="Apply Default Dissolve" ToolTip="Apply to two selected overlapping video events">
+                  <StackPanel><Border Width="110" Height="69" BorderBrush="#777777" BorderThickness="1"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#316E9C" Offset="0"/><GradientStop Color="#A8A8A8" Offset="0.5"/><GradientStop Color="#B97344" Offset="1"/></LinearGradientBrush></Border.Background></Border><TextBlock Text="Default" TextAlignment="Center" Margin="0,4,0,0" Foreground="#E6E6E6" FontSize="11"/></StackPanel>
+                </Button>
+              </WrapPanel></ScrollViewer>
+            </Grid>
+          </Grid>
+        </TabItem>
         <TabItem Header="Clip Properties">
           <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="12">
             <TextBlock x:Name="ClipName" Text="Select a timeline clip" FontWeight="SemiBold" Margin="0,0,0,10"/>
