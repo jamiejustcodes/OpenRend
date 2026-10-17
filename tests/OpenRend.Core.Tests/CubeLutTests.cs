@@ -35,6 +35,26 @@ public sealed class CubeLutTests
     }
 
     [Fact]
+    public async Task OversizedEmbeddedLutsCannotReplaceAnExistingProjectWithAnUnreadableManifest()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "OpenRendTests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+        var path = Path.Combine(folder, "project.openrend");
+        byte[] original = [1, 2, 3]; await File.WriteAllBytesAsync(path, original);
+        var lut = new CubeLut { Size = 65, Samples = Enumerable.Repeat(double.MaxValue, 65 * 65 * 65 * 3).ToArray() };
+        var effects = Enumerable.Range(0, 4).Select(_ => { var effect = VideoEffect.Create(VideoEffectKind.Lut3D); effect.Lut = lut; return effect; }).ToList();
+        var media = new MediaAsset { Path = "source.mp4", HasVideo = true, DurationSeconds = 1 };
+        var project = new ProjectDocument { Media = [media], Tracks = [new() { Kind = TrackKind.Video,
+            Clips = [new() { MediaId = media.Id, DurationFrames = 30, VideoEffects = effects }] }] };
+        try
+        {
+            await Assert.ThrowsAsync<InvalidDataException>(() => ProjectStore.SaveAsync(project, path));
+            Assert.Equal(original, await File.ReadAllBytesAsync(path));
+            Assert.Empty(Directory.GetFiles(folder, "*.tmp"));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
+
+    [Fact]
     public void ParsesTitleCommentsDomainsAndIndependentClones()
     {
         var lut = CubeLutParser.Parse("TITLE \"My # LUT\" # comment\nDOMAIN_MIN -1 -2 -3\nDOMAIN_MAX 1 2 3\n" + Identity);

@@ -7,6 +7,7 @@ namespace OpenRend.Project;
 public static class ProjectStore
 {
     public const int CurrentVersion = 6;
+    private const long MaximumManifestBytes = 64 * 1024 * 1024;
     private static readonly JsonSerializerOptions Options = new()
     {
         WriteIndented = true,
@@ -33,6 +34,8 @@ public static class ProjectStore
             await using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous | FileOptions.WriteThrough))
             {
                 await JsonSerializer.SerializeAsync(stream, manifest, Options, cancellationToken);
+                // Embedded assets must not produce a file the project reader would reject.
+                if (stream.Position > MaximumManifestBytes) throw new InvalidDataException("Project manifest exceeds 64 MiB.");
                 await stream.FlushAsync(cancellationToken);
                 stream.Flush(flushToDisk: true);
             }
@@ -51,7 +54,7 @@ public static class ProjectStore
         var fullPath = System.IO.Path.GetFullPath(path);
         // Readers keep their snapshot handle while a save replaces the directory entry.
         await using var stream = new FileStream(fullPath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
-        if (stream.Length > 64 * 1024 * 1024) throw new InvalidDataException("Project manifest exceeds 64 MiB.");
+        if (stream.Length > MaximumManifestBytes) throw new InvalidDataException("Project manifest exceeds 64 MiB.");
         ProjectManifest? manifest;
         try { manifest = await JsonSerializer.DeserializeAsync<ProjectManifest>(stream, Options, cancellationToken); }
         catch (JsonException error) { throw new InvalidDataException("Project JSON is invalid.", error); }
