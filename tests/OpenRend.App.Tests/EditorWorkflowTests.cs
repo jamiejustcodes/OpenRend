@@ -46,6 +46,68 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
     [Trait("Category", "Desktop")]
     public Task TransitionPresetDragConvertsCutUsingSavedEditingPreferences() => VerifyTransitionPlacement("cut-drag");
 
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public async Task RenderDialogFiltersFavoritesAndRendersTheDraggedLoopRegion()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        var projectPath = Path.Combine(temporary, "render.openrend");
+        var asset = new MediaAsset { Path = Path.Combine(root, "tests", "native", "fixture.mp4"), Width = 320, Height = 180,
+            DurationSeconds = 3, FrameRate = 30, HasVideo = true, HasAudio = true };
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 90 };
+        await ProjectStore.SaveAsync(new ProjectDocument { Name = "UI integration", Width = 320, Height = 180, Media = [asset],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }, new() { Kind = TrackKind.Audio,
+                Clips = [new() { MediaId = asset.Id, DurationFrames = 90 }] }] }, projectPath);
+        try
+        {
+            using var running = Launch(executable, projectPath, temporary);
+            var window = running.Window;
+            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+            var bounds = Find(window, $"Clip_{clip.Id:N}").BoundingRectangle;
+            var scale = bounds.Height / 67;
+            var y = (int)(bounds.Top - 46 * scale + 12 * scale);
+            Mouse.Drag(new System.Drawing.Point((int)(bounds.Left + bounds.Width / 6), y),
+                new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), y), MouseButton.Left);
+            RenderAndVerify(window, executable, Path.Combine(temporary, "loop.mp4"), "30", dialog =>
+            {
+                var search = Find(dialog, "RenderSearch").AsTextBox();
+                search.Text = "high;H.264";
+                WaitFor(() => Find(dialog, "RenderTemplates").AsListBox().Items.Length == 1, "Template property search did not narrow the list.");
+                Find(dialog, "RenderFavorite").AsCheckBox().Toggle();
+                Find(dialog, "RenderFavoritesOnly").AsCheckBox().Toggle();
+                search.Text = "";
+                Assert.Single(Find(dialog, "RenderTemplates").AsListBox().Items);
+                var loop = Find(dialog, "RenderLoopOnly").AsCheckBox();
+                Assert.True(loop.IsEnabled);
+                loop.Toggle();
+                Find(dialog, "RenderFileName").AsTextBox().Text = "invalid.wav";
+                Find(dialog, "StartRender").AsButton().Invoke();
+                Assert.Contains(".mp4", Find(dialog, "Error").Name);
+                Find(dialog, "RenderFileName").AsTextBox().Text = "loop.mp4";
+                var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
+                using var screenshot = Capture.Element(dialog); screenshot.ToFile(Path.Combine(artifact, "render-as.png"));
+            });
+            using var preferences = JsonDocument.Parse(File.ReadAllText(Path.Combine(temporary, "render.json")));
+            Assert.Equal("project-mp4-high", preferences.RootElement.GetProperty("TemplateId").GetString());
+            Assert.Equal("project-mp4-high", Assert.Single(preferences.RootElement.GetProperty("Favorites").EnumerateArray()).GetString());
+            Assert.True(preferences.RootElement.GetProperty("UseLoopRegion").GetBoolean());
+            Find(window, "RenderButton").AsButton().Invoke();
+            Window? reopened = null;
+            WaitFor(() => (reopened = window.ModalWindows.SingleOrDefault(dialog => dialog.Title == "Render As")) is not null, "Render As did not reopen.");
+            var selected = Find(reopened!, "RenderTemplates").AsListBox().SelectedItem;
+            Assert.NotNull(selected);
+            Assert.Equal("Project settings — High quality", selected.Text);
+            Assert.Equal(ToggleState.On, Find(reopened!, "RenderFavorite").Patterns.Toggle.Pattern.ToggleState.Value);
+            reopened!.Close();
+            running.CloseGracefully();
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
     private async Task VerifyTransitionPlacement(string action)
     {
         var root = FindRepository();
@@ -643,18 +705,16 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         Assert.Fail(action + " track state was not persisted.");
     }
 
-    private void RenderAndVerify(Window window, string executable, string outputPath)
+    private void RenderAndVerify(Window window, string executable, string outputPath, string expectedFrames = "90", Action<Window>? configure = null)
     {
         Find(window, "RenderButton").AsButton().Invoke();
         Window? dialog = null;
         WaitFor(() => (dialog = window.ModalWindows.SingleOrDefault()) is not null, "Render did not open its output dialog.");
         Assert.NotNull(dialog);
-        var controls = dialog.FindAllDescendants();
-        output.WriteLine("Render output dialog: " + string.Join(" | ", controls.Select(e => $"{e.Properties.ControlType.ValueOrDefault}:{e.Properties.Name.ValueOrDefault}:{e.Properties.AutomationId.ValueOrDefault}")));
-        var fileName = Assert.Single(controls, e => e.ControlType == ControlType.Edit && e.Name.Contains("File name", StringComparison.OrdinalIgnoreCase)).AsTextBox();
-        fileName.Text = outputPath;
-        var save = Assert.Single(controls, e => e.ControlType == ControlType.Button && e.Name.TrimStart('&') == "Save").AsButton();
-        save.Invoke();
+        Find(dialog, "RenderFolder").AsTextBox().Text = Path.GetDirectoryName(outputPath)!;
+        Find(dialog, "RenderFileName").AsTextBox().Text = Path.GetFileName(outputPath);
+        configure?.Invoke(dialog);
+        Find(dialog, "StartRender").AsButton().Invoke();
         WaitFor(() => File.Exists(outputPath), "The desktop render did not produce a finalized output file.", timeoutSeconds: 30);
         var probe = new ProcessStartInfo(Path.Combine(Path.GetDirectoryName(executable)!, "ffprobe.exe")) { UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true };
         foreach (var argument in new[] { "-v", "error", "-show_entries", "stream=codec_type,width,height,nb_frames", "-of", "json", outputPath }) probe.ArgumentList.Add(argument);
@@ -667,7 +727,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         var video = result.RootElement.GetProperty("streams").EnumerateArray().Single(s => s.GetProperty("codec_type").GetString() == "video");
         Assert.Equal(320, video.GetProperty("width").GetInt32());
         Assert.Equal(180, video.GetProperty("height").GetInt32());
-        Assert.Equal("90", video.GetProperty("nb_frames").GetString());
+        Assert.Equal(expectedFrames, video.GetProperty("nb_frames").GetString());
     }
 
     private RunningApplication Launch(string executable, string projectPath, string dataDirectory)

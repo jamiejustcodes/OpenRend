@@ -480,16 +480,18 @@ public partial class MainWindow : Window
     {
         if (vm.Project.DurationFrames == 0) { vm.Status = "Place media on the timeline before rendering."; return; }
         Pause();
-        var dialog = new SaveFileDialog { Filter = "H.264 / AAC video|*.mp4", DefaultExt = ".mp4", FileName = vm.Project.Name + ".mp4" };
-        if (dialog.ShowDialog(this) != true) return;
+        var preferencesPath = Path.Combine(Path.GetDirectoryName(recoveryPath)!, "render.json");
+        var dialog = new RenderAsWindow(vm.Project, Timeline.LoopRegion, RenderPreferencesStore.Load(preferencesPath)) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        RenderPreferencesStore.Save(dialog.Preferences, preferencesPath);
         exportCancellation = new CancellationTokenSource(); vm.Busy = true; vm.Progress = 0;
         CancelRender.Visibility = Visibility.Visible; RenderButton.IsEnabled = false;
         try
         {
             vm.Status = "Rendering edited timeline…";
             var progress = new Progress<double>(p => { vm.Progress = p; vm.Status = $"Rendering timeline: {p:P0}"; });
-            await vm.Exporter.ExportAsync(vm.Project.DeepClone(), dialog.FileName, progress, exportCancellation.Token);
-            vm.Status = $"Rendered {Path.GetFileName(dialog.FileName)}.";
+            await vm.Exporter.ExportAsync(vm.Project.DeepClone(), dialog.OutputPath, dialog.Options, progress, exportCancellation.Token);
+            vm.Status = $"Rendered {Path.GetFileName(dialog.OutputPath)}.";
         }
         catch (OperationCanceledException) { vm.Status = "Render cancelled."; }
         finally { vm.Busy = false; CancelRender.Visibility = Visibility.Collapsed; exportCancellation.Dispose(); exportCancellation = null; Refresh(); }

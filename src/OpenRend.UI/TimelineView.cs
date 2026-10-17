@@ -22,7 +22,9 @@ public sealed partial class TimelineView : FrameworkElement
         get => project;
         set
         {
+            if (!ReferenceEquals(project, value)) loopRegion = null;
             project = value ?? throw new ArgumentNullException(nameof(value));
+            if (loopRegion is { } range && range.EndFrame > project.DurationFrames) loopRegion = null;
             if (levelTrack is { } levelId && project.Tracks.All(t => t.Id != levelId)) CancelTrackLevelInput();
             ActiveTrackIndex = Math.Clamp(ActiveTrackIndex, 0, Math.Max(0, project.Tracks.Count - 1));
             (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
@@ -98,6 +100,8 @@ public sealed partial class TimelineView : FrameworkElement
     public void CancelPointerInput()
     {
         pressedEventButton = null;
+        if (selectingLoop) loopRegion = loopBeforeDrag;
+        selectingLoop = false;
         dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
         CancelTrackLevelInput();
         ReleaseMouseCapture(); ClearHover(); InvalidateVisual();
@@ -111,7 +115,7 @@ public sealed partial class TimelineView : FrameworkElement
         ClipToBounds = true;
         AllowDrop = true;
         AutomationProperties.SetName(this, "Timeline");
-        AutomationProperties.SetHelpText(this, "Up and Down choose a track. Left and Right select clips. Shift extends the selection. M mutes, Shift+M solos, L locks, and V changes video visibility. S splits at the cursor; Delete removes selected clips.");
+        AutomationProperties.SetHelpText(this, "Up and Down choose a track. Left and Right select clips. Shift extends the selection. I and O set loop in and out points. M mutes, Shift+M solos, L locks, and V changes video visibility. S splits at the cursor; Delete removes selected clips.");
         Drop += (_, e) =>
         {
             if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
@@ -152,6 +156,15 @@ public sealed partial class TimelineView : FrameworkElement
     {
         if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) return false;
         if (Project.Tracks.Count == 0) return false;
+        if (modifiers == ModifierKeys.None && key is Key.I or Key.O)
+        {
+            var at = Math.Clamp(Position, 0, Project.DurationFrames);
+            var start = key == Key.I ? at : LoopRegion?.StartFrame ?? 0;
+            var end = key == Key.O ? at : LoopRegion?.EndFrame ?? Project.DurationFrames;
+            if (end < start) { if (key == Key.I) end = Project.DurationFrames; else start = 0; }
+            LoopRegion = end > start ? new FrameRange(start, end - start) : null;
+            return true;
+        }
         if (levelTrack is { } levelId && levelKind is { } level && key is Key.Left or Key.Right or Key.Home or Key.End)
         {
             if (Project.Tracks.Single(t => t.Id == levelId).IsLocked) return true;
@@ -392,6 +405,7 @@ public sealed partial class TimelineView : FrameworkElement
             for (var minor = 1; minor < 5; minor++)
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
         }
+        DrawLoopRegion(dc);
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, RulerHeight, Math.Max(0, ActualWidth - HeaderWidth), Math.Max(0, ActualHeight - RulerHeight))));
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
@@ -552,6 +566,7 @@ public sealed partial class TimelineView : FrameworkElement
             }
             return;
         }
+        if (BeginLoopRegion(origin)) { e.Handled = true; return; }
         var hit = HitClip(origin);
         dragTrack = hit?.Track; dragging = hit?.Clip;
         if (dragging is null)
@@ -567,6 +582,7 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e); var p = e.GetPosition(this);
+        if (selectingLoop) { UpdateLoopRegion(p); return; }
         if (pressedEventButton is not null) { UpdateHover(p); return; }
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
         if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
@@ -596,6 +612,11 @@ public sealed partial class TimelineView : FrameworkElement
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
+        if (selectingLoop)
+        {
+            UpdateLoopRegion(e.GetPosition(this)); selectingLoop = false;
+            ReleaseMouseCapture(); e.Handled = true; return;
+        }
         if (pressedEventButton is not null)
         {
             CompleteEventButton(e.GetPosition(this)); e.Handled = true; return;
@@ -623,6 +644,8 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        if (selectingLoop) loopRegion = loopBeforeDrag;
+        selectingLoop = false;
         pressedEventButton = null;
         adjustingLevel = false; seeking = false;
         dragging = null; ClearHover();

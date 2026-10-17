@@ -1,0 +1,54 @@
+<Window x:Class="OpenRend.App.RenderAsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Render As" Width="820" Height="540" MinWidth="680" MinHeight="480"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <DockPanel Margin="0,0,0,8">
+      <CheckBox x:Name="FavoritesOnly" AutomationProperties.AutomationId="RenderFavoritesOnly" Content="Show favorites only" DockPanel.Dock="Right" Margin="12,0,0,0" VerticalAlignment="Center" Checked="FilterChanged" Unchecked="FilterChanged"/>
+      <Label Content="_Search:" Target="Search" Foreground="{DynamicResource TextBrush}"/>
+      <TextBox x:Name="Search" AutomationProperties.AutomationId="RenderSearch" AutomationProperties.Name="Search render templates" TextChanged="SearchChanged"/>
+    </DockPanel>
+    <Grid Grid.Row="1">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="190"/><ColumnDefinition Width="8"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <DockPanel>
+        <TextBlock DockPanel.Dock="Top" Text="Formats" Margin="0,0,0,5"/>
+        <ListBox x:Name="Formats" AutomationProperties.AutomationId="RenderFormats" AutomationProperties.Name="Formats">
+          <ListBoxItem Content="H.264 / AAC MP4" IsSelected="True"/>
+        </ListBox>
+      </DockPanel>
+      <DockPanel Grid.Column="2">
+        <TextBlock DockPanel.Dock="Top" Text="Templates" Margin="0,0,0,5"/>
+        <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <CheckBox x:Name="Favorite" Content="Favorite" AutomationProperties.AutomationId="RenderFavorite" Checked="FavoriteChanged" Unchecked="FavoriteChanged"/>
+          <TextBlock x:Name="Details" TextWrapping="Wrap" Margin="0,6,0,0" MinHeight="32"/>
+        </StackPanel>
+        <ListBox x:Name="Templates" AutomationProperties.AutomationId="RenderTemplates" AutomationProperties.Name="Templates" DisplayMemberPath="Name" SelectionChanged="TemplateChanged"/>
+      </DockPanel>
+    </Grid>
+    <Grid Grid.Row="2" Margin="0,12,0,0">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="65"/><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+      <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+      <Label Content="_Folder:" Target="Folder" Foreground="{DynamicResource TextBrush}"/>
+      <TextBox Grid.Column="1" x:Name="Folder" AutomationProperties.AutomationId="RenderFolder" AutomationProperties.Name="Output folder" TextChanged="TargetChanged"/>
+      <Button Grid.Column="2" Content="Browse…" Click="BrowseClick"/>
+      <Label Grid.Row="1" Content="_Name:" Target="FileName" Foreground="{DynamicResource TextBrush}"/>
+      <TextBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" x:Name="FileName" AutomationProperties.AutomationId="RenderFileName" AutomationProperties.Name="Output file name" TextChanged="TargetChanged"/>
+    </Grid>
+    <GroupBox Grid.Row="3" Header="Render Options" Style="{StaticResource PreferencesGroup}" Margin="0,8,0,0">
+      <StackPanel Margin="8">
+        <CheckBox x:Name="UseLoop" Content="Render loop region only" AutomationProperties.AutomationId="RenderLoopOnly"/>
+        <TextBlock x:Name="RangeDetails" Margin="20,4,0,0"/>
+      </StackPanel>
+    </GroupBox>
+    <TextBlock Grid.Row="4" x:Name="Error" Foreground="#FFB4AB" TextWrapping="Wrap" Margin="0,6,0,4"/>
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button Content="Render" MinWidth="85" IsDefault="True" AutomationProperties.AutomationId="StartRender" Click="RenderClick"/>
+      <Button Content="Cancel" MinWidth="85" IsCancel="True"/>
+    </StackPanel>
+  </Grid>
+</Window>

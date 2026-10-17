@@ -234,6 +234,26 @@ public sealed class TimelineAccessibilityTests
 
     private static double VisualTreeDpi(TimelineView view) => System.Windows.Media.VisualTreeHelper.GetDpi(view).DpiScaleX;
 
+    [Fact]
+    public void LoopInOutKeysKeepEventSelectionAndClearOnProjectReplacement() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var clipId = editor.Project.Tracks[0].Clips[0].Id;
+        view.Selection.Add(clipId);
+        view.Position = 30;
+        Assert.True(view.HandleKeyboardInput(Key.I, ModifierKeys.None));
+        view.Position = 90;
+        Assert.True(view.HandleKeyboardInput(Key.O, ModifierKeys.None));
+        Assert.Equal(new FrameRange(30, 60), view.LoopRegion);
+        Assert.Equal(clipId, Assert.Single(view.Selection));
+        Assert.False(editor.CanUndo);
+        view.Project = editor.Project;
+        Assert.NotNull(view.LoopRegion);
+        view.Project = editor.Project.DeepClone();
+        Assert.Null(view.LoopRegion);
+        Assert.Throws<ArgumentOutOfRangeException>(() => view.LoopRegion = new FrameRange(149, 2));
+    });
+
     private static void Sta(Action action)
     {
         Exception? failure = null;
