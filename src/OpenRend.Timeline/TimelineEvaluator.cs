@@ -37,8 +37,6 @@ public static class TimelineEvaluator
                     var outgoing = ordered.Where(c => c.Id != incoming.Id && c.FadeOutFrames > 0 &&
                         c.StartFrame <= frame && frame < c.EndFrame &&
                         c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
-                        c.FadeOutTransition?.Kind == incoming.FadeInTransition?.Kind &&
-                        c.FadeOutTransition?.Preset == incoming.FadeInTransition?.Preset &&
                         frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
                         .OrderByDescending(c => c.StartFrame).FirstOrDefault();
                     if (outgoing is null ||

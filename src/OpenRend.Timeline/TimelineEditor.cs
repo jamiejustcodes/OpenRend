@@ -139,16 +139,32 @@ public sealed class TimelineEditor
             // The two fade lengths follow the integer-frame overlap, including after save and undo.
             outgoing.FadeOutFrames = overlap;
             incoming.FadeInFrames = overlap;
-            outgoing.FadeOutTransition = new VideoTransition();
             incoming.FadeInTransition = new VideoTransition();
             outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
             outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
         });
     }
 
+    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds)
+    {
+        var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
+        var selected = Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => ids.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip)))
+            .OrderBy(item => item.Clip.StartFrame).ToArray();
+        if (selected.Length == 2)
+        {
+            var outgoing = selected[0];
+            var incoming = selected[1];
+            if (outgoing.Track != incoming.Track || outgoing.Clip.EndFrame <= incoming.Clip.StartFrame) return 0;
+            ApplyDissolve(outgoing.Clip.Id, incoming.Clip.Id);
+            return 1;
+        }
+        return ApplyDissolvesToAdjacent(selected.Select(item => item.Clip.Id));
+    }
+
     public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds)
     {
-        var selected = ExpandSelection(selectedClipIds);
+        var selected = ExpandSelection(selectedClipIds, ignoreGroups: true);
         var pairs = new List<(TimelineClip Outgoing, TimelineClip Incoming)>();
         foreach (var track in Project.Tracks.Where(track => track.Kind == TrackKind.Video))
         {
@@ -189,7 +205,6 @@ public sealed class TimelineEditor
             {
                 var overlap = outgoing.EndFrame - incoming.StartFrame;
                 outgoing.FadeOutFrames = incoming.FadeInFrames = overlap;
-                outgoing.FadeOutTransition = new VideoTransition();
                 incoming.FadeInTransition = new VideoTransition();
                 outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
                 outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
@@ -698,10 +713,8 @@ public sealed class TimelineEditor
             foreach (var incoming in track.Clips.Where(clip => clip.FadeInTransition is not null &&
                 clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null))
             {
-                var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.FadeOutTransition is not null &&
+                var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.FadeOutFrames > 0 &&
                     clip.FadeOffsetFrames == 0 && clip.FadeDurationFrames is null &&
-                    clip.FadeOutTransition.Kind == incoming.FadeInTransition!.Kind &&
-                    clip.FadeOutTransition.Preset == incoming.FadeInTransition.Preset &&
                     clip.StartFrame < incoming.StartFrame && clip.EndFrame > incoming.StartFrame &&
                     clip.EndFrame <= incoming.EndFrame)
                     .OrderByDescending(clip => clip.StartFrame).FirstOrDefault();

@@ -78,7 +78,7 @@ public sealed class TimelineTests
     }
 
     [Fact]
-    public void DissolveAttachesToBothEventFadesAndUndoRestoresThem()
+    public void DissolveAttachesPresetToIncomingFadeAndUndoRestoresIt()
     {
         var (editor, media, track) = Create();
         var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
@@ -88,7 +88,7 @@ public sealed class TimelineTests
 
         Assert.Equal(15, outgoing.FadeOutFrames);
         Assert.Equal(15, incoming.FadeInFrames);
-        Assert.Equal(VideoTransitionKind.Dissolve, outgoing.FadeOutTransition!.Kind);
+        Assert.Null(outgoing.FadeOutTransition);
         Assert.Equal("Default", incoming.FadeInTransition!.Preset);
         Assert.True(editor.Undo());
         Assert.Null(editor.Project.Tracks[0].Clips[0].FadeOutTransition);
@@ -166,6 +166,28 @@ public sealed class TimelineTests
             Assert.Null(clip.FadeInTransition);
             Assert.Null(clip.FadeOutTransition);
         });
+    }
+
+    [Fact]
+    public void TwoSelectedEventsApplyDissolveOnlyBetweenThatPair()
+    {
+        var (editor, media, track) = Create();
+        var first = editor.PlaceClip(media.Id, track.Id, 0, 30);
+        var second = editor.PlaceClip(media.Id, track.Id, 20, 30);
+        var third = editor.PlaceClip(media.Id, track.Id, 40, 30);
+        var last = editor.PlaceClip(media.Id, track.Id, 60, 30);
+
+        Assert.Equal(1, editor.ApplyDissolveToSelection([second.Id, third.Id]));
+
+        Assert.Null(first.FadeOutTransition);
+        Assert.Equal(0, first.FadeOutFrames);
+        Assert.Equal(0, second.FadeInFrames);
+        Assert.Null(second.FadeInTransition);
+        Assert.Equal(10, second.FadeOutFrames);
+        Assert.Equal(VideoTransitionKind.Dissolve, third.FadeInTransition!.Kind);
+        Assert.Equal(0, third.FadeOutFrames);
+        Assert.Null(last.FadeInTransition);
+        Assert.Equal(0, last.FadeInFrames);
     }
 
     [Fact]

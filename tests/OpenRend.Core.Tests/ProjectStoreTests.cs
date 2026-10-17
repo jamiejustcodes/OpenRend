@@ -53,7 +53,7 @@ public sealed class ProjectStoreTests : IDisposable
 
         Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
         Assert.Equal(15, loaded.Tracks[0].Clips[1].FadeInFrames);
-        Assert.Equal(VideoTransitionKind.Dissolve, loaded.Tracks[0].Clips[0].FadeOutTransition!.Kind);
+        Assert.Null(loaded.Tracks[0].Clips[0].FadeOutTransition);
         Assert.Equal("Default", loaded.Tracks[0].Clips[1].FadeInTransition!.Preset);
     }
 
