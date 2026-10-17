@@ -12,6 +12,7 @@ namespace OpenRend.UI;
 
 public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
+public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition);
 
 public sealed partial class TimelineView : FrameworkElement
 {
@@ -61,6 +62,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, string>? TrackAction;
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
+    public event Action<TransitionGesture>? TransitionDropped;
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
     public event Action? PanCropRequested;
@@ -112,10 +114,22 @@ public sealed partial class TimelineView : FrameworkElement
         AutomationProperties.SetHelpText(this, "Up and Down choose a track. Left and Right select clips. Shift extends the selection. M mutes, Shift+M solos, L locks, and V changes video visibility. S splits at the cursor; Delete removes selected clips.");
         Drop += (_, e) =>
         {
+            if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
+            {
+                if (TransitionAt(e.GetPosition(this), transition) is { } target) TransitionDropped?.Invoke(target);
+                e.Handled = true;
+                return;
+            }
             if (e.Data.GetData("OpenRend.Media") is not Guid media) return;
             var p = e.GetPosition(this);
             var track = TrackAt(p.Y);
             if (track is not null) { MediaDropped?.Invoke(media, track.Id, FrameAt(p.X)); e.Handled = true; }
+        };
+        DragOver += (_, e) =>
+        {
+            if (e.Data.GetData(TransitionDataFormat) is not VideoTransition transition) return;
+            e.Effects = TransitionAt(e.GetPosition(this), transition) is null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
         };
         ContextMenu = CreateEventMenu();
     }

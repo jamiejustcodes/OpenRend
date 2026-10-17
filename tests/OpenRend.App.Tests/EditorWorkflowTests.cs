@@ -32,7 +32,17 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
 {
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]
-    public async Task TransitionPresetAppliesToSelectedOverlapAndSurvivesSave()
+    public Task TransitionPresetAppliesToSelectedOverlapAndSurvivesSave() => VerifyTransitionPlacement("add");
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public Task TransitionPresetDoubleClickAppliesAndSurvivesSave() => VerifyTransitionPlacement("double-click");
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public Task TransitionPresetDragTargetsOverlapIndependentlyOfSelection() => VerifyTransitionPlacement("drag");
+
+    private async Task VerifyTransitionPlacement(string action)
     {
         var root = FindRepository();
         var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
@@ -43,8 +53,11 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
         var media = new MediaAsset { Path = Path.Combine(root, "tests", "native", "fixture.mp4"), Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true };
         var outgoing = new TimelineClip { MediaId = media.Id, Name = "Outgoing", DurationFrames = 60 };
         var incoming = new TimelineClip { MediaId = media.Id, Name = "Incoming", StartFrame = 45, DurationFrames = 45 };
+        var unrelated = new TimelineClip { MediaId = media.Id, Name = "Unrelated", StartFrame = 120, DurationFrames = 30 };
+        var clips = new List<TimelineClip> { outgoing, incoming };
+        if (action == "drag") clips.Add(unrelated);
         await ProjectStore.SaveAsync(new ProjectDocument { Name = "UI integration", Width = 320, Height = 180,
-            Media = [media], Tracks = [new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1", Clips = [outgoing, incoming] }] }, projectPath);
+            Media = [media], Tracks = [new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1", Clips = clips }] }, projectPath);
         try
         {
             using var running = Launch(executable, projectPath, temporary);
@@ -56,7 +69,20 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             var transitions = window.FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Transitions")));
             Assert.NotNull(transitions);
             transitions.Patterns.SelectionItem.Pattern.Select();
-            Find(window, "DefaultDissolvePreset").AsButton().Invoke();
+            var preset = Find(window, "DefaultDissolvePreset");
+            Mouse.Click(preset.GetClickablePoint());
+            Wait.UntilInputIsProcessed();
+            Assert.DoesNotContain('*', window.Title);
+            if (action == "add") Find(window, "AddDefaultDissolve").AsButton().Invoke();
+            else if (action == "double-click") Mouse.DoubleClick(preset.GetClickablePoint());
+            else
+            {
+                Find(window, $"Clip_{unrelated.Id:N}").Patterns.SelectionItem.Pattern.Select();
+                var left = Find(window, $"Clip_{outgoing.Id:N}").BoundingRectangle;
+                var right = Find(window, $"Clip_{incoming.Id:N}").BoundingRectangle;
+                var target = new System.Drawing.Point((int)((right.Left + left.Right) / 2), (int)(left.Top + left.Height / 2));
+                Mouse.Drag(preset.GetClickablePoint(), target, MouseButton.Left);
+            }
             WaitFor(() => window.Title.Contains('*'), "The transition preset did not change the project.");
             SaveButton(window).Invoke();
             WaitFor(() => !window.Title.Contains('*'), "The transition was not saved.");
@@ -64,6 +90,7 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
             Assert.Equal(15, loaded.Tracks[0].Clips[1].FadeInFrames);
             Assert.Equal(VideoTransitionKind.Dissolve, loaded.Tracks[0].Clips[1].FadeInTransition!.Kind);
+            if (action == "drag") Assert.Null(loaded.Tracks[0].Clips[2].FadeInTransition);
             running.CloseGracefully();
         }
         finally { Directory.Delete(temporary, recursive: true); }

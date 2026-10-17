@@ -97,4 +97,26 @@ public sealed class ClipPointerTests
         Assert.True(thread.Join(TimeSpan.FromSeconds(15)), "Clip pointer check timed out.");
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
+
+    [Fact]
+    public void TransitionDropTargetsTheOverlapAndRejectsLockedOrAmbiguousTracks() => Sta(() =>
+    {
+        var (view, track, outgoing) = Create();
+        var incoming = new TimelineClip { StartFrame = 75, DurationFrames = 60 };
+        track.Clips.Add(incoming);
+        var preset = new VideoTransition();
+        var point = new Point(TimelineView.HeaderWidth + 80.0 / 30 * view.PixelsPerSecond, 80);
+        var target = view.TransitionAt(point, preset);
+        Assert.NotNull(target);
+        Assert.Equal(outgoing.Id, target.OutgoingClipId);
+        Assert.Equal(incoming.Id, target.IncomingClipId);
+        Assert.NotSame(preset, target.Transition);
+        Assert.Null(view.TransitionAt(new Point(360, 80), preset));
+        Assert.Null(view.TransitionAt(new Point(100, 80), preset));
+        track.IsLocked = true;
+        Assert.Null(view.TransitionAt(point, preset));
+        track.IsLocked = false;
+        track.Clips.Add(new TimelineClip { StartFrame = 76, DurationFrames = 3 });
+        Assert.Null(view.TransitionAt(point, preset));
+    });
 }

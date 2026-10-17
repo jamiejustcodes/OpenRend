@@ -88,6 +88,13 @@ public partial class MainWindow : Window
                 isVisible: action == "Visible" ? !track.IsVisible : null);
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.TransitionDropped += gesture => Guard(() =>
+        {
+            gesture.Transition.Validate();
+            Pause();
+            vm.Editor.ApplyDissolve(gesture.OutgoingClipId, gesture.IncomingClipId);
+            vm.Status = "Default Dissolve applied to the dropped overlap.";
+        });
         Timeline.SplitRequested += () => Guard(vm.Split);
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
@@ -535,21 +542,6 @@ public partial class MainWindow : Window
     private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
-    private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
-    {
-        if (DissolvePluginItem is null || DefaultDissolvePreset is null) return;
-        var query = TransitionSearch.Text.Trim();
-        var visible = query.Length == 0 || "Dissolve".Contains(query, StringComparison.OrdinalIgnoreCase) || "Default".Contains(query, StringComparison.OrdinalIgnoreCase);
-        DissolvePluginItem.Visibility = DefaultDissolvePreset.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-    }
-    private void ApplyDefaultDissolveClick(object sender, RoutedEventArgs e) => Guard(() =>
-    {
-        if (vm.Selection.Count == 0) { vm.Status = "Select a video event to apply Dissolve."; return; }
-        Pause();
-        var count = vm.Editor.ApplyDissolveToSelection(vm.Selection);
-        vm.Status = count == 0 ? "No adjacent video overlap found for the selection." :
-            $"Default Dissolve applied to {count} overlap{(count == 1 ? "" : "s")}.";
-    });
     private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 3; UpdateInspector(); }
     private async void PanCropClick(object sender, RoutedEventArgs e) => await OpenPanCropAsync();
     private async Task OpenPanCropAsync(Guid? requestedClip = null) => await GuardAsync(async () =>
