@@ -39,8 +39,9 @@ public static class TimelineEvaluator
                     if (outgoing is null || frame >= outgoing.EndFrame ||
                         ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
                     var progress = (double)(frame - incoming.StartFrame) / (outgoing.EndFrame - incoming.StartFrame);
-                    // Alpha-over needs an opaque outgoing event while the incoming fade supplies the blend weight.
-                    transitionOpacity[outgoing.Id] = 1;
+                    var incomingAlpha = track.Opacity * incoming.Opacity * progress;
+                    // Compensate for the incoming alpha-over pass so lower tracks remain visible at the linear blend weight.
+                    transitionOpacity[outgoing.Id] = (1 - progress) / (1 - incomingAlpha);
                     transitionOpacity[incoming.Id] = progress;
                 }
             }

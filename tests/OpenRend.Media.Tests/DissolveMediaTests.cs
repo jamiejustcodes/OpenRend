@@ -40,6 +40,25 @@ public sealed class DissolveMediaTests
         finally { Directory.Delete(directory, recursive: true); }
     }
 
+    [Fact]
+    public void DissolveKeepsLowerTrackVisibleWhenEventsAreTranslucent()
+    {
+        var project = CreateProject();
+        foreach (var clip in project.Tracks[0].Clips) clip.Opacity = .5;
+        var green = new MediaAsset { Path = "openrend://color?hex=#00FF00", DurationSeconds = 3, HasVideo = true };
+        project.Media.Add(green);
+        project.Tracks.Add(new TimelineTrack { Kind = TrackKind.Video,
+            Clips = [new TimelineClip { MediaId = green.Id, DurationFrames = 45 }] });
+        project.Validate();
+
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, useGpuCompositing: false);
+        var pixel = renderer.RenderFrame(project, 22, 32, 24);
+        Assert.InRange((int)pixel[2], 67, 69);
+        Assert.InRange((int)pixel[1], 127, 129);
+        Assert.InRange((int)pixel[0], 59, 61);
+    }
+
     private static ProjectDocument CreateProject()
     {
         var project = new ProjectDocument { Width = 32, Height = 24 };
