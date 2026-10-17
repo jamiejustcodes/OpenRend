@@ -28,7 +28,7 @@ public sealed class WindowsDesktopFactAttribute : FactAttribute
     }
 }
 
-public sealed class EditorWorkflowTests(ITestOutputHelper output)
+public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
 {
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]

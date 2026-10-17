@@ -23,6 +23,8 @@ public partial class App : Application
         window.Show();
         if (e.Args.Length > 0 && File.Exists(e.Args[0]))
             window.Dispatcher.InvokeAsync(async () => await window.OpenPathAsync(e.Args[0]));
+        else if (e.Args.Length == 0)
+            window.Dispatcher.InvokeAsync(async () => await window.ShowStartupAsync());
     }
     protected override void OnExit(ExitEventArgs e)
     {

@@ -268,6 +268,7 @@ public partial class MainWindow : Window
         Pause();
         var project = await ProjectStore.LoadAsync(path);
         vm.Replace(project, path);
+        RecordRecentProject(path);
         await PopulateMediaVisualsAsync();
         var missing = ProjectStore.FindMissingMedia(project);
         vm.Status = missing.Count > 0 ? $"{missing.Count} missing media files. File → Relink missing media." : $"Opened {Path.GetFileName(path)}.";
@@ -323,9 +324,9 @@ public partial class MainWindow : Window
             if (dialog.ShowDialog(this) != true) return false;
             path = dialog.FileName;
         }
-        await vm.SaveAsync(path); return true;
+        await vm.SaveAsync(path); RecordRecentProject(path); return true;
     }
-    private async void NewClick(object sender, RoutedEventArgs e) => await GuardAsync(async () => { if (await ConfirmUnsavedAsync()) { Pause(); vm.NewProject(); } });
+    private async void NewClick(object sender, RoutedEventArgs e) => await GuardAsync(ShowWelcomeAsync);
     private async void OpenClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         var dialog = new OpenFileDialog { Filter = "OpenRend project|*.openrend|All files|*.*" };
@@ -874,6 +875,7 @@ public partial class MainWindow : Window
             Key.O when ctrl => () => OpenClick(this, e),
             Key.S when ctrl => () => { if (shift) SaveAsClick(this, e); else SaveClick(this, e); }
             ,
+            Key.N when ctrl && shift => () => NewEmptyClick(this, e),
             Key.N when ctrl => () => NewClick(this, e),
             Key.Z when ctrl => () => { if (shift) RedoClick(this, e); else UndoClick(this, e); }
             ,
@@ -882,7 +884,6 @@ public partial class MainWindow : Window
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
-            Key.N when ctrl && shift => () => NormalizeAudioClipClick(this, e),
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.A when ctrl => () => SelectAllClick(this, e),

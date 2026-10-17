@@ -10,6 +10,7 @@
     <Menu shell:WindowChrome.IsHitTestVisibleInChrome="True" VerticalAlignment="Stretch">
       <MenuItem Header="_File">
         <MenuItem Header="_New" InputGestureText="Ctrl+N" Click="NewClick"/>
+        <MenuItem Header="New empty project" InputGestureText="Ctrl+Shift+N" Click="NewEmptyClick"/>
         <MenuItem Header="_Open project…" InputGestureText="Ctrl+O" Click="OpenClick"/>
         <MenuItem Header="Import legacy project…" Click="ImportLegacyClick"/>
         <Separator/>
@@ -41,7 +42,7 @@
         <MenuItem x:Name="IgnoreGroupsMenu" Header="Ignore clip groups" IsCheckable="True" Click="IgnoreGroupsClick"/>
         <Separator/>
         <MenuItem Header="Switches">
-          <MenuItem Header="Normalize audio" InputGestureText="Ctrl+Shift+N" Click="NormalizeAudioClipClick"/>
+          <MenuItem Header="Normalize audio" Click="NormalizeAudioClipClick"/>
           <MenuItem Header="Mute audio" InputGestureText="Ctrl+Shift+M" Click="MuteAudioClipClick"/>
           <MenuItem Header="Invert phase" Click="InvertPhaseClipClick"/>
         </MenuItem>
