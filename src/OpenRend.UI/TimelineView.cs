@@ -71,6 +71,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? PanCropRequested;
     public event Action? VideoEffectsRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
+    public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
     public event Action<Guid, string>? VideoEventActionRequested;
     public event Action<int>? InsertVideoTrackRequested;
     public event Action<int>? InsertAudioTrackRequested;
@@ -610,11 +611,16 @@ public sealed partial class TimelineView : FrameworkElement
                 if (Math.Abs(nearest) <= threshold) delta = Math.Max(-dragging.StartFrame, delta + nearest);
             }
         }
-        else if (mode == "TrimLeft") delta = Math.Clamp(delta, Math.Max(-dragging.SourceInFrame, -dragging.StartFrame), dragging.DurationFrames - 1);
+        else if (mode == "TrimLeft") delta = Math.Clamp(delta,
+            dragging.VideoSourceMode == VideoSourceMode.Bounded ? Math.Max(-dragging.SourceInFrame, -dragging.StartFrame) : -dragging.StartFrame,
+            dragging.DurationFrames - 1);
         else
         {
             var media = Project.Media.First(m => m.Id == dragging.MediaId);
-            delta = Math.Clamp(delta, 1 - dragging.DurationFrames, Math.Max(0, Project.FrameRate.Frames(media.DurationSeconds) - dragging.SourceInFrame - dragging.DurationFrames));
+            var maximum = dragging.VideoSourceMode == VideoSourceMode.Bounded
+                ? Math.Max(0, Project.FrameRate.Frames(media.DurationSeconds) - dragging.SourceInFrame - dragging.DurationFrames)
+                : long.MaxValue - dragging.StartFrame - dragging.DurationFrames;
+            delta = Math.Clamp(delta, 1 - dragging.DurationFrames, maximum);
         }
         InvalidateVisual();
     }

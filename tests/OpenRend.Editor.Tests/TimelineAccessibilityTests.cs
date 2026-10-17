@@ -302,6 +302,34 @@ public sealed class TimelineAccessibilityTests
         Assert.True(view.HandleKeyboardInput(Key.Divide, ModifierKeys.Control));
     });
 
+    [Fact]
+    public void VideoLoopMenuRoutesModesAndReflectsUndoAndTrackLocks() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var id = editor.Project.Tracks[0].Clips[0].Id;
+        var requests = 0;
+        view.VideoSourceModeRequested += (clip, mode) => { requests++; editor.SetVideoSourceMode(clip, mode); };
+        var menu = view.CreateEventMenu(id);
+        var switches = menu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Switches"));
+        var loop = Assert.IsType<System.Windows.Controls.MenuItem>(switches.Items[0]);
+        void Open() => menu.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.ContextMenu.OpenedEvent));
+        void Click(bool value) { loop.IsChecked = value; loop.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.MenuItem.ClickEvent)); }
+        Open(); Assert.Equal(Visibility.Visible, switches.Visibility); Assert.False(loop.IsChecked);
+        Assert.Equal("VideoEventLoop", AutomationProperties.GetAutomationId(loop));
+        Click(true); Assert.Equal(VideoSourceMode.Loop, editor.Project.Tracks[0].Clips[0].VideoSourceMode);
+        Open(); Assert.True(loop.IsChecked);
+        Click(false); Assert.Equal(VideoSourceMode.HoldLastFrame, editor.Project.Tracks[0].Clips[0].VideoSourceMode);
+        editor.Undo(); Open(); Assert.True(loop.IsChecked);
+        editor.Project.Tracks[0].IsLocked = true; Open(); Assert.False(loop.IsEnabled);
+        Click(false); Assert.Equal(2, requests);
+        editor.Project.Tracks[0].IsLocked = false;
+        editor.Project.Media[0].Path = "openrend://color?hex=FFFFFF";
+        Open(); Assert.Equal(Visibility.Collapsed, switches.Visibility);
+        var audioMenu = view.CreateEventMenu(editor.Project.Tracks[1].Clips[0].Id);
+        audioMenu.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.ContextMenu.OpenedEvent));
+        Assert.Equal(Visibility.Collapsed, audioMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Switches")).Visibility);
+    });
+
     private static void Sta(Action action)
     {
         Exception? failure = null;

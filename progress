@@ -2,9 +2,9 @@
 
 ## Resume here — source looping in progress, 17 October 2026
 
-- Baseline pushed commit: `51a83d0`; the tested source-playback engine is being committed next. The prior whole-frame overlap-to-cut gate passed native integration and 587 managed checks; packaged cut/error workflows passed 2/2. That gate predates the uncommitted source-mode work.
+- Latest pushed engine commit: `97ab917`. The prior whole-frame overlap-to-cut gate passed native integration and 587 managed checks; packaged cut/error workflows passed 2/2. That gate predates the uncommitted source-mode work.
 - Current implementation: explicit finite-video Loop/HoldLastFrame modes, legacy Bounded default, schema 7, continuous rational source phase and shared preview/export mapping. The event Switches > Loop control and trim extensions are being integrated. Audio looping, factory defaults and full UI parity remain open.
-- Focused Media source-mode tests passed 11/11 (Release): CPU/D3D, crop/effects/dissolve paths, encoded output, cold-decoder hold and unchanged source bytes. Expanded focused Core checks passed 28/28, and the corrected complete Editor suite passed 111/111, including clipboard source modes. The first aggregate run passed Core251/Media242/Playback2 but found one Editor menu regression and one Desktop test setup issue. Both are corrected in source; the focused Desktop retry is running and the corrected aggregate gate remains pending.
+- Focused Media source-mode tests passed 11/11 (Release): CPU/D3D, crop/effects/dissolve paths, encoded output, cold-decoder hold and unchanged source bytes. Expanded focused Core checks passed 28/28, and the corrected complete Editor suite passed 111/111, including clipboard source modes. The first aggregate run passed Core251/Media242/Playback2 but found one Editor menu regression and one Desktop test setup issue. Both are corrected in source; the focused Desktop retry passed 1/1 and the corrected aggregate gate remains pending.
 - Comparison pixel experiment completed; the comparison app was restored to an empty workspace. Reusable private evidence, exact scope and unknowns remain in ignored `scratch/rea-source-loop-pixels-findings.md` and `scratch/GEMINI-HANDOFF.md`. Do not commit private evidence.
 - Next: verify clipboard preservation and corrected menu/desktop setup, run `tools/build.ps1` with desktop checks and isolated data, make small tested commits, update package and handoff. Keep fractional project-frame mode-switch limits explicit. Inspect Git status and stage explicit paths only.
 
@@ -263,3 +263,7 @@ User's editor and Vegas Pro processes preserved. Zero commits or git pushes to G
 ### Source-playback engine checkpoint
 
 Finite-video Loop/HoldLastFrame modes, schema 7, continuous source-phase mapping and shared render paths are ready for the first source-mode commit. Focused Core28 and Media11 passed; the initial broader run passed all251 Core and242 Media tests. Editor111 passed after correcting the missing-metadata menu case and preserving extended clipboard events. Desktop retry and corrected full gate are pending. Logs: `.local/source-loop-core.log`, `.local/source-loop-editor.log`, `.local/source-loop-build.log`.
+
+### Source-mode desktop checkpoint
+
+The event Switches > Loop workflow passed the focused Desktop test: enable, undo/redo, save, trim beyond the source, uncheck into HoldLastFrame, save and reopen. The test fits the timeline before reopening an offscreen event menu. Complete Editor111 passed with extended clipboard events at matching/doubled rational rates. Engine commit `97ab917` is pushed. The UI/clipboard slice is ready for its own tested commit; the corrected full gate is next. Log: `.local/source-loop-desktop.log`.

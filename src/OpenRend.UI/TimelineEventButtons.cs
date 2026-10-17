@@ -141,6 +141,17 @@ public sealed partial class TimelineView
             TransitionPropertiesRequested?.Invoke(id);
         });
         AutomationProperties.SetAutomationId(transition, "TransitionProperties");
+        var switches = new MenuItem { Header = "Switches" };
+        var loop = new MenuItem { Header = "Loop", IsCheckable = true };
+        AutomationProperties.SetAutomationId(loop, "VideoEventLoop");
+        switches.Items.Add(loop); menu.Items.Add(switches);
+        loop.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                VideoSourceModeRequested?.Invoke(events[0].Id, loop.IsChecked ? VideoSourceMode.Loop : VideoSourceMode.HoldLastFrame);
+        };
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
@@ -158,6 +169,11 @@ public sealed partial class TimelineView
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;
             transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            var source = video.Length == 1 ? Project.Media.SingleOrDefault(media => media.Id == video[0].Clip.MediaId) : null;
+            switches.Visibility = source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)
+                ? Visibility.Visible : Visibility.Collapsed;
+            switches.IsEnabled = loop.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            loop.IsChecked = video.Length == 1 && video[0].Clip.VideoSourceMode == VideoSourceMode.Loop;
             split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
         };

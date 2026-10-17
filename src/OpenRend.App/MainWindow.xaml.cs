@@ -116,6 +116,12 @@ public partial class MainWindow : Window
             Pause();
             new TransitionPropertiesWindow(vm, id) { Owner = this }.ShowDialog();
         });
+        Timeline.VideoSourceModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetVideoSourceMode(id, mode);
+            vm.Status = mode == VideoSourceMode.Loop ? "Video event looping enabled." : "Video event holds its last frame beyond the source.";
+        });
         Timeline.VideoEventActionRequested += async (id, action) =>
         {
             if (action == "PanCrop") await OpenPanCropAsync(id);

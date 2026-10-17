@@ -229,7 +229,7 @@ public sealed class EditorViewModel : ObservableObject
                 clip.StartFrame = checked(at + offset);
                 clip.SourceInFrame = ConvertFrame(copied.Clip.SourceInFrame);
                 var available = p.FrameRate.Frames(clipboardMedia.Single(m => m.Id == copied.Clip.MediaId).DurationSeconds);
-                if (available > 0)
+                if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0)
                 {
                     clip.DurationFrames = Math.Min(clip.DurationFrames, available);
                     clip.SourceInFrame = Math.Min(clip.SourceInFrame, available - clip.DurationFrames);
