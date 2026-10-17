@@ -171,6 +171,7 @@ public sealed class TimelineClip
 }
 
 public enum VideoTransitionKind { Dissolve }
+public enum CutTransitionAlignment { BeforeCut, CenteredOnCut, AfterCut }
 
 public sealed class VideoTransition
 {

@@ -190,6 +190,55 @@ public sealed class TimelineTests
         Assert.Equal(0, last.FadeInFrames);
     }
 
+    [Theory]
+    [InlineData(CutTransitionAlignment.BeforeCut, 15, 0)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 7, 8)]
+    [InlineData(CutTransitionAlignment.AfterCut, 0, 15)]
+    public void CutConversionExtendsSourceHandlesWithoutMovingExistingContent(CutTransitionAlignment alignment, long before, long after)
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        editor.TrimClip(outgoing.Id, 20, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 60, 60);
+        editor.TrimClip(incoming.Id, 30, 60);
+        var later = editor.PlaceClip(media.Id, track.Id, 180, 30);
+
+        editor.ConvertCutToDissolve(outgoing.Id, incoming.Id, 15, alignment);
+
+        Assert.Equal(60 + after, outgoing.EndFrame);
+        Assert.Equal(60 - before, incoming.StartFrame);
+        Assert.Equal(30 - before, incoming.SourceInFrame);
+        Assert.Equal(120, incoming.EndFrame);
+        Assert.Equal(180, later.StartFrame);
+        Assert.Equal(15, outgoing.FadeOutFrames);
+        Assert.Equal(15, incoming.FadeInFrames);
+        var firstUnblendedFrame = Assert.Single(TimelineEvaluator.Evaluate(editor.Project, 60 + after).Video);
+        Assert.Equal(30 + after, firstUnblendedFrame.SourceFrame);
+        Assert.True(editor.Undo());
+        var restored = editor.Project.Tracks[0].Clips;
+        Assert.Equal(60, restored[0].EndFrame);
+        Assert.Equal(60, restored[1].StartFrame);
+        Assert.Equal(30, restored[1].SourceInFrame);
+        Assert.Null(restored[1].FadeInTransition);
+    }
+
+    [Fact]
+    public void CutConversionRejectsMissingSourceHandlesWithoutChangingTheTimeline()
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 60, 60);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            editor.ConvertCutToDissolve(outgoing.Id, incoming.Id, 15, CutTransitionAlignment.BeforeCut));
+        Assert.Equal(60, incoming.StartFrame);
+        Assert.Null(incoming.FadeInTransition);
+        editor.TrimClip(outgoing.Id, 240, 60);
+        Assert.Throws<ArgumentOutOfRangeException>(() =>
+            editor.ConvertCutToDissolve(outgoing.Id, incoming.Id, 15, CutTransitionAlignment.AfterCut));
+        Assert.Equal(60, outgoing.EndFrame);
+        Assert.Equal(60, incoming.StartFrame);
+    }
+
     [Fact]
     public void UndoRedoAndBranchingRestoreWholeProject()
     {

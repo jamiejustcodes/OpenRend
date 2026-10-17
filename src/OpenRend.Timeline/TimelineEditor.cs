@@ -162,6 +162,54 @@ public sealed class TimelineEditor
         return ApplyDissolvesToAdjacent(selected.Select(item => item.Clip.Id));
     }
 
+    public void ConvertCutToDissolve(Guid outgoingClipId, Guid incomingClipId, long overlapFrames, CutTransitionAlignment alignment)
+    {
+        if (overlapFrames <= 0) throw new ArgumentOutOfRangeException(nameof(overlapFrames));
+        if (!Enum.IsDefined(alignment)) throw new ArgumentOutOfRangeException(nameof(alignment));
+        var (outgoingTrack, outgoing) = FindClip(outgoingClipId);
+        var (incomingTrack, incoming) = FindClip(incomingClipId);
+        if (outgoingClipId == incomingClipId || outgoingTrack != incomingTrack || outgoingTrack.Kind != TrackKind.Video ||
+            outgoing.EndFrame != incoming.StartFrame)
+            throw new InvalidOperationException("Choose two video events that meet at a cut on the same track.");
+        EnsureUnlocked(outgoingTrack);
+        var before = alignment switch
+        {
+            CutTransitionAlignment.BeforeCut => overlapFrames,
+            CutTransitionAlignment.CenteredOnCut => overlapFrames / 2,
+            _ => 0
+        };
+        var after = overlapFrames - before;
+        var extendedOutgoing = outgoing.DeepClone();
+        var extendedIncoming = incoming.DeepClone();
+        extendedOutgoing.DurationFrames = checked(outgoing.DurationFrames + after);
+        extendedIncoming.StartFrame = checked(incoming.StartFrame - before);
+        extendedIncoming.SourceInFrame = checked(incoming.SourceInFrame - before);
+        extendedIncoming.DurationFrames = checked(incoming.DurationFrames + before);
+        EnsureTimelineBounds(extendedOutgoing);
+        EnsureTimelineBounds(extendedIncoming);
+        EnsureSourceBounds(extendedOutgoing, Project.Media.Single(media => media.Id == outgoing.MediaId));
+        EnsureSourceBounds(extendedIncoming, Project.Media.Single(media => media.Id == incoming.MediaId));
+        if (outgoing.FadeInFrames > extendedOutgoing.DurationFrames - overlapFrames ||
+            incoming.FadeOutFrames > extendedIncoming.DurationFrames - overlapFrames)
+            throw new InvalidOperationException("The overlap conflicts with an existing fade.");
+        if (outgoingTrack.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
+            clip.StartFrame < extendedOutgoing.EndFrame && clip.EndFrame > extendedIncoming.StartFrame))
+            throw new InvalidOperationException("A dissolve requires exactly two events in the overlap.");
+        Execute(_ =>
+        {
+            outgoing.DurationFrames = extendedOutgoing.DurationFrames;
+            incoming.StartFrame = extendedIncoming.StartFrame;
+            incoming.SourceInFrame = extendedIncoming.SourceInFrame;
+            incoming.DurationFrames = extendedIncoming.DurationFrames;
+            // Extending a take adds handles; existing media and crop keyframes keep their timeline positions.
+            if (incoming.Crop is not null) incoming.CropOffsetFrames = checked(incoming.CropOffsetFrames - before);
+            outgoing.FadeOutFrames = incoming.FadeInFrames = overlapFrames;
+            incoming.FadeInTransition = new VideoTransition();
+            outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
+            outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
+        });
+    }
+
     public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds)
     {
         var selected = ExpandSelection(selectedClipIds, ignoreGroups: true);
