@@ -49,6 +49,7 @@ public sealed class ProjectStoreTests : IDisposable
 
         var path = System.IO.Path.Combine(directory, "dissolve.orproj");
         await ProjectStore.SaveAsync(project, path);
+        Assert.Equal(5, (int)JsonNode.Parse(await File.ReadAllTextAsync(path))!["Version"]!);
         var loaded = await ProjectStore.LoadAsync(path);
 
         Assert.Equal(15, loaded.Tracks[0].Clips[0].FadeOutFrames);
@@ -58,13 +59,13 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
-    public async Task EarlierProjectsLoadAndNewSavesDeclareParameterizedEffectVersionFour()
+    public async Task EarlierProjectsLoadAndNewSavesDeclareTransitionVersionFive()
     {
         var path = System.IO.Path.Combine(directory, "versioned.openrend");
         var project = Create();
         await ProjectStore.SaveAsync(project, path);
         var manifest = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
-        Assert.Equal(4, (int)manifest["Version"]!);
+        Assert.Equal(5, (int)manifest["Version"]!);
         manifest["Version"] = 1;
         await File.WriteAllTextAsync(path, manifest.ToJsonString());
         var loaded = await ProjectStore.LoadAsync(path);
@@ -72,7 +73,7 @@ public sealed class ProjectStoreTests : IDisposable
         var editor = new TimelineEditor(loaded);
         editor.SetCropKeyframe(loaded.Tracks[0].Clips[0].Id, 0, CropState.Identity(320, 180) with { RotationDegrees = 45 });
         await ProjectStore.SaveAsync(loaded, path);
-        Assert.Equal(4, (int)JsonNode.Parse(await File.ReadAllTextAsync(path))!["Version"]!);
+        Assert.Equal(5, (int)JsonNode.Parse(await File.ReadAllTextAsync(path))!["Version"]!);
         Assert.Equal(45, (await ProjectStore.LoadAsync(path)).Tracks[0].Clips[0].Crop!.Keyframes[0].State.RotationDegrees);
         manifest["Version"] = 2;
         await File.WriteAllTextAsync(path, manifest.ToJsonString());

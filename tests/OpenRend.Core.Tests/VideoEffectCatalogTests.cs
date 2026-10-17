@@ -81,7 +81,7 @@ public sealed class VideoEffectCatalogTests
         try
         {
             await ProjectStore.SaveAsync(editor.Project, path); var manifest = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
-            Assert.Equal(4, (int)manifest["Version"]!); var loaded = await ProjectStore.LoadAsync(path);
+            Assert.Equal(ProjectStore.CurrentVersion, (int)manifest["Version"]!); var loaded = await ProjectStore.LoadAsync(path);
             Assert.Equal(7.5, loaded.Tracks[0].Clips[0].VideoEffects[0].GetParameter("Frequency"));
             manifest["Version"] = 3; manifest["Project"]!["Tracks"]![0]!["Clips"]![0]!["VideoEffects"] = new JsonArray(JsonNode.Parse("{\"Id\":\"" + Guid.NewGuid() + "\",\"Kind\":\"Saturation\",\"Amount\":0.5}"));
             await File.WriteAllTextAsync(path, manifest.ToJsonString()); loaded = await ProjectStore.LoadAsync(path);

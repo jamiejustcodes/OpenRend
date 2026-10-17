@@ -82,7 +82,7 @@ public sealed class VideoEffectChoiceTests
             var loaded = await ProjectStore.LoadAsync(path);
             Assert.Equal(1, loaded.Tracks[0].Clips[0].VideoEffects[0].GetParameter("Channel"));
             var manifest = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
-            Assert.Equal(4, (int)manifest["Version"]!);
+            Assert.Equal(ProjectStore.CurrentVersion, (int)manifest["Version"]!);
             var parameters = (JsonObject)manifest["Project"]!["Tracks"]![0]!["Clips"]![0]!["VideoEffects"]![0]!["Parameters"]!;
             parameters.Remove("Channel");
             await File.WriteAllTextAsync(path, manifest.ToJsonString());
