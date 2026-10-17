@@ -41,8 +41,8 @@ public sealed class OverlapToCutTests
             Assert.Equal(before.Crop, after.Crop);
             Assert.Equal(before.Opacity, after.Opacity);
         }
-        Assert.Equal(outgoing.Id, Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut - 1).Video.Where(item => item.Clip.Id == outgoing.Id || item.Clip.Id == incoming.Id)).Clip.Id);
-        Assert.Equal(incoming.Id, Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut).Video.Where(item => item.Clip.Id == outgoing.Id || item.Clip.Id == incoming.Id)).Clip.Id);
+        Assert.Equal(outgoing.Id, Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut - 1).Video, item => item.Clip.Id == outgoing.Id || item.Clip.Id == incoming.Id).Clip.Id);
+        Assert.Equal(incoming.Id, Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut).Video, item => item.Clip.Id == outgoing.Id || item.Clip.Id == incoming.Id).Clip.Id);
         var converted = JsonSerializer.Serialize(editor.Project);
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid() + ".openrend");
         try
@@ -66,7 +66,7 @@ public sealed class OverlapToCutTests
         editor.ConvertOverlapToCut(pair[0].Id, pair[1].Id, alignment);
         Assert.Equal(cut, pair[0].EndFrame); Assert.Equal(cut, pair[1].StartFrame);
         Assert.Equal(source, pair[1].SourceInFrame); Assert.Equal(210, pair[1].EndFrame);
-        Assert.Null(Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut).Video.Where(item => item.Clip.Id == pair[1].Id)).Dissolve);
+        Assert.Null(Assert.Single(TimelineEvaluator.Evaluate(editor.Project, cut).Video, item => item.Clip.Id == pair[1].Id).Dissolve);
     }
 
     [Theory]
