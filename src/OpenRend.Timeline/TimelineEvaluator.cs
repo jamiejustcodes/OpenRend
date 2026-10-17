@@ -24,11 +24,31 @@ public static class TimelineEvaluator
         {
             if (track.IsMuted || (track.Kind == TrackKind.Video && !track.IsVisible)) continue;
             if ((track.Kind == TrackKind.Video ? soloVideo : soloAudio) && !track.IsSolo) continue;
-            foreach (var clip in track.Clips)
+            var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null)
+                ? track.Clips.OrderBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray() : track.Clips.ToArray();
+            var transitionOpacity = new Dictionary<Guid, double>();
+            if (track.Kind == TrackKind.Video)
+            {
+                foreach (var incoming in ordered.Where(c => c.FadeInTransition is not null && c.StartFrame <= frame && frame < c.EndFrame))
+                {
+                    var outgoing = ordered.Where(c => c.Id != incoming.Id && c.StartFrame < incoming.StartFrame &&
+                        c.EndFrame > incoming.StartFrame && c.EndFrame <= incoming.EndFrame &&
+                        c.FadeOutTransition?.Kind == incoming.FadeInTransition?.Kind &&
+                        c.FadeOutTransition?.Preset == incoming.FadeInTransition?.Preset)
+                        .OrderByDescending(c => c.StartFrame).FirstOrDefault();
+                    if (outgoing is null || frame >= outgoing.EndFrame ||
+                        ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
+                    var progress = (double)(frame - incoming.StartFrame) / (outgoing.EndFrame - incoming.StartFrame);
+                    // Alpha-over needs an opaque outgoing event while the incoming fade supplies the blend weight.
+                    transitionOpacity[outgoing.Id] = 1;
+                    transitionOpacity[incoming.Id] = progress;
+                }
+            }
+            foreach (var clip in ordered)
             {
                 if (frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
                 var local = frame - clip.StartFrame;
-                var fade = FadeAt(clip, local);
+                var fade = transitionOpacity.TryGetValue(clip.Id, out var blend) ? blend : FadeAt(clip, local);
                 var (left, right) = BalanceStages(track, clip);
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;

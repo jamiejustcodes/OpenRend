@@ -111,6 +111,24 @@ public sealed class TimelineTests
     }
 
     [Fact]
+    public void DissolveEvaluatesOverlapWithoutDimmingTheOutgoingEvent()
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 45, 60);
+        editor.ApplyDissolve(outgoing.Id, incoming.Id);
+
+        var start = TimelineEvaluator.Evaluate(editor.Project, 45).Video;
+        Assert.Equal(new[] { outgoing.Id, incoming.Id }, start.Select(layer => layer.Clip.Id));
+        Assert.Equal(1, start[0].Opacity);
+        Assert.Equal(0, start[1].Opacity);
+        var middle = TimelineEvaluator.Evaluate(editor.Project, 52).Video;
+        Assert.Equal(1, middle[0].Opacity);
+        Assert.Equal(7.0 / 15, middle[1].Opacity, 12);
+        Assert.Equal(1, Assert.Single(TimelineEvaluator.Evaluate(editor.Project, 60).Video).Opacity);
+    }
+
+    [Fact]
     public void UndoRedoAndBranchingRestoreWholeProject()
     {
         var (editor, media, track) = Create();
