@@ -25,20 +25,25 @@ public static class TimelineEvaluator
             if (track.IsMuted || (track.Kind == TrackKind.Video && !track.IsVisible)) continue;
             if ((track.Kind == TrackKind.Video ? soloVideo : soloAudio) && !track.IsSolo) continue;
             var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null)
-                ? track.Clips.OrderBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray() : track.Clips.ToArray();
+                ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
+                : track.Clips.ToArray();
             var transitionOpacity = new Dictionary<Guid, double>();
             if (track.Kind == TrackKind.Video)
             {
-                foreach (var incoming in ordered.Where(c => c.FadeInTransition is not null && c.StartFrame <= frame && frame < c.EndFrame))
+                foreach (var incoming in ordered.Where(c => c.FadeInTransition is not null && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
                 {
-                    var outgoing = ordered.Where(c => c.Id != incoming.Id && c.StartFrame < incoming.StartFrame &&
-                        c.EndFrame > incoming.StartFrame && c.EndFrame <= incoming.EndFrame &&
+                    var incomingPosition = frame - incoming.StartFrame + incoming.FadeOffsetFrames;
+                    if (incomingPosition >= incoming.FadeInFrames) continue;
+                    var outgoing = ordered.Where(c => c.Id != incoming.Id && c.FadeOutFrames > 0 &&
+                        c.StartFrame <= frame && frame < c.EndFrame &&
+                        c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
                         c.FadeOutTransition?.Kind == incoming.FadeInTransition?.Kind &&
-                        c.FadeOutTransition?.Preset == incoming.FadeInTransition?.Preset)
+                        c.FadeOutTransition?.Preset == incoming.FadeInTransition?.Preset &&
+                        frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
                         .OrderByDescending(c => c.StartFrame).FirstOrDefault();
-                    if (outgoing is null || frame >= outgoing.EndFrame ||
+                    if (outgoing is null ||
                         ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
-                    var progress = (double)(frame - incoming.StartFrame) / (outgoing.EndFrame - incoming.StartFrame);
+                    var progress = (double)incomingPosition / incoming.FadeInFrames;
                     var incomingAlpha = track.Opacity * incoming.Opacity * progress;
                     // Compensate for the incoming alpha-over pass so lower tracks remain visible at the linear blend weight.
                     transitionOpacity[outgoing.Id] = (1 - progress) / (1 - incomingAlpha);

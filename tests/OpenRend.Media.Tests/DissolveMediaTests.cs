@@ -59,6 +59,24 @@ public sealed class DissolveMediaTests
         Assert.InRange((int)pixel[0], 59, 61);
     }
 
+    [Fact]
+    public void SplittingEitherEventPreservesTheDissolveFrames()
+    {
+        var project = CreateProject();
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, useGpuCompositing: false);
+        var original = Enumerable.Range(15, 15).Select(frame => renderer.RenderFrame(project, frame, 32, 24)).ToArray();
+        var editor = new TimelineEditor(project);
+        var outgoing = project.Tracks[0].Clips[0];
+        var incoming = project.Tracks[0].Clips[1];
+
+        editor.SplitClip(incoming.Id, 20);
+        editor.SplitClip(outgoing.Id, 25);
+
+        for (var frame = 15; frame < 30; frame++)
+            Assert.Equal(original[frame - 15], renderer.RenderFrame(project, frame, 32, 24));
+    }
+
     private static ProjectDocument CreateProject()
     {
         var project = new ProjectDocument { Width = 32, Height = 24 };
