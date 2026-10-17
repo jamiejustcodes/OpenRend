@@ -51,10 +51,8 @@ public sealed class EditorWorkflowTests(ITestOutputHelper output)
             var window = running.Window;
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
             Mouse.Click(Find(window, $"Clip_{outgoing.Id:N}").GetClickablePoint());
-            using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
-                Mouse.Click(Find(window, $"Clip_{incoming.Id:N}").GetClickablePoint());
             Assert.True(Find(window, $"Clip_{outgoing.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
-            Assert.True(Find(window, $"Clip_{incoming.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
+            Assert.False(Find(window, $"Clip_{incoming.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
             var transitions = window.FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Transitions")));
             Assert.NotNull(transitions);
             transitions.Patterns.SelectionItem.Pattern.Select();

@@ -544,13 +544,11 @@ public partial class MainWindow : Window
     }
     private void ApplyDefaultDissolveClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
-            .SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id)).Select(clip => clip))
-            .OrderBy(clip => clip.StartFrame).ToArray();
-        if (selected.Length != 2) { vm.Status = "Select two overlapping video events to apply Dissolve."; return; }
+        if (vm.Selection.Count == 0) { vm.Status = "Select a video event to apply Dissolve."; return; }
         Pause();
-        vm.Editor.ApplyDissolve(selected[0].Id, selected[1].Id);
-        vm.Status = "Default Dissolve applied to the selected overlap.";
+        var count = vm.Editor.ApplyDissolvesToAdjacent(vm.Selection);
+        vm.Status = count == 0 ? "No adjacent video overlap found for the selection." :
+            $"Default Dissolve applied to {count} overlap{(count == 1 ? "" : "s")}.";
     });
     private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 3; UpdateInspector(); }
     private async void PanCropClick(object sender, RoutedEventArgs e) => await OpenPanCropAsync();
