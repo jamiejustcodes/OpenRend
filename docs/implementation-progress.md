@@ -2,6 +2,16 @@
 
 This is the importance-ordered work list for OpenRend's editor. A feature is checked only when its verified controls and interactions work end to end, its edit decisions survive save/reopen and undo/redo, and preview and export agree. Evidence for comparisons with other editors stays in local research notes outside version control. Record commits and test results here as work lands.
 
+## Requested addition: startup and project creation
+
+Status: functional startup slice, full parity open. OpenRend has its own welcome artwork/branding, New/Open/Getting Started pages, sizing/rate choices and startup preference. Complete advanced project controls, factory defaults and exact visual matching remain open.
+
+- [x] Five aspect-ratio choices and all fifteen HD/FullHD/UHD dimensions create empty projects at seven whole/fractional nominal rates.
+- [x] Show on startup saves independently; successful creation remembers preset choices.
+- [x] Recent projects reopen, missing paths are filtered, and command-line project open bypasses welcome.
+- [x] Desktop test creates/saves/reopens a 2160×3840/60 fps portrait project and verifies startup preferences and recent-project routing.
+- [ ] Complete advanced project settings and the remaining visual/interaction comparison.
+
 ## 1. Event transitions and overlap editing — critical
 
 - [ ] Reproduce the transition browser's categories, preset selection and placement interactions.
@@ -34,7 +44,7 @@ OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered
 - [ ] Persist render presets and validate options before starting an export.
 - [ ] Verify duration, frame count, audio and output metadata against actual files.
 
-Status: partial. Render As now exposes the supported H.264/AAC presets, property search, favorites, output folder/name and loop-region rendering. The timeline provides ruler/edge drags and I/O in/out points. Full catalog/custom templates, channel mapping, metadata/log options and complete UI matching remain open. Loop selection is session state and is currently bounded to the timeline; project persistence and loop playback remain open.
+Status: partial. Render As now exposes supported H.264/AAC presets, custom quality/audio bitrate/encoder-speed settings, property search, favorites, output folder/name and loop-region rendering. The timeline provides ruler/edge drags and I/O in/out points. Full format/resolution/rate catalog, channel mapping, metadata/log options and complete UI matching remain open. Loop selection is session state and is currently bounded to the timeline; project persistence and loop playback remain open.
 
 Verified parts:
 
@@ -42,6 +52,8 @@ Verified parts:
 - [x] Encoded ranges have the requested frame count/rate, rational audio duration, first-frame pixels and source-tone identity at integer and fractional rates.
 - [x] Supported template property search requires each semicolon-separated term; favorites and selected template/folder choices survive preference reload.
 - [x] Desktop workflow drags a loop region, searches/favorites a preset, rejects an invalid extension and renders a 30-frame file; reopening the dialog restores its saved choices.
+- [x] Custom preset model saves/renames/deletes stable IDs and validates actual H.264/AAC encoder settings; encoded tests inspect quality/speed/bitrate and source protection.
+- [x] Desktop custom preset save/reopen/rename/export works; selecting a builtin preserves saved custom presets and favorites.
 
 ## 3. Color grading, curves and LUTs — high
 
@@ -50,7 +62,14 @@ Verified parts:
 - [ ] Match processing order and interpolation in preview and export.
 - [ ] Verify representative scopes, pixels, save/reopen and undo/redo.
 
-Status: queued.
+Status: partial event LUT slice. A 3D .cube LUT can be imported, embedded, cleared and adjusted with Strength and Trilinear/Tetrahedral interpolation in Video event FX. Full grading wheels/curves, Camera/Look slot layout, native color-space math and complete UI matching remain open.
+
+Verified parts:
+
+- [x] Bounded parser validates 3D lattice/domain data, preserves independent clones and rejects unsupported/truncated input.
+- [x] Strength, bypass and both interpolation methods preserve alpha and share preview/export processing; CPU/D3D and encoded frames are compared over a lower track.
+- [x] Version 6 embeds LUT data; import/clear undo, save/reopen without the source LUT file and oversize-save destination protection are tested.
+- [x] Desktop Browse/Clear/Undo, Strength and interpolation edits survive save/reopen after the original LUT is deleted.
 
 ## 4. Effect scope beyond events — high
 

@@ -24,6 +24,8 @@ Keep the entire bundle directory together. This is a development build; it has n
 
 ## Editing
 
+Welcome opens at startup with aspect, resolution and rational frame-rate choices. Ctrl+N reopens New Project; the startup checkbox and recent projects are saved independently. Opening a project path skips Welcome. See [project startup](docs/project-startup.md).
+
 Import media with Ctrl+I or drop files onto the window. Double-click a source to place it at the cursor, or drag it to a compatible timeline track. Video with sound creates separate picture and audio clips. Ctrl+click selects several clips; use Ctrl+A to select all.
 
 Drag a clip to move it, or point near either edge to show a resize cursor and highlighted trim grip. The edge target extends slightly outside the clip. Hold and drag to trim; Escape cancels the drag. S splits selected clips at the cursor; Delete removes them. Imported picture/sound pairs stay linked for editing. G links a selection, U unlinks it, and Edit → Ignore clip groups temporarily isolates members. Splits produce independent left/right groups. Snap aligns moves with clip boundaries and the playhead. Ripple closes removed time on the affected tracks. Ctrl+Z/Ctrl+Y undo and redo. Track headers provide mute, solo, lock and video visibility controls. Clip Properties edits source ranges, gain, opacity, pan and fades.
@@ -32,7 +34,7 @@ Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V paste
 
 Video events have Pan/Crop, FX and event-options buttons at their lower-right corner. Narrow events show an overflow button; zoom in or use the context menu for the full controls. Event options toggle headers, names and lengths for the current session. Locked tracks disable event actions.
 
-Video event FX provides 53 built-in effects across color, blur, detail, distortion, keying, stylizing, glow and render. Use the Plug-in chooser to filter categories, search, and stage Add/Replace/Remove operations; OK applies the draft as one undo step and Cancel preserves the project. Reorder or bypass effects, drag a parameter or enter its value, and undo changes. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. See [video effects](docs/video-effects.md) for the supported catalog and processing limits. Effect keyframes and external plug-ins are not supported yet.
+Video event FX provides 63 built-in effects across color, blur, detail, distortion, keying, stylizing, glow, render and AI tools. Use the Plug-in chooser to filter categories, search, and stage Add/Replace/Remove operations; OK applies the draft as one undo step and Cancel preserves the project. Reorder or bypass effects, drag a parameter or enter its value, and undo changes. LUT Filter imports embedded 3D `.cube` data with strength and interpolation controls. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. See [video effects](docs/video-effects.md) for the supported catalog and processing limits. Effect keyframes and external plug-ins are not supported yet.
 
 Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
 
