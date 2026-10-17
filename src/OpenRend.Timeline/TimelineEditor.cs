@@ -117,6 +117,34 @@ public sealed class TimelineEditor
         return clip;
     }
 
+    public void ApplyDissolve(Guid outgoingClipId, Guid incomingClipId)
+    {
+        if (outgoingClipId == incomingClipId) throw new ArgumentException("Choose two different video events.");
+        var (outgoingTrack, outgoing) = FindClip(outgoingClipId);
+        var (incomingTrack, incoming) = FindClip(incomingClipId);
+        if (outgoingTrack.Id != incomingTrack.Id || outgoingTrack.Kind != TrackKind.Video)
+            throw new InvalidOperationException("A dissolve requires overlapping video events on the same track.");
+        EnsureUnlocked(outgoingTrack);
+        if (outgoing.StartFrame >= incoming.StartFrame || outgoing.EndFrame <= incoming.StartFrame || outgoing.EndFrame > incoming.EndFrame)
+            throw new InvalidOperationException("The incoming event must overlap the end of the outgoing event.");
+        var overlap = outgoing.EndFrame - incoming.StartFrame;
+        if (outgoing.FadeInFrames > outgoing.DurationFrames - overlap || incoming.FadeOutFrames > incoming.DurationFrames - overlap)
+            throw new InvalidOperationException("The overlap conflicts with an existing fade.");
+        if (outgoingTrack.Clips.Any(clip => clip.Id != outgoingClipId && clip.Id != incomingClipId &&
+            clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame))
+            throw new InvalidOperationException("A dissolve requires exactly two events in the overlap.");
+        Execute(_ =>
+        {
+            // The two fade lengths follow the integer-frame overlap, including after save and undo.
+            outgoing.FadeOutFrames = overlap;
+            incoming.FadeInFrames = overlap;
+            outgoing.FadeOutTransition = new VideoTransition();
+            incoming.FadeInTransition = new VideoTransition();
+            outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
+            outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
+        });
+    }
+
     public void MoveClip(Guid clipId, Guid trackId, long startFrame)
     {
         var (source, clip) = FindClip(clipId);

@@ -84,6 +84,10 @@ public sealed class ProjectDocument
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
                 var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
+                if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null))
+                    throw new InvalidDataException("Video transitions require a video clip.");
+                clip.FadeInTransition?.Validate();
+                clip.FadeOutTransition?.Validate();
                 if (clip.Crop is not null)
                 {
                     if (track.Kind != TrackKind.Video || clip.CropOffsetFrames > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip crop range is invalid.");
@@ -147,6 +151,8 @@ public sealed class TimelineClip
     public double Opacity { get; set; } = 1;
     public long FadeInFrames { get; set; }
     public long FadeOutFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeInTransition { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeOutTransition { get; set; }
     public long FadeOffsetFrames { get; set; }
     public long? FadeDurationFrames { get; set; }
     public double Pan { get; set; }
@@ -157,7 +163,25 @@ public sealed class TimelineClip
     {
         var clone = (TimelineClip)MemberwiseClone();
         clone.Crop = Crop?.DeepClone();
+        clone.FadeInTransition = FadeInTransition?.DeepClone();
+        clone.FadeOutTransition = FadeOutTransition?.DeepClone();
         clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
         return clone;
+    }
+}
+
+public enum VideoTransitionKind { Dissolve }
+
+public sealed class VideoTransition
+{
+    public VideoTransitionKind Kind { get; set; } = VideoTransitionKind.Dissolve;
+    public string Preset { get; set; } = "Default";
+
+    public VideoTransition DeepClone() => (VideoTransition)MemberwiseClone();
+
+    public void Validate()
+    {
+        if (!Enum.IsDefined(Kind) || !string.Equals(Preset, "Default", StringComparison.Ordinal))
+            throw new InvalidDataException("Video transition is not supported.");
     }
 }

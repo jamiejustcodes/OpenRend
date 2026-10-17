@@ -78,6 +78,39 @@ public sealed class TimelineTests
     }
 
     [Fact]
+    public void DissolveAttachesToBothEventFadesAndUndoRestoresThem()
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 45, 60);
+
+        editor.ApplyDissolve(outgoing.Id, incoming.Id);
+
+        Assert.Equal(15, outgoing.FadeOutFrames);
+        Assert.Equal(15, incoming.FadeInFrames);
+        Assert.Equal(VideoTransitionKind.Dissolve, outgoing.FadeOutTransition!.Kind);
+        Assert.Equal("Default", incoming.FadeInTransition!.Preset);
+        Assert.True(editor.Undo());
+        Assert.Null(editor.Project.Tracks[0].Clips[0].FadeOutTransition);
+        Assert.Null(editor.Project.Tracks[0].Clips[1].FadeInTransition);
+        Assert.True(editor.Redo());
+        Assert.Equal(15, editor.Project.Tracks[0].Clips[1].FadeInFrames);
+    }
+
+    [Fact]
+    public void DissolveRejectsNonOverlappingAndThreeWayEvents()
+    {
+        var (editor, media, track) = Create();
+        var outgoing = editor.PlaceClip(media.Id, track.Id, 0, 60);
+        var incoming = editor.PlaceClip(media.Id, track.Id, 60, 60);
+        Assert.Throws<InvalidOperationException>(() => editor.ApplyDissolve(outgoing.Id, incoming.Id));
+        editor.MoveClip(incoming.Id, track.Id, 45);
+        editor.PlaceClip(media.Id, track.Id, 50, 30);
+        Assert.Throws<InvalidOperationException>(() => editor.ApplyDissolve(outgoing.Id, incoming.Id));
+        Assert.Null(outgoing.FadeOutTransition);
+    }
+
+    [Fact]
     public void UndoRedoAndBranchingRestoreWholeProject()
     {
         var (editor, media, track) = Create();
