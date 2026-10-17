@@ -284,6 +284,65 @@ public sealed class TimelineEditor
         });
     }
 
+    public void ConvertOverlapToCut(Guid outgoingClipId, Guid incomingClipId, CutTransitionAlignment alignment)
+    {
+        if (!Enum.IsDefined(alignment)) throw new ArgumentOutOfRangeException(nameof(alignment));
+        if (outgoingClipId == incomingClipId) throw new ArgumentException("Choose two different video events.");
+        var (outgoingTrack, outgoing) = FindClip(outgoingClipId);
+        var (incomingTrack, incoming) = FindClip(incomingClipId);
+        if (outgoingTrack != incomingTrack || outgoingTrack.Kind != TrackKind.Video)
+            throw new InvalidOperationException("A cut conversion requires overlapping video events on the same track.");
+        EnsureUnlocked(outgoingTrack);
+        if (outgoing.StartFrame >= incoming.StartFrame || outgoing.EndFrame <= incoming.StartFrame || outgoing.EndFrame >= incoming.EndFrame)
+            throw new InvalidOperationException("Both events must retain a positive duration on opposite sides of the overlap.");
+        var overlap = outgoing.EndFrame - incoming.StartFrame;
+        if (outgoing.FadeOffsetFrames != 0 || incoming.FadeOffsetFrames != 0 ||
+            outgoing.FadeDurationFrames is not null || incoming.FadeDurationFrames is not null ||
+            outgoing.FadeOutFrames != overlap || incoming.FadeInFrames != overlap)
+            throw new InvalidOperationException("Cut conversion requires complete, unsplit fades covering the overlap.");
+        if (outgoingTrack.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
+            clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame))
+            throw new InvalidOperationException("A cut conversion requires exactly two events in the overlap.");
+        if (alignment == CutTransitionAlignment.CenteredOnCut && overlap % 2 != 0)
+            throw new InvalidOperationException("Centering this overlap would create a half-frame cut. OpenRend stores edits in whole project frames.");
+        var cut = alignment switch
+        {
+            CutTransitionAlignment.BeforeCut => outgoing.EndFrame,
+            CutTransitionAlignment.AfterCut => incoming.StartFrame,
+            _ => checked(incoming.StartFrame + overlap / 2)
+        };
+        var trimmedOutgoing = outgoing.DeepClone();
+        var trimmedIncoming = incoming.DeepClone();
+        var headTrim = cut - incoming.StartFrame;
+        trimmedOutgoing.DurationFrames = cut - outgoing.StartFrame;
+        trimmedOutgoing.FadeOutFrames = 0;
+        trimmedOutgoing.FadeOutTransition = null;
+        trimmedIncoming.StartFrame = cut;
+        trimmedIncoming.DurationFrames = incoming.EndFrame - cut;
+        trimmedIncoming.SourceInFrame = checked(incoming.SourceInFrame + headTrim);
+        if (trimmedIncoming.Crop is not null) trimmedIncoming.CropOffsetFrames = checked(incoming.CropOffsetFrames + headTrim);
+        trimmedIncoming.FadeInFrames = 0;
+        trimmedIncoming.FadeInTransition = null;
+        EnsureTimelineBounds(trimmedOutgoing);
+        EnsureTimelineBounds(trimmedIncoming);
+        EnsureSourceBounds(trimmedOutgoing, Project.Media.Single(media => media.Id == outgoing.MediaId));
+        EnsureSourceBounds(trimmedIncoming, Project.Media.Single(media => media.Id == incoming.MediaId));
+        if (trimmedOutgoing.FadeInFrames > trimmedOutgoing.DurationFrames || trimmedIncoming.FadeOutFrames > trimmedIncoming.DurationFrames)
+            throw new InvalidOperationException("The cut would truncate an outer fade.");
+        Execute(_ =>
+        {
+            outgoing.DurationFrames = trimmedOutgoing.DurationFrames;
+            outgoing.FadeOutFrames = 0;
+            outgoing.FadeOutTransition = null;
+            // Trimming the head advances the take and crop envelope together, preserving surviving content.
+            incoming.StartFrame = trimmedIncoming.StartFrame;
+            incoming.DurationFrames = trimmedIncoming.DurationFrames;
+            incoming.SourceInFrame = trimmedIncoming.SourceInFrame;
+            incoming.CropOffsetFrames = trimmedIncoming.CropOffsetFrames;
+            incoming.FadeInFrames = 0;
+            incoming.FadeInTransition = null;
+        });
+    }
     public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds)
     {
         var selected = ExpandSelection(selectedClipIds, ignoreGroups: true);
@@ -877,5 +936,3 @@ public sealed class TimelineEditor
         Project.Media = copy.Media; Project.Tracks = copy.Tracks;
     }
 }
-
-
