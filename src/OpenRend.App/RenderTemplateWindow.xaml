@@ -1,0 +1,44 @@
+<Window x:Class="OpenRend.App.RenderTemplateWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Custom Settings — H.264 / AAC MP4" Width="570" Height="440" MinWidth="510" MinHeight="420"
+        WindowStartupLocation="CenterOwner">
+  <Grid Margin="12">
+    <Grid.RowDefinitions>
+      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+      <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+    </Grid.RowDefinitions>
+    <Grid Margin="0,0,0,10">
+      <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+      <Label Content="_Template name:" Target="PresetName" Foreground="{DynamicResource TextBrush}"/>
+      <TextBox Grid.Column="1" x:Name="PresetName" MaxLength="120" AutomationProperties.AutomationId="CustomRenderTemplateName" AutomationProperties.Name="Template name" TextChanged="SettingsChanged"/>
+    </Grid>
+    <TextBlock Grid.Row="1" x:Name="ProjectDetails" TextWrapping="Wrap" Margin="0,0,0,8"/>
+    <GroupBox Grid.Row="2" Header="Video" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+      <Grid Margin="8">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Label Content="_Quality (CRF):" Target="Quality" Foreground="{DynamicResource TextBrush}"/>
+        <TextBox Grid.Column="1" x:Name="Quality" MaxLength="2" AutomationProperties.AutomationId="CustomRenderCrf" AutomationProperties.Name="Quality (CRF)" TextChanged="SettingsChanged"/>
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="0–51. Lower values retain more detail and make larger files." TextWrapping="Wrap" Margin="2,4,2,8"/>
+        <Label Grid.Row="2" Content="_Encoder speed:" Target="Speed" Foreground="{DynamicResource TextBrush}"/>
+        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Speed" AutomationProperties.AutomationId="CustomRenderEncoderSpeed" AutomationProperties.Name="Encoder speed" SelectionChanged="SpeedChanged"/>
+      </Grid>
+    </GroupBox>
+    <GroupBox Grid.Row="3" Header="Audio" Style="{StaticResource PreferencesGroup}">
+      <Grid Margin="8">
+        <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+        <Label Content="_Bitrate (kbps):" Target="AudioBitrate" Foreground="{DynamicResource TextBrush}"/>
+        <TextBox Grid.Column="1" x:Name="AudioBitrate" MaxLength="3" AutomationProperties.AutomationId="CustomRenderAudioBitrate" AutomationProperties.Name="Audio bitrate (kbps)" TextChanged="SettingsChanged"/>
+        <TextBlock Grid.Row="1" Grid.Column="1" Text="32–512 kbps · AAC stereo · 48 kHz" Margin="2,4,2,0"/>
+      </Grid>
+    </GroupBox>
+    <TextBlock Grid.Row="4" x:Name="Error" AutomationProperties.AutomationId="CustomRenderTemplateError" Foreground="#FFB4AB" TextWrapping="Wrap" Margin="0,8,0,6"/>
+    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="Save" Content="Save" MinWidth="80" AutomationProperties.AutomationId="SaveRenderTemplate" Click="SaveClick" ToolTip="Save settings and name to this custom template."/>
+      <Button x:Name="SaveAs" Content="Save As…" MinWidth="80" AutomationProperties.AutomationId="SaveRenderTemplateAs" Click="SaveAsClick" ToolTip="Save a new custom template with a different name."/>
+      <Button Content="Cancel" MinWidth="80" IsCancel="True"/>
+    </StackPanel>
+  </Grid>
+</Window>

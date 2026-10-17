@@ -24,6 +24,10 @@
       <DockPanel Grid.Column="2">
         <TextBlock DockPanel.Dock="Top" Text="Templates" Margin="0,0,0,5"/>
         <StackPanel DockPanel.Dock="Bottom" Margin="0,8,0,0">
+          <StackPanel Orientation="Horizontal" Margin="0,0,0,6">
+            <Button x:Name="Customize" Content="Customize Template…" AutomationProperties.AutomationId="CustomizeRenderTemplate" Click="CustomizeClick" ToolTip="Change the name, quality, audio bitrate or encoder speed."/>
+            <Button x:Name="DeleteTemplate" Content="Delete Template" AutomationProperties.AutomationId="DeleteRenderTemplate" Click="DeleteTemplateClick"/>
+          </StackPanel>
           <CheckBox x:Name="Favorite" Content="Favorite" AutomationProperties.AutomationId="RenderFavorite" Checked="FavoriteChanged" Unchecked="FavoriteChanged"/>
           <TextBlock x:Name="Details" TextWrapping="Wrap" Margin="0,6,0,0" MinHeight="32"/>
         </StackPanel>

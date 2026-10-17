@@ -51,7 +51,7 @@ public partial class RenderAsWindow : Window
     private void RefreshTemplates()
     {
         if (Templates is null || project is null) return;
-        var visible = RenderTemplateCatalog.Filter(project, Search.Text, FavoritesOnly.IsChecked == true, favorites).ToArray();
+        var visible = RenderTemplateCatalog.Filter(Preferences.Templates, project, Search.Text, FavoritesOnly.IsChecked == true, favorites).ToArray();
         Templates.ItemsSource = visible;
         Templates.SelectedItem = visible.FirstOrDefault(template => template.Id == selectedId) ?? visible.FirstOrDefault();
         UpdateDetails();
@@ -73,6 +73,8 @@ public partial class RenderAsWindow : Window
         try { Favorite.IsChecked = template is not null && favorites.Contains(template.Id); }
         finally { updatingFavorite = false; }
         Details.Text = template?.Description(project) ?? "No templates match the current filters.";
+        if (Customize is not null) Customize.IsEnabled = template is not null;
+        if (DeleteTemplate is not null) DeleteTemplate.IsEnabled = template?.IsCustom == true;
     }
 
     private void FavoriteChanged(object sender, RoutedEventArgs e)
@@ -87,6 +89,33 @@ public partial class RenderAsWindow : Window
         var dialog = new OpenFolderDialog { Title = "Choose render folder" };
         if (Directory.Exists(Folder.Text)) dialog.InitialDirectory = Folder.Text;
         if (dialog.ShowDialog(this) == true) Folder.Text = dialog.FolderName;
+    }
+
+    private void CustomizeClick(object sender, RoutedEventArgs e)
+    {
+        if (Templates.SelectedItem is not RenderTemplate template) return;
+        var preferences = Preferences with { TemplateId = template.Id, Favorites = favorites.Order().ToArray() };
+        var dialog = new RenderTemplateWindow(project, preferences, template) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        Preferences = dialog.Preferences;
+        selectedId = Preferences.TemplateId;
+        // A new preset should remain visible even if the previous view showed only favorites.
+        FavoritesOnly.IsChecked = false;
+        Search.Text = "";
+        Error.Text = "";
+        RefreshTemplates();
+    }
+
+    private void DeleteTemplateClick(object sender, RoutedEventArgs e)
+    {
+        if (Templates.SelectedItem is not RenderTemplate { IsCustom: true } template) return;
+        if (MessageBox.Show(this, $"Delete the template “{template.Name}”?", "Render As", MessageBoxButton.YesNo,
+            MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        Preferences = (Preferences with { TemplateId = template.Id, Favorites = favorites.Order().ToArray() }).DeleteCustomTemplate(template.Id);
+        favorites.Remove(template.Id);
+        selectedId = Preferences.TemplateId;
+        Error.Text = "";
+        RefreshTemplates();
     }
 
     private void RenderClick(object sender, RoutedEventArgs e)
@@ -106,9 +135,11 @@ public partial class RenderAsWindow : Window
                 throw new InvalidDataException("Choose a destination different from the original media.");
             if (File.Exists(output) && MessageBox.Show(this, $"Replace {name}?", "Render As", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes) return;
             OutputPath = output;
-            Options = new ExportOptions { TemplateId = template.Id, Range = UseLoop.IsChecked == true ? loopRegion : null };
-            Preferences = new RenderPreferences { TemplateId = template.Id, Favorites = favorites.Order().ToArray(),
+            Options = new ExportOptions { TemplateId = template.Id, CustomTemplate = template.IsCustom ? template with { } : null,
+                Range = UseLoop.IsChecked == true ? loopRegion : null };
+            Preferences = Preferences with { TemplateId = template.Id, Favorites = favorites.Order().ToArray(),
                 OutputFolder = Path.GetDirectoryName(output), UseLoopRegion = UseLoop.IsChecked == true };
+            Preferences.Validate();
             DialogResult = true;
         }
         catch (Exception error) when (error is InvalidDataException or ArgumentException or NotSupportedException)
