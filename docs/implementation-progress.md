@@ -20,13 +20,14 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [ ] Evaluate each supported transition identically in preview and export.
 - [ ] Verify the desktop workflow and encoded output.
 
-Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target existing adjacent overlaps; two selected events target their pair. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves cut overlap duration and alignment. The full preset catalog, automatic one-event placement/ripple, source alpha processing, factory defaults, and complete UI matching remain open.
+Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target existing adjacent overlaps; two selected events target their pair. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves cut overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, automatic one-event placement/ripple, factory defaults, and complete UI matching remain open.
 
 Verified parts:
 
 - [x] Default Dissolve save/reopen and undo/redo.
 - [x] Default Dissolve pixels agree across CPU/D3D and encoded video for opaque sources.
 - [x] Reduced event opacity preserves the lower track's blend weight.
+- [x] Transparent source pixels, alpha effects, letterboxing and crop boundaries reveal lower tracks at the weighted dissolve coverage; CPU/D3D, encoded output and split preservation are tested.
 - [x] Default Dissolve frame output survives splitting either event; unsplit fade lengths follow moves and trims.
 - [x] Existing adjacent overlaps apply atomically; a two-event selection affects only that pair.
 - [x] Preset selection leaves the project untouched; add, double-click, and drag-to-overlap survive save/reopen in desktop tests.

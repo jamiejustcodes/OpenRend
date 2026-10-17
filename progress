@@ -1,6 +1,6 @@
 # OpenRend development handoff
 
-Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Startup presets/recent projects, custom render settings and the event LUT slice are implemented and passed the full gate. Default Dissolve and full feature/UI parity remain partial. Private comparison material stays in ignored `scratch/` and must not be committed.
+Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Startup presets/recent projects, custom render settings and the event LUT slice are implemented and passed the full gate. Continuing Default Dissolve source-alpha handling and native take-offset investigation for automatic overlap placement. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
 
 Current findings: transitions/overlap workflows, dedicated grading/LUTs, effect scopes, reusable motion tracking, project interchange, transcript-driven timeline edits, render templates/ranges, project notes and slideshow creation are gaps or partial features. The older notes below include feature descriptions and test counts that predate this audit; use current source and `docs/feature-status.md` for implementation status.
 
@@ -177,3 +177,11 @@ User's editor and Vegas Pro processes preserved. Zero commits or git pushes to G
 - Current next steps: complete critical transition creation/ripple/alpha/properties/catalog gaps and remaining render formats/mapping/log options; extend startup advanced settings and exact visual comparison; continue grading wheels/curves/slots and the remaining importance groups. Native grading/color-space equivalence remains unverified. Private startup/grading/custom-render evidence and findings are under ignored scratch and were not committed.
 
 
+
+## Transition alpha and automatic placement continuation — 17 October
+
+- Reused the retained REA transition bundle and revisited the exact one-event/ripple call paths. The non-ripple path adjusts take edges; the ripple path uses a Start setter and moves later same-track events. Native take-offset behavior remains unresolved.
+- Two isolated target scripting attempts preserved the active project's identity, track/media counts and path. The first could not obtain the MP4 stream; the second accepted an uncompressed AVI but failed to add a background-project track. Neither reached take-offset mutation. Investigating the documented temporary background-active scope before implementing that behavior; no source-offset guess is being treated as evidence.
+- Default Dissolve now carries explicit paired-layer progress and interpolates premultiplied source color and coverage. This fixes transparent/keyed incoming pixels and crop/letterbox holes holding the outgoing event too opaque. Event opacity contributes to each weight and track opacity is applied once. Preview/export share the same path; the group mixture runs on CPU before final CPU/D3D composition.
+- Focused verification: 11 new Media alpha checks and 4 existing dissolve checks passed; the new pair/split metadata check plus TimelineTests passed 23 checks. Cases include decoded FFV1 alpha, generators, keying, unequal event/track opacity, split envelopes, crop/letterbox boundaries, encoded output, CPU/D3D agreement and unchanged source bytes. Native target color-space/interpolation parity and throughput remain unverified. Full integration gate is pending.
+- Next: resolve the temporary-project API failure, then implement and test automatic overlap creation/ripple using the observed take behavior; complete transition properties/removal, catalog and visual matching afterward. No top-level feature is complete.

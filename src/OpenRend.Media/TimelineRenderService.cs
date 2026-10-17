@@ -5,7 +5,7 @@ using OpenRend.Timeline;
 namespace OpenRend.Media;
 
 [SupportedOSPlatform("windows")]
-public sealed class TimelineRenderService : IDisposable
+public sealed partial class TimelineRenderService : IDisposable
 {
     private readonly MediaService media;
     private readonly object compositorGate = new();
@@ -43,8 +43,25 @@ public sealed class TimelineRenderService : IDisposable
                 if (NativeMethods.CompositorBegin(compositor) < 0) throw NativeMethods.Error("Could not begin timeline composition");
             }
             else for (var i = 3; i < output.Length; i += 4) output[i] = 255;
-            foreach (var layer in TimelineEvaluator.Evaluate(project, frame).Video)
+            var layers = TimelineEvaluator.Evaluate(project, frame).Video;
+            foreach (var layer in layers)
             {
+                if (layer.Dissolve is { } dissolve)
+                {
+                    if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
+                    var incoming = layers.FirstOrDefault(candidate => candidate.Clip.Id == dissolve.IncomingClipId);
+                    if (incoming is not null)
+                    {
+                        var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve.Progress, width, height);
+                        if (compositor is not null)
+                        {
+                            if (NativeMethods.CompositorLayer(compositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
+                                throw NativeMethods.Error("Could not composite dissolve timeline layer");
+                        }
+                        else Composite(output, width, height, dissolvePixels, width, height, layer.Track.Opacity);
+                        continue;
+                    }
+                }
                 if (layer.Opacity <= 0) continue;
                 if (IsSubtitleLayer(layer))
                 {

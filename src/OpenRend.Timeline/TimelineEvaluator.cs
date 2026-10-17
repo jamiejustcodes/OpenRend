@@ -5,7 +5,10 @@ namespace OpenRend.Timeline;
 public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, MediaAsset Media, long SourceFrame, double Opacity, double Gain, double Pan)
 {
     public CropState? Crop { get; init; }
+    // Dissolve participants form one composite group; scalar opacity alone cannot describe source coverage.
+    public EvaluatedDissolve? Dissolve { get; init; }
 }
+public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress);
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
 
 public static class TimelineEvaluator
@@ -28,6 +31,7 @@ public static class TimelineEvaluator
                 ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
                 : track.Clips.ToArray();
             var transitionOpacity = new Dictionary<Guid, double>();
+            var dissolves = new Dictionary<Guid, EvaluatedDissolve>();
             if (track.Kind == TrackKind.Video)
             {
                 foreach (var incoming in ordered.Where(c => c.FadeInTransition is not null && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
@@ -40,12 +44,17 @@ public static class TimelineEvaluator
                         frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
                         .OrderByDescending(c => c.StartFrame).FirstOrDefault();
                     if (outgoing is null ||
+                        !media.TryGetValue(outgoing.MediaId, out var outgoingAsset) || !outgoingAsset.HasVideo ||
+                        !media.TryGetValue(incoming.MediaId, out var incomingAsset) || !incomingAsset.HasVideo ||
                         ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
                     var progress = (double)incomingPosition / incoming.FadeInFrames;
                     var incomingAlpha = track.Opacity * incoming.Opacity * progress;
                     // Compensate for the incoming alpha-over pass so lower tracks remain visible at the linear blend weight.
                     transitionOpacity[outgoing.Id] = (1 - progress) / (1 - incomingAlpha);
                     transitionOpacity[incoming.Id] = progress;
+                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress);
+                    dissolves[outgoing.Id] = dissolve;
+                    dissolves[incoming.Id] = dissolve;
                 }
             }
             foreach (var clip in ordered)
@@ -57,7 +66,8 @@ public static class TimelineEvaluator
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
                 var item = new EvaluatedClip(track, clip, asset, clip.SourceInFrame + local, clip.Opacity * track.Opacity * fade, clip.Gain * track.Gain * fade * peak, pan);
-                if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with { Crop = CropAt(clip, asset, local) });
+                if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with
+                    { Crop = CropAt(clip, asset, local), Dissolve = dissolves.GetValueOrDefault(clip.Id) });
                 if (track.Kind == TrackKind.Audio && asset.HasAudio) audio.Add(item);
             }
         }
