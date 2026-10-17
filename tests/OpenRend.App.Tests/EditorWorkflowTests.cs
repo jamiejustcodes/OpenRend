@@ -820,8 +820,13 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
     [DllImport("user32.dll", CharSet = CharSet.Unicode)]
     private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
 
-    private static Button SaveButton(Window window) => window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Save")))?.AsButton()
-        ?? throw new Xunit.Sdk.XunitException("The Save button was not exposed.");
+    private static Button SaveButton(Window window)
+    {
+        AutomationElement? button = null;
+        WaitFor(() => (button = window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Save")))) is not null,
+            "The Save button was not exposed.");
+        return button!.AsButton();
+    }
 
     private static void Chord(Window window, params VirtualKeyShort[] keys)
     {
@@ -842,12 +847,15 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
     private static void WaitFor(Func<bool> condition, string failure, int timeoutSeconds = 8)
     {
         var watch = Stopwatch.StartNew();
+        COMException? lastTimeout = null;
         while (watch.Elapsed < TimeSpan.FromSeconds(timeoutSeconds))
         {
-            if (condition()) return;
+            try { if (condition()) return; }
+            // Closing a modal can briefly invalidate its owner's UIA traversal.
+            catch (COMException error) when (unchecked((uint)error.HResult) == 0x80131505u) { lastTimeout = error; }
             Thread.Sleep(80);
         }
-        Assert.Fail(failure);
+        Assert.Fail(lastTimeout is null ? failure : failure + " Last UIA error: " + lastTimeout.Message);
     }
 
     private static async Task<ProjectDocument> WaitForSavedClipsAsync(string path, int count)
