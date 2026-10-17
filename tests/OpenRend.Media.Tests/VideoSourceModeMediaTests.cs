@@ -159,4 +159,3 @@ public sealed class VideoSourceModeMediaTests : IDisposable
     }
     public void Dispose() { if (Directory.Exists(directory)) Directory.Delete(directory, recursive: true); }
 }
-

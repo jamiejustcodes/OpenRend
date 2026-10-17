@@ -24,6 +24,12 @@ Conversion trims the outgoing tail and incoming head, advances the incoming sour
 
 Centered conversion requires an even number of overlap frames. An odd overlap would require a half-frame cut, so OpenRend reports the limitation and leaves the project unchanged. Split envelopes, nested/contained or three-way overlaps and locked tracks are unsupported for this command.
 
+## Video source looping
+
+For a finite video event, open its options menu and choose Switches > Loop. Checked repeats the source when an event extends beyond it; unchecked explicitly uses its last decoded frame. Edge trimming and automatic overlap placement use the selected source mode. This setting affects video only; linked audio keeps its existing source bounds.
+
+Older events keep bounded playback until you explicitly select a source mode. Loop phase is stored in integer project frames and reduced against the probed source duration at evaluation time. Turning Loop off preserves its starting source position when it can be represented in whole project frames; otherwise the command reports the fractional-offset limitation without editing. Crop animation keeps its event-relative timing.
+
 ## Rendering and preservation
 
 Preview and export use the same paired interpolation of source color and alpha coverage. Event opacity contributes to each participant's weight; track opacity is applied once to the resulting layer. Transparent pixels, alpha effects, letterboxing and crop boundaries reveal lower tracks. The mixture currently runs on the CPU before final CPU/D3D composition.
@@ -34,4 +40,4 @@ Project save/reopen, undo/redo, split envelopes and tested clipboard rate conver
 
 Only Default Dissolve is supported. The broader transition catalog, progress curves and full browser/properties layout remain pending. The current properties window exposes plug-in removal and history controls.
 
-Automatic placement rejects missing source handles rather than wrapping the source. Same-start overlaps at project zero, event-level locks and exact-gap displacement remain limited. Initial Editing preferences use 0.25 seconds centered; factory-default matching has not been established. Exact reference-editor pixel math, color management and professional-scale throughput remain unverified.
+Legacy bounded events reject missing source handles. Explicit video Loop/Hold modes permit source extensions; audio looping and default-loop preferences are not implemented. Same-start overlaps at project zero, event-level locks and exact-gap displacement remain limited. Initial Editing preferences use 0.25 seconds centered; factory-default matching has not been established. Source-duration probing and arbitrary VFR/source-rate equivalence remain limited. Exact reference-editor pixel math, color management and professional-scale throughput remain unverified.

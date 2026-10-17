@@ -246,4 +246,3 @@ public sealed class VideoSourceModeTests
         Assert.Equal(VideoSourceMode.HoldLastFrame, incoming.VideoSourceMode); Assert.True(editor.Undo()); Assert.False(editor.CanUndo);
     }
 }
-
