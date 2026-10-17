@@ -50,6 +50,8 @@ Save with Ctrl+S. Projects store versioned JSON and relative source paths where 
 
 Ctrl+Shift+E opens Render As. Choose a project-size/rate H.264/AAC preset, search template properties (separate required terms with semicolons), or filter saved favorites. Drag the upper timeline ruler or use I/O while the timeline has focus to set a loop region, then enable Render loop region only to export it. Loop selection currently lasts for the session and is bounded to the timeline. The renderer composites video, keeps black gaps, mixes audio, applies clip levels/fades and finalizes MP4 before replacing the chosen destination. Cancellation and failure preserve an existing destination. Export cannot overwrite a source file. See [rendering](docs/rendering.md) for supported settings and limits.
 
+The Transitions tab supports Default Dissolve on overlaps and cuts, automatic single-event placement with same-track ripple, and plug-in removal that retains the crossfade. Preview and export share source-alpha processing. See [transitions](docs/transitions.md) for placement rules, preservation checks and current limits.
+
 ## Verification and scope
 
 Tests exercise rational timing, edit transactions, fade preservation, persistence, legacy project import, native decoding, seeking, audio resampling, video composition and real encoded output. See [feature status](docs/feature-status.md) for evidence and remaining work.
