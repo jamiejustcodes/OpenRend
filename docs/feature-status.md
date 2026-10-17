@@ -6,6 +6,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | --- | --- | --- |
 | Rational project frame grid | Tested | Long frame roundtrip and integer boundaries in core tests |
 | Placement, move, trim, split | Tested | Domain tests; splits preserve fade envelopes |
+| Default Dissolve / crossfades | Partial, tested locally | Paired source alpha, CPU/D3D and encoded output, split/save/clipboard preservation, cut conversion, plug-in removal, move/trim alignment and automatic placement with same-track ripple. Source wrapping, event locks, broader catalog, progress curves and complete properties/browser UI remain open. See [implementation progress](implementation-progress.md). |
 | Undo/redo and locks | Tested | Validation failures roll back, redo branches reset |
 | Mute, solo, visibility | Tested | Shared evaluator and real media export tests |
 | JSON projects, autosave, relink | Tested | Relative paths, concurrent reader snapshots, ordered save requests, blocked-save preservation, source overwrite rejection and unknown-version rejection |

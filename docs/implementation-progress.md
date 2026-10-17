@@ -20,7 +20,7 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [ ] Evaluate each supported transition identically in preview and export.
 - [ ] Verify the desktop workflow and encoded output.
 
-Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target existing adjacent overlaps; two selected events target their pair. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves cut overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, automatic one-event placement/ripple, factory defaults, and complete UI matching remain open.
+Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target adjacent overlaps or create an overlap using available source handles; two selected events target their pair. Automatic placement supports ripple of later events on the same track. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, source looping, event locks, factory defaults, and complete UI matching remain open.
 
 Verified parts:
 
@@ -35,6 +35,10 @@ Verified parts:
 - [x] Cut drops use saved Editing preferences; a desktop test sets duration/alignment through the dialog, drops, saves, and verifies source/timeline ranges.
 - [x] Version 5 projects preserve transition decisions and reject unsupported newer formats in older readers.
 - [x] Clipboard preserves split Default Dissolve evaluation through save/reopen, independent repeated pastes and undo/redo at matching rates and doubled integer/rational rates. Canonical overlap fades follow converted endpoints when downsampling.
+- [x] Remove Selected Plug-In preserves fades, overlap, split envelopes and pixels, with undo/redo and save/reopen. Plain crossfades follow later moves/trims. Desktop properties/removal workflow is tested; full properties layout is pending.
+- [x] Automatic single-event placement adjusts take edges without ripple, or moves later same-track events with ripple. Core, desktop and encoded tests distinguish source timing at fractional project rates and preserve original media.
+
+Automatic placement rejects missing source handles instead of wrapping the source. Same-start overlaps after clamping at project zero are unsupported, and a displacement exactly equal to the gap is a no-op. Event-level locks and the complete native exception/fallback path remain pending. The current properties window exposes the supported plug-in removal and undo controls; it does not establish complete target UI parity.
 
 OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered on the cut. Factory-default parity is still unverified.
 
