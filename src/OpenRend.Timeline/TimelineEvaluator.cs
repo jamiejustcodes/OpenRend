@@ -27,14 +27,14 @@ public static class TimelineEvaluator
         {
             if (track.IsMuted || (track.Kind == TrackKind.Video && !track.IsVisible)) continue;
             if ((track.Kind == TrackKind.Video ? soloVideo : soloAudio) && !track.IsSolo) continue;
-            var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null)
+            var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null || c.FadeInFrames > 0)
                 ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
                 : track.Clips.ToArray();
             var transitionOpacity = new Dictionary<Guid, double>();
             var dissolves = new Dictionary<Guid, EvaluatedDissolve>();
             if (track.Kind == TrackKind.Video)
             {
-                foreach (var incoming in ordered.Where(c => c.FadeInTransition is not null && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
+                foreach (var incoming in ordered.Where(c => c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
                 {
                     var incomingPosition = frame - incoming.StartFrame + incoming.FadeOffsetFrames;
                     if (incomingPosition >= incoming.FadeInFrames) continue;
@@ -43,7 +43,7 @@ public static class TimelineEvaluator
                         c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
                         frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
                         .OrderByDescending(c => c.StartFrame).FirstOrDefault();
-                    if (outgoing is null ||
+                    if (outgoing is null || (incoming.FadeInTransition is null && !IsCanonicalCrossfade(outgoing, incoming, ordered)) ||
                         !media.TryGetValue(outgoing.MediaId, out var outgoingAsset) || !outgoingAsset.HasVideo ||
                         !media.TryGetValue(incoming.MediaId, out var incomingAsset) || !incomingAsset.HasVideo ||
                         ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
@@ -72,6 +72,19 @@ public static class TimelineEvaluator
             }
         }
         return new(video, audio);
+    }
+
+    private static bool IsCanonicalCrossfade(TimelineClip outgoing, TimelineClip incoming, IReadOnlyList<TimelineClip> clips)
+    {
+        if (outgoing.FadeOutFrames != incoming.FadeInFrames) return false;
+        var start = (decimal)incoming.StartFrame - incoming.FadeOffsetFrames;
+        var end = (decimal)outgoing.StartFrame - outgoing.FadeOffsetFrames + (outgoing.FadeDurationFrames ?? outgoing.DurationFrames);
+        var incomingEnd = start + (incoming.FadeDurationFrames ?? incoming.DurationFrames);
+        if (end - start != incoming.FadeInFrames || incomingEnd < end) return false;
+        // Split pieces share an envelope. Check every start boundary in it, including parts outside this frame.
+        var overlap = clips.Where(clip => clip.StartFrame < end && clip.EndFrame > start).ToArray();
+        return !overlap.Select(clip => Math.Max(start, clip.StartFrame)).Any(position =>
+            overlap.Count(clip => clip.StartFrame <= position && position < clip.EndFrame) > 2);
     }
 
     public static double FadeAt(TimelineClip clip, double localFrame)
