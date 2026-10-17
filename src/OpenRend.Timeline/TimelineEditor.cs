@@ -146,6 +146,58 @@ public sealed class TimelineEditor
         });
     }
 
+    public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds)
+    {
+        var selected = ExpandSelection(selectedClipIds);
+        var pairs = new List<(TimelineClip Outgoing, TimelineClip Incoming)>();
+        foreach (var track in Project.Tracks.Where(track => track.Kind == TrackKind.Video))
+        {
+            var clips = track.Clips.OrderBy(clip => clip.StartFrame).ThenBy(clip => clip.Id).ToArray();
+            for (var i = 1; i < clips.Length; i++)
+            {
+                var outgoing = clips[i - 1];
+                var incoming = clips[i];
+                if (!selected.Contains(outgoing.Id) && !selected.Contains(incoming.Id)) continue;
+                if (outgoing.StartFrame >= incoming.StartFrame || outgoing.EndFrame <= incoming.StartFrame ||
+                    outgoing.EndFrame > incoming.EndFrame) continue;
+                if (clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
+                    clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame)) continue;
+                EnsureUnlocked(track);
+                pairs.Add((outgoing, incoming));
+            }
+        }
+        if (pairs.Count == 0) return 0;
+        var fades = new Dictionary<Guid, (long In, long Out)>();
+        foreach (var (outgoing, incoming) in pairs)
+        {
+            var overlap = outgoing.EndFrame - incoming.StartFrame;
+            var outgoingFades = fades.GetValueOrDefault(outgoing.Id, (outgoing.FadeInFrames, outgoing.FadeOutFrames));
+            var incomingFades = fades.GetValueOrDefault(incoming.Id, (incoming.FadeInFrames, incoming.FadeOutFrames));
+            fades[outgoing.Id] = (outgoingFades.Item1, overlap);
+            fades[incoming.Id] = (overlap, incomingFades.Item2);
+        }
+        foreach (var track in Project.Tracks)
+            foreach (var clip in track.Clips.Where(clip => fades.ContainsKey(clip.Id)))
+            {
+                var fade = fades[clip.Id];
+                if (fade.In > clip.DurationFrames - fade.Out)
+                    throw new InvalidOperationException("The overlap conflicts with an existing fade.");
+            }
+        Execute(_ =>
+        {
+            foreach (var (outgoing, incoming) in pairs)
+            {
+                var overlap = outgoing.EndFrame - incoming.StartFrame;
+                outgoing.FadeOutFrames = incoming.FadeInFrames = overlap;
+                outgoing.FadeOutTransition = new VideoTransition();
+                incoming.FadeInTransition = new VideoTransition();
+                outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
+                outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
+            }
+        });
+        return pairs.Count;
+    }
+
     public void MoveClip(Guid clipId, Guid trackId, long startFrame)
     {
         var (source, clip) = FindClip(clipId);

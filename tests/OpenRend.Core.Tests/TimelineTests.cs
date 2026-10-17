@@ -148,6 +148,27 @@ public sealed class TimelineTests
     }
 
     [Fact]
+    public void OneSelectedEventAppliesDissolveToBothAdjacentOverlapsAtomically()
+    {
+        var (editor, media, track) = Create();
+        var first = editor.PlaceClip(media.Id, track.Id, 0, 30);
+        var middle = editor.PlaceClip(media.Id, track.Id, 20, 30);
+        var last = editor.PlaceClip(media.Id, track.Id, 40, 30);
+
+        Assert.Equal(2, editor.ApplyDissolvesToAdjacent([middle.Id]));
+        Assert.Equal(10, first.FadeOutFrames);
+        Assert.Equal(10, middle.FadeInFrames);
+        Assert.Equal(10, middle.FadeOutFrames);
+        Assert.Equal(10, last.FadeInFrames);
+        Assert.True(editor.Undo());
+        Assert.All(editor.Project.Tracks[0].Clips, clip =>
+        {
+            Assert.Null(clip.FadeInTransition);
+            Assert.Null(clip.FadeOutTransition);
+        });
+    }
+
+    [Fact]
     public void UndoRedoAndBranchingRestoreWholeProject()
     {
         var (editor, media, track) = Create();
