@@ -159,6 +159,29 @@ public sealed class TimelineEditor
         });
     }
 
+    public void SetVideoSourceMode(Guid clipId, VideoSourceMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Source playback modes are only available for video events.");
+        if (clip.VideoSourceMode == mode) return;
+        var changed = clip.DeepClone();
+        changed.VideoSourceMode = mode;
+        var media = Project.Media.Single(media => media.Id == clip.MediaId);
+        if (clip.VideoSourceMode == VideoSourceMode.Loop && mode != VideoSourceMode.Loop)
+        {
+            var seconds = VideoSourceTime.Seconds(Project.FrameRate, clip.SourceInFrame, media.DurationSeconds, VideoSourceMode.Loop);
+            var frame = Project.FrameRate.Frames(seconds);
+            if (Math.Abs(Project.FrameRate.Seconds(frame) - seconds) > 1e-9)
+                throw new InvalidOperationException("This loop phase requires a fractional project-frame source offset. Changing its source mode is not supported.");
+            // Removing whole source cycles must not restart event-relative crop animation.
+            changed.SourceInFrame = frame;
+        }
+        EnsureSourceBounds(changed, media);
+        Execute(_ => { clip.VideoSourceMode = mode; clip.SourceInFrame = changed.SourceInFrame; });
+    }
+
     public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds)
     {
         var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
@@ -207,8 +230,9 @@ public sealed class TimelineEditor
         {
             // Adjusting take edges keeps existing source content and crop keys at their timeline times.
             moved.SourceInFrame = checked(moved.SourceInFrame + delta);
+            if (moved.VideoSourceMode == VideoSourceMode.HoldLastFrame) moved.SourceInFrame = Math.Max(0, moved.SourceInFrame);
             if (moved.Crop is not null) moved.CropOffsetFrames = checked(moved.CropOffsetFrames + delta);
-            // Source looping is not modeled, so an unavailable head handle rejects the complete edit.
+            // Legacy bounded events still reject unavailable source handles atomically.
             EnsureSourceBounds(moved, Project.Media.Single(media => media.Id == moved.MediaId));
         }
         var overlap = outgoing.EndFrame - moved.StartFrame;
@@ -258,6 +282,7 @@ public sealed class TimelineEditor
         extendedOutgoing.DurationFrames = checked(outgoing.DurationFrames + after);
         extendedIncoming.StartFrame = checked(incoming.StartFrame - before);
         extendedIncoming.SourceInFrame = checked(incoming.SourceInFrame - before);
+        if (extendedIncoming.VideoSourceMode == VideoSourceMode.HoldLastFrame) extendedIncoming.SourceInFrame = Math.Max(0, extendedIncoming.SourceInFrame);
         extendedIncoming.DurationFrames = checked(incoming.DurationFrames + before);
         EnsureTimelineBounds(extendedOutgoing);
         EnsureTimelineBounds(extendedIncoming);
@@ -416,7 +441,7 @@ public sealed class TimelineEditor
         Execute(_ =>
         {
             if (clip.Crop is not null) clip.CropOffsetFrames = checked(clip.CropOffsetFrames + checked(sourceIn - clip.SourceInFrame));
-            clip.SourceInFrame = sourceIn;
+            clip.SourceInFrame = clip.VideoSourceMode == VideoSourceMode.HoldLastFrame ? Math.Max(0, sourceIn) : sourceIn;
             clip.DurationFrames = duration;
             clip.FadeInFrames = Math.Min(clip.FadeInFrames, duration);
             clip.FadeOutFrames = Math.Min(clip.FadeOutFrames, duration - clip.FadeInFrames);
@@ -533,6 +558,7 @@ public sealed class TimelineEditor
             var trimmed = item.Clip.DeepClone();
             trimmed.StartFrame = checked(trimmed.StartFrame + startDelta);
             trimmed.SourceInFrame = checked(trimmed.SourceInFrame + sourceDelta);
+            if (trimmed.VideoSourceMode == VideoSourceMode.HoldLastFrame) trimmed.SourceInFrame = Math.Max(0, trimmed.SourceInFrame);
             trimmed.DurationFrames = checked(trimmed.DurationFrames + durationDelta);
             if (trimmed.Crop is not null) trimmed.CropOffsetFrames = checked(trimmed.CropOffsetFrames + sourceDelta);
             EnsureTimelineBounds(trimmed);
@@ -925,9 +951,12 @@ public sealed class TimelineEditor
     }
     private void EnsureSourceBounds(TimelineClip clip, MediaAsset media)
     {
-        if (clip.DurationFrames <= 0 || clip.SourceInFrame < 0 || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(clip), "Clip source range is invalid.");
+        if (clip.DurationFrames <= 0 || clip.SourceInFrame < 0 && clip.VideoSourceMode != VideoSourceMode.Loop || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(clip), "Clip source range is invalid.");
+        if (clip.VideoSourceMode != VideoSourceMode.Bounded &&
+            (!media.HasVideo || media.DurationSeconds < 1e-28 || media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("Source playback modes require a finite video source.");
         var available = Project.FrameRate.Frames(media.DurationSeconds);
-        if (available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new ArgumentOutOfRangeException(nameof(clip), "Clip extends beyond the source media.");
+        if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new ArgumentOutOfRangeException(nameof(clip), "Clip extends beyond the source media.");
     }
     private void Restore(ProjectDocument snapshot)
     {

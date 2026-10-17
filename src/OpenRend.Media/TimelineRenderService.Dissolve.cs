@@ -59,14 +59,14 @@ public sealed partial class TimelineRenderService
         {
             if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
                 throw new MediaException("Source dimensions exceed video processing limits.");
-            var pixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
+            var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
             pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
             return new(pixels, sourceWidth, sourceHeight, SamplingTransform(crop, sourceWidth, sourceHeight, width, height));
         }
         var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
         var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
         var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
-        return new(media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), layerWidth, layerHeight), layerWidth, layerHeight, null);
+        return new(media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight), layerWidth, layerHeight, null);
     }
 
     private static Vector4 SampleDissolveLayer(DissolveSource? source, int x, int y, int width, int height)

@@ -107,7 +107,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         throw new MediaException("Source dimensions exceed video processing limits.");
                     // Effects precede resampling, so preview size cannot change their source pixels.
                     // Decode honors display rotation before sampling.
-                    var sourcePixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
+                    var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
                     sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
                     var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
                     if (compositor != null)
@@ -121,7 +121,7 @@ public sealed partial class TimelineRenderService : IDisposable
                 var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
                 var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
                 var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
-                var pixels = media.GetFrame(layer.Media.Path, project.FrameRate.Seconds(layer.SourceFrame), layerWidth, layerHeight);
+                var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
                 if (compositor != null)
                 {
                     if (NativeMethods.CompositorLayer(compositor, pixels, layerWidth, layerHeight, layerWidth * 4, layer.Opacity) < 0)

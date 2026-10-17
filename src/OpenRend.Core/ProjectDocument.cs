@@ -76,11 +76,14 @@ public sealed class ProjectDocument
             {
                 if (clip == null || clip.Id == Guid.Empty || !clipIds.Add(clip.Id)) throw new InvalidDataException("Clip IDs must be unique and non-empty.");
                 if (!mediaIds.Contains(clip.MediaId)) throw new InvalidDataException("A clip references unknown media.");
-                if (clip.StartFrame < 0 || clip.SourceInFrame < 0 || clip.DurationFrames <= 0 || clip.StartFrame > long.MaxValue - clip.DurationFrames || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip range is invalid.");
+                if (clip.StartFrame < 0 || clip.SourceInFrame < 0 && clip.VideoSourceMode != VideoSourceMode.Loop || clip.DurationFrames <= 0 || clip.StartFrame > long.MaxValue - clip.DurationFrames || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip range is invalid.");
                 var source = mediaById[clip.MediaId];
                 if (track.Kind == TrackKind.Video && !source.HasVideo || track.Kind == TrackKind.Audio && !source.HasAudio) throw new InvalidDataException("A clip has no compatible media stream.");
+                if (!Enum.IsDefined(clip.VideoSourceMode) || clip.VideoSourceMode != VideoSourceMode.Bounded &&
+                    (track.Kind != TrackKind.Video || source.DurationSeconds < 1e-28 || source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
+                    throw new InvalidDataException("Source playback modes require a finite video source.");
                 var available = FrameRate.Frames(source.DurationSeconds);
-                if (available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
+                if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
                 var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
@@ -146,6 +149,7 @@ public sealed class TimelineClip
     public long StartFrame { get; set; }
     public long SourceInFrame { get; set; }
     public long DurationFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);
     public double Gain { get; set; } = 1;
     public double Opacity { get; set; } = 1;
