@@ -231,3 +231,13 @@ public sealed class VideoTransition
             throw new InvalidDataException("Video transition preset is missing.");
     }
 }
+
+[JsonConverter(typeof(JsonStringEnumConverter<ChannelRemapping>))]
+public enum ChannelRemapping
+{
+    None = 0,
+    Mono = 1,
+    Swap = 2,
+    MuteLeft = 3,
+    MuteRight = 4
+}
