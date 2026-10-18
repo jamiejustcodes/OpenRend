@@ -632,13 +632,18 @@ public sealed class TimelineEditor
             Name = $"{newTrackKind} {Project.Tracks.Count(t => t.Kind == newTrackKind) + 1}"
         };
 
+        var clipsToMove = selected.Where(s => s.Track == source).Select(s => s.Clip).ToList();
+
         Execute(_ =>
         {
             var clampedIndex = Math.Clamp(targetTrackIndex, 0, Project.Tracks.Count);
             Project.Tracks.Insert(clampedIndex, newTrack);
             foreach (var item in selected) item.Clip.StartFrame = positions[item.Clip.Id];
-            source.Clips.Remove(primary);
-            newTrack.Clips.Add(primary);
+            foreach (var clip in clipsToMove)
+            {
+                source.Clips.Remove(clip);
+                newTrack.Clips.Add(clip);
+            }
         });
         return newTrack;
     }

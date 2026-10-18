@@ -414,4 +414,68 @@ public sealed class TimelineTests
         editor.SetClipLock(videoClip.Id, true);
         Assert.Throws<InvalidOperationException>(() => editor.MoveSelectionToNewTrack([videoClip.Id], videoClip.Id, 1, TrackKind.Video, 10));
     }
+
+    [Fact]
+    public void MoveSelectionToNewTrackMovesMultipleSelectedClipsOnSourceTrack()
+    {
+        var (editor, media, track) = Create();
+        var clip1 = editor.PlaceClip(media.Id, track.Id, 10, 30);
+        var clip2 = editor.PlaceClip(media.Id, track.Id, 50, 30);
+        Assert.Single(editor.Project.Tracks);
+        Assert.Equal(2, track.Clips.Count);
+
+        // Select both clips on the source track and move to new track at index 0 (above track 0)
+        var newTrack = editor.MoveSelectionToNewTrack([clip1.Id, clip2.Id], clip1.Id, 0, TrackKind.Video, 20);
+        Assert.Equal(2, editor.Project.Tracks.Count);
+        Assert.Equal(newTrack.Id, editor.Project.Tracks[0].Id);
+        Assert.Empty(track.Clips);
+        Assert.Equal(2, newTrack.Clips.Count);
+        Assert.Equal(20, clip1.StartFrame);
+        Assert.Equal(60, clip2.StartFrame); // Shifted by delta = +10
+
+        // Undo restores both clips to original track
+        Assert.True(editor.Undo());
+        Assert.Single(editor.Project.Tracks);
+        var restoredTrack = editor.Project.Tracks[0];
+        Assert.Equal(2, restoredTrack.Clips.Count);
+        Assert.Equal(10, restoredTrack.Clips.Single(c => c.Id == clip1.Id).StartFrame);
+        Assert.Equal(50, restoredTrack.Clips.Single(c => c.Id == clip2.Id).StartFrame);
+    }
+
+    [Fact]
+    public void MoveSelectionToNewTrackAudioClipCreatesAudioLayerWithLinkedVideoSync()
+    {
+        var editor = new TimelineEditor(new ProjectDocument());
+        var media = new MediaAsset { Path = "test.mp4", DurationSeconds = 10, HasVideo = true, HasAudio = true };
+        editor.AddMedia(media);
+        var videoTrack = editor.AddTrack(TrackKind.Video);
+        var audioTrack = editor.AddTrack(TrackKind.Audio);
+        var videoClip = editor.PlaceClip(media.Id, videoTrack.Id, 10, 60);
+        var audioClip = editor.PlaceClip(media.Id, audioTrack.Id, 10, 60);
+        editor.LinkClips([videoClip.Id, audioClip.Id]);
+
+        // Drag audio clip down to create a new audio layer at index 2 (below all tracks)
+        var newAudioTrack = editor.MoveSelectionToNewTrack([audioClip.Id], audioClip.Id, 2, TrackKind.Audio, 40);
+        Assert.Equal(3, editor.Project.Tracks.Count);
+        Assert.Equal(newAudioTrack.Id, editor.Project.Tracks[2].Id);
+        Assert.Equal(TrackKind.Audio, newAudioTrack.Kind);
+        Assert.Equal("Audio 2", newAudioTrack.Name);
+        Assert.Empty(audioTrack.Clips);
+        Assert.Contains(audioClip, newAudioTrack.Clips);
+        Assert.Equal(40, audioClip.StartFrame);
+
+        // Linked video clip remains on video track, shifted horizontally in sync
+        Assert.Contains(videoClip, videoTrack.Clips);
+        Assert.Equal(40, videoClip.StartFrame);
+
+        // Undo restores
+        Assert.True(editor.Undo());
+        Assert.Equal(2, editor.Project.Tracks.Count);
+        var restoredVideoTrack = editor.Project.Tracks.Single(t => t.Id == videoTrack.Id);
+        var restoredAudioTrack = editor.Project.Tracks.Single(t => t.Id == audioTrack.Id);
+        Assert.Contains(restoredAudioTrack.Clips, c => c.Id == audioClip.Id);
+        Assert.Contains(restoredVideoTrack.Clips, c => c.Id == videoClip.Id);
+        Assert.Equal(10, restoredAudioTrack.Clips.Single(c => c.Id == audioClip.Id).StartFrame);
+        Assert.Equal(10, restoredVideoTrack.Clips.Single(c => c.Id == videoClip.Id).StartFrame);
+    }
 }
