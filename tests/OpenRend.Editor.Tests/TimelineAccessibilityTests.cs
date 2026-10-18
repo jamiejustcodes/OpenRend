@@ -330,6 +330,63 @@ public sealed class TimelineAccessibilityTests
         Assert.Equal(Visibility.Collapsed, audioMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Switches")).Visibility);
     });
 
+    [Fact]
+    public void VideoFadeCurveMenuRoutesShapesAndReflectsUndoAndFades() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var id = editor.Project.Tracks[0].Clips[0].Id;
+        editor.Project.Tracks[0].Clips[0].FadeInFrames = 10;
+        editor.Project.Tracks[0].Clips[0].FadeOutFrames = 10;
+        var requests = 0;
+        view.VideoFadeCurveRequested += (clip, curve, fadeOut) => { requests++; editor.SetVideoFadeCurve(clip, curve, fadeOut); };
+        var menu = view.CreateEventMenu(id);
+        var inMenu = menu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Fade In Curve"));
+        var outMenu = menu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Fade Out Curve"));
+        void Open() => menu.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.ContextMenu.OpenedEvent));
+        Open();
+        Assert.Equal(Visibility.Visible, inMenu.Visibility);
+        Assert.Equal(Visibility.Visible, outMenu.Visibility);
+        Assert.Equal("FadeInCurveMenu", AutomationProperties.GetAutomationId(inMenu));
+        Assert.Equal("FadeOutCurveMenu", AutomationProperties.GetAutomationId(outMenu));
+        var inFast = inMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Fast"));
+        var inLinear = inMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Linear"));
+        Assert.True(inLinear.IsChecked);
+        Assert.False(inFast.IsChecked);
+
+        inFast.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.MenuItem.ClickEvent));
+        Assert.Equal(VideoFadeCurve.Fast, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+        Open();
+        Assert.True(inFast.IsChecked);
+        Assert.False(inLinear.IsChecked);
+
+        var outSlow = outMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Slow"));
+        outSlow.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.MenuItem.ClickEvent));
+        Assert.Equal(VideoFadeCurve.Slow, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+        Open();
+        Assert.True(outSlow.IsChecked);
+
+        editor.Undo();
+        Open();
+        Assert.Equal(VideoFadeCurve.Linear, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+        Assert.False(outSlow.IsChecked);
+
+        editor.Project.Tracks[0].IsLocked = true;
+        Open();
+        Assert.False(inMenu.IsEnabled);
+        Assert.False(outMenu.IsEnabled);
+        editor.Project.Tracks[0].IsLocked = false;
+
+        editor.Project.Tracks[0].Clips[0].FadeInFrames = 0;
+        editor.Project.Tracks[0].Clips[0].FadeOutFrames = 0;
+        Open();
+        Assert.Equal(Visibility.Collapsed, inMenu.Visibility);
+        Assert.Equal(Visibility.Collapsed, outMenu.Visibility);
+
+        var audioMenu = view.CreateEventMenu(editor.Project.Tracks[1].Clips[0].Id);
+        audioMenu.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.ContextMenu.OpenedEvent));
+        Assert.Equal(Visibility.Collapsed, audioMenu.Items.OfType<System.Windows.Controls.MenuItem>().Single(item => Equals(item.Header, "Fade In Curve")).Visibility);
+    });
+
     private static void Sta(Action action)
     {
         Exception? failure = null;

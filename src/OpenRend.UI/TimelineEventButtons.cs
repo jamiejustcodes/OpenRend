@@ -152,6 +152,38 @@ public sealed partial class TimelineView
             if (IsEnabled && events.Length == 1)
                 VideoSourceModeRequested?.Invoke(events[0].Id, loop.IsChecked ? VideoSourceMode.Loop : VideoSourceMode.HoldLastFrame);
         };
+        var fadeInCurves = new MenuItem { Header = "Fade In Curve" };
+        AutomationProperties.SetAutomationId(fadeInCurves, "FadeInCurveMenu");
+        var fadeOutCurves = new MenuItem { Header = "Fade Out Curve" };
+        AutomationProperties.SetAutomationId(fadeOutCurves, "FadeOutCurveMenu");
+        foreach (var curve in (VideoFadeCurve[])Enum.GetValues(typeof(VideoFadeCurve)))
+        {
+            var inItem = new MenuItem { Header = curve.ToString(), IsCheckable = true };
+            AutomationProperties.SetAutomationId(inItem, $"FadeInCurve_{curve}");
+            var inCurve = curve;
+            inItem.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    VideoFadeCurveRequested?.Invoke(events[0].Id, inCurve, false);
+            };
+            fadeInCurves.Items.Add(inItem);
+
+            var outItem = new MenuItem { Header = curve.ToString(), IsCheckable = true };
+            AutomationProperties.SetAutomationId(outItem, $"FadeOutCurve_{curve}");
+            var outCurve = curve;
+            outItem.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    VideoFadeCurveRequested?.Invoke(events[0].Id, outCurve, true);
+            };
+            fadeOutCurves.Items.Add(outItem);
+        }
+        menu.Items.Add(fadeInCurves);
+        menu.Items.Add(fadeOutCurves);
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
@@ -174,6 +206,19 @@ public sealed partial class TimelineView
                 ? Visibility.Visible : Visibility.Collapsed;
             switches.IsEnabled = loop.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             loop.IsChecked = video.Length == 1 && video[0].Clip.VideoSourceMode == VideoSourceMode.Loop;
+            var hasFadeIn = video.Length == 1 && video[0].Clip.FadeInFrames > 0;
+            var hasFadeOut = video.Length == 1 && video[0].Clip.FadeOutFrames > 0;
+            fadeInCurves.Visibility = hasFadeIn ? Visibility.Visible : Visibility.Collapsed;
+            fadeInCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            fadeOutCurves.Visibility = hasFadeOut ? Visibility.Visible : Visibility.Collapsed;
+            fadeOutCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            if (video.Length == 1)
+            {
+                foreach (MenuItem item in fadeInCurves.Items)
+                    item.IsChecked = item.Header.ToString() == video[0].Clip.FadeInCurve.ToString();
+                foreach (MenuItem item in fadeOutCurves.Items)
+                    item.IsChecked = item.Header.ToString() == video[0].Clip.FadeOutCurve.ToString();
+            }
             split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
         };

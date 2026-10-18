@@ -72,6 +72,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? VideoEffectsRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
+    public event Action<Guid, VideoFadeCurve, bool>? VideoFadeCurveRequested;
     public event Action<Guid, string>? VideoEventActionRequested;
     public event Action<int>? InsertVideoTrackRequested;
     public event Action<int>? InsertAudioTrackRequested;
