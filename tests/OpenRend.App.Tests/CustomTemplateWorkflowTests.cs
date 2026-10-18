@@ -27,6 +27,7 @@ public sealed partial class EditorWorkflowTests
             var window = running.Window;
             RenderAndVerify(window, executable, Path.Combine(temporary, "custom.mp4"), configure: render =>
             {
+                var initialCount = Find(render, "RenderTemplates").AsListBox().Items.Length;
                 Find(render, "CustomizeRenderTemplate").AsButton().Invoke();
                 Window? settings = null;
                 WaitFor(() => (settings = render.ModalWindows.SingleOrDefault(dialog => dialog.Title.StartsWith("Custom Settings"))) is not null,
@@ -42,7 +43,7 @@ public sealed partial class EditorWorkflowTests
                 var artifacts = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifacts);
                 using (var screenshot = Capture.Element(settings!)) screenshot.ToFile(Path.Combine(artifacts, "custom-render.png"));
                 Find(settings!, "SaveRenderTemplateAs").AsButton().Invoke();
-                WaitFor(() => render.ModalWindows.Length == 0 && Find(render, "RenderTemplates").AsListBox().Items.Length > RenderTemplateCatalog.All.Count,
+                WaitFor(() => render.ModalWindows.Length == 0 && Find(render, "RenderTemplates").AsListBox().Items.Length > initialCount,
                     "Saving a custom template did not add it to the render catalog.");
                 Find(render, "RenderFavorite").AsCheckBox().Toggle();
                 Find(render, "CustomizeRenderTemplate").AsButton().Invoke();
