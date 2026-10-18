@@ -217,7 +217,7 @@ public sealed partial class TimelineRenderService : IDisposable
             if (track.Kind != TrackKind.Audio || track.IsMuted || (solo && !track.IsSolo)) continue;
             foreach (var clip in track.Clips)
             {
-                if (!assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0 || track.Gain <= 0) continue;
+                if (clip.IsMuted || !assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0 || track.Gain <= 0) continue;
                 var start = project.FrameRate.Seconds(clip.StartFrame);
                 var end = project.FrameRate.Seconds(clip.EndFrame);
                 // Include only sample instants inside the clip's half-open range.
