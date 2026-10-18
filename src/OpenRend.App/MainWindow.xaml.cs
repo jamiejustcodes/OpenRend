@@ -793,7 +793,34 @@ public partial class MainWindow : Window
         vm.Status = allLoop ? "Set video source mode to hold last frame." : "Set video source mode to loop.";
     });
 
-    private void MuteAudioClipClick(object sender, RoutedEventArgs e) => MuteEventClick(sender, e);
+    private void MuteAudioClipClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+
+        if (selected.Length == 0 && SelectedClip is { } anyClip)
+        {
+            var trk = vm.Project.Tracks.First(t => t.Clips.Contains(anyClip));
+            if (trk.Kind == TrackKind.Audio)
+            {
+                selected = [(trk, anyClip)];
+            }
+            else
+            {
+                var groupMembers = vm.Editor.ExpandSelection([anyClip.Id], false);
+                selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+                    .SelectMany(t => t.Clips.Where(c => groupMembers.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+            }
+        }
+
+        if (selected.Length == 0) { vm.Status = "Select an audio event (or linked clip) to mute/unmute."; return; }
+        Pause();
+        var allMuted = selected.All(s => s.Clip.IsMuted);
+        vm.Editor.SetSelectionMute(selected.Select(s => s.Clip.Id), !allMuted);
+        UpdateInspector();
+        RequestPreview();
+        vm.Status = allMuted ? "Unmuted audio event(s)." : "Muted audio event(s).";
+    });
     private void InvertPhaseClipClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
@@ -968,7 +995,7 @@ public partial class MainWindow : Window
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
             Key.L when ctrl && shift => () => LockEventClick(this, e),
-            Key.M when ctrl && shift => () => MuteEventClick(this, e),
+            Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),

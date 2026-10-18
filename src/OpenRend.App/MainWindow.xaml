@@ -43,9 +43,10 @@
         <Separator/>
         <MenuItem Header="Switches">
           <MenuItem x:Name="LockEventMenu" Header="Lock" InputGestureText="Ctrl+Shift+L" Click="LockEventClick"/>
-          <MenuItem x:Name="MuteEventMenu" Header="Mute" InputGestureText="Ctrl+Shift+M" Click="MuteEventClick"/>
+          <MenuItem x:Name="MuteEventMenu" Header="Mute event" Click="MuteEventClick"/>
           <MenuItem x:Name="LoopEventMenu" Header="Loop" Click="LoopEventClick"/>
           <Separator/>
+          <MenuItem x:Name="MuteAudioClipMenu" Header="Mute audio" InputGestureText="Ctrl+Shift+M" Click="MuteAudioClipClick"/>
           <MenuItem Header="Normalize audio" Click="NormalizeAudioClipClick"/>
           <MenuItem Header="Invert phase" Click="InvertPhaseClipClick"/>
         </MenuItem>
@@ -165,7 +166,7 @@
               <TextBlock Grid.Row="5" Text="Pan (−1 to 1)"/><TextBox x:Name="ClipPan" Grid.Row="5" Grid.Column="1"/>
               <TextBlock Grid.Row="6" Text="Fade in (frames)"/><TextBox x:Name="ClipFadeIn" Grid.Row="6" Grid.Column="1"/>
               <TextBlock Grid.Row="7" Text="Fade out (frames)"/><TextBox x:Name="ClipFadeOut" Grid.Row="7" Grid.Column="1"/>
-              <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"><Button Content="Apply clip properties" Click="ApplyPropertiesClick" Margin="2,10"/><Button Content="Normalize (0 dB)" Click="NormalizeAudioClipClick" ToolTip="Normalize audio peak to 0 dB" Margin="4,10"/><Button x:Name="MuteEventButton" Content="Mute" Click="MuteEventClick" ToolTip="Toggle event mute" Margin="4,10"/><Button x:Name="LockEventButton" Content="Lock" Click="LockEventClick" ToolTip="Toggle event lock" Margin="4,10"/><Button x:Name="EditTextMediaButton" Content="Edit text…" Click="EditTextMediaClick" ToolTip="Edit Titles &amp; Text media properties" Margin="4,10" Visibility="Collapsed"/></StackPanel>
+              <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"><Button Content="Apply clip properties" Click="ApplyPropertiesClick" Margin="2,10"/><Button Content="Normalize (0 dB)" Click="NormalizeAudioClipClick" ToolTip="Normalize audio peak to 0 dB" Margin="4,10"/><Button x:Name="MuteAudioButton" Content="Mute audio" Click="MuteAudioClipClick" ToolTip="Toggle audio mute (leaves video visible)" Margin="4,10"/><Button x:Name="LockEventButton" Content="Lock" Click="LockEventClick" ToolTip="Toggle event lock" Margin="4,10"/><Button x:Name="MuteEventButton" Content="Mute event" Click="MuteEventClick" ToolTip="Toggle event mute (disables event output)" Margin="4,10"/><Button x:Name="EditTextMediaButton" Content="Edit text…" Click="EditTextMediaClick" ToolTip="Edit Titles &amp; Text media properties" Margin="4,10" Visibility="Collapsed"/></StackPanel>
             </Grid>
           </StackPanel></ScrollViewer>
         </TabItem>
