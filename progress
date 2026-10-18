@@ -1,36 +1,60 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, Timeline Event Switches (Lock and Mute) complete
+## Resume here — 18 October 2026, Vegas Pro 18 Transition Catalog, Properties UI & Spatial Reveals Complete (Feature 1 Complete)
 
 - Latest features:
-  - Timeline Event Switches: Lock and Mute (Schema 9).
-  - Parity scope achieved:
-    - Event Lock:
-      - Protects clips from destructive edits: moving, trimming, splitting, deleting, level adjustments, and crop keyframing.
-      - Keeps switches context menu (`Switches -> Lock`) accessible so clips can always be unlocked.
-      - Renders gold padlock glyph with silver shackle on event headers.
-      - Displays prohibited cursor (`Cursors.No`) when hovering or attempting to drag locked event headers or trim edges.
-      - Inspector panel provides direct `Lock` toggle button (`LockEventButton`).
-      - Main menu provides `Edit -> Switches -> Lock` with `Ctrl+Shift+L` shortcut.
-    - Event Mute:
-      - Excludes video layer during timeline evaluation when a video event is muted (evaluates as black/transparent).
-      - Bypasses audio decoding and outputs complete silence when an audio event is muted.
-      - Excludes clips from participating in plain crossfades.
-      - Displays `[Muted]` text tag on event header and applies dark muted background styling.
-      - `Ctrl+Shift+M` shortcut and Inspector `Mute audio` button specifically target the audio clip/stream of the selected or linked group, silencing audio while leaving video visible.
-      - Video event mute (disabling visual display) is controlled independently via the video event context menu (`Switches -> Mute`) or `Edit -> Switches -> Mute event`.
-      - Inspector panel provides direct `Mute audio` and `Mute event` toggle buttons alongside `Lock`.
-    - Multi-selection support: Toggling lock or mute from menus applies across all selected clips.
-    - Schema 9: `IsLocked` and `IsMuted` serialized with `JsonIgnoreCondition.WhenWritingDefault` for backward compatibility.
-    - Undo/Redo: All switch changes are tracked atomically as undoable project transactions.
-- Native integration and managed test suites passed (650 tests passed):
-  - OpenRend.Core.Tests: 281/281 passed (added ClipLockAndMuteTests for mutation rejection, multi-selection, and schema 9 persistence).
-  - OpenRend.Editor.Tests: 114/114 passed (added EventButtonTests verifying context menu switches, locked actions, and cursor states).
-  - OpenRend.Media.Tests: 250/250 passed (added ClipLockAndMuteMediaTests for silence rendering, black frame evaluation, and plain crossfade exclusion).
-  - OpenRend.Playback.Tests: 4/4 passed.
-  - OpenRend.App.Tests: Desktop UI workflow test `EventLockAndMuteWorkflowPersistsAndSurvivesSaveReopen` passed with UI tests enabled.
+  - Complete Vegas Pro Video Transition Catalog & Spatial Reveals Engine (Feature 1 Complete):
+    - `src/OpenRend.Core/TransitionCatalog.cs`:
+      - Modeled all 18 Vegas Pro OFX video transition plug-ins reverse-engineered from `Vfx1.ofx.bundle` and `PresetPackage.xml`:
+        1. `Dissolve` (Fades: 23 presets including Crossfade, Additive, Fade Through Color, Color Bleed)
+        2. `Flash` (Fades: 3 presets)
+        3. `LinearWipe` (Wipes: 12 presets)
+        4. `ClockWipe` (Wipes: 6 presets)
+        5. `VenetianBlinds` (Wipes: 6 presets)
+        6. `StarWipe` (Wipes: 18 presets)
+        7. `BarnDoor` (Reveals: 10 presets)
+        8. `Iris` (Reveals: 14 presets)
+        9. `Split` (Reveals: 8 presets)
+        10. `Push` (Transforms: 12 presets)
+        11. `Slide` (Transforms: 10 presets)
+        12. `Zoom` (Transforms: 14 presets)
+        13. `Swap` (Transforms: 8 presets)
+        14. `Squeeze` (Transforms: 14 presets)
+        15. `CrossEffect` (Transforms: 5 presets)
+        16. `PageLoop` (3D & Peels: 4 presets)
+        17. `PagePeel` (3D & Peels: 4 presets)
+        18. `PageRoll` (3D & Peels: 4 presets)
+      - Defined parameter schemas: `Angle`, `Feather`, `Direction`, `Orientation`, `BorderSize`, `BorderColor`, `PushOff`.
+    - `src/OpenRend.Core/ProjectDocument.cs`:
+      - Expanded `VideoTransitionKind` with all 18 enum values.
+      - Added `Parameters` dictionary to `VideoTransition` with validation and deep-cloning.
+    - `src/OpenRend.Project/TransitionBrowserPreferences.cs`:
+      - Added `Favorites` HashSet for favorite plug-ins while keeping `FavoriteDissolve` backward-compatible.
+    - `src/OpenRend.Timeline/TimelineEditor.cs`:
+      - Overloaded `ApplyDissolve`, `ConvertCutToDissolve`, `ApplyDissolveToSelection` to take transition instances and parameters.
+      - Added `SetVideoTransition(clipId, transition)` with atomic undo/redo.
+    - `src/OpenRend.UI/TimelineTransitions.cs`:
+      - Removed restriction limiting transitions to Default Dissolve, enabling all 18 plug-ins on overlaps and cuts.
+    - `src/OpenRend.App/MainWindow.xaml` & `src/OpenRend.App/MainWindow.Transitions.cs`:
+      - Vegas Pro category navigation: `All Plug-ins`, `Favorites`, `Fades`, `Wipes`, `Reveals`, `Transforms`, `3D and Peels`.
+      - Multi-column preset card gallery with visual vector thumbnails, favorite stars (★/☆), `+` add button, search filtering, and cut/overlap drag-and-drop.
+    - `src/OpenRend.App/TransitionPropertiesWindow.cs`:
+      - Interactive parameter editor matching Vegas Pro OFX interact controls: Preset combo, Angle/Feather sliders, Direction/Orientation combos, Border Size/Color pickers, Push-off toggle, with real-time preview and undo/redo.
+    - `src/OpenRend.Media/TimelineRenderService.Dissolve.cs`:
+      - Implemented spatial reveal math: Linear/Clock/Star wipes, Venetian blinds, Barn door, Iris, Push, Slide, Zoom, Swap, Squeeze, Flash, Page peels, with smooth boundary feathering and border compositing, evaluating with full opacity for revealed pixels.
+  - Multi-Layer Timeline Dragging & Audio Mute Fix:
+    - Audio Mute Fix (`Ctrl+Shift+M`): Swallowing guard added in `TimelineView.cs` and `ignoreGroups: true` in `MainWindow.xaml.cs` so video layer stays rendered and visible while muting audio.
+    - 1:1 Vegas Pro Multi-Layer Timeline Drag & Drop Engine:
+      - `TimelineEditor.MoveSelectionToNewTrack` for dynamic layer creation with group horizontal synchronization and undo/redo.
+      - `TimelineView.cs` phantom layer preview (`#00D2FF`), insertion guideline, snapping line (`#00E5FF`), timecode badge, and edge auto-scrolling.
+  - Verification:
+    - `tools/build.ps1 -SkipNative` passed with 0 warnings, 0 errors, and 666 managed unit tests passed:
+      - OpenRend.Core.Tests: 291/291 passed (+6 new unit tests for catalog, parameters, persistence, layer creation, group sync, audio mute).
+      - OpenRend.Editor.Tests: 118/118 passed (+3 new unit tests for transition drops, gestures, properties undo/redo, shortcut swallowing).
+      - OpenRend.Media.Tests: 255/255 passed (+5 new unit tests for spatial reveals, wipes, iris, barn door, flash render pixel evaluation).
+      - OpenRend.Playback.Tests: 2/2 passed.
 - Next active item in docs/implementation-progress.md:
-  - Transition catalog expansion and custom curve properties under Feature 1, or proceed to Feature 2 (Render templates and range options / channel mapping). Reverse engineer with REA skill to ensure 1:1 code and UI parity.
+  - Feature 2: Render templates and range options — critical (reproduce render dialog template search, filtering and selection controls for supported output formats, channel mapping, metadata/log options).
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
 

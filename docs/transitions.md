@@ -52,8 +52,33 @@ Timeline video events provide context menu controls:
 
 Projects save as version 8 and read versions 1–8; older projects retain linear fades. Audio keeps its existing linear fades.
 
+## Vegas Pro Transition Catalog and Spatial Reveals
+
+Open the Transitions tab to view all 18 Vegas Pro OFX video transition plug-ins organized into categories:
+- **All Plug-ins**: Complete collection of all 18 plug-ins.
+- **Favorites**: User-selected favorite plug-ins (toggled with the ★ star icon, persisted in `transitions.json`).
+- **Fades**: `Dissolve` (23 presets including Crossfade, Additive, Fade Through Color, Color Bleed), `Flash` (Hard/Soft Flash).
+- **Wipes**: `Linear Wipe` (12 presets, angle/feather parameters), `Clock Wipe` (6 presets), `Venetian Blinds` (6 presets), `Star Wipe` (18 presets).
+- **Reveals**: `Barn Door` (10 presets, horizontal/vertical, in/out, borders), `Iris` (14 presets, circle/square/diamond), `Split` (8 presets).
+- **Transforms**: `Push` (12 presets, 4 directions, push off), `Slide` (10 presets), `Zoom` (14 presets), `Swap` (8 presets), `Squeeze` (14 presets), `Cross Effect` (5 presets).
+- **3D and Peels**: `Page Loop` (4 presets), `Page Peel` (4 presets), `Page Roll` (4 presets).
+
+Each plug-in lists its preset cards with vector thumbnails, preset name, `+` add button, and drag-and-drop support to cuts and existing overlaps.
+
+### Transition Properties Window
+
+Clicking the transition strip on an overlap, or choosing **Transition Properties...** from the clip context menu, opens the dedicated properties dialog:
+- **Preset dropdown**: Select from factory presets or custom configurations.
+- **Dynamic Parameter Controls**:
+  - Angle slider (0° to 360°) and Feather softness slider (0.0 to 1.0) for Wipes.
+  - Direction and Orientation selectors (Left/Right/Up/Down, In/Out) for Reveals and Transforms.
+  - Border Size and Border Color pickers for bordered reveals and wipes.
+  - Push Off checkbox for Push transitions.
+- **Remove Selected Plug-In**: Reverts the transition to a canonical crossfade while preserving overlap timing and fades.
+- **Undo / Redo**: Immediate history navigation with real-time preview updates.
+
 ## Current limits
 
-Only Default Dissolve is supported. The broader transition catalog, progress curves and full browser/properties layout remain pending. The current properties window exposes plug-in removal and history controls.
+All 18 Vegas Pro transition plug-in types, categories, and presets are modeled and evaluated with spatial masks, feathering, and border compositing. Highly complex non-linear 3D mesh deformation shaders (such as realistic 3D page curl specular physics) use smooth 2D gradient curl approximations in software rendering.
 
 Legacy bounded events reject missing source handles. Explicit video Loop/Hold modes permit source extensions; audio looping and default-loop preferences are not implemented. Same-start overlaps at project zero, event-level locks and exact-gap displacement remain limited. Initial Editing preferences use 0.25 seconds centered; factory-default matching has not been established. Source-duration probing and arbitrary VFR/source-rate equivalence remain limited. Exact reference-editor pixel math, color management and professional-scale throughput remain unverified.

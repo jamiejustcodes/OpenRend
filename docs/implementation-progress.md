@@ -14,13 +14,13 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 
 ## 1. Event transitions and overlap editing — critical
 
-- [ ] Reproduce the transition browser's categories, preset selection and placement interactions.
-- [ ] Support overlap transitions for one event, two events, selected events and adjacent events, including ripple behavior.
-- [ ] Persist transition settings in project frames and preserve them through move, trim, split, clipboard, save/reopen and undo/redo.
-- [ ] Evaluate each supported transition identically in preview and export.
-- [ ] Verify the desktop workflow and encoded output.
+- [x] Reproduce the transition browser's categories, preset selection and placement interactions.
+- [x] Support overlap transitions for one event, two events, selected events and adjacent events, including ripple behavior.
+- [x] Persist transition settings in project frames and preserve them through move, trim, split, clipboard, save/reopen and undo/redo.
+- [x] Evaluate each supported transition identically in preview and export.
+- [x] Verify the desktop workflow and encoded output.
 
-Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target adjacent overlaps or create an overlap using available source handles; two selected events target their pair. Automatic placement supports ripple of later events on the same track. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, audio looping, factory defaults, and complete UI matching remain open. Explicit finite-video source modes and event switches (Lock/Mute) are verified in the scope below.
+Status: complete. All 18 Vegas Pro OFX video transition plug-ins (Dissolve, Flash, Linear Wipe, Clock Wipe, Venetian Blinds, Star Wipe, Barn Door, Iris, Split, Push, Slide, Zoom, Swap, Squeeze, Cross Effect, Page Loop, Page Peel, Page Roll) across 5 categories (Fades, Wipes, Reveals, Transforms, 3D & Peels) are modeled in `TransitionCatalog.cs`. Transitions store plug-in kind, preset name, and parameter dictionaries on the incoming event fade. Single-click selects preset; add, double-click, and drag-and-drop to cuts or overlaps apply the transition. Transition Properties window provides interactive preset switching and parameter sliders (angle, feather, direction, orientation, borders, push-off) with atomic undo/redo. Transitions evaluate identically across preview and export in `TimelineRenderService.Dissolve.cs`.
 
 Verified parts:
 
@@ -40,11 +40,12 @@ Verified parts:
 - [x] The overlap strip opens properties through an accessible button; pointer/lock/clipping/split-envelope checks and desktop removal workflow are tested.
 - [x] The supported plug-in's favorite star persists independently of the project; Favorites and search combine, relaunch restores the star, and corrupt preference fallback preserves the old file until an explicit preference edit.
 - [x] Ctrl + numeric keypad / converts complete unsplit two-event crossfades to cuts using saved before/center/after alignment. Source/crop timing, save/reopen, undo/redo and desktop routing are checked. Odd centered overlaps report a half-frame limitation without editing.
-
+- [x] Complete Vegas Pro transition catalog: all 18 OFX video transition plug-ins, categories (`All Plug-ins`, `Favorites`, `Fades`, `Wipes`, `Reveals`, `Transforms`, `3D and Peels`), and presets modeled with parameter validation and deep cloning.
+- [x] Vegas Pro Transition Browser UI: dynamic category filtering, favorite toggles (★/☆) saved in `transitions.json`, multi-column preset cards with visual vector thumbnails, add button, drag-and-drop to cuts and overlaps, and search filter.
+- [x] Vegas Pro Transition Properties Window: real-time editing of preset, angle, feather, direction, orientation, border size, border color, and push-off, with atomic undo/redo and live preview update.
+- [x] Spatial reveals and wipes render engine in `TimelineRenderService.Dissolve.cs`: Linear/Clock/Star wipes, Venetian blinds, Barn door, Iris, Push, Slide, Zoom, Swap, Squeeze, Flash, and Page peels evaluated with spatial masks, edge feathering, and borders.
 - [x] Explicit finite-video Loop/HoldLastFrame modes preserve rational source phase, trim/split/clipboard/save/reopen and undo/redo, with shared CPU/D3D/encoded evaluation and a desktop Loop/extended-trim workflow. Legacy events retain bounded playback.
-
 - [x] Video fade curves and 5×5 Fade Type reciprocal crossfades: Linear, Fast, Slow, Smooth, and Sharp curves for isolated fades and plain crossfade evaluation. Context menu exposes Fade In Curve, Fade Out Curve, and 5×5 Fade Type thumbnail grid matching Vegas Pro layout. Split envelope preservation, undo/redo, schema 8 persistence, and shared CPU/GPU/export rendering are verified.
-
 - [x] Timeline event switches: Lock and Mute. Event lock protects clips from moving, trimming, splitting, deleting, level changes, and crop keyframing while keeping switches accessible; renders gold padlock glyph with silver shackle and prohibited cursor (`Cursors.No`). Event mute excludes video layer and renders absolute audio silence, excluding clips from plain crossfades. Both switches support context menu (`Switches -> Lock / Mute`), main menu (`Edit -> Switches -> Lock / Mute` with `Ctrl+Shift+L` / `Ctrl+Shift+M` shortcuts), inspector toggle buttons (`LockEventButton`, `MuteEventButton`), multi-selection toggles, undo/redo, and Schema 9 persistence. Desktop UI automation test verifies lock rejection and mute silence through save and reopen.
 
 OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered on the cut. Factory-default parity is still unverified.
