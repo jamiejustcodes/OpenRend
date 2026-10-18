@@ -42,7 +42,7 @@ public sealed partial class EditorWorkflowTests
                 var artifacts = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifacts);
                 using (var screenshot = Capture.Element(settings!)) screenshot.ToFile(Path.Combine(artifacts, "custom-render.png"));
                 Find(settings!, "SaveRenderTemplateAs").AsButton().Invoke();
-                WaitFor(() => render.ModalWindows.Length == 0 && Find(render, "RenderTemplates").AsListBox().Items.Length == 3,
+                WaitFor(() => render.ModalWindows.Length == 0 && Find(render, "RenderTemplates").AsListBox().Items.Length > RenderTemplateCatalog.All.Count,
                     "Saving a custom template did not add it to the render catalog.");
                 Find(render, "RenderFavorite").AsCheckBox().Toggle();
                 Find(render, "CustomizeRenderTemplate").AsButton().Invoke();

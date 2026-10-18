@@ -1,26 +1,41 @@
 # Rendering
 
-Open Render As with Ctrl+Shift+E. Choose a format/template, output folder and file name, then Render. Both current presets use project dimensions and frame rate, H.264 8-bit YUV 4:2:0 video and stereo AAC at 48 kHz.
+Open Render As with Ctrl+Shift+E. Choose a format and template, output folder and file name, then Render. Templates support project dimensions or fixed resolutions (UHD 4K, HD 1080p, 720p), H.264/HEVC/ProRes video, and AAC/WAV/MP3 audio.
 
-| Template | Video quality (CRF) | Audio bitrate |
-| --- | --- | --- |
-| Project settings | 20 | 192 kbps |
-| Project settings — High quality | 17 | 256 kbps |
+## Supported format catalog
 
-Customize Template opens editable name, quality (CRF 0–51), AAC bitrate (32–512 kbps) and encoder-speed controls. Save updates an existing custom preset, including its name; Save As creates a new preset with an independent identity. Builtins stay unchanged. Delete Template removes a selected custom preset and its favorite reference. Custom changes remain in the dialog draft until Render As is accepted; Cancel discards that draft.
+| Format | Codecs | Extension | Presets |
+| --- | --- | --- | --- |
+| MAGIX AVC/AAC MP4 | H.264 (libx264) + AAC | `.mp4` | Project settings, High quality, Internet 4K 2160p, Internet HD 720p |
+| MAGIX HEVC/AAC MP4 | HEVC (libx265) + AAC | `.mp4` | Internet UHD 2160p, Internet HD 1080p |
+| Apple ProRes | ProRes (prores_ks 10-bit YUV 4:2:2) + 24-bit PCM | `.mov` | Apple ProRes 422, Apple ProRes 422 HQ |
+| Sony Wave Audio | PCM Uncompressed Audio (no video) | `.wav` | 48,000 Hz 24-bit PCM, 44,100 Hz 16-bit PCM |
+| MP3 Audio | MPEG Layer-3 (libmp3lame, no video) | `.mp3` | 320 kbps 48,000 Hz, 192 kbps 48,000 Hz |
 
-Search matches supported template properties without case sensitivity. Semicolons separate required terms: `high;H.264;1920x1080` requires all three terms to match. Favorite marks the selected template; Show favorites only filters the list. Template, favorites, output folder and the loop-only choice are saved in `render.json` under the application data directory, or `OPENREND_DATA_DIR` when set.
+Selecting a template automatically switches the output file name's extension to match the target format (`.mp4`, `.mov`, `.wav`, `.mp3`).
 
-## Loop-region export
+## Template search and filtering
 
-Drag the upper timeline ruler to select a region. Drag either boundary to resize it. With the timeline focused, I sets the in point and O sets the out point at the cursor. Render loop region only is available when a nonempty region exists. The dialog shows its start, exclusive end and frame count. With the option off, the complete timeline renders.
+- **Search**: Matches template properties (name, codec, format, resolution, audio rate/bitrate, speed) without case sensitivity. Semicolons separate required terms (`high;H.264;1920x1080` requires all three terms).
+- **Formats list**: Filters templates by format category (`All Formats`, `MAGIX AVC/AAC MP4`, `MAGIX HEVC/AAC MP4`, `Apple ProRes`, `Sony Wave Audio`, `MP3 Audio`).
+- **Show favorites only**: Narrows list to starred favorite templates.
+- **Match project settings**: Narrows list to templates whose resolution matches the current project width and height.
 
-The range stays in integer project frames. Video evaluation uses the original absolute timeline frame, and audio begins at the corresponding rational project time. Export does not move or trim project events. Cancellation or encoder failure preserves an existing destination; final output replaces it only after successful encoding. Source media cannot be chosen as the destination.
+## Custom templates
 
-## Current limits and verification
+Customize Template opens editable name, quality (CRF 0–51), AAC bitrate (32–512 kbps) and encoder-speed controls. Save updates an existing custom preset, including its name; Save As creates a new preset with an independent identity. Builtins stay unchanged. Delete Template removes a selected custom preset and its favorite reference.
 
-Loop selection is session state, is bounded to the timeline, and does not enable loop playback. Selection history and project persistence are pending. Custom output dimensions/rates, additional output formats, channel mapping, markers and loudness logs are pending. The dialog exposes supported controls only.
+## Render options
 
-Encoded tests verify range frame counts/rates, audio duration, starting pixels and tone identity at 30, 30000/1001 and 24000/1001 fps. Desktop integration verifies ruler selection, property search, favorites, filename validation, saved choices and a 30-frame loop export. The complete native/managed build gate also covers existing full-timeline exports and cancellation/source protection.
+- **Render loop region only**: Available when a timeline loop region is set (via timeline ruler drag or I/O keys). Bounded to integer project frames.
+- **Stretch video to fill output frame size (do not letterbox)**: Scales the video directly to the output resolution without pillarbox or letterbox black borders.
+- **Channel mapping**:
+  - `None (Stereo)`: Default stereo passthrough.
+  - `Downmix to Mono`: $(L + R) / 2$ mixed into both left and right channels.
+  - `Swap Left and Right`: Inverts stereo soundstage.
+  - `Mute Left Channel`: Silences left channel while retaining right channel.
+  - `Mute Right Channel`: Silences right channel while retaining left channel.
+- **Generate loudness log (.loudness.log)**: Computes ITU-R BS.1770 integrated loudness in LUFS, maximum true peak in dBFS, duration, frame count, sample rate, and channel mapping metadata, saved alongside the output media.
+- **Dynamic estimates**: Live calculation of estimated output file size based on bitrate, resolution, and frame duration, plus available free disk space on the target destination drive.
 
-Custom-template tests inspect the encoded H.264 quality/speed settings and AAC bitrate. Desktop integration saves, reopens and renames a custom preset, renders it, then renders a builtin while checking the custom preset and favorite survive.
+Preferences (chosen template, favorites, output folder, loop region setting, stretch to fill, channel mapping, loudness logging, format filter, and match project setting) persist in `render.json` under the application data directory.

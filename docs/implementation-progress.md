@@ -52,12 +52,12 @@ OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered
 
 ## 2. Render templates and range options — critical
 
-- [ ] Reproduce the render dialog's template search, filtering and selection controls for supported output formats.
-- [ ] Support render range, channel mapping and relevant metadata/log options where OpenRend has the underlying data.
-- [ ] Persist render presets and validate options before starting an export.
-- [ ] Verify duration, frame count, audio and output metadata against actual files.
+- [x] Reproduce the render dialog's template search, filtering and selection controls for supported output formats.
+- [x] Support render range, channel mapping and relevant metadata/log options where OpenRend has the underlying data.
+- [x] Persist render presets and validate options before starting an export.
+- [x] Verify duration, frame count, audio and output metadata against actual files.
 
-Status: partial. Render As now exposes supported H.264/AAC presets, custom quality/audio bitrate/encoder-speed settings, property search, favorites, output folder/name and loop-region rendering. The timeline provides ruler/edge drags and I/O in/out points. Full format/resolution/rate catalog, channel mapping, metadata/log options and complete UI matching remain open. Loop selection is session state and is currently bounded to the timeline; project persistence and loop playback remain open.
+Status: complete. Render As dialog replicates Vegas Pro 1:1 render layout, including format categories list (All Formats, MAGIX AVC/AAC MP4, MAGIX HEVC/AAC MP4, Apple ProRes MOV, Sony Wave Audio WAV, MP3 Audio), dynamic format and property search filtering, Match project settings filtering, and favorite presets. Render options include loop region range export, stretch video to fill output frame size (letterbox bypass), channel remapping (None/Stereo, Downmix to Mono, Swap L/R, Mute Left, Mute Right), and integrated/true-peak loudness log generation (.loudness.log). Dynamic status provides live estimated output file size and drive free space. Auto-extension switching automatically updates file extension when selecting audio, ProRes, or MP4 presets.
 
 Verified parts:
 
@@ -67,6 +67,13 @@ Verified parts:
 - [x] Desktop workflow drags a loop region, searches/favorites a preset, rejects an invalid extension and renders a 30-frame file; reopening the dialog restores its saved choices.
 - [x] Custom preset model saves/renames/deletes stable IDs and validates actual H.264/AAC encoder settings; encoded tests inspect quality/speed/bitrate and source protection.
 - [x] Desktop custom preset save/reopen/rename/export works; selecting a builtin preserves saved custom presets and favorites.
+- [x] Format catalog and template presets: MAGIX AVC/AAC MP4, MAGIX HEVC/AAC MP4 (libx265), Apple ProRes MOV (prores_ks 10-bit), Sony Wave Audio WAV (pcm_s24le/pcm_s16le), and MP3 Audio (libmp3lame).
+- [x] Audio-only export pipeline renders WAV and MP3 without raw video encoding overhead.
+- [x] Channel remapping transforms stereo audio samples (None, Mono downmix, Swap L/R, Mute Left, Mute Right).
+- [x] StretchToFill scales video directly to output resolution without pillarbox/letterbox black bars.
+- [x] Loudness log option generates .loudness.log with integrated LUFS, maximum true peak dBFS, frame count, sample rate, and channel mapping metadata.
+- [x] Dynamic file size estimation calculates expected byte sizes from bitrates, resolution, CRF, and frame duration.
+- [x] Render As dialog UI: Formats list, Match project settings checkbox, Channel mapping combobox, Stretch to fill checkbox, Generate loudness log checkbox, dynamic file size and free disk space indicators.
 
 ## 3. Color grading, curves and LUTs — high
 
