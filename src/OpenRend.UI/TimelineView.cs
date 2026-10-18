@@ -70,6 +70,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? SplitRequested;
     public event Action? PanCropRequested;
     public event Action? VideoEffectsRequested;
+    public event Action? ColorGradingRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
     public event Action<Guid, VideoFadeCurve, VideoFadeCurve?, bool>? VideoFadeCurveRequested;

@@ -189,6 +189,22 @@ public sealed class EventButtonTests
     });
 
     [Fact]
+    public void EventMenuContainsColorGradingAndInvokesAction() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        var menu = view.CreateEventMenu(clip.Id);
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+        var grading = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Color Grading…"));
+        Assert.True(grading.IsEnabled);
+        Guid invoked = Guid.Empty;
+        string? invokedAction = null;
+        view.VideoEventActionRequested += (id, action) => { invoked = id; invokedAction = action; };
+        grading.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal(clip.Id, invoked);
+        Assert.Equal("ColorGrading", invokedAction);
+    });
+
+    [Fact]
     public void AutomationExposesEnabledInvokeButtonsUnderTheEvent() => Sta(() =>
     {
         var (view, track, clip) = Create();

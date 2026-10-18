@@ -103,11 +103,12 @@ public sealed partial class TimelineView
             TransitionPropertiesRequested?.Invoke(clipId);
             return;
         }
-        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia")
+        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia" or "ColorGrading")
         {
             if (VideoEventActionRequested is not null) VideoEventActionRequested.Invoke(clipId, action);
             else if (action == "PanCrop") PanCropRequested?.Invoke();
             else if (action == "VideoEffects") VideoEffectsRequested?.Invoke();
+            else if (action == "ColorGrading") ColorGradingRequested?.Invoke();
         }
         else if (action == "More")
         {
@@ -136,6 +137,8 @@ public sealed partial class TimelineView
         }
         var crop = Add(EventButtonLabel("PanCrop"), () => { if (clipId is { } id) InvokeEventAction(id, "PanCrop"); else PanCropRequested?.Invoke(); });
         var fx = Add(EventButtonLabel("VideoEffects"), () => { if (clipId is { } id) InvokeEventAction(id, "VideoEffects"); else VideoEffectsRequested?.Invoke(); });
+        var grading = Add("Color Grading…", () => { if (clipId is { } id) InvokeEventAction(id, "ColorGrading"); else ColorGradingRequested?.Invoke(); });
+        AutomationProperties.SetAutomationId(grading, "ColorGradingEventMenu");
         var transition = Add("Transition Properties…", () =>
         {
             var id = clipId ?? Project.Tracks.Where(track => track.Kind == TrackKind.Video)

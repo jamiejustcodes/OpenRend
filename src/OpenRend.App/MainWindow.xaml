@@ -66,6 +66,7 @@
       <MenuItem Header="_Tools">
         <MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/>
         <MenuItem x:Name="VideoEffectsMenu" Header="Video event FX…" Click="VideoEffectsClick"/>
+        <MenuItem x:Name="ColorGradingMenu" Header="Color Grading…" InputGestureText="Ctrl+Shift+G" Click="ColorGradingClick"/>
         <MenuItem Header="Clip properties" Click="ClipPropertiesClick"/>
         <Separator/>
         <MenuItem Header="Scene Detection…" Click="SceneDetectionClick"/>

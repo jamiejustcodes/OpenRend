@@ -117,6 +117,7 @@ public partial class MainWindow : Window
         });
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
+        Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
             Pause();
@@ -143,6 +144,7 @@ public partial class MainWindow : Window
             if (action == "PanCrop") await OpenPanCropAsync(id);
             else if (action == "VideoEffects") OpenVideoEffects(id);
             else if (action == "EditTextMedia") OpenEditTextMedia(id);
+            else if (action == "ColorGrading") OpenColorGrading(id);
         };
         Timeline.ClipLockRequested += (id, locked) => Guard(() =>
         {
@@ -651,6 +653,22 @@ public partial class MainWindow : Window
         Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
         new VideoEffectsWindow(vm, selected[0].Clip.Id) { Owner = this }.ShowDialog();
     });
+    private void ColorGradingClick(object sender, RoutedEventArgs e) => OpenColorGrading();
+    private void OpenColorGrading(Guid? requestedClip = null) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => requestedClip is { } id ? clip.Id == id : vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+        if (selected.Length != 1) { vm.Status = "Select one video event to edit its color grading."; return; }
+        if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
+        Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
+        var clipId = selected[0].Clip.Id;
+        var effect = selected[0].Clip.VideoEffects.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
+        if (effect is null)
+        {
+            effect = vm.Editor.AddVideoEffect(clipId, VideoEffectKind.ColorGrading);
+        }
+        new ColorGradingWindow(vm, clipId, effect.Id, () => RequestPreview()) { Owner = this }.ShowDialog();
+    });
     private void AiTextToSpeechClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -1020,6 +1038,7 @@ public partial class MainWindow : Window
             Key.L when ctrl && shift => () => LockEventClick(this, e),
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
+            Key.G when ctrl && shift => () => ColorGradingClick(this, e),
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
             Key.X when ctrl => () => CutClick(this, e),
