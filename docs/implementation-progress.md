@@ -20,7 +20,7 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [ ] Evaluate each supported transition identically in preview and export.
 - [ ] Verify the desktop workflow and encoded output.
 
-Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target adjacent overlaps or create an overlap using available source handles; two selected events target their pair. Automatic placement supports ripple of later events on the same track. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, audio looping, event locks, factory defaults, and complete UI matching remain open. Explicit finite-video source modes are verified in the scope below.
+Status: default Dissolve is partial. The preset belongs to the incoming event fade. One selected event can target adjacent overlaps or create an overlap using available source handles; two selected events target their pair. Automatic placement supports ripple of later events on the same track. Single-click selects a preset; add, double-click, overlap drag, and cut drag are functional. The Editing preferences panel saves overlap duration and alignment. Source alpha is handled by a shared premultiplied mixture, tested locally; exact target pixel math remains unverified. The full preset catalog, audio looping, factory defaults, and complete UI matching remain open. Explicit finite-video source modes and event switches (Lock/Mute) are verified in the scope below.
 
 Verified parts:
 
@@ -44,6 +44,8 @@ Verified parts:
 - [x] Explicit finite-video Loop/HoldLastFrame modes preserve rational source phase, trim/split/clipboard/save/reopen and undo/redo, with shared CPU/D3D/encoded evaluation and a desktop Loop/extended-trim workflow. Legacy events retain bounded playback.
 
 - [x] Video fade curves and 5×5 Fade Type reciprocal crossfades: Linear, Fast, Slow, Smooth, and Sharp curves for isolated fades and plain crossfade evaluation. Context menu exposes Fade In Curve, Fade Out Curve, and 5×5 Fade Type thumbnail grid matching Vegas Pro layout. Split envelope preservation, undo/redo, schema 8 persistence, and shared CPU/GPU/export rendering are verified.
+
+- [x] Timeline event switches: Lock and Mute. Event lock protects clips from moving, trimming, splitting, deleting, level changes, and crop keyframing while keeping switches accessible; renders gold padlock glyph with silver shackle and prohibited cursor (`Cursors.No`). Event mute excludes video layer and renders absolute audio silence, excluding clips from plain crossfades. Both switches support context menu (`Switches -> Lock / Mute`), main menu (`Edit -> Switches -> Lock / Mute` with `Ctrl+Shift+L` / `Ctrl+Shift+M` shortcuts), inspector toggle buttons (`LockEventButton`, `MuteEventButton`), multi-selection toggles, undo/redo, and Schema 9 persistence. Desktop UI automation test verifies lock rejection and mute silence through save and reopen.
 
 OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered on the cut. Factory-default parity is still unverified.
 
