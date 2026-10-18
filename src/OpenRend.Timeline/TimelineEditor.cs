@@ -2,7 +2,7 @@ using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
-public sealed class TimelineEditor
+public sealed partial class TimelineEditor
 {
     private readonly Stack<ProjectDocument> undo = new();
     private readonly Stack<ProjectDocument> redo = new();

@@ -120,6 +120,7 @@ public partial class MainWindow : Window
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
+        Timeline.MotionTrackingRequested += id => OpenMotionTracking(id);
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
             Pause();
@@ -739,6 +740,17 @@ public partial class MainWindow : Window
     {
         Pause(); RequestPreview();
         new ColorGradingWindow(vm, EffectScope.Output, Guid.Empty, null, () => RequestPreview()) { Owner = this }.ShowDialog();
+    });
+    private void MotionTrackingClick(object sender, RoutedEventArgs e) => OpenMotionTracking();
+    private void OpenMotionTracking(Guid? requestedClip = null) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => requestedClip is { } id ? clip.Id == id : vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
+        if (selected.Length != 1) { vm.Status = "Select one video event to edit its motion tracking."; return; }
+        if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing motion tracking."; return; }
+        Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
+        var clipId = selected[0].Clip.Id;
+        new MotionTrackWindow(vm, clipId, () => RequestPreview()) { Owner = this }.ShowDialog();
     });
     private void AiTextToSpeechClick(object sender, RoutedEventArgs e) => Guard(() =>
     {

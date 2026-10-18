@@ -103,12 +103,13 @@ public sealed partial class TimelineView
             TransitionPropertiesRequested?.Invoke(clipId);
             return;
         }
-        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia" or "ColorGrading")
+        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia" or "ColorGrading" or "MotionTracking")
         {
             if (VideoEventActionRequested is not null) VideoEventActionRequested.Invoke(clipId, action);
             else if (action == "PanCrop") PanCropRequested?.Invoke();
             else if (action == "VideoEffects") VideoEffectsRequested?.Invoke();
             else if (action == "ColorGrading") ColorGradingRequested?.Invoke();
+            else if (action == "MotionTracking") MotionTrackingRequested?.Invoke(clipId);
         }
         else if (action == "More")
         {
@@ -139,6 +140,8 @@ public sealed partial class TimelineView
         var fx = Add(EventButtonLabel("VideoEffects"), () => { if (clipId is { } id) InvokeEventAction(id, "VideoEffects"); else VideoEffectsRequested?.Invoke(); });
         var grading = Add("Color Grading…", () => { if (clipId is { } id) InvokeEventAction(id, "ColorGrading"); else ColorGradingRequested?.Invoke(); });
         AutomationProperties.SetAutomationId(grading, "ColorGradingEventMenu");
+        var tracking = Add("Motion Tracking…", () => { if (clipId is { } id) InvokeEventAction(id, "MotionTracking"); else MotionTrackingRequested?.Invoke(clipId ?? Guid.Empty); });
+        AutomationProperties.SetAutomationId(tracking, "MotionTrackingEventMenu");
         var transition = Add("Transition Properties…", () =>
         {
             var id = clipId ?? Project.Tracks.Where(track => track.Kind == TrackKind.Video)
@@ -268,7 +271,7 @@ public sealed partial class TimelineView
             var singleTarget = targetClips.Length == 1 ? targetClips[0] : (Track: (TimelineTrack?)null, Clip: (TimelineClip?)null);
             var isLocked = singleTarget.Clip?.IsLocked ?? false;
             var video = selected.Where(item => item.Track.Kind == TrackKind.Video && (clipId is null || item.Clip.Id == clipId)).ToArray();
-            crop.IsEnabled = fx.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            crop.IsEnabled = fx.IsEnabled = grading.IsEnabled = tracking.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;
             transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;

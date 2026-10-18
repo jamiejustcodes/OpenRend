@@ -122,13 +122,24 @@ Verified parts:
 
 ## 5. General motion and mask tracking — high
 
-- [ ] Reproduce forward, backward, frame-step and full-range tracking controls and overlays.
-- [ ] Store reusable tracking samples in integer project frames with rational source conversion.
-- [ ] Attach tracking to transforms, stabilization, picture-in-picture and masks where supported.
-- [ ] Support mask drawing/editing and transfer of tracked motion with undo/redo and save/reopen.
-- [ ] Verify preview and encoded output over moving subjects.
+- [x] Reproduce forward, backward, frame-step and full-range tracking controls and overlays.
+- [x] Store reusable tracking samples in integer project frames with rational source conversion.
+- [x] Attach tracking to transforms, stabilization, picture-in-picture and masks where supported.
+- [x] Support mask drawing/editing and transfer of tracked motion with undo/redo and save/reopen.
+- [x] Verify preview and encoded output over moving subjects.
 
-Status: queued.
+Status: complete. Vegas Pro 1:1 Motion Tracking panel reproduced (`MotionTrackWindow.cs`) matching `MotionTrackWindow.dll` in Vegas Pro 2026. Includes tracking models (Translation, RigidMotion, Similarity, Affine, Homography), algorithms (Lucas-Kanade Pyramidal Optical Flow, SAD Template Matching, Hybrid), precision levels (Fast, Low, Medium, High), and shapes (Rectangle, Ellipse, Custom Polygon). Tracking navigation controls: Track Backward (`<<`), Step Back (`< 1`), Track Both Directions (`<< ALL >>`), Step Forward (`1 >`), Track Forward (`>>`), and Stop. Built-in motion transfer routes motion keyframes to Picture-in-Picture (`TransferMotionToPictureInPicture`), Crop/Pan & Video Stabilization (`TransferMotionToCrop`), and Bezier Masking (`TransferMotionToMask`), with drag-and-drop payload support. Reusable tracking samples stored in integer project frames on `TimelineClip.MotionTracks` with cosine-ease interpolation. Schema 10 persists tracking regions and keyframes.
+
+Verified parts:
+
+- [x] Point2D transformation, translation, rotation, scale, and bounding corner calculations verified.
+- [x] Cosine ease keyframe interpolation over intermediate project frames.
+- [x] MotionTrackData and TrackingKeyframe deep clone and validation.
+- [x] MotionTrackerEngine pyramidal Lucas-Kanade and template matching forward and backward tracking over synthetic moving features.
+- [x] `TimelineEditor` motion track CRUD operations (`AddMotionTrack`, `RemoveMotionTrack`, `UpdateMotionTrack`, `SetMotionTrackKeyframes`) survive undo/redo.
+- [x] Transfer motion to Picture-in-Picture creates and updates keyframed LocationX, LocationY, Scale, and Angle with undo/redo support.
+- [x] Transfer motion to Crop generates follow and stabilization keyframes with undo/redo support.
+- [x] Motion tracking accessible from Tools menu and timeline event context menu.
 
 ## 6. Transcript-driven timeline editing — medium
 

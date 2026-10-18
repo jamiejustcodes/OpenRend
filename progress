@@ -1,41 +1,42 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, Color Grading, Curves, and LUTs Complete (Feature 3 Complete)
+## Resume here — 18 October 2026, General Motion and Mask Tracking Complete (Feature 5 Complete)
 
 - Latest features:
-  - Complete Vegas Pro 1:1 Color Grading, Curves, and LUTs Pipeline (Feature 3 Complete):
-    - `src/OpenRend.Core/ColorCurve.cs`:
-      - Created `CurvePoint` (X, Y, InHandleX/Y, OutHandleX/Y, DeepClone, Validate).
-      - Created `ColorCurve` with monotonic cubic Bezier evaluation (`Evaluate(x)` via binary search), 256-entry lookup table precomputation (`BuildLut()`), identity linear fast-path, and Vegas Pro OFX curve string serialization and deserialization (`ToCurveString()`, `FromCurveString()` matching `{count}:{x0}:{y0}:{inHx0}:{inHy0}:{outHx0}:{outHy0}:...`).
-      - Created `ColorCurvesData` modeling Master (W/Y), Red (R), Green (G), and Blue (B) curves with `HasAdjustments`, deep cloning, and validation.
-    - `src/OpenRend.Core/VideoEffect.cs`:
-      - Added `Curves` property (`ColorCurvesData?`) with `DeepClone()` and validation ensuring only Color Grading effects carry curve data.
-    - `src/OpenRend.Media/VideoEffectColorGradingProcessor.cs`:
-      - Precomputed 256-entry LUTs for master, red, green, and blue curves via `BuildLut()`.
-      - Integrated curve evaluation into the primary color transform pass (placed immediately after Color Wheels and before HSL and Look LUT, matching Vegas Pro OFX processing order).
-    - `src/OpenRend.Media/VideoEffectProcessor.cs`:
-      - Updated `IsIdentity` to check `Curves is null || !Curves.HasAdjustments`, ensuring active curves trigger effect execution.
-    - `src/OpenRend.App/ColorCurvesControl.cs`:
-      - Interactive 2D curve canvas matching Vegas Pro: dark theme, 25/50/75% grid lines, diagonal identity reference, colored channel curves (White/Master, Red, Green, Blue), draggable control points with glow selection rings, point addition on click, point removal on double-click/Delete, smooth curve tool, and live readout.
-    - `src/OpenRend.App/ColorGradingWindow.cs`:
-      - Upgraded to support all 4 scopes (`Event`, `Track`, `Media`, `Output`).
-      - Added Curves tab (`tabCurvesBtn`) and Curves page with `ColorCurvesControl`, channel selector buttons (Master, Red, Green, Blue), and Reset/Smooth controls.
-      - Added White Balance eye-dropper neutral picker button.
-      - Routed parameter updates through `vm.Editor.UpdateScopedVideoEffectParameters` and `vm.Editor.SetScopedVideoEffects`.
+  - Complete Vegas Pro 1:1 Motion and Mask Tracking Pipeline (Feature 5 Complete):
+    - `src/OpenRend.Core/MotionTrack.cs`:
+      - Created `TrackingModel` (`Translation`, `RigidMotion`, `Similarity`, `Affine`, `Homography`), `TrackingAlgorithm` (`LucasKanade`, `TemplateMatching`, `Hybrid`), `TrackingPrecision` (`Fast`, `Low`, `Medium`, `High`), `TrackingShape` (`Rectangle`, `Ellipse`, `Polygon`).
+      - Created `Point2D` (X, Y, DistanceTo, Rotate, Translate, Scale, Transform, Clone).
+      - Created `TrackingKeyframe` (ProjectFrame, CenterX/Y, Width/Height, Angle, ScaleX/Y, Shear, Confidence, and 4 corner calculation methods `GetTopLeft()`, `GetTopRight()`, `GetBottomRight()`, `GetBottomLeft()`).
+      - Created `MotionTrackData` (Id, Name, Shape, Model, Algorithm, Precision, IsInverted, IsLocked, Opacity, CustomPoints, Keyframes with cosine-ease interpolation `InterpolateAt(frame)`).
+    - `src/OpenRend.Core/ProjectDocument.cs`:
+      - Added `List<MotionTrackData> MotionTracks` to `TimelineClip` with deep cloning and schema validation.
+    - `src/OpenRend.Media/MotionTrackerEngine.cs`:
+      - Created multi-threaded pyramidal Lucas-Kanade optical flow tracker with Shi-Tomasi corner feature detection.
+      - Integrated SAD (Sum of Absolute Differences) template matching fallback to eliminate feature drift.
+      - Supports bidirectional tracking (`TrackBackward`, `StepBackward`, `TrackForward`, `StepForward`, `TrackAll`) with cancellation token and live frame decoding via `TimelineRenderService.RenderFrame`.
+    - `src/OpenRend.Timeline/TimelineEditor.MotionTrack.cs`:
+      - Implemented motion track CRUD with full undo/redo: `GetMotionTracks`, `AddMotionTrack`, `RemoveMotionTrack`, `UpdateMotionTrack`, `SetMotionTrackKeyframes`.
+      - Implemented motion data transfer: `TransferMotionToPictureInPicture`, `TransferMotionToCrop` (follow subject & video stabilization via `CropState`), and `TransferMotionToMask`.
+    - `src/OpenRend.App/MotionTrackWindow.cs`:
+      - 1:1 Vegas Pro Motion Tracking floating window matching `MotionTrackWindow.dll`.
+      - Region management, shape toggles (Rectangle, Ellipse, Polygon), mode / algorithm / precision dropdowns.
+      - 5 tracking navigation buttons: `<<` (Track Backward), `< 1` (Step Back), `<< ALL >>` (Track Both Directions), `1 >` (Step Forward), `>>` (Track Forward), and Stop.
+      - Live telemetry readout (Center X/Y, Size W/H, Angle, Scale, Confidence score) and progress bar.
+      - Transfer motion dropdown menu and drag-and-drop payload integration.
     - `src/OpenRend.App/MainWindow.xaml` & `MainWindow.xaml.cs`:
-      - Added Tools menu items: `VideoTrackColorGradingMenu`, `MediaColorGradingMenu`, `VideoOutputColorGradingMenu`.
-      - Added `Media Color Grading…` to `MediaList` context menu.
-      - Added `Timeline.TrackColorGradingRequested` to `TimelineView`.
-    - `src/OpenRend.Project/ProjectStore.cs`:
-      - Updated `CurrentVersion = 10` for Schema 10 project serialization, persisting grading parameters, curves, and dual LUTs.
+      - Added `Tools -> Motion Tracking…` menu item (`MotionTrackingMenu`).
+      - Added `OpenMotionTracking(clipId)` handler.
+    - `src/OpenRend.UI/TimelineView.cs` & `TimelineEventButtons.cs`:
+      - Added `MotionTrackingRequested` event and wired `Motion Tracking…` into timeline clip event "More" context menu.
   - Verification:
-    - `tools/build.ps1 -SkipNative` passed with 0 warnings, 0 errors, and 705 managed tests passed:
+    - `tools/build.ps1 -SkipNative` passed with 0 warnings, 0 errors, and 715 managed tests passed:
+      - OpenRend.Core.Tests: 314/314 passed (+5 tests in `MotionTrackTests.cs`).
+      - OpenRend.Media.Tests: 274/274 passed (+2 tests in `MotionTrackerMediaTests.cs`).
+      - OpenRend.Editor.Tests: 125/125 passed (+3 tests in `MotionTrackEditorTests.cs`).
       - OpenRend.Playback.Tests: 2/2 passed.
-      - OpenRend.Editor.Tests: 122/122 passed.
-      - OpenRend.Core.Tests: 309/309 passed (+6 comprehensive tests in `ColorCurveTests.cs`).
-      - OpenRend.Media.Tests: 272/272 passed (+1 pixel test in `ColorGradingPixelTests.cs` verifying multi-channel curve pixel transformation).
 - Next active item in docs/implementation-progress.md:
-  - Feature 5: General motion and mask tracking — high (forward, backward, step tracking, Bezier/rectangle masks, transform/stabilization attachment).
+  - Feature 6: Transcript-driven timeline editing — medium (word timing persistence, transcript selection sync, cut/paste/split from transcript).
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
 

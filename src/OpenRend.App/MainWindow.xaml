@@ -65,6 +65,7 @@
       </MenuItem>
       <MenuItem Header="_Tools">
         <MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/>
+        <MenuItem x:Name="MotionTrackingMenu" Header="Motion Tracking…" Click="MotionTrackingClick"/>
         <MenuItem x:Name="VideoEffectsMenu" Header="Video event FX…" Click="VideoEffectsClick"/>
         <MenuItem x:Name="VideoTrackEffectsMenu" Header="Video Track FX…" Click="VideoTrackEffectsClick"/>
         <MenuItem x:Name="MediaEffectsMenu" Header="Media FX…" Click="MediaEffectsClick"/>

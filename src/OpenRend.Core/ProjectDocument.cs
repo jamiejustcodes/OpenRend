@@ -142,6 +142,15 @@ public sealed class ProjectDocument
                     if (effect == null || !effectIds.Add(effect.Id)) throw new InvalidDataException("Video effect IDs must be unique within a clip.");
                     effect.Validate();
                 }
+                if (clip.MotionTracks != null)
+                {
+                    var mtIds = new HashSet<Guid>();
+                    foreach (var mt in clip.MotionTracks)
+                    {
+                        if (mt == null || !mtIds.Add(mt.Id)) throw new InvalidDataException("Motion track IDs must be unique within a clip.");
+                        mt.Validate();
+                    }
+                }
             }
         }
     }
@@ -229,6 +238,8 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CropAnimation? Crop { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long CropOffsetFrames { get; set; }
     public List<VideoEffect> VideoEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<MotionTrackData> MotionTracks { get; set; } = [];
     public TimelineClip DeepClone()
     {
         var clone = (TimelineClip)MemberwiseClone();
@@ -236,6 +247,7 @@ public sealed class TimelineClip
         clone.FadeInTransition = FadeInTransition?.DeepClone();
         clone.FadeOutTransition = FadeOutTransition?.DeepClone();
         clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
+        clone.MotionTracks = MotionTracks.Select(track => track.DeepClone()).ToList();
         return clone;
     }
 }
