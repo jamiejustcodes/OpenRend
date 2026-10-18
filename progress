@@ -1,13 +1,13 @@
 # OpenRend development handoff
 
-## Resume here — 17 October 2026, 22:19 UK
+## Resume here â€” 18 October 2026, 05:40 UK
 
-- Latest pushed implementation commit: `0ce3264`. Source engine `97ab917` and video Loop menu/trim/clipboard `0ce3264` are complete in their supported scope. No top-level parity group is complete.
+- Latest pushed commit: `f23ff59`. Source engine `97ab917` and video Loop menu/trim/clipboard `0ce3264` are complete in their supported scope. No top-level parity group is complete.
 - Corrected `tools/build.ps1` passed native integration and **633 managed checks**: Core259, Editor111, Media242, Playback2, Desktop19; failed/skipped0. Release build: 0 warnings, 0 errors. Log `.local/source-loop-final-build.log`; isolated preferences/recovery `.local/source-loop-final-gate` and desktop checks enabled.
 - Finite video supports explicit Switches > Loop: repeat source or hold its final decoded frame, with rational continuous source timing, trim/split/clipboard/save/reopen and undo/redo. Schema7 preserves the legacy Bounded default. Preview/export share mapping; original media is unchanged.
 - Limits: audio looping and default-loop preferences remain open. Disabling Loop rejects a phase requiring fractional project-frame offsets instead of silently rounding. Arbitrary VFR/per-stream duration equivalence is unverified. Linked audio keeps its existing bounds. The complete transition catalog, event locks, progress curves and exact UI matching remain open.
 - Package refreshed at `dist/OpenRend/OpenRend.exe`; packaged Loop/extended-trim/save/reopen workflow passed1/1. Logs `.local/source-loop-package.log` and `.local/source-loop-package-test.log`.
-- Next REA item: fade-curve versus reciprocal-curve ownership. Static API inspection and a guarded pixel experiment plan/script are retained privately in ignored `scratch/rea-fade-curves-findings.md`, `scratch/rea-fade-curves-oracle-plan.md`, `scratch/rea-fade-curves-a.cs`. Runtime curve experiment has not run; formulas remain unknown. Comparison app currently remains in its empty workspace.
+- Next REA item: fade-curve versus reciprocal-curve ownership. Static API inspection and a guarded pixel experiment plan/script are retained privately in ignored `scratch/rea-fade-curves-findings.md`, `scratch/rea-fade-curves-oracle-plan.md`, `scratch/rea-fade-curves-a.cs`. Isolated-head and overlap experiments are recorded privately, followed by a denser five-curve sample. Five proposed shapes agree within one8-bit unit at15 tested points. Fade-out direction and general plain-crossfade ownership still need observation; no new curve implementation has landed. Comparison app was returned to its empty workspace after explicit Undo.
 - Keep `scratch/GEMINI-HANDOFF.md` updated with private evidence and exact continuation state. Stage explicit paths only; private research/generated binaries stay uncommitted.
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
@@ -270,6 +270,12 @@ Finite-video Loop/HoldLastFrame modes, schema 7, continuous source-phase mapping
 
 The event Switches > Loop workflow passed the focused Desktop test: enable, undo/redo, save, trim beyond the source, uncheck into HoldLastFrame, save and reopen. The test fits the timeline before reopening an offscreen event menu. Complete Editor111 passed with extended clipboard events at matching/doubled rational rates. Engine commit `97ab917` is pushed. The UI/clipboard slice is ready for its own tested commit; the corrected full gate is next. Log: `.local/source-loop-desktop.log`.
 
-### Source-mode corrected gate — 17 October 2026
+### Source-mode corrected gate â€” 17 October 2026
 
 Source engine97ab917 and UI/clipboard0ce3264 passed the corrected full gate: native integration +633 managed (259Core,111Editor,242Media,2Playback,19Desktop), zero failures/skips/warnings/errors. The failed first gate remains available as `.local/source-loop-build.log`; it exposed a missing-media assumption in a synthetic menu fixture and an offscreen test-menu setup issue. Both were fixed and retested. EOF-only test formatting cleanup was included before the corrected gate. The development bundle was then refreshed and its packaged Loop/extended-trim/save/reopen workflow passed1/1.
+
+### Fade research continuation â€” 18 October 2026
+
+The first isolated video-head-fade observation completed twelve captures with exact settings restored, unchanged source/project files and unchanged media/preview state. The comparison workspace was restored to empty. Overlap ownership and denser interpolation samples remain research work; no new curve control or formula has been implemented. The verified OpenRend baseline remains633 managed checks plus native integration and the packaged Loop workflow. Normalized this handoff file to UTF-8 for consistent display.
+
+- Continued curve research: bounded isolated-head samples support five curve shapes within quantization tolerance. Overlap samples with the existing supported transition did not establish curve ownership. Next: measure isolated tail direction and inspect native curve controls before implementing the next slice. The verified633-test baseline is unchanged.
