@@ -74,6 +74,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
     public event Action<Guid, VideoFadeCurve, VideoFadeCurve?, bool>? VideoFadeCurveRequested;
     public event Action<Guid, string>? VideoEventActionRequested;
+    public event Action<Guid, bool>? ClipLockRequested;
+    public event Action<Guid, bool>? ClipMuteRequested;
     public event Action<int>? InsertVideoTrackRequested;
     public event Action<int>? InsertAudioTrackRequested;
     public event Action<Guid>? DuplicateTrackRequested;
@@ -374,9 +376,9 @@ public sealed partial class TimelineView : FrameworkElement
     }
     internal Cursor CursorAt(Point point)
     {
-        if (HitEventButton(point) is { } button) return button.Track.IsLocked ? Cursors.No : Cursors.Hand;
+        if (HitEventButton(point) is { } button) return button.Track.IsLocked || (button.Clip.IsLocked && button.Action != "More") ? Cursors.No : Cursors.Hand;
         var hit = HitClip(point);
-        return hit is null ? Cursors.Arrow : hit.Value.Track.IsLocked ? Cursors.No : hit.Value.Mode == "Move" ? Cursors.Arrow : Cursors.SizeWE;
+        return hit is null ? Cursors.Arrow : (hit.Value.Track.IsLocked || hit.Value.Clip.IsLocked) ? Cursors.No : hit.Value.Mode == "Move" ? Cursors.Arrow : Cursors.SizeWE;
     }
     private void UpdateHover(Point point)
     {
@@ -385,7 +387,7 @@ public sealed partial class TimelineView : FrameworkElement
         var nextButton = button is { } hovered ? (hovered.Clip.Id, hovered.Action) : ((Guid, string)?)null;
         if (hoverEventButton != nextButton) { hoverEventButton = nextButton; InvalidateVisual(); }
         var hit = HitClip(point);
-        var id = button is null && hit is { Track.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
+        var id = button is null && hit is { Track.IsLocked: false, Clip.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
         var nextMode = id is not null ? hit!.Value.Mode : "";
         Cursor = CursorAt(point);
         if (hoverClipId == id && hoverMode == nextMode) return;
@@ -436,12 +438,31 @@ public sealed partial class TimelineView : FrameworkElement
                 }
                 var rect = new Rect(X(start), cy + 1, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), TrackHeight - 2);
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
+                var isMuted = clip.IsMuted || track.IsMuted;
                 var selected = Selection.Contains(clip.Id);
-                dc.DrawRectangle(Brush(track.IsMuted ? "#414141" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
+                dc.DrawRectangle(Brush(isMuted ? "#2D2D2D" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
                     new Pen(selected ? Brush("#E4DF8F") : Brush("#5E737C"), 1), rect);
                 dc.PushClip(new RectangleGeometry(rect));
-                if (ShowEventHeaders) dc.DrawRectangle(Brush(selected ? "#4D5356" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
-                if (ShowEventNames) Text(dc, clip.Name, rect.X + 3, rect.Y + 1, size: 11, maxWidth: rect.Width - 6);
+                if (ShowEventHeaders) dc.DrawRectangle(Brush(selected ? "#4D5356" : isMuted ? "#383838" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
+                var headerOffset = 3.0;
+                if (clip.IsLocked)
+                {
+                    var lockX = rect.X + 3;
+                    var lockY = rect.Y + 3;
+                    var lockPen = new Pen(Brush("#D0D0D0"), 1.2);
+                    var shackleGeo = new StreamGeometry();
+                    using (var sgc = shackleGeo.Open())
+                    {
+                        sgc.BeginFigure(new Point(lockX + 2.5, lockY + 5), false, false);
+                        sgc.ArcTo(new Point(lockX + 7.5, lockY + 5), new Size(2.5, 2.5), 0, false, SweepDirection.Clockwise, true, false);
+                    }
+                    shackleGeo.Freeze();
+                    dc.DrawGeometry(null, lockPen, shackleGeo);
+                    dc.DrawRectangle(Brush("#E0A020"), null, new Rect(lockX + 1, lockY + 5, 8, 6));
+                    headerOffset = 13.0;
+                }
+                var displayName = clip.IsMuted ? $"{clip.Name} [Muted]" : clip.Name;
+                if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
                 {
                     var height = TrackHeight - 22;
@@ -584,7 +605,7 @@ public sealed partial class TimelineView : FrameworkElement
             seeking = true; SeekRequested?.Invoke(FrameAt(origin.X)); CaptureMouse(); return;
         }
         SelectClip(dragging.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
-        if (dragTrack!.IsLocked) { dragging = null; return; }
+        if (dragTrack!.IsLocked || dragging.IsLocked) { dragging = null; return; }
         mode = hit!.Value.Mode;
         Cursor = mode == "Move" ? Cursors.SizeAll : Cursors.SizeWE;
         destination = Project.Tracks.IndexOf(dragTrack); delta = 0; CaptureMouse();

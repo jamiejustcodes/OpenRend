@@ -16,9 +16,10 @@ public sealed class EventButtonTests
 {
     private static (TimelineView View, TimelineTrack Track, TimelineClip Clip) Create()
     {
-        var clip = new TimelineClip { Name = "Picture", StartFrame = 30, DurationFrames = 60 };
+        var media = new MediaAsset { Path = "test.mp4", HasVideo = true, DurationSeconds = 10 };
+        var clip = new TimelineClip { MediaId = media.Id, Name = "Picture", StartFrame = 30, DurationFrames = 60 };
         var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [clip] };
-        var view = new TimelineView { Project = new() { FrameRate = new(30, 1), Tracks = [track] }, PixelsPerSecond = 100 };
+        var view = new TimelineView { Project = new() { FrameRate = new(30, 1), Media = [media], Tracks = [track] }, PixelsPerSecond = 100 };
         view.Measure(new Size(1000, 400)); view.Arrange(new Rect(0, 0, 1000, 400));
         return (view, track, clip);
     }
@@ -238,6 +239,66 @@ public sealed class EventButtonTests
         Assert.Equal(3, clipPeer.GetChildren().Count);
         view.VerticalOffset = 100;
         Assert.Empty(clipPeer.GetChildren());
+    });
+
+    [Fact]
+    public void EventMenuExposesSwitchesLockAndMute() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        var menu = view.CreateEventMenu(clip.Id);
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+
+        var switches = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Switches"));
+        var lockItem = switches.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Lock"));
+        var muteItem = switches.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Mute"));
+
+        Assert.False(lockItem.IsChecked);
+        Assert.False(muteItem.IsChecked);
+
+        (Guid Id, bool Value)? lockRequested = null;
+        view.ClipLockRequested += (id, locked) => lockRequested = (id, locked);
+        lockItem.IsChecked = true;
+        lockItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal((clip.Id, true), lockRequested);
+
+        (Guid Id, bool Value)? muteRequested = null;
+        view.ClipMuteRequested += (id, muted) => muteRequested = (id, muted);
+        muteItem.IsChecked = true;
+        muteItem.RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+        Assert.Equal((clip.Id, true), muteRequested);
+    });
+
+    [Fact]
+    public void LockedClipDisablesModifyingEventMenuOptionsAndCursorShowsProhibited() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        clip.IsLocked = true;
+        var menu = view.CreateEventMenu(clip.Id);
+        menu.RaiseEvent(new RoutedEventArgs(ContextMenu.OpenedEvent));
+
+        var crop = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Video event Pan/Crop…"));
+        var fx = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Video Event FX…"));
+        var split = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Split at cursor"));
+        var delete = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Delete selection"));
+
+        Assert.False(crop.IsEnabled);
+        Assert.False(fx.IsEnabled);
+        Assert.False(split.IsEnabled);
+        Assert.False(delete.IsEnabled);
+
+        var switches = menu.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Switches"));
+        var lockItem = switches.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Lock"));
+        var muteItem = switches.Items.OfType<MenuItem>().Single(item => Equals(item.Header, "Mute"));
+        Assert.True(lockItem.IsEnabled);
+        Assert.True(lockItem.IsChecked);
+        Assert.False(muteItem.IsEnabled);
+
+        // Invoking Pan/Crop action directly on locked clip throws ElementNotEnabledException
+        Assert.Throws<ElementNotEnabledException>(() => view.InvokeEventAction(clip.Id, "PanCrop"));
+
+        // Cursor over locked event edge or body indicates prohibited
+        var bounds = view.ClipBounds(track.Id, clip);
+        Assert.Same(Cursors.No, view.CursorAt(Center(bounds)));
     });
 
     private static void PumpDispatcher()

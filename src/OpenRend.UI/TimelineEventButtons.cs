@@ -93,6 +93,8 @@ public sealed partial class TimelineView
     {
         var track = Project.Tracks.FirstOrDefault(t => t.Clips.Any(c => c.Id == clipId)) ?? throw new ElementNotAvailableException();
         if (!IsEnabled || track.IsLocked) throw new ElementNotEnabledException();
+        var targetClip = track.Clips.Single(c => c.Id == clipId);
+        if (action != "More" && targetClip.IsLocked) throw new ElementNotEnabledException();
         if (action != "More" && track.Kind != TrackKind.Video) throw new InvalidOperationException("This event has no video.");
         SelectClip(clipId, false, ensureVisible: false);
         if (action == "Transition")
@@ -142,9 +144,32 @@ public sealed partial class TimelineView
         });
         AutomationProperties.SetAutomationId(transition, "TransitionProperties");
         var switches = new MenuItem { Header = "Switches" };
+        AutomationProperties.SetAutomationId(switches, "EventSwitchesMenu");
         var loop = new MenuItem { Header = "Loop", IsCheckable = true };
         AutomationProperties.SetAutomationId(loop, "VideoEventLoop");
-        switches.Items.Add(loop); menu.Items.Add(switches);
+        switches.Items.Add(loop);
+        var muteItem = new MenuItem { Header = "Mute", IsCheckable = true };
+        AutomationProperties.SetAutomationId(muteItem, "EventMute");
+        switches.Items.Add(muteItem);
+        var lockItem = new MenuItem { Header = "Lock", IsCheckable = true };
+        AutomationProperties.SetAutomationId(lockItem, "EventLock");
+        switches.Items.Add(lockItem);
+        menu.Items.Add(switches);
+
+        lockItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipLockRequested?.Invoke(events[0].Id, lockItem.IsChecked);
+        };
+        muteItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipMuteRequested?.Invoke(events[0].Id, muteItem.IsChecked);
+        };
         loop.Click += (_, _) =>
         {
             var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
@@ -236,24 +261,32 @@ public sealed partial class TimelineView
         {
             if (clipId is { } id && Project.Tracks.Any(t => t.Clips.Any(c => c.Id == id))) SelectClip(id, false, ensureVisible: false);
             var selected = Project.Tracks.SelectMany(t => t.Clips.Where(c => Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
+            var targetClips = selected.Where(item => clipId is null || item.Clip.Id == clipId).ToArray();
+            var singleTarget = targetClips.Length == 1 ? targetClips[0] : (Track: (TimelineTrack?)null, Clip: (TimelineClip?)null);
+            var isLocked = singleTarget.Clip?.IsLocked ?? false;
             var video = selected.Where(item => item.Track.Kind == TrackKind.Video && (clipId is null || item.Clip.Id == clipId)).ToArray();
-            crop.IsEnabled = fx.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            crop.IsEnabled = fx.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;
-            transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             var source = video.Length == 1 ? Project.Media.SingleOrDefault(media => media.Id == video[0].Clip.MediaId) : null;
             switches.Visibility = source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)
                 ? Visibility.Visible : Visibility.Collapsed;
-            switches.IsEnabled = loop.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            switches.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            loop.IsEnabled = switches.IsEnabled && !isLocked;
             loop.IsChecked = video.Length == 1 && video[0].Clip.VideoSourceMode == VideoSourceMode.Loop;
+            muteItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            muteItem.IsChecked = singleTarget.Clip?.IsMuted ?? false;
+            lockItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            lockItem.IsChecked = isLocked;
             var hasFadeIn = video.Length == 1 && video[0].Clip.FadeInFrames > 0;
             var hasFadeOut = video.Length == 1 && video[0].Clip.FadeOutFrames > 0;
             fadeInCurves.Visibility = hasFadeIn ? Visibility.Visible : Visibility.Collapsed;
-            fadeInCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            fadeInCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             fadeOutCurves.Visibility = hasFadeOut ? Visibility.Visible : Visibility.Collapsed;
-            fadeOutCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            fadeOutCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             fadeType.Visibility = hasFadeIn ? Visibility.Visible : Visibility.Collapsed;
-            fadeType.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            fadeType.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             if (video.Length == 1)
             {
                 foreach (MenuItem item in fadeInCurves.Items)
@@ -270,7 +303,7 @@ public sealed partial class TimelineView
                     btn.BorderThickness = isCurrent ? new Thickness(2) : new Thickness(1);
                 }
             }
-            split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked);
+            split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked && !item.Clip.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
         };
         return menu;
