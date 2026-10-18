@@ -13,12 +13,13 @@
       - Inspector panel provides direct `Lock` toggle button (`LockEventButton`).
       - Main menu provides `Edit -> Switches -> Lock` with `Ctrl+Shift+L` shortcut.
     - Event Mute:
-      - Excludes video layer during timeline evaluation (evaluates as black/transparent).
-      - Bypasses audio decoding and outputs complete silence.
+      - Excludes video layer during timeline evaluation when a video event is muted (evaluates as black/transparent).
+      - Bypasses audio decoding and outputs complete silence when an audio event is muted.
       - Excludes clips from participating in plain crossfades.
       - Displays `[Muted]` text tag on event header and applies dark muted background styling.
-      - Inspector panel provides direct `Mute` toggle button (`MuteEventButton`).
-      - Main menu provides `Edit -> Switches -> Mute` with `Ctrl+Shift+M` shortcut.
+      - `Ctrl+Shift+M` shortcut and Inspector `Mute audio` button specifically target the audio clip/stream of the selected or linked group, silencing audio while leaving video visible.
+      - Video event mute (disabling visual display) is controlled independently via the video event context menu (`Switches -> Mute`) or `Edit -> Switches -> Mute event`.
+      - Inspector panel provides direct `Mute audio` and `Mute event` toggle buttons alongside `Lock`.
     - Multi-selection support: Toggling lock or mute from menus applies across all selected clips.
     - Schema 9: `IsLocked` and `IsMuted` serialized with `JsonIgnoreCondition.WhenWritingDefault` for backward compatibility.
     - Undo/Redo: All switch changes are tracked atomically as undoable project transactions.
