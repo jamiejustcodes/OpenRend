@@ -81,6 +81,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<int>? InsertAudioTrackRequested;
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
+    public event Action<Guid>? TrackFxRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -297,7 +298,7 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, _ => 230 };
+        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, _ => 230 };
         return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 47 : 4), 21, action == "Visible" ? 18 : 20);
     }
 
@@ -663,6 +664,13 @@ public sealed partial class TimelineView : FrameworkElement
             }
             if (t.Kind == TrackKind.Video)
             {
+                var fxBounds = TrackButtonBounds(t.Id, "FX");
+                var hasFx = t.VideoEffects.Count > 0;
+                if (hasFx)
+                {
+                    dc.DrawRectangle(Brush("#2E7D32"), null, fxBounds);
+                }
+                Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
                 dc.DrawRectangle(Brush(t.IsVisible ? "#438AC8" : "#404040"), null, TrackButtonBounds(t.Id, "Visible"));
                 Text(dc, "V", 235, y + 47);
             }
@@ -743,9 +751,22 @@ public sealed partial class TimelineView : FrameworkElement
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
                     adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
-                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible" })
-                    if ((action != "Visible" || track.Kind == TrackKind.Video) && TrackButtonBounds(track.Id, action).Contains(origin))
-                    { InvokeTrackAction(track.Id, action); break; }
+                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX" })
+                {
+                    if (action == "FX")
+                    {
+                        if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "FX").Contains(origin))
+                        {
+                            TrackFxRequested?.Invoke(track.Id);
+                            break;
+                        }
+                    }
+                    else if ((action != "Visible" || track.Kind == TrackKind.Video) && TrackButtonBounds(track.Id, action).Contains(origin))
+                    {
+                        InvokeTrackAction(track.Id, action);
+                        break;
+                    }
+                }
             }
             return;
         }
@@ -996,6 +1017,13 @@ public sealed partial class TimelineView : FrameworkElement
                 var del = new MenuItem { Header = "Delete Track" };
                 del.Click += (_, _) => DeleteTrackRequested?.Invoke(track.Id);
                 menu.Items.Add(del);
+
+                if (track.Kind == TrackKind.Video)
+                {
+                    var trackFx = new MenuItem { Header = "Track FX…" };
+                    trackFx.Click += (_, _) => TrackFxRequested?.Invoke(track.Id);
+                    menu.Items.Add(trackFx);
+                }
 
                 menu.Items.Add(new Separator());
 

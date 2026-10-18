@@ -66,6 +66,9 @@
       <MenuItem Header="_Tools">
         <MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/>
         <MenuItem x:Name="VideoEffectsMenu" Header="Video event FX…" Click="VideoEffectsClick"/>
+        <MenuItem x:Name="VideoTrackEffectsMenu" Header="Video Track FX…" Click="VideoTrackEffectsClick"/>
+        <MenuItem x:Name="MediaEffectsMenu" Header="Media FX…" Click="MediaEffectsClick"/>
+        <MenuItem x:Name="VideoOutputEffectsMenu" Header="Video Output FX…" Click="VideoOutputEffectsClick"/>
         <MenuItem x:Name="ColorGradingMenu" Header="Color Grading…" InputGestureText="Ctrl+Shift+G" Click="ColorGradingClick"/>
         <MenuItem Header="Clip properties" Click="ClipPropertiesClick"/>
         <Separator/>
@@ -110,6 +113,11 @@
               <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
               <Grid Grid.Column="2">
                 <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
+                  <ListBox.ContextMenu>
+                    <ContextMenu>
+                      <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
+                    </ContextMenu>
+                  </ListBox.ContextMenu>
                   <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
                   <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Width" Value="128"/><Setter Property="Height" Value="104"/><Setter Property="Padding" Value="5"/><Setter Property="Foreground" Value="#E8E8E8"/><Setter Property="VerticalContentAlignment" Value="Top"/></Style></ListBox.ItemContainerStyle>
                   <ListBox.ItemTemplate><DataTemplate><StackPanel><Border Background="#181818" Width="116" Height="66"><Image Source="{Binding Thumbnail}" Stretch="Uniform"/></Border><TextBlock Text="{Binding Name}" FontSize="11" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" Height="28" Margin="0,2,0,0"/></StackPanel></DataTemplate></ListBox.ItemTemplate>

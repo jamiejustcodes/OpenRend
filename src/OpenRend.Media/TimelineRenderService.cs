@@ -44,93 +44,131 @@ public sealed partial class TimelineRenderService : IDisposable
             }
             else for (var i = 3; i < output.Length; i += 4) output[i] = 255;
             var layers = TimelineEvaluator.Evaluate(project, frame).Video;
-            foreach (var layer in layers)
+            var trackGroups = layers.GroupBy(l => l.Track.Id).ToList();
+
+            foreach (var trackGroup in trackGroups)
             {
-                if (layer.Dissolve is { } dissolve)
+                var track = trackGroup.First().Track;
+                var hasTrackEffects = VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
+                var trackBuffer = hasTrackEffects ? new byte[checked(width * height * 4)] : output;
+                var currentCompositor = hasTrackEffects ? null : compositor;
+
+                foreach (var layer in trackGroup)
                 {
-                    if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
-                    var incoming = layers.FirstOrDefault(candidate => candidate.Clip.Id == dissolve.IncomingClipId);
-                    if (incoming is not null)
+                    var effOpacity = hasTrackEffects ? (track.Opacity > 0 ? layer.Opacity / track.Opacity : layer.Opacity) : layer.Opacity;
+                    if (layer.Dissolve is { } dissolve)
                     {
-                        var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve, width, height);
-                        if (compositor is not null)
+                        if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
+                        var incoming = layers.FirstOrDefault(candidate => candidate.Clip.Id == dissolve.IncomingClipId);
+                        if (incoming is not null)
                         {
-                            if (NativeMethods.CompositorLayer(compositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
-                                throw NativeMethods.Error("Could not composite dissolve timeline layer");
+                            var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve, width, height);
+                            if (currentCompositor is not null)
+                            {
+                                if (NativeMethods.CompositorLayer(currentCompositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
+                                    throw NativeMethods.Error("Could not composite dissolve timeline layer");
+                            }
+                            else Composite(trackBuffer, width, height, dissolvePixels, width, height, hasTrackEffects ? 1.0 : layer.Track.Opacity);
+                            continue;
                         }
-                        else Composite(output, width, height, dissolvePixels, width, height, layer.Track.Opacity);
+                    }
+                    if (layer.Opacity <= 0) continue;
+                    if (IsSubtitleLayer(layer))
+                    {
+                        if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;
+                        var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
+                        var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
+                        var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
+                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        {
+                            subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, frame);
+                        }
+                        if (currentCompositor != null)
+                        {
+                            if (NativeMethods.CompositorLayer(currentCompositor, subtitlePixels, width, height, width * 4, effOpacity) < 0)
+                                throw NativeMethods.Error("Could not composite subtitle timeline layer");
+                        }
+                        else Composite(trackBuffer, width, height, subtitlePixels, width, height, effOpacity);
                         continue;
                     }
-                }
-                if (layer.Opacity <= 0) continue;
-                if (IsSubtitleLayer(layer))
-                {
-                    if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;
-                    var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
-                    var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
-                    var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
-                    if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                    if (IsColorGeneratorLayer(layer))
                     {
-                        subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, frame);
+                        var colorPixels = RenderColorGenerator(layer.Media.Path, width, height);
+                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        {
+                            colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
+                        }
+                        if (currentCompositor != null)
+                        {
+                            if (NativeMethods.CompositorLayer(currentCompositor, colorPixels, width, height, width * 4, effOpacity) < 0)
+                                throw NativeMethods.Error("Could not composite color generator timeline layer");
+                        }
+                        else Composite(trackBuffer, width, height, colorPixels, width, height, effOpacity);
+                        continue;
                     }
+                    var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
+                    var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
+                    crop.Validate();
+                    var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
+                        crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
+                    if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                    {
+                        if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
+                            throw new MediaException("Source dimensions exceed video processing limits.");
+                        // Effects precede resampling, so preview size cannot change their source pixels.
+                        // Decode honors display rotation before sampling.
+                        var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
+                        if (VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                        {
+                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
+                        }
+                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        {
+                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
+                        }
+                        var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
+                        if (currentCompositor != null)
+                        {
+                            if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, sourceWidth, sourceHeight, checked(sourceWidth * 4), effOpacity, in transform) < 0)
+                                throw NativeMethods.Error("Could not composite cropped timeline layer");
+                        }
+                        else CompositeTransformed(trackBuffer, width, height, sourcePixels, sourceWidth, sourceHeight, effOpacity, transform);
+                        continue;
+                    }
+                    var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
+                    var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
+                    var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
+                    var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
+                    if (currentCompositor != null)
+                    {
+                        if (NativeMethods.CompositorLayer(currentCompositor, pixels, layerWidth, layerHeight, layerWidth * 4, effOpacity) < 0)
+                            throw NativeMethods.Error("Could not composite timeline layer");
+                    }
+                    else Composite(trackBuffer, width, height, pixels, layerWidth, layerHeight, effOpacity);
+                }
+
+                if (hasTrackEffects)
+                {
+                    trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
                     if (compositor != null)
                     {
-                        if (NativeMethods.CompositorLayer(compositor, subtitlePixels, width, height, width * 4, layer.Opacity) < 0)
-                            throw NativeMethods.Error("Could not composite subtitle timeline layer");
+                        if (NativeMethods.CompositorLayer(compositor, trackBuffer, width, height, width * 4, track.Opacity) < 0)
+                            throw NativeMethods.Error("Could not composite track FX layer");
                     }
-                    else Composite(output, width, height, subtitlePixels, width, height, layer.Opacity);
-                    continue;
-                }
-                if (IsColorGeneratorLayer(layer))
-                {
-                    var colorPixels = RenderColorGenerator(layer.Media.Path, width, height);
-                    if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                    else
                     {
-                        colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
+                        Composite(output, width, height, trackBuffer, width, height, track.Opacity);
                     }
-                    if (compositor != null)
-                    {
-                        if (NativeMethods.CompositorLayer(compositor, colorPixels, width, height, width * 4, layer.Opacity) < 0)
-                            throw NativeMethods.Error("Could not composite color generator timeline layer");
-                    }
-                    else Composite(output, width, height, colorPixels, width, height, layer.Opacity);
-                    continue;
                 }
-                var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
-                var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
-                crop.Validate();
-                var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
-                    crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
-                if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                {
-                    if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
-                        throw new MediaException("Source dimensions exceed video processing limits.");
-                    // Effects precede resampling, so preview size cannot change their source pixels.
-                    // Decode honors display rotation before sampling.
-                    var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
-                    sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
-                    var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
-                    if (compositor != null)
-                    {
-                        if (NativeMethods.CompositorLayerTransform(compositor, sourcePixels, sourceWidth, sourceHeight, checked(sourceWidth * 4), layer.Opacity, in transform) < 0)
-                            throw NativeMethods.Error("Could not composite cropped timeline layer");
-                    }
-                    else CompositeTransformed(output, width, height, sourcePixels, sourceWidth, sourceHeight, layer.Opacity, transform);
-                    continue;
-                }
-                var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
-                var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
-                var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
-                var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
-                if (compositor != null)
-                {
-                    if (NativeMethods.CompositorLayer(compositor, pixels, layerWidth, layerHeight, layerWidth * 4, layer.Opacity) < 0)
-                        throw NativeMethods.Error("Could not composite timeline layer");
-                }
-                else Composite(output, width, height, pixels, layerWidth, layerHeight, layer.Opacity);
             }
+
             if (compositor != null && NativeMethods.CompositorReadback(compositor, output, output.Length) < 0)
                 throw NativeMethods.Error("Could not read composited timeline frame");
+
+            if (VideoEffectProcessor.HasActiveEffects(project.VideoOutputEffects))
+            {
+                output = VideoEffectProcessor.Apply(output, width, height, project.VideoOutputEffects, frame);
+            }
             return output;
         }
     }
@@ -257,11 +295,13 @@ public sealed partial class TimelineRenderService : IDisposable
                     output[target] = layer[source];
                     output[target + 1] = layer[source + 1];
                     output[target + 2] = layer[source + 2];
+                    output[target + 3] = 255;
                 }
                 else if (alpha > 0)
                 {
                     for (var channel = 0; channel < 3; channel++)
                         output[target + channel] = (byte)Math.Clamp((int)Math.Round(layer[source + channel] * alpha + output[target + channel] * (1 - alpha)), 0, 255);
+                    output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
                 }
             }
         }
@@ -326,6 +366,7 @@ public sealed partial class TimelineRenderService : IDisposable
                 var target = ((y + top) * width + x + left) * 4;
                 for (var channel = 0; channel < 3; channel++)
                     output[target + channel] = (byte)Math.Clamp((int)Math.Round(SampleColor(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
+                output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
             }
         }
     }

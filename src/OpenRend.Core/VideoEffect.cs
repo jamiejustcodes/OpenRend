@@ -12,6 +12,14 @@ public enum VideoEffectKind
     AiAutoReframe, AiColorization, AiDehaze, AiSharpen, AiSmooth, AiStyleTransfer, AiUpscale, AiZDepth, AiSmartMask, Lut3D, ColorGrading
 }
 
+public enum EffectScope
+{
+    Event,
+    Track,
+    Media,
+    Output
+}
+
 public sealed class VideoEffect
 {
     public Guid Id { get; set; } = Guid.NewGuid();

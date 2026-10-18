@@ -17,7 +17,8 @@ public sealed partial class VideoEffectsWindow : Window
     private static readonly VideoEffectKind[] BuiltInEffects = Enum.GetValues<VideoEffectKind>();
     private readonly EditorViewModel vm;
     private readonly TimelineEditor editor;
-    private readonly Guid clipId;
+    private readonly EffectScope scope;
+    private readonly Guid targetId;
     private readonly ListBox chain = new();
     private readonly ComboBox available = new();
     private readonly CheckBox enabled = new() { Content = "Enable selected effect" };
@@ -34,16 +35,21 @@ public sealed partial class VideoEffectsWindow : Window
     private long previewRevision;
 
     public VideoEffectsWindow(EditorViewModel viewModel, Guid selectedClip)
+        : this(viewModel, EffectScope.Event, selectedClip)
     {
-        vm = viewModel; editor = vm.Editor; clipId = selectedClip;
+    }
+
+    public VideoEffectsWindow(EditorViewModel viewModel, EffectScope effectScope, Guid selectedTargetId)
+    {
+        vm = viewModel; editor = vm.Editor; scope = effectScope; targetId = selectedTargetId;
         Style = (Style)FindResource(typeof(Window));
-        Title = "Video event FX"; Width = 820; Height = 560; MinWidth = 700; MinHeight = 490;
+        Title = WindowTitle; Width = 820; Height = 560; MinWidth = 700; MinHeight = 490;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new Grid { Background = (Brush)FindResource("PanelBrush") };
         root.RowDefinitions.Add(new() { Height = new GridLength(30) });
         root.RowDefinitions.Add(new() { Height = new GridLength(36) });
         root.RowDefinitions.Add(new()); root.RowDefinitions.Add(new() { Height = new GridLength(36) });
-        root.Children.Add(new TextBlock { Text = "Video Event FX:  " + EventClip.Name, Margin = new Thickness(10, 0, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis });
+        root.Children.Add(new TextBlock { Text = HeaderText, Margin = new Thickness(10, 0, 10, 0), TextTrimming = TextTrimming.CharacterEllipsis });
         var toolbar = new DockPanel { LastChildFill = false, Background = (Brush)FindResource("HeaderBrush"), Margin = new Thickness(0, 0, 0, 1) };
         Grid.SetRow(toolbar, 1); root.Children.Add(toolbar);
         toolbar.Children.Add(new TextBlock { Text = "Built-in:", Margin = new Thickness(10, 0, 6, 0) });
@@ -51,7 +57,7 @@ public sealed partial class VideoEffectsWindow : Window
         AutomationProperties.SetAutomationId(available, "AvailableVideoEffect"); AutomationProperties.SetName(available, "Available video effect"); toolbar.Children.Add(available);
         toolbar.Children.Add(MakeButton("Add", "Add video effect", () => Edit(() =>
         {
-            if (available.SelectedIndex >= 0) selectedId = editor.AddVideoEffect(clipId, BuiltInEffects[available.SelectedIndex]).Id;
+            if (available.SelectedIndex >= 0) selectedId = editor.AddScopedVideoEffect(scope, targetId, BuiltInEffects[available.SelectedIndex]).Id;
         }), "AddVideoEffect"));
         toolbar.Children.Add(MakeButton("Plug-in chooser…", "Open video FX plug-in chooser", OpenChooser, "OpenFxChooser"));
         undo = MakeButton("Undo", "Undo effect edit", () => Edit(() => editor.Undo()), "UndoVideoEffect");
@@ -65,7 +71,7 @@ public sealed partial class VideoEffectsWindow : Window
         var chainTools = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(2, 5, 2, 2) };
         up = MakeButton("↑", "Move effect earlier", () => Move(-1), "MoveVideoEffectUp");
         down = MakeButton("↓", "Move effect later", () => Move(1), "MoveVideoEffectDown");
-        remove = MakeButton("Remove", "Remove video effect", () => Edit(() => { if (selectedId is { } id) editor.RemoveVideoEffect(clipId, id); }), "RemoveVideoEffect");
+        remove = MakeButton("Remove", "Remove video effect", () => Edit(() => { if (selectedId is { } id) editor.RemoveScopedVideoEffect(scope, targetId, id); }), "RemoveVideoEffect");
         chainTools.Children.Add(up); chainTools.Children.Add(down); chainTools.Children.Add(remove); DockPanel.SetDock(chainTools, Dock.Bottom); left.Children.Add(chainTools);
         chain.DisplayMemberPath = nameof(ChainEntry.Name); AutomationProperties.SetAutomationId(chain, "VideoEffectChain"); AutomationProperties.SetName(chain, "Video effect chain");
         chain.SelectionChanged += (_, _) => { if (!refreshing) { selectedId = (chain.SelectedItem as ChainEntry)?.Id; RefreshParameters(); } };
@@ -83,13 +89,13 @@ public sealed partial class VideoEffectsWindow : Window
         {
             if (SelectedEffect is not { } effect) return;
             var defaults = VideoEffectCatalog.Get(effect.Kind).Parameters.ToDictionary(parameter => parameter.Key, parameter => parameter.DefaultValue);
-            editor.UpdateVideoEffectParameters(clipId, effect.Id, defaults, effect.IsEnabled);
+            editor.UpdateScopedVideoEffectParameters(scope, targetId, effect.Id, defaults, effect.IsEnabled);
         }), "ResetVideoEffect");
         reset.HorizontalAlignment = HorizontalAlignment.Left; fieldHost.Children.Add(reset);
         var previewHost = new Border { Background = Brushes.Black, Margin = new Thickness(0, 10, 0, 0), Child = preview };
         AutomationProperties.SetName(preview, "Video effect preview"); Grid.SetRow(previewHost, 3); right.Children.Add(previewHost);
         var bottom = new DockPanel { LastChildFill = true, Margin = new Thickness(8, 0, 8, 0) }; Grid.SetRow(bottom, 3); root.Children.Add(bottom);
-        var close = MakeButton("Close", "Close video event FX", Close, "CloseVideoEffects"); DockPanel.SetDock(close, Dock.Right); bottom.Children.Add(close);
+        var close = MakeButton("Close", "Close video FX", Close, "CloseVideoEffects"); DockPanel.SetDock(close, Dock.Right); bottom.Children.Add(close);
         status.TextTrimming = TextTrimming.CharacterEllipsis; bottom.Children.Add(status);
         Content = root;
         SourceInitialized += (_, _) => { var dark = 1; DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); };
@@ -116,14 +122,53 @@ public sealed partial class VideoEffectsWindow : Window
     }
 
     private sealed record ChainEntry(Guid Id, string Name);
-    private TimelineClip EventClip => editor.Project.Tracks.SelectMany(t => t.Clips).Single(c => c.Id == clipId);
-    private VideoEffect? SelectedEffect => EventClip.VideoEffects.SingleOrDefault(effect => effect.Id == selectedId);
+    private TimelineClip? EventClip => scope == EffectScope.Event ? editor.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == targetId) : null;
+    private TimelineTrack? TargetTrack => scope == EffectScope.Track ? editor.Project.Tracks.FirstOrDefault(t => t.Id == targetId) : null;
+    private MediaAsset? TargetMedia => scope == EffectScope.Media ? editor.Project.Media.FirstOrDefault(m => m.Id == targetId) : null;
+
+    private List<VideoEffect> TargetEffects => scope switch
+    {
+        EffectScope.Event => EventClip?.VideoEffects ?? [],
+        EffectScope.Track => TargetTrack?.VideoEffects ?? [],
+        EffectScope.Media => TargetMedia?.VideoEffects ?? [],
+        EffectScope.Output => editor.Project.VideoOutputEffects,
+        _ => []
+    };
+
+    private string TargetName => scope switch
+    {
+        EffectScope.Event => EventClip?.Name ?? "",
+        EffectScope.Track => TargetTrack is { } track ? $"Track {editor.Project.Tracks.IndexOf(track) + 1}: {track.Name}" : "",
+        EffectScope.Media => TargetMedia?.Name ?? "",
+        EffectScope.Output => "Master Video Bus",
+        _ => ""
+    };
+
+    private string HeaderText => scope switch
+    {
+        EffectScope.Event => "Video Event FX:  " + TargetName,
+        EffectScope.Track => "Video Track FX:  " + TargetName,
+        EffectScope.Media => "Media FX:  " + TargetName,
+        EffectScope.Output => "Video Output FX",
+        _ => "Video FX"
+    };
+
+    private string WindowTitle => scope switch
+    {
+        EffectScope.Event => "Video event FX",
+        EffectScope.Track => "Video track FX",
+        EffectScope.Media => "Media FX",
+        EffectScope.Output => "Video output FX",
+        _ => "Video FX"
+    };
+
+    private VideoEffect? SelectedEffect => TargetEffects.SingleOrDefault(effect => effect.Id == selectedId);
     private static string EffectName(VideoEffectKind kind) => VideoEffectCatalog.Get(kind).Name;
     private void OpenChooser()
     {
-        var chooser = new VideoEffectChooserWindow(EventClip.VideoEffects) { Owner = this };
+        var chooser = new VideoEffectChooserWindow(TargetEffects) { Owner = this };
         if (chooser.ShowDialog() == true && chooser.Result is { } result)
-            Edit(() => editor.SetVideoEffects(clipId, result));
+            Edit(() => editor.SetScopedVideoEffects(scope, targetId, result));
     }
     private static Button MakeButton(string text, string name, Action action, string id)
     {
@@ -137,7 +182,15 @@ public sealed partial class VideoEffectsWindow : Window
     }
     private void EditorChanged(object? sender, EventArgs e)
     {
-        if (editor.Project.Tracks.SelectMany(t => t.Clips).All(c => c.Id != clipId)) { Close(); return; }
+        var exists = scope switch
+        {
+            EffectScope.Event => EventClip is not null,
+            EffectScope.Track => TargetTrack is not null,
+            EffectScope.Media => TargetMedia is not null,
+            EffectScope.Output => true,
+            _ => false
+        };
+        if (!exists) { Close(); return; }
         Refresh();
     }
     private void Refresh()
@@ -146,8 +199,8 @@ public sealed partial class VideoEffectsWindow : Window
         refreshing = true;
         try
         {
-            if (!EventClip.VideoEffects.Any(effect => effect.Id == selectedId)) selectedId = EventClip.VideoEffects.FirstOrDefault()?.Id;
-            chain.ItemsSource = EventClip.VideoEffects.Select((effect, index) => new ChainEntry(effect.Id, $"{index + 1}. {EffectName(effect.Kind)}{(effect.IsEnabled ? "" : " (bypassed)")}")).ToArray();
+            if (!TargetEffects.Any(effect => effect.Id == selectedId)) selectedId = TargetEffects.FirstOrDefault()?.Id;
+            chain.ItemsSource = TargetEffects.Select((effect, index) => new ChainEntry(effect.Id, $"{index + 1}. {EffectName(effect.Kind)}{(effect.IsEnabled ? "" : " (bypassed)")}")).ToArray();
             chain.SelectedItem = chain.Items.Cast<ChainEntry>().SingleOrDefault(item => item.Id == selectedId);
             undo.IsEnabled = editor.CanUndo; redo.IsEnabled = editor.CanRedo;
         }
@@ -159,13 +212,13 @@ public sealed partial class VideoEffectsWindow : Window
         refreshing = true;
         try
         {
-            var effect = SelectedEffect; var index = EventClip.VideoEffects.FindIndex(item => item.Id == selectedId);
+            var effect = SelectedEffect; var index = TargetEffects.FindIndex(item => item.Id == selectedId);
             UpdateLutDetails();
             heading.Text = effect is null ? "No effects in chain" : EffectName(effect.Kind);
             enabled.Visibility = reset.Visibility = effect is null ? Visibility.Collapsed : Visibility.Visible;
             empty.Visibility = effect is null ? Visibility.Visible : Visibility.Collapsed;
             enabled.IsChecked = effect?.IsEnabled == true;
-            remove.IsEnabled = effect is not null; up.IsEnabled = index > 0; down.IsEnabled = index >= 0 && index < EventClip.VideoEffects.Count - 1;
+            remove.IsEnabled = effect is not null; up.IsEnabled = index > 0; down.IsEnabled = index >= 0 && index < TargetEffects.Count - 1;
             // Reuse controls during edits so keyboard focus and a slider's capture survive refresh.
             if (effect is not null && parameterEffectId == effect.Id && parameterKind == effect.Kind)
             {
@@ -246,13 +299,13 @@ public sealed partial class VideoEffectsWindow : Window
     private void ApplyControls()
     {
         if (refreshing || SelectedEffect is not { } effect || !ReadControls(out var values)) return;
-        Edit(() => editor.UpdateVideoEffectParameters(clipId, effect.Id, values, enabled.IsChecked == true));
+        Edit(() => editor.UpdateScopedVideoEffectParameters(scope, targetId, effect.Id, values, enabled.IsChecked == true));
     }
     private void Move(int direction)
     {
         if (selectedId is not { } id) return;
-        var index = EventClip.VideoEffects.FindIndex(effect => effect.Id == id);
-        Edit(() => editor.MoveVideoEffect(clipId, id, index + direction));
+        var index = TargetEffects.FindIndex(effect => effect.Id == id);
+        Edit(() => editor.MoveScopedVideoEffect(scope, targetId, id, index + direction));
     }
     private async void RequestPreview()
     {
@@ -264,13 +317,27 @@ public sealed partial class VideoEffectsWindow : Window
             while (previewPending && !closed)
             {
                 previewPending = false; var request = previewRevision;
-                var project = editor.Project.DeepClone(); var clip = project.Tracks.SelectMany(track => track.Clips).Single(item => item.Id == clipId);
+                var project = editor.Project.DeepClone();
                 if (adjusting && selectedId is { } id && ReadControls(out var values))
                 {
-                    var effect = clip.VideoEffects.Single(item => item.Id == id);
-                    foreach (var (key, value) in values) effect.SetParameter(key, value);
+                    var effects = scope switch
+                    {
+                        EffectScope.Event => project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.Id == targetId)?.VideoEffects,
+                        EffectScope.Track => project.Tracks.FirstOrDefault(track => track.Id == targetId)?.VideoEffects,
+                        EffectScope.Media => project.Media.FirstOrDefault(media => media.Id == targetId)?.VideoEffects,
+                        EffectScope.Output => project.VideoOutputEffects,
+                        _ => null
+                    };
+                    if (effects?.SingleOrDefault(item => item.Id == id) is { } effect)
+                    {
+                        foreach (var (key, value) in values) effect.SetParameter(key, value);
+                    }
                 }
-                var frame = Math.Clamp(vm.Position, clip.StartFrame, clip.EndFrame - 1);
+                long frame = vm.Position;
+                if (scope == EffectScope.Event && EventClip is { } eventClip)
+                {
+                    frame = Math.Clamp(vm.Position, eventClip.StartFrame, Math.Max(eventClip.StartFrame, eventClip.EndFrame - 1));
+                }
                 var scale = Math.Min(480.0 / project.Width, 270.0 / project.Height);
                 var width = Math.Max(1, (int)Math.Round(project.Width * scale)); var height = Math.Max(1, (int)Math.Round(project.Height * scale));
                 var pixels = await Task.Run(() => vm.Renderer.RenderFrame(project, frame, width, height));

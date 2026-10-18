@@ -1,42 +1,47 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, Vegas Pro 1:1 Render Templates, Formats Catalog, Channel Mapping & Loudness Logs Complete (Feature 2 Complete)
+## Resume here — 18 October 2026, Effect Scopes Beyond Events (Media FX, Event FX, Track FX, Video Output FX) Complete (Feature 4 Complete)
 
 - Latest features:
-  - Complete Vegas Pro 1:1 Render Engine & Dialog Parity (Feature 2 Complete):
+  - Complete Vegas Pro 1:1 Scoped Video Effects Pipeline (Feature 4 Complete):
+    - `src/OpenRend.Core/VideoEffect.cs`:
+      - Added `EffectScope` enum: `Event`, `Track`, `Media`, `Output`.
     - `src/OpenRend.Core/ProjectDocument.cs`:
-      - Added `ChannelRemapping` enum matching Vegas Pro audio mapping: `None` (0), `Mono` (1), `Swap` (2), `MuteLeft` (3), `MuteRight` (4).
-    - `src/OpenRend.Media/ExportOptions.cs`:
-      - Added `StretchToFill`, `ChannelMapping`, and `GenerateLoudnessLog` to export configuration.
-    - `src/OpenRend.Media/RenderTemplates.cs`:
-      - Modeled Vegas Pro output format catalog (`RenderFormatInfo`) with Formats: `All Formats`, `MAGIX AVC/AAC MP4`, `MAGIX HEVC/AAC MP4`, `Apple ProRes`, `Sony Wave Audio`, `MP3 Audio`.
-      - Expanded templates catalog with UHD 4K, HD 1080p, 720p, ProRes 422/HQ, 24-bit/16-bit uncompressed WAV, and 320/192 kbps MP3.
-      - Added `EstimatedBytes()` estimating output file size based on video CRF, resolution, audio bitrate, and duration.
-      - Updated `Filter()` with `formatId` category filtering and `matchProject` (aspect ratio and resolution matching).
-      - Updated `RenderPreferences` with `StretchToFill`, `ChannelMapping`, `GenerateLoudnessLog`, `SelectedFormatId`, `MatchProjectSettings`.
-    - `src/OpenRend.Media/ExportService.cs`:
-      - Implemented `ApplyChannelRemapping(float[] samples, ChannelRemapping mapping)` for Mono downmix, Swap L/R, Mute Left, Mute Right.
-      - Implemented dedicated audio-only export pipeline for WAV (`pcm_s24le`, `pcm_s16le`) and MP3 (`libmp3lame`) avoiding video pipe overhead.
-      - Implemented Apple ProRes (`prores_ks` 10-bit yuv422p10le) and HEVC (`libx265`) encoders.
-      - Implemented `StretchToFill` scaling directly to output dimensions (`-vf scale=w:h`).
-      - Implemented `GenerateLoudnessLog` computing ITU-R BS.1770 integrated LUFS, maximum true peak dBFS, frame count, sample rate, and channel mapping metadata into `.loudness.log`.
-    - `src/OpenRend.App/RenderAsWindow.xaml` & `RenderAsWindow.xaml.cs`:
-      - Added Formats ListBox bound to `RenderTemplateCatalog.Formats`.
-      - Added `MatchProject` ("Match project settings") checkbox alongside `FavoritesOnly`.
-      - In Render Options GroupBox:
-        - Added `StretchToFill` checkbox ("Stretch video to fill output frame size (do not letterbox)").
-        - Added `ChannelMappingCombo` ("Channel mapping": None/Stereo, Mono, Swap L/R, Mute Left, Mute Right).
-        - Added `GenerateLoudnessLog` checkbox ("Generate loudness log (.loudness.log)").
-        - Added dynamic status labels for live Estimated file size (~X MB/GB) and available free disk space on target drive.
-      - Auto-extension switching automatically updates file extension when selecting audio (`.wav`, `.mp3`), ProRes (`.mov`), or MP4 (`.mp4`) presets.
+      - Added `MediaItem.VideoEffects` list for Media FX (raw source decoding level).
+      - Added `TimelineTrack.VideoEffects` list for Track FX (track compositing level).
+      - Added `ProjectDocument.VideoOutputEffects` list for Video Output FX / Master Bus FX.
+      - Updated project schema version to 10 (`CurrentSchemaVersion = 10`), preserving backward compatibility and rejecting future unhandled schemas.
+    - `src/OpenRend.Timeline/TimelineEditor.cs`:
+      - Implemented `GetScopedVideoEffects`, `SetScopedVideoEffects`, `AddScopedVideoEffect`, `RemoveScopedVideoEffect`, `UpdateScopedVideoEffectParameters`, and `MoveScopedVideoEffect`.
+      - Ensured `Restore(snapshot)` restores `Project.VideoOutputEffects = copy.VideoOutputEffects`, `Track.VideoEffects`, `Media.VideoEffects`, and `Clip.VideoEffects` atomically.
+    - `src/OpenRend.Media/TimelineRenderService.cs`:
+      - Implemented 1:1 Vegas Pro effect pipeline order:
+        1. Media FX: Evaluated immediately on source frame before event pan/crop.
+        2. Event FX: Evaluated per-clip with spatial transformations and fade curves.
+        3. Track FX: Evaluated on the intermediate track composite buffer across all clips on the track.
+        4. Video Output FX: Evaluated on the final composite frame across all tracks before display/export.
+      - Fixed alpha compositing bug in `Composite` and `CompositeTransformed` so destination buffer alpha (`output[target + 3]`) is preserved, allowing intermediate track buffers to blend correctly onto the master frame.
+    - `src/OpenRend.App/VideoEffectsWindow.cs` & `VideoEffectsWindow.Lut.cs`:
+      - Refactored `VideoEffectsWindow` to support all 4 scopes (`EffectScope`, `Guid targetId`).
+      - Title and header dynamically reflect scope: `"Video Event FX: [Name]"`, `"Video Track FX: [Track]"`, `"Media FX: [Asset]"`, `"Video Output FX"`.
+      - Effect operations, LUT adjustments, and parameter edits route through `TimelineEditor` scoped methods with undo/redo.
+      - Live preview requests evaluate full composite at current playhead.
+    - `src/OpenRend.UI/TimelineView.cs`:
+      - Added green illuminated `"fx"` button (`#2E7D32`) on video track headers when Track FX are present; muted gray button when empty.
+      - Added `TrackFxRequested` event and right-click context menu item `"Track FX…"`.
+    - `src/OpenRend.App/MainWindow.xaml` & `MainWindow.xaml.cs`:
+      - Wired `Timeline.TrackFxRequested` to `OpenTrackEffects(trackId)`.
+      - Added menu items: `"Video Track FX…"`, `"Media FX…"`, and `"Video Output FX…"`.
+      - Added `"Media FX…"` option to Project Media list context menu.
   - Verification:
-    - `tools/build.ps1 -SkipNative` passed with 0 warnings, 0 errors, and 672 managed tests passed:
-      - OpenRend.Core.Tests: 291/291 passed.
-      - OpenRend.Editor.Tests: 118/118 passed.
+    - `tools/build.ps1` (native and managed checks) passed with 0 warnings, 0 errors, and 698 managed tests passed:
       - OpenRend.Playback.Tests: 2/2 passed.
-      - OpenRend.Media.Tests: 261/261 passed (+6 new unit tests in `RenderFormatAndChannelTests.cs` and `RenderTemplateTests.cs` for channel remapping math, audio-only WAV/MP3 export, stretch-to-fill scaling, loudness log generation, format filtering, match project, and byte estimation).
+      - OpenRend.Editor.Tests: 122/122 passed.
+      - OpenRend.Core.Tests: 303/303 passed (+5 comprehensive tests in `ScopedVideoEffectTests.cs`).
+      - OpenRend.Media.Tests: 271/271 passed (+2 comprehensive tests in `ScopedEffectMediaTests.cs` verifying Vegas Pro Media -> Event -> Track -> Output processing order and track layer independence).
 - Next active item in docs/implementation-progress.md:
   - Feature 3: Color grading, curves and LUTs — high (reproduce grading panel's wheel, curve, white-balance and LUT controls, match processing order and interpolation in preview and export).
+  - Feature 5: General motion and mask tracking — high (forward, backward, step tracking, Bezier/rectangle masks, transform/stabilization attachment).
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
 

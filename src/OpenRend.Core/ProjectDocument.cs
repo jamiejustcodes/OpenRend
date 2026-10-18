@@ -39,6 +39,8 @@ public sealed class ProjectDocument
     public Rational FrameRate { get; set; } = new(30, 1);
     public List<MediaAsset> Media { get; set; } = [];
     public List<TimelineTrack> Tracks { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<VideoEffect> VideoOutputEffects { get; set; } = [];
     [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
 
     public ProjectDocument DeepClone() => new()
@@ -48,7 +50,8 @@ public sealed class ProjectDocument
         Height = Height,
         FrameRate = FrameRate,
         Media = Media.Select(m => m.DeepClone()).ToList(),
-        Tracks = Tracks.Select(t => t.DeepClone()).ToList()
+        Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
+        VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList()
     };
 
     public void Validate()
@@ -56,6 +59,15 @@ public sealed class ProjectDocument
         if (Width is <= 0 or > 32768 || Height is <= 0 or > 32768) throw new InvalidDataException("Project dimensions must be between 1 and 32768.");
         if (FrameRate.Numerator <= 0 || FrameRate.Denominator <= 0) throw new InvalidDataException("Project frame rate must be positive.");
         if (Media == null || Tracks == null) throw new InvalidDataException("Project collections are missing.");
+        if (VideoOutputEffects != null)
+        {
+            var outputEffectIds = new HashSet<Guid>();
+            foreach (var effect in VideoOutputEffects)
+            {
+                if (effect == null || !outputEffectIds.Add(effect.Id)) throw new InvalidDataException("Video output effect IDs must be unique.");
+                effect.Validate();
+            }
+        }
         var mediaIds = new HashSet<Guid>();
         var mediaById = new Dictionary<Guid, MediaAsset>();
         foreach (var media in Media)
@@ -64,6 +76,15 @@ public sealed class ProjectDocument
             if (!double.IsFinite(media.DurationSeconds) || media.DurationSeconds < 0) throw new InvalidDataException("Media duration is invalid.");
             if (!double.IsFinite(media.FrameRate) || media.FrameRate < 0 || media.Width < 0 || media.Height < 0) throw new InvalidDataException("Media metadata is invalid.");
             if (string.IsNullOrWhiteSpace(media.Path)) throw new InvalidDataException("Media path is empty.");
+            if (media.VideoEffects != null)
+            {
+                var mediaEffectIds = new HashSet<Guid>();
+                foreach (var effect in media.VideoEffects)
+                {
+                    if (effect == null || !mediaEffectIds.Add(effect.Id)) throw new InvalidDataException("Media video effect IDs must be unique.");
+                    effect.Validate();
+                }
+            }
             mediaById.Add(media.Id, media);
         }
         var trackIds = new HashSet<Guid>();
@@ -72,6 +93,17 @@ public sealed class ProjectDocument
         {
             if (track == null || track.Id == Guid.Empty || !trackIds.Add(track.Id) || !Enum.IsDefined(track.Kind) || track.Clips == null) throw new InvalidDataException("Track is invalid.");
             if (!double.IsFinite(track.Gain) || track.Gain < 0 || !double.IsFinite(track.Opacity) || track.Opacity is < 0 or > 1 || !double.IsFinite(track.Pan) || track.Pan is < -1 or > 1) throw new InvalidDataException("Track levels are invalid.");
+            if (track.VideoEffects != null)
+            {
+                if (track.Kind != TrackKind.Video && track.VideoEffects.Count != 0)
+                    throw new InvalidDataException("Track video effects require a video track.");
+                var trackEffectIds = new HashSet<Guid>();
+                foreach (var effect in track.VideoEffects)
+                {
+                    if (effect == null || !trackEffectIds.Add(effect.Id)) throw new InvalidDataException("Track video effect IDs must be unique within a track.");
+                    effect.Validate();
+                }
+            }
             foreach (var clip in track.Clips)
             {
                 if (clip == null || clip.Id == Guid.Empty || !clipIds.Add(clip.Id)) throw new InvalidDataException("Clip IDs must be unique and non-empty.");
@@ -126,7 +158,14 @@ public sealed class MediaAsset
     public double FrameRate { get; set; }
     public bool HasVideo { get; set; }
     public bool HasAudio { get; set; }
-    public MediaAsset DeepClone() => (MediaAsset)MemberwiseClone();
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<VideoEffect> VideoEffects { get; set; } = [];
+    public MediaAsset DeepClone()
+    {
+        var clone = (MediaAsset)MemberwiseClone();
+        clone.VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList();
+        return clone;
+    }
 }
 
 public sealed class TimelineTrack
@@ -142,7 +181,23 @@ public sealed class TimelineTrack
     public double Opacity { get; set; } = 1;
     public double Pan { get; set; }
     public List<TimelineClip> Clips { get; set; } = [];
-    public TimelineTrack DeepClone() => new() { Id = Id, Name = Name, Kind = Kind, IsMuted = IsMuted, IsSolo = IsSolo, IsLocked = IsLocked, IsVisible = IsVisible, Gain = Gain, Opacity = Opacity, Pan = Pan, Clips = Clips.Select(c => c.DeepClone()).ToList() };
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<VideoEffect> VideoEffects { get; set; } = [];
+    public TimelineTrack DeepClone() => new()
+    {
+        Id = Id,
+        Name = Name,
+        Kind = Kind,
+        IsMuted = IsMuted,
+        IsSolo = IsSolo,
+        IsLocked = IsLocked,
+        IsVisible = IsVisible,
+        Gain = Gain,
+        Opacity = Opacity,
+        Pan = Pan,
+        Clips = Clips.Select(c => c.DeepClone()).ToList(),
+        VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList()
+    };
 }
 
 public sealed class TimelineClip

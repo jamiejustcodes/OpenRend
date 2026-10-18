@@ -547,12 +547,15 @@ public sealed partial class TimelineRenderService
         crop.Validate();
         var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
             crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
-        if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+        if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
         {
             if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
                 throw new MediaException("Source dimensions exceed video processing limits.");
             var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
-            pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
+            if (VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
+            if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
             return new(pixels, sourceWidth, sourceHeight, SamplingTransform(crop, sourceWidth, sourceHeight, width, height));
         }
         var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);

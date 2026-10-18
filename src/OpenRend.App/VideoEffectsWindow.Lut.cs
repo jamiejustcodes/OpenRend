@@ -53,8 +53,8 @@ public sealed partial class VideoEffectsWindow
     {
         if (SelectedEffect is not { Kind: VideoEffectKind.Lut3D } selected) return;
         // Embed an independent lattice so reopening never depends on the imported file remaining in place.
-        var effects = EventClip.VideoEffects.Select(effect => effect.DeepClone()).ToArray();
+        var effects = TargetEffects.Select(effect => effect.DeepClone()).ToArray();
         effects.Single(effect => effect.Id == selected.Id).Lut = lut?.DeepClone();
-        editor.SetVideoEffects(clipId, effects);
+        editor.SetScopedVideoEffects(scope, targetId, effects);
     }
 }

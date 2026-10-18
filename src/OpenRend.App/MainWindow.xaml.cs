@@ -117,6 +117,7 @@ public partial class MainWindow : Window
         });
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
+        Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
@@ -651,7 +652,44 @@ public partial class MainWindow : Window
         if (selected.Length != 1) { vm.Status = "Select one video event to edit its effects."; return; }
         if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its effects."; return; }
         Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
-        new VideoEffectsWindow(vm, selected[0].Clip.Id) { Owner = this }.ShowDialog();
+        new VideoEffectsWindow(vm, EffectScope.Event, selected[0].Clip.Id) { Owner = this }.ShowDialog();
+    });
+    private void VideoTrackEffectsClick(object sender, RoutedEventArgs e) => OpenTrackEffects();
+    private void OpenTrackEffects(Guid? requestedTrack = null) => Guard(() =>
+    {
+        var tracks = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video).ToArray();
+        if (tracks.Length == 0) { vm.Status = "Project has no video tracks."; return; }
+        var track = requestedTrack is { } id
+            ? tracks.FirstOrDefault(t => t.Id == id)
+            : (Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count && vm.Project.Tracks[Timeline.ActiveTrackIndex].Kind == TrackKind.Video
+                ? vm.Project.Tracks[Timeline.ActiveTrackIndex]
+                : tracks.FirstOrDefault());
+        if (track is null) { vm.Status = "Select a video track to edit its effects."; return; }
+        if (track.IsLocked) { vm.Status = "Unlock the video track before editing its effects."; return; }
+        Pause(); RequestPreview();
+        new VideoEffectsWindow(vm, EffectScope.Track, track.Id) { Owner = this }.ShowDialog();
+    });
+    private void MediaEffectsClick(object sender, RoutedEventArgs e) => OpenMediaEffects();
+    private void OpenMediaEffects(Guid? requestedMedia = null) => Guard(() =>
+    {
+        MediaAsset? asset = null;
+        if (requestedMedia is { } id)
+        {
+            asset = vm.Project.Media.FirstOrDefault(m => m.Id == id);
+        }
+        else if (MediaList.SelectedItem is MediaItem item)
+        {
+            asset = item.Asset;
+        }
+        if (asset is null || !asset.HasVideo) { vm.Status = "Select a video media asset in Project Media to edit its effects."; return; }
+        Pause(); RequestPreview();
+        new VideoEffectsWindow(vm, EffectScope.Media, asset.Id) { Owner = this }.ShowDialog();
+    });
+    private void VideoOutputEffectsClick(object sender, RoutedEventArgs e) => OpenVideoOutputEffects();
+    private void OpenVideoOutputEffects() => Guard(() =>
+    {
+        Pause(); RequestPreview();
+        new VideoEffectsWindow(vm, EffectScope.Output, Guid.Empty) { Owner = this }.ShowDialog();
     });
     private void ColorGradingClick(object sender, RoutedEventArgs e) => OpenColorGrading();
     private void OpenColorGrading(Guid? requestedClip = null) => Guard(() =>

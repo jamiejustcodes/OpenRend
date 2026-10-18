@@ -93,12 +93,23 @@ Verified parts:
 
 ## 4. Effect scope beyond events — high
 
-- [ ] Attach video effects to event, track, media and project scopes through matching controls.
-- [ ] Define and verify the order in which those scopes render together.
-- [ ] Persist, copy and undo scoped effects without changing unrelated events.
-- [ ] Verify preview/export consistency and the UI selection state at every scope.
+- [x] Attach video effects to event, track, media and project scopes through matching controls.
+- [x] Define and verify the order in which those scopes render together.
+- [x] Persist, copy and undo scoped effects without changing unrelated events.
+- [x] Verify preview/export consistency and the UI selection state at every scope.
 
-Status: queued.
+Status: complete. Video effects can be attached to Event, Track, Media, and Video Output (Master Bus) scopes matching Vegas Pro 1:1. Effect evaluation order is Media FX (source raw) -> Event FX & Pan/Crop -> Track FX (track composite) -> Video Output FX (master output). Intermediate track composites preserve alpha across CPU and GPU compositing. `VideoEffectsWindow` dynamically adjusts title and target to all four scopes, routing atomic undo/redo through `TimelineEditor`. Track header renders green illuminated "fx" button on tracks with effects, and right-click context menu exposes "Track FX…". Project Media list exposes "Media FX…", and Tools menu provides "Video Track FX…", "Media FX…", and "Video Output FX…". Schema 10 persists Media, Track, and Output effect chains.
+
+Verified parts:
+
+- [x] Vegas Pro 1:1 processing order verified: Media FX -> Event FX -> Track FX -> Video Output FX.
+- [x] Track FX evaluates whole-track composite independently of lower/upper tracks.
+- [x] Intermediate track buffer composites with full alpha preservation on CPU and Direct3D GPU pipelines.
+- [x] `VideoEffectsWindow` header, effect list, parameter sliders, LUT controls, and preview request adapt to Event, Track, Media, and Output scopes.
+- [x] Track header "fx" button renders green (`#2E7D32`) when active, dark/muted when empty, and triggers Track FX dialog on click.
+- [x] Menus and context menus wired for Track FX, Media FX, and Video Output FX.
+- [x] Schema 10 project serialization round-trips Media, Track, and Output effects and rejects unhandled future schemas.
+- [x] `TimelineEditor` undo/redo restores `VideoOutputEffects`, `Track.VideoEffects`, `Media.VideoEffects`, and `Clip.VideoEffects` atomically.
 
 ## 5. General motion and mask tracking — high
 

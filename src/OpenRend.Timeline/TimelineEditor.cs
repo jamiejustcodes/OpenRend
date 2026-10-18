@@ -949,18 +949,30 @@ public sealed class TimelineEditor
         Execute(_ => { clip.Crop = null; clip.CropOffsetFrames = 0; });
     }
 
-    public VideoEffect AddVideoEffect(Guid clipId, VideoEffectKind kind)
+    public List<VideoEffect> GetScopedVideoEffects(EffectScope scope, Guid targetId)
     {
-        var clip = EditableVideoClip(clipId);
+        return scope switch
+        {
+            EffectScope.Event => EditableVideoClip(targetId).VideoEffects,
+            EffectScope.Track => EditableVideoTrack(targetId).VideoEffects,
+            EffectScope.Media => EditableMediaAsset(targetId).VideoEffects,
+            EffectScope.Output => Project.VideoOutputEffects,
+            _ => throw new ArgumentOutOfRangeException(nameof(scope))
+        };
+    }
+
+    public VideoEffect AddScopedVideoEffect(EffectScope scope, Guid targetId, VideoEffectKind kind)
+    {
+        var effects = GetScopedVideoEffects(scope, targetId);
         var effect = VideoEffect.Create(kind);
-        Execute(_ => clip.VideoEffects.Add(effect));
+        Execute(_ => effects.Add(effect));
         return effect;
     }
 
-    public void UpdateVideoEffect(Guid clipId, Guid effectId, double amount, double secondaryAmount, bool isEnabled)
+    public void UpdateScopedVideoEffect(EffectScope scope, Guid targetId, Guid effectId, double amount, double secondaryAmount, bool isEnabled)
     {
-        var clip = EditableVideoClip(clipId);
-        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var effects = GetScopedVideoEffects(scope, targetId);
+        var effect = effects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
         var updated = effect.DeepClone();
         updated.Amount = amount; updated.SecondaryAmount = secondaryAmount; updated.IsEnabled = isEnabled;
         updated.Validate();
@@ -968,61 +980,73 @@ public sealed class TimelineEditor
         Execute(_ => { effect.Amount = amount; effect.SecondaryAmount = secondaryAmount; effect.IsEnabled = isEnabled; });
     }
 
-    public void RemoveVideoEffect(Guid clipId, Guid effectId)
+    public void RemoveScopedVideoEffect(EffectScope scope, Guid targetId, Guid effectId)
     {
-        var clip = EditableVideoClip(clipId);
-        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
-        Execute(_ => clip.VideoEffects.Remove(effect));
+        var effects = GetScopedVideoEffects(scope, targetId);
+        var effect = effects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        Execute(_ => effects.Remove(effect));
     }
 
-    public void UpdateVideoEffectParameters(Guid clipId, Guid effectId, IReadOnlyDictionary<string, double> parameters, bool isEnabled)
+    public void UpdateScopedVideoEffectParameters(EffectScope scope, Guid targetId, Guid effectId, IReadOnlyDictionary<string, double> parameters, bool isEnabled)
     {
         ArgumentNullException.ThrowIfNull(parameters);
-        var clip = EditableVideoClip(clipId);
-        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var effects = GetScopedVideoEffects(scope, targetId);
+        var effect = effects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
         var updated = effect.DeepClone();
         foreach (var (key, value) in parameters) updated.SetParameter(key, value);
         updated.IsEnabled = isEnabled;
         updated.Validate();
         if (effect.IsEnabled == isEnabled && VideoEffectCatalog.Get(effect.Kind).Parameters.All(parameter => effect.GetParameter(parameter.Key) == updated.GetParameter(parameter.Key))) return;
-        Execute(_ => clip.VideoEffects[clip.VideoEffects.IndexOf(effect)] = updated);
+        Execute(_ => effects[effects.IndexOf(effect)] = updated);
     }
 
-    public VideoEffect ReplaceVideoEffect(Guid clipId, Guid effectId, VideoEffectKind kind)
+    public VideoEffect ReplaceScopedVideoEffect(EffectScope scope, Guid targetId, Guid effectId, VideoEffectKind kind)
     {
-        var clip = EditableVideoClip(clipId);
-        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        var effects = GetScopedVideoEffects(scope, targetId);
+        var effect = effects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
         var replacement = VideoEffect.Create(kind);
         replacement.IsEnabled = effect.IsEnabled;
-        Execute(_ => clip.VideoEffects[clip.VideoEffects.IndexOf(effect)] = replacement);
+        Execute(_ => effects[effects.IndexOf(effect)] = replacement);
         return replacement;
     }
 
-    public void SetVideoEffects(Guid clipId, IReadOnlyList<VideoEffect> effects)
+    public void SetScopedVideoEffects(EffectScope scope, Guid targetId, IReadOnlyList<VideoEffect> newEffects)
     {
-        ArgumentNullException.ThrowIfNull(effects);
-        var clip = EditableVideoClip(clipId);
-        if (effects.Any(effect => effect is null) || effects.Select(effect => effect.Id).Distinct().Count() != effects.Count)
+        ArgumentNullException.ThrowIfNull(newEffects);
+        var effects = GetScopedVideoEffects(scope, targetId);
+        if (newEffects.Any(effect => effect is null) || newEffects.Select(effect => effect.Id).Distinct().Count() != newEffects.Count)
             throw new InvalidDataException("Video effects require unique identities.");
-        foreach (var effect in effects) effect.Validate();
-        var snapshot = effects.Select(effect => effect.DeepClone()).ToList();
-        var same = clip.VideoEffects.Count == snapshot.Count && clip.VideoEffects.Zip(snapshot).All(pair =>
+        foreach (var effect in newEffects) effect.Validate();
+        var snapshot = newEffects.Select(effect => effect.DeepClone()).ToList();
+        var same = effects.Count == snapshot.Count && effects.Zip(snapshot).All(pair =>
             pair.First.Id == pair.Second.Id && pair.First.Kind == pair.Second.Kind && pair.First.IsEnabled == pair.Second.IsEnabled &&
             (pair.First.Lut is { } lut ? lut.ContentEquals(pair.Second.Lut) : pair.Second.Lut is null) &&
             VideoEffectCatalog.Get(pair.First.Kind).Parameters.All(parameter => pair.First.GetParameter(parameter.Key) == pair.Second.GetParameter(parameter.Key)));
         if (same) return;
-        // The chooser owns its working copy; a single accepted chain is one undo step.
-        Execute(_ => clip.VideoEffects = snapshot);
+        Execute(_ =>
+        {
+            effects.Clear();
+            effects.AddRange(snapshot);
+        });
     }
 
-    public void MoveVideoEffect(Guid clipId, Guid effectId, int destinationIndex)
+    public void MoveScopedVideoEffect(EffectScope scope, Guid targetId, Guid effectId, int destinationIndex)
     {
-        var clip = EditableVideoClip(clipId);
-        var effect = clip.VideoEffects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
-        if (destinationIndex < 0 || destinationIndex >= clip.VideoEffects.Count) throw new ArgumentOutOfRangeException(nameof(destinationIndex));
-        if (clip.VideoEffects.IndexOf(effect) == destinationIndex) return;
-        Execute(_ => { clip.VideoEffects.Remove(effect); clip.VideoEffects.Insert(destinationIndex, effect); });
+        var effects = GetScopedVideoEffects(scope, targetId);
+        var effect = effects.FirstOrDefault(item => item.Id == effectId) ?? throw new KeyNotFoundException("Video effect was not found.");
+        if (destinationIndex < 0 || destinationIndex >= effects.Count) throw new ArgumentOutOfRangeException(nameof(destinationIndex));
+        if (effects.IndexOf(effect) == destinationIndex) return;
+        Execute(_ => { effects.Remove(effect); effects.Insert(destinationIndex, effect); });
     }
+
+    // Existing event-scoped convenience methods
+    public VideoEffect AddVideoEffect(Guid clipId, VideoEffectKind kind) => AddScopedVideoEffect(EffectScope.Event, clipId, kind);
+    public void UpdateVideoEffect(Guid clipId, Guid effectId, double amount, double secondaryAmount, bool isEnabled) => UpdateScopedVideoEffect(EffectScope.Event, clipId, effectId, amount, secondaryAmount, isEnabled);
+    public void RemoveVideoEffect(Guid clipId, Guid effectId) => RemoveScopedVideoEffect(EffectScope.Event, clipId, effectId);
+    public void UpdateVideoEffectParameters(Guid clipId, Guid effectId, IReadOnlyDictionary<string, double> parameters, bool isEnabled) => UpdateScopedVideoEffectParameters(EffectScope.Event, clipId, effectId, parameters, isEnabled);
+    public VideoEffect ReplaceVideoEffect(Guid clipId, Guid effectId, VideoEffectKind kind) => ReplaceScopedVideoEffect(EffectScope.Event, clipId, effectId, kind);
+    public void SetVideoEffects(Guid clipId, IReadOnlyList<VideoEffect> effects) => SetScopedVideoEffects(EffectScope.Event, clipId, effects);
+    public void MoveVideoEffect(Guid clipId, Guid effectId, int destinationIndex) => MoveScopedVideoEffect(EffectScope.Event, clipId, effectId, destinationIndex);
 
     private TimelineClip EditableVideoClip(Guid clipId)
     {
@@ -1030,6 +1054,21 @@ public sealed class TimelineEditor
         EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Video effects are only available for video clips.");
         return clip;
+    }
+
+    private TimelineTrack EditableVideoTrack(Guid trackId)
+    {
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new KeyNotFoundException("Track was not found.");
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Track effects require a video track.");
+        if (track.IsLocked) throw new InvalidOperationException("Track is locked.");
+        return track;
+    }
+
+    private MediaAsset EditableMediaAsset(Guid mediaId)
+    {
+        var media = Project.Media.FirstOrDefault(m => m.Id == mediaId) ?? throw new KeyNotFoundException("Media asset was not found.");
+        if (!media.HasVideo) throw new InvalidOperationException("Media video effects require a video media asset.");
+        return media;
     }
 
     public long SnapFrame(long frame, long toleranceFrames, Guid? excludeClipId = null, long? playheadFrame = null)
@@ -1119,6 +1158,6 @@ public sealed class TimelineEditor
     {
         var copy = snapshot.DeepClone();
         Project.Name = copy.Name; Project.Width = copy.Width; Project.Height = copy.Height; Project.FrameRate = copy.FrameRate;
-        Project.Media = copy.Media; Project.Tracks = copy.Tracks;
+        Project.Media = copy.Media; Project.Tracks = copy.Tracks; Project.VideoOutputEffects = copy.VideoOutputEffects;
     }
 }
