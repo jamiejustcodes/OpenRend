@@ -35,11 +35,11 @@ public static class TimelineEvaluator
             var dissolves = new Dictionary<Guid, EvaluatedDissolve>();
             if (track.Kind == TrackKind.Video)
             {
-                foreach (var incoming in ordered.Where(c => c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
+                foreach (var incoming in ordered.Where(c => !c.IsMuted && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
                 {
                     var incomingPosition = frame - incoming.StartFrame + incoming.FadeOffsetFrames;
                     if (incomingPosition >= incoming.FadeInFrames) continue;
-                    var outgoing = ordered.Where(c => c.Id != incoming.Id && c.FadeOutFrames > 0 &&
+                    var outgoing = ordered.Where(c => !c.IsMuted && c.Id != incoming.Id && c.FadeOutFrames > 0 &&
                         c.StartFrame <= frame && frame < c.EndFrame &&
                         c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
                         frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
@@ -66,7 +66,7 @@ public static class TimelineEvaluator
             }
             foreach (var clip in ordered)
             {
-                if (frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
+                if (clip.IsMuted || frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
                 var local = frame - clip.StartFrame;
                 var fade = transitionOpacity.TryGetValue(clip.Id, out var blend) ? blend : track.Kind == TrackKind.Video ? VideoFadeAt(clip, local) : FadeAt(clip, local);
                 var (left, right) = BalanceStages(track, clip);

@@ -125,7 +125,8 @@ public sealed class TimelineEditor
         var (incomingTrack, incoming) = FindClip(incomingClipId);
         if (outgoingTrack.Id != incomingTrack.Id || outgoingTrack.Kind != TrackKind.Video)
             throw new InvalidOperationException("A dissolve requires overlapping video events on the same track.");
-        EnsureUnlocked(outgoingTrack);
+        EnsureUnlocked(outgoingTrack, outgoing);
+        EnsureUnlocked(incomingTrack, incoming);
         if (outgoing.StartFrame >= incoming.StartFrame || outgoing.EndFrame <= incoming.StartFrame || outgoing.EndFrame > incoming.EndFrame)
             throw new InvalidOperationException("The incoming event must overlap the end of the outgoing event.");
         var overlap = outgoing.EndFrame - incoming.StartFrame;
@@ -148,7 +149,7 @@ public sealed class TimelineEditor
     public void RemoveVideoTransition(Guid clipId, bool fadeOut = false)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Transitions are only available for video clips.");
         if ((fadeOut ? clip.FadeOutTransition : clip.FadeInTransition) is null) return;
         Execute(_ =>
@@ -167,7 +168,7 @@ public sealed class TimelineEditor
         if (!Enum.IsDefined(curve)) throw new ArgumentOutOfRangeException(nameof(curve));
         if (reciprocalCurve.HasValue && !Enum.IsDefined(reciprocalCurve.Value)) throw new ArgumentOutOfRangeException(nameof(reciprocalCurve));
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Fade curves are only available for video events.");
         var recip = reciprocalCurve ?? curve;
         if (fadeOut ? (clip.FadeOutCurve == curve && clip.FadeOutReciprocalCurve == recip)
@@ -200,7 +201,7 @@ public sealed class TimelineEditor
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Source playback modes are only available for video events.");
         if (clip.VideoSourceMode == mode) return;
         var changed = clip.DeepClone();
@@ -306,7 +307,8 @@ public sealed class TimelineEditor
         if (outgoingClipId == incomingClipId || outgoingTrack != incomingTrack || outgoingTrack.Kind != TrackKind.Video ||
             outgoing.EndFrame != incoming.StartFrame)
             throw new InvalidOperationException("Choose two video events that meet at a cut on the same track.");
-        EnsureUnlocked(outgoingTrack);
+        EnsureUnlocked(outgoingTrack, outgoing);
+        EnsureUnlocked(incomingTrack, incoming);
         var before = alignment switch
         {
             CutTransitionAlignment.BeforeCut => overlapFrames,
@@ -354,7 +356,8 @@ public sealed class TimelineEditor
         var (incomingTrack, incoming) = FindClip(incomingClipId);
         if (outgoingTrack != incomingTrack || outgoingTrack.Kind != TrackKind.Video)
             throw new InvalidOperationException("A cut conversion requires overlapping video events on the same track.");
-        EnsureUnlocked(outgoingTrack);
+        EnsureUnlocked(outgoingTrack, outgoing);
+        EnsureUnlocked(incomingTrack, incoming);
         if (outgoing.StartFrame >= incoming.StartFrame || outgoing.EndFrame <= incoming.StartFrame || outgoing.EndFrame >= incoming.EndFrame)
             throw new InvalidOperationException("Both events must retain a positive duration on opposite sides of the overlap.");
         var overlap = outgoing.EndFrame - incoming.StartFrame;
@@ -421,7 +424,8 @@ public sealed class TimelineEditor
                     outgoing.EndFrame > incoming.EndFrame) continue;
                 if (clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
                     clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame)) continue;
-                EnsureUnlocked(track);
+                EnsureUnlocked(track, outgoing);
+                EnsureUnlocked(track, incoming);
                 pairs.Add((outgoing, incoming));
             }
         }
@@ -460,7 +464,7 @@ public sealed class TimelineEditor
     {
         var (source, clip) = FindClip(clipId);
         var target = FindTrack(trackId);
-        EnsureUnlocked(source);
+        EnsureUnlocked(source, clip);
         EnsureUnlocked(target);
         EnsureCompatible(Project.Media.Single(m => m.Id == clip.MediaId), target);
         Execute(_ =>
@@ -474,7 +478,7 @@ public sealed class TimelineEditor
     public void TrimClip(Guid clipId, long sourceIn, long duration)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         Execute(_ =>
         {
             if (clip.Crop is not null) clip.CropOffsetFrames = checked(clip.CropOffsetFrames + checked(sourceIn - clip.SourceInFrame));
@@ -491,7 +495,7 @@ public sealed class TimelineEditor
     public TimelineClip SplitClip(Guid clipId, long frame)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         if (frame <= clip.StartFrame || frame >= clip.EndFrame) throw new ArgumentOutOfRangeException(nameof(frame), "Split must be inside the clip.");
         var right = clip.DeepClone();
         var leftDuration = frame - clip.StartFrame;
@@ -515,7 +519,7 @@ public sealed class TimelineEditor
     public void DeleteClip(Guid clipId, bool ripple = false)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         Execute(_ =>
         {
             track.Clips.Remove(clip);
@@ -540,7 +544,7 @@ public sealed class TimelineEditor
     public void LinkClips(IEnumerable<Guid> ids)
     {
         var selected = SelectedClips(ids);
-        foreach (var item in selected) EnsureUnlocked(item.Track);
+        foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         if (selected.Count < 2) throw new ArgumentException("Select at least two clips to link.", nameof(ids));
         if (selected[0].Clip.GroupId.HasValue && selected.All(item => item.Clip.GroupId == selected[0].Clip.GroupId)) return;
         var group = Guid.NewGuid();
@@ -550,7 +554,7 @@ public sealed class TimelineEditor
     public void UnlinkClips(IEnumerable<Guid> ids)
     {
         var selected = SelectedClips(ids);
-        foreach (var item in selected) EnsureUnlocked(item.Track);
+        foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         if (selected.All(item => item.Clip.GroupId is null)) return;
         Execute(_ => { foreach (var item in selected) item.Clip.GroupId = null; });
     }
@@ -567,7 +571,7 @@ public sealed class TimelineEditor
         var positions = new Dictionary<Guid, long>();
         foreach (var item in selected)
         {
-            EnsureUnlocked(item.Track);
+            EnsureUnlocked(item.Track, item.Clip);
             var moved = item.Clip.DeepClone();
             moved.StartFrame = checked(moved.StartFrame + delta);
             EnsureTimelineBounds(moved);
@@ -591,7 +595,7 @@ public sealed class TimelineEditor
         var changes = new Dictionary<Guid, TimelineClip>();
         foreach (var item in selected)
         {
-            EnsureUnlocked(item.Track);
+            EnsureUnlocked(item.Track, item.Clip);
             var trimmed = item.Clip.DeepClone();
             trimmed.StartFrame = checked(trimmed.StartFrame + startDelta);
             trimmed.SourceInFrame = checked(trimmed.SourceInFrame + sourceDelta);
@@ -622,7 +626,7 @@ public sealed class TimelineEditor
     public IReadOnlyList<TimelineClip> SplitSelection(IEnumerable<Guid> ids, long frame, bool ignoreGroups = false)
     {
         var selected = SelectedClips(ids, ignoreGroups);
-        foreach (var item in selected) EnsureUnlocked(item.Track);
+        foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         var crossing = selected.Where(item => frame > item.Clip.StartFrame && frame < item.Clip.EndFrame).ToList();
         if (crossing.Count == 0) throw new ArgumentOutOfRangeException(nameof(frame), "Split must be inside a selected clip.");
         var rightGroups = new Dictionary<Guid, Guid>();
@@ -652,7 +656,7 @@ public sealed class TimelineEditor
     {
         var selected = SelectedClips(ids, ignoreGroups);
         if (selected.Count == 0) return;
-        foreach (var item in selected) EnsureUnlocked(item.Track);
+        foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         var removed = selected.Select(item => item.Clip.Id).ToHashSet();
         var shifts = new Dictionary<Guid, long>();
         if (ripple)
@@ -707,7 +711,7 @@ public sealed class TimelineEditor
     public void SetClipLevels(Guid clipId, double? gain = null, double? opacity = null, double? pan = null, long? fadeInFrames = null, long? fadeOutFrames = null)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         Execute(_ =>
         {
             if (gain.HasValue) clip.Gain = gain.Value;
@@ -718,10 +722,58 @@ public sealed class TimelineEditor
         });
     }
 
-    public void SetCropKeyframe(Guid clipId, long localFrame, CropState state, CropInterpolation interpolation = CropInterpolation.Linear)
+    public void SetClipLock(Guid clipId, bool isLocked)
     {
         var (track, clip) = FindClip(clipId);
         EnsureUnlocked(track);
+        if (clip.IsLocked == isLocked) return;
+        Execute(_ =>
+        {
+            var target = Project.Tracks.SelectMany(t => t.Clips).First(c => c.Id == clipId);
+            target.IsLocked = isLocked;
+        });
+    }
+
+    public void SetClipMute(Guid clipId, bool isMuted)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        if (clip.IsMuted == isMuted) return;
+        Execute(_ =>
+        {
+            var target = Project.Tracks.SelectMany(t => t.Clips).First(c => c.Id == clipId);
+            target.IsMuted = isMuted;
+        });
+    }
+
+    public void SetSelectionLock(IEnumerable<Guid> ids, bool isLocked, bool ignoreGroups = false)
+    {
+        var selected = SelectedClips(ids, ignoreGroups);
+        foreach (var item in selected) EnsureUnlocked(item.Track);
+        var changed = selected.Where(item => item.Clip.IsLocked != isLocked).ToList();
+        if (changed.Count == 0) return;
+        Execute(_ =>
+        {
+            foreach (var item in changed) item.Clip.IsLocked = isLocked;
+        });
+    }
+
+    public void SetSelectionMute(IEnumerable<Guid> ids, bool isMuted, bool ignoreGroups = false)
+    {
+        var selected = SelectedClips(ids, ignoreGroups);
+        foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
+        var changed = selected.Where(item => item.Clip.IsMuted != isMuted).ToList();
+        if (changed.Count == 0) return;
+        Execute(_ =>
+        {
+            foreach (var item in changed) item.Clip.IsMuted = isMuted;
+        });
+    }
+
+    public void SetCropKeyframe(Guid clipId, long localFrame, CropState state, CropInterpolation interpolation = CropInterpolation.Linear)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
         EnsureVideoCrop(track);
         if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
         if (!Enum.IsDefined(interpolation)) throw new ArgumentOutOfRangeException(nameof(interpolation));
@@ -812,7 +864,7 @@ public sealed class TimelineEditor
     public void RemoveCropKeyframe(Guid clipId, long localFrame)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         EnsureVideoCrop(track);
         if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
         if (clip.Crop is null) return;
@@ -828,7 +880,7 @@ public sealed class TimelineEditor
     public void ResetCrop(Guid clipId)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         EnsureVideoCrop(track);
         if (clip.Crop is null) return;
         Execute(_ => { clip.Crop = null; clip.CropOffsetFrames = 0; });
@@ -912,7 +964,7 @@ public sealed class TimelineEditor
     private TimelineClip EditableVideoClip(Guid clipId)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track);
+        EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Video effects are only available for video clips.");
         return clip;
     }
@@ -944,6 +996,11 @@ public sealed class TimelineEditor
         throw new KeyNotFoundException("Clip was not found.");
     }
     private static void EnsureUnlocked(TimelineTrack track) { if (track.IsLocked) throw new InvalidOperationException("Track is locked."); }
+    private static void EnsureUnlocked(TimelineTrack track, TimelineClip clip)
+    {
+        if (track.IsLocked) throw new InvalidOperationException("Track is locked.");
+        if (clip.IsLocked) throw new InvalidOperationException("Event is locked.");
+    }
     private static void EnsureVideoCrop(TimelineTrack track) { if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Crop is only available for video clips."); }
     private static void EnsureCompatible(MediaAsset media, TimelineTrack track)
     {

@@ -155,6 +155,8 @@ public sealed class TimelineClip
     public long SourceInFrame { get; set; }
     public long DurationFrames { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsLocked { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsMuted { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);
     public double Gain { get; set; } = 1;
     public double Opacity { get; set; } = 1;

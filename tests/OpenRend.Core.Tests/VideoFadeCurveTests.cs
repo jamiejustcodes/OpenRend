@@ -69,7 +69,7 @@ public sealed class VideoFadeCurveTests
         {
             var path = Path.Combine(folder, "curves.openrend"); await ProjectStore.SaveAsync(editor.Project, path);
             var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
-            Assert.Equal(8, (int)json["Version"]!);
+            Assert.Equal(ProjectStore.CurrentVersion, (int)json["Version"]!);
             var restored = (await ProjectStore.LoadAsync(path)).Tracks[0].Clips[0];
             Assert.Equal(VideoFadeCurve.Fast, restored.FadeInCurve); Assert.Equal(VideoFadeCurve.Fast, restored.FadeOutCurve);
             var clip = json["Project"]!["Tracks"]![0]!["Clips"]![0]!.AsObject();

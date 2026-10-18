@@ -6,7 +6,7 @@ namespace OpenRend.Project;
 
 public static class ProjectStore
 {
-    public const int CurrentVersion = 8;
+    public const int CurrentVersion = 9;
     private const long MaximumManifestBytes = 64 * 1024 * 1024;
     private static readonly JsonSerializerOptions Options = new()
     {
