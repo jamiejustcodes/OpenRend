@@ -478,6 +478,8 @@ public partial class MainWindow : Window
             if (gesture.NewTrackIndex is { } newIdx && gesture.NewTrackKind is { } newKind)
             {
                 var newTrack = vm.Editor.MoveSelectionToNewTrack(vm.Selection, gesture.ClipId, newIdx, newKind, gesture.Start, vm.IgnoreGroups);
+                var trackIndex = vm.Project.Tracks.IndexOf(newTrack);
+                if (trackIndex >= 0) Timeline.ActivateTrack(trackIndex);
                 vm.Status = $"Created new {newKind} layer '{newTrack.Name}' and moved event.";
             }
             else

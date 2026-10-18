@@ -147,4 +147,94 @@ public sealed class ClipPointerTests
         Assert.False(view.HandleKeyboardInput(Key.M, ModifierKeys.Control | ModifierKeys.Shift));
         Assert.False(view.HandleKeyboardInput(Key.M, ModifierKeys.Control));
     });
+
+    [Fact]
+    public void EvaluateDragTargetDifferentiatesBoundaryInsertionsAndExistingTrack() => Sta(() =>
+    {
+        var (view, _, _) = Create(); // 1 video track at RulerHeight = 50, TrackHeight = 64
+        // In ruler / above track 0: insert at top
+        var topRuler = view.EvaluateDragTarget(40, TrackKind.Video);
+        Assert.True(topRuler.IsNewTrack);
+        Assert.Equal(0, topRuler.TrackIndex);
+
+        // Near top boundary of track 0: insert at top (index 0)
+        var topBoundary = view.EvaluateDragTarget(55, TrackKind.Video);
+        Assert.True(topBoundary.IsNewTrack);
+        Assert.Equal(0, topBoundary.TrackIndex);
+
+        // Center of track 0: target existing track 0
+        var center = view.EvaluateDragTarget(82, TrackKind.Video);
+        Assert.False(center.IsNewTrack);
+        Assert.Equal(0, center.TrackIndex);
+
+        // Near bottom boundary of track 0: insert below track 0 (index 1)
+        var bottomBoundary = view.EvaluateDragTarget(105, TrackKind.Video);
+        Assert.True(bottomBoundary.IsNewTrack);
+        Assert.Equal(1, bottomBoundary.TrackIndex);
+
+        // Empty space below all tracks: insert at bottom (index 1)
+        var emptyBelow = view.EvaluateDragTarget(200, TrackKind.Video);
+        Assert.True(emptyBelow.IsNewTrack);
+        Assert.Equal(1, emptyBelow.TrackIndex);
+    });
+
+    [Fact]
+    public void EvaluateDragTargetInterTrackBoundaryBetweenSameKindTracks() => Sta(() =>
+    {
+        var (view, track0, _) = Create();
+        var track1 = new TimelineTrack { Kind = TrackKind.Video };
+        view.Project.Tracks.Add(track1); // Track 0 at 50..114, Track 1 at 114..178
+
+        // Bottom of track 0 indicates insertion between tracks (index 1)
+        var bottomTrack0 = view.EvaluateDragTarget(105, TrackKind.Video);
+        Assert.True(bottomTrack0.IsNewTrack);
+        Assert.Equal(1, bottomTrack0.TrackIndex);
+
+        // Top of track 1 also indicates insertion between tracks (index 1)
+        var topTrack1 = view.EvaluateDragTarget(120, TrackKind.Video);
+        Assert.True(topTrack1.IsNewTrack);
+        Assert.Equal(1, topTrack1.TrackIndex);
+
+        // Center of track 1 targets existing track 1
+        var centerTrack1 = view.EvaluateDragTarget(146, TrackKind.Video);
+        Assert.False(centerTrack1.IsNewTrack);
+        Assert.Equal(1, centerTrack1.TrackIndex);
+
+        // Bottom of track 1 indicates insertion below track 1 (index 2)
+        var bottomTrack1 = view.EvaluateDragTarget(170, TrackKind.Video);
+        Assert.True(bottomTrack1.IsNewTrack);
+        Assert.Equal(2, bottomTrack1.TrackIndex);
+    });
+
+    [Fact]
+    public void EvaluateDragTargetIncompatibleTrackAlwaysInsertsNewLayer() => Sta(() =>
+    {
+        var (view, videoTrack, _) = Create();
+        var audioTrack = new TimelineTrack { Kind = TrackKind.Audio };
+        view.Project.Tracks.Add(audioTrack); // Video Track 0 at 50..114, Audio Track 1 at 114..178
+
+        // Dragging Video over upper half of Audio track: inserts new Video layer above Audio track (index 1)
+        var videoOverAudioUpper = view.EvaluateDragTarget(130, TrackKind.Video);
+        Assert.True(videoOverAudioUpper.IsNewTrack);
+        Assert.Equal(1, videoOverAudioUpper.TrackIndex);
+        Assert.Equal(TrackKind.Video, videoOverAudioUpper.NewTrackKind);
+
+        // Dragging Video over lower half of Audio track: inserts new Video layer below Audio track (index 2)
+        var videoOverAudioLower = view.EvaluateDragTarget(160, TrackKind.Video);
+        Assert.True(videoOverAudioLower.IsNewTrack);
+        Assert.Equal(2, videoOverAudioLower.TrackIndex);
+        Assert.Equal(TrackKind.Video, videoOverAudioLower.NewTrackKind);
+
+        // Dragging Audio over upper half of Video track: inserts new Audio layer above Video track (index 0)
+        var audioOverVideoUpper = view.EvaluateDragTarget(65, TrackKind.Audio);
+        Assert.True(audioOverVideoUpper.IsNewTrack);
+        Assert.Equal(0, audioOverVideoUpper.TrackIndex);
+        Assert.Equal(TrackKind.Audio, audioOverVideoUpper.NewTrackKind);
+
+        // Dragging Audio over lower half of Video track: inserts new Audio layer below Video track (index 1)
+        var audioOverVideoLower = view.EvaluateDragTarget(95, TrackKind.Audio);
+        Assert.True(audioOverVideoLower.IsNewTrack);
+        Assert.Equal(1, audioOverVideoLower.TrackIndex);
+        Assert.Equal(TrackKind.Audio, audioOverVideoLower.NewTrackKind);
+    });
 }
