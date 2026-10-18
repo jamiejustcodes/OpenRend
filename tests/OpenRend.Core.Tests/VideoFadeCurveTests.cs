@@ -95,4 +95,68 @@ public sealed class VideoFadeCurveTests
         clip.FadeOutCurve = (VideoFadeCurve)99;
         Assert.Throws<InvalidDataException>(editor.Project.Validate);
     }
+
+    [Fact]
+    public void SetVideoFadeCurveChangesHeadAndTailWithUndoRedo()
+    {
+        var (editor, clip) = Create(VideoFadeCurve.Linear);
+        editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Fast, fadeOut: false);
+        Assert.Equal(VideoFadeCurve.Fast, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+        Assert.Equal(VideoFadeCurve.Linear, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+
+        editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Slow, fadeOut: true);
+        Assert.Equal(VideoFadeCurve.Fast, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+        Assert.Equal(VideoFadeCurve.Slow, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+
+        Assert.True(editor.Undo());
+        Assert.Equal(VideoFadeCurve.Linear, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+        Assert.True(editor.Undo());
+        Assert.Equal(VideoFadeCurve.Linear, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+
+        Assert.True(editor.Redo());
+        Assert.Equal(VideoFadeCurve.Fast, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+        Assert.True(editor.Redo());
+        Assert.Equal(VideoFadeCurve.Slow, editor.Project.Tracks[0].Clips[0].FadeOutCurve);
+    }
+
+    [Fact]
+    public void SetVideoFadeCurvePreservesSplitEnvelopes()
+    {
+        var (editor, clip) = Create(VideoFadeCurve.Linear);
+        var middle = editor.SplitClip(clip.Id, 50);
+        var right = editor.SplitClip(middle.Id, 150);
+
+        editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Smooth, fadeOut: false);
+        Assert.All(editor.Project.Tracks[0].Clips, c => Assert.Equal(VideoFadeCurve.Smooth, c.FadeInCurve));
+
+        editor.SetVideoFadeCurve(right.Id, VideoFadeCurve.Sharp, fadeOut: true);
+        Assert.All(editor.Project.Tracks[0].Clips, c => Assert.Equal(VideoFadeCurve.Sharp, c.FadeOutCurve));
+
+        Assert.True(editor.Undo());
+        Assert.All(editor.Project.Tracks[0].Clips, c => Assert.Equal(VideoFadeCurve.Linear, c.FadeOutCurve));
+    }
+
+    [Fact]
+    public void SetVideoFadeCurveRemovesActiveTransitionAndValidates()
+    {
+        var (editor, clip) = Create(VideoFadeCurve.Linear);
+        clip.FadeInTransition = new VideoTransition();
+
+        editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Fast, fadeOut: false);
+        Assert.Equal(VideoFadeCurve.Fast, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+        Assert.Null(editor.Project.Tracks[0].Clips[0].FadeInTransition);
+
+        Assert.True(editor.Undo());
+        Assert.NotNull(editor.Project.Tracks[0].Clips[0].FadeInTransition);
+        Assert.Equal(VideoFadeCurve.Linear, editor.Project.Tracks[0].Clips[0].FadeInCurve);
+
+        Assert.Throws<ArgumentOutOfRangeException>(() => editor.SetVideoFadeCurve(clip.Id, (VideoFadeCurve)99));
+
+        var audio = new TimelineTrack { Kind = TrackKind.Audio, Clips = [new TimelineClip { Id = Guid.NewGuid(), MediaId = clip.MediaId, DurationFrames = 100 }] };
+        editor.Project.Tracks.Add(audio);
+        Assert.Throws<InvalidOperationException>(() => editor.SetVideoFadeCurve(audio.Clips[0].Id, VideoFadeCurve.Fast));
+
+        editor.Project.Tracks[0].IsLocked = true;
+        Assert.Throws<InvalidOperationException>(() => editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Slow));
+    }
 }

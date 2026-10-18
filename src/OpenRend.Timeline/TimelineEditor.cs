@@ -159,6 +159,35 @@ public sealed class TimelineEditor
         });
     }
 
+    public void SetVideoFadeCurve(Guid clipId, VideoFadeCurve curve, bool fadeOut = false)
+    {
+        if (!Enum.IsDefined(curve)) throw new ArgumentOutOfRangeException(nameof(curve));
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Fade curves are only available for video events.");
+        if ((fadeOut ? clip.FadeOutCurve : clip.FadeInCurve) == curve) return;
+        Execute(_ =>
+        {
+            var targetClips = clip.FadeDurationFrames is null
+                ? [clip]
+                : track.Clips.Where(c => c.MediaId == clip.MediaId && c.FadeDurationFrames == clip.FadeDurationFrames &&
+                                         c.StartFrame - c.FadeOffsetFrames == clip.StartFrame - clip.FadeOffsetFrames).ToArray();
+            foreach (var target in targetClips)
+            {
+                if (fadeOut)
+                {
+                    target.FadeOutCurve = curve;
+                    target.FadeOutTransition = null;
+                }
+                else
+                {
+                    target.FadeInCurve = curve;
+                    target.FadeInTransition = null;
+                }
+            }
+        });
+    }
+
     public void SetVideoSourceMode(Guid clipId, VideoSourceMode mode)
     {
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
