@@ -9,7 +9,7 @@ public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, Media
     // Dissolve participants form one composite group; scalar opacity alone cannot describe source coverage.
     public EvaluatedDissolve? Dissolve { get; init; }
 }
-public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress, double? OutgoingWeight = null, double? IncomingWeight = null);
+public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress, double? OutgoingWeight = null, double? IncomingWeight = null, VideoTransition? Transition = null);
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
 
 public static class TimelineEvaluator
@@ -59,7 +59,7 @@ public static class TimelineEvaluator
                     // Compensate for the incoming alpha-over pass so lower tracks remain visible at the blend weight.
                     transitionOpacity[outgoing.Id] = incomingAlpha >= 1 ? 0 : outWeight / (1 - incomingAlpha);
                     transitionOpacity[incoming.Id] = inWeight;
-                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress, outWeight, inWeight);
+                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress, outWeight, inWeight, incoming.FadeInTransition);
                     dissolves[outgoing.Id] = dissolve;
                     dissolves[incoming.Id] = dissolve;
                 }

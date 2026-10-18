@@ -185,19 +185,49 @@ public sealed class TimelineClip
     }
 }
 
-public enum VideoTransitionKind { Dissolve }
+public enum VideoTransitionKind
+{
+    Dissolve,
+    LinearWipe,
+    BarnDoor,
+    Push,
+    Slide,
+    Zoom,
+    Flash,
+    Iris,
+    Split,
+    ClockWipe,
+    VenetianBlinds,
+    CrossEffect,
+    Swap,
+    Squeeze,
+    StarWipe,
+    PageLoop,
+    PagePeel,
+    PageRoll
+}
 public enum CutTransitionAlignment { BeforeCut, CenteredOnCut, AfterCut }
 
 public sealed class VideoTransition
 {
     public VideoTransitionKind Kind { get; set; } = VideoTransitionKind.Dissolve;
     public string Preset { get; set; } = "Default";
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Dictionary<string, string>? Parameters { get; set; }
 
-    public VideoTransition DeepClone() => (VideoTransition)MemberwiseClone();
+    public VideoTransition DeepClone()
+    {
+        var clone = (VideoTransition)MemberwiseClone();
+        if (Parameters != null)
+            clone.Parameters = new Dictionary<string, string>(Parameters);
+        return clone;
+    }
 
     public void Validate()
     {
-        if (!Enum.IsDefined(Kind) || !string.Equals(Preset, "Default", StringComparison.Ordinal))
+        if (!Enum.IsDefined(Kind))
             throw new InvalidDataException("Video transition is not supported.");
+        if (string.IsNullOrWhiteSpace(Preset))
+            throw new InvalidDataException("Video transition preset is missing.");
     }
 }

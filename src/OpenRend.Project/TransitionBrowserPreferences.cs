@@ -5,6 +5,22 @@ namespace OpenRend.Project;
 public sealed record TransitionBrowserPreferences
 {
     public bool FavoriteDissolve { get; init; }
+    public HashSet<string> Favorites { get; init; } = [];
+
+    public bool IsFavorite(string pluginName) =>
+        (string.Equals(pluginName, "Dissolve", StringComparison.OrdinalIgnoreCase) && FavoriteDissolve) ||
+        Favorites.Contains(pluginName);
+
+    public TransitionBrowserPreferences WithFavorite(string pluginName, bool isFavorite)
+    {
+        var newFavorites = new HashSet<string>(Favorites, StringComparer.OrdinalIgnoreCase);
+        if (isFavorite) newFavorites.Add(pluginName);
+        else newFavorites.Remove(pluginName);
+        var favoriteDissolve = string.Equals(pluginName, "Dissolve", StringComparison.OrdinalIgnoreCase)
+            ? isFavorite
+            : (newFavorites.Contains("Dissolve") || FavoriteDissolve);
+        return this with { FavoriteDissolve = favoriteDissolve, Favorites = newFavorites };
+    }
 }
 
 public static class TransitionBrowserPreferencesStore

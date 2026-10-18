@@ -23,7 +23,7 @@ public sealed partial class TimelineView
     internal TransitionGesture? TransitionAt(Point point, VideoTransition transition)
     {
         if (point.X < HeaderWidth || point.Y < RulerHeight ||
-            transition.Kind != VideoTransitionKind.Dissolve || transition.Preset != "Default") return null;
+            !Enum.IsDefined(transition.Kind) || string.IsNullOrWhiteSpace(transition.Preset)) return null;
         var track = TrackAt(point.Y);
         if (track is null || track.Kind != TrackKind.Video || track.IsLocked) return null;
         var frame = FrameAt(point.X);
