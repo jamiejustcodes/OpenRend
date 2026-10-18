@@ -160,12 +160,18 @@ public sealed class TimelineEditor
     }
 
     public void SetVideoFadeCurve(Guid clipId, VideoFadeCurve curve, bool fadeOut = false)
+        => SetVideoFadeCurve(clipId, curve, null, fadeOut);
+
+    public void SetVideoFadeCurve(Guid clipId, VideoFadeCurve curve, VideoFadeCurve? reciprocalCurve, bool fadeOut = false)
     {
         if (!Enum.IsDefined(curve)) throw new ArgumentOutOfRangeException(nameof(curve));
+        if (reciprocalCurve.HasValue && !Enum.IsDefined(reciprocalCurve.Value)) throw new ArgumentOutOfRangeException(nameof(reciprocalCurve));
         var (track, clip) = FindClip(clipId);
         EnsureUnlocked(track);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Fade curves are only available for video events.");
-        if ((fadeOut ? clip.FadeOutCurve : clip.FadeInCurve) == curve) return;
+        var recip = reciprocalCurve ?? curve;
+        if (fadeOut ? (clip.FadeOutCurve == curve && clip.FadeOutReciprocalCurve == recip)
+                    : (clip.FadeInCurve == curve && clip.FadeInReciprocalCurve == recip && clip.FadeInTransition is null)) return;
         Execute(_ =>
         {
             var targetClips = clip.FadeDurationFrames is null
@@ -177,11 +183,13 @@ public sealed class TimelineEditor
                 if (fadeOut)
                 {
                     target.FadeOutCurve = curve;
+                    target.FadeOutReciprocalCurve = recip;
                     target.FadeOutTransition = null;
                 }
                 else
                 {
                     target.FadeInCurve = curve;
+                    target.FadeInReciprocalCurve = recip;
                     target.FadeInTransition = null;
                 }
             }

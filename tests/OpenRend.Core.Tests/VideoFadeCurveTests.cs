@@ -159,4 +159,59 @@ public sealed class VideoFadeCurveTests
         editor.Project.Tracks[0].IsLocked = true;
         Assert.Throws<InvalidOperationException>(() => editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Slow));
     }
+
+    [Fact]
+    public void ReciprocalCurveEvaluatesPlainCrossfadeMatchingVegasProMeasurements()
+    {
+        var media = new MediaAsset { Path = Path.GetFullPath("overlap.avi"), HasVideo = true, DurationSeconds = 10 };
+        var outgoing = new TimelineClip { MediaId = media.Id, StartFrame = 0, DurationFrames = 90, FadeOutFrames = 30 };
+        var incoming = new TimelineClip { MediaId = media.Id, StartFrame = 60, DurationFrames = 90, FadeInFrames = 30,
+            FadeInCurve = VideoFadeCurve.Linear, FadeInReciprocalCurve = VideoFadeCurve.Fast };
+        var editor = new TimelineEditor(new() { Media = [media], Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming] }] });
+
+        // Offsets 8, 15, 22 into the 30-frame overlap (frames 68, 75, 82)
+        var points = new[] { 68, 75, 82 };
+        var expectedAlphas = new[] { 205, 191, 205 };
+
+        for (var i = 0; i < points.Length; i++)
+        {
+            var layers = TimelineEvaluator.Evaluate(editor.Project, points[i]).Video;
+            Assert.Equal(2, layers.Count);
+            var dissolve = Assert.IsType<EvaluatedDissolve>(layers[0].Dissolve);
+            Assert.Same(dissolve, layers[1].Dissolve);
+            var progress = (points[i] - 60) / 30.0;
+            var expectedIn = progress;
+            var expectedOut = (1 - progress) * (1 - progress);
+            Assert.Equal(expectedIn, dissolve.IncomingWeight!.Value, 12);
+            Assert.Equal(expectedOut, dissolve.OutgoingWeight!.Value, 12);
+
+            var totalWeight = expectedIn + expectedOut;
+            Assert.Equal(expectedAlphas[i], (int)Math.Round(totalWeight * 255));
+        }
+    }
+
+    [Fact]
+    public void SetVideoFadeCurveWithReciprocalUpdatesAndUndoes()
+    {
+        var (editor, clip) = Create(VideoFadeCurve.Linear);
+        clip.FadeInTransition = new VideoTransition();
+
+        editor.SetVideoFadeCurve(clip.Id, VideoFadeCurve.Smooth, VideoFadeCurve.Sharp, fadeOut: false);
+        var updated = editor.Project.Tracks[0].Clips[0];
+        Assert.Equal(VideoFadeCurve.Smooth, updated.FadeInCurve);
+        Assert.Equal(VideoFadeCurve.Sharp, updated.FadeInReciprocalCurve);
+        Assert.Null(updated.FadeInTransition);
+
+        Assert.True(editor.Undo());
+        var reverted = editor.Project.Tracks[0].Clips[0];
+        Assert.Equal(VideoFadeCurve.Linear, reverted.FadeInCurve);
+        Assert.Equal(VideoFadeCurve.Linear, reverted.FadeInReciprocalCurve);
+        Assert.NotNull(reverted.FadeInTransition);
+
+        Assert.True(editor.Redo());
+        var redone = editor.Project.Tracks[0].Clips[0];
+        Assert.Equal(VideoFadeCurve.Smooth, redone.FadeInCurve);
+        Assert.Equal(VideoFadeCurve.Sharp, redone.FadeInReciprocalCurve);
+        Assert.Null(redone.FadeInTransition);
+    }
 }

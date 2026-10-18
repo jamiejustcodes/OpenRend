@@ -90,7 +90,9 @@ public sealed class ProjectDocument
                 if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null))
                     throw new InvalidDataException("Video transitions require a video clip.");
                 if (!Enum.IsDefined(clip.FadeInCurve) || !Enum.IsDefined(clip.FadeOutCurve) ||
-                    track.Kind != TrackKind.Video && (clip.FadeInCurve != VideoFadeCurve.Linear || clip.FadeOutCurve != VideoFadeCurve.Linear))
+                    !Enum.IsDefined(clip.FadeInReciprocalCurve) || !Enum.IsDefined(clip.FadeOutReciprocalCurve) ||
+                    track.Kind != TrackKind.Video && (clip.FadeInCurve != VideoFadeCurve.Linear || clip.FadeOutCurve != VideoFadeCurve.Linear ||
+                        clip.FadeInReciprocalCurve != VideoFadeCurve.Linear || clip.FadeOutReciprocalCurve != VideoFadeCurve.Linear))
                     throw new InvalidDataException("Video fade curves require a video clip and a supported shape.");
                 clip.FadeInTransition?.Validate();
                 clip.FadeOutTransition?.Validate();
@@ -160,6 +162,8 @@ public sealed class TimelineClip
     public long FadeOutFrames { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeInCurve { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeOutCurve { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeInReciprocalCurve { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeOutReciprocalCurve { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeInTransition { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeOutTransition { get; set; }
     public long FadeOffsetFrames { get; set; }

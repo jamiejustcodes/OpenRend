@@ -9,7 +9,7 @@ public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, Media
     // Dissolve participants form one composite group; scalar opacity alone cannot describe source coverage.
     public EvaluatedDissolve? Dissolve { get; init; }
 }
-public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress);
+public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress, double? OutgoingWeight = null, double? IncomingWeight = null);
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
 
 public static class TimelineEvaluator
@@ -49,11 +49,17 @@ public static class TimelineEvaluator
                         !media.TryGetValue(incoming.MediaId, out var incomingAsset) || !incomingAsset.HasVideo ||
                         ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
                     var progress = (double)incomingPosition / incoming.FadeInFrames;
-                    var incomingAlpha = track.Opacity * incoming.Opacity * progress;
-                    // Compensate for the incoming alpha-over pass so lower tracks remain visible at the linear blend weight.
-                    transitionOpacity[outgoing.Id] = (1 - progress) / (1 - incomingAlpha);
-                    transitionOpacity[incoming.Id] = progress;
-                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress);
+                    var inWeight = incoming.FadeInTransition is null
+                        ? VideoFadeInterpolation.Evaluate(incoming.FadeInCurve, progress)
+                        : progress;
+                    var outWeight = incoming.FadeInTransition is null
+                        ? 1 - VideoFadeInterpolation.Evaluate(incoming.FadeInReciprocalCurve, progress)
+                        : 1 - progress;
+                    var incomingAlpha = track.Opacity * incoming.Opacity * inWeight;
+                    // Compensate for the incoming alpha-over pass so lower tracks remain visible at the blend weight.
+                    transitionOpacity[outgoing.Id] = incomingAlpha >= 1 ? 0 : outWeight / (1 - incomingAlpha);
+                    transitionOpacity[incoming.Id] = inWeight;
+                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress, outWeight, inWeight);
                     dissolves[outgoing.Id] = dissolve;
                     dissolves[incoming.Id] = dissolve;
                 }
