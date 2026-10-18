@@ -39,6 +39,17 @@ internal static partial class VideoEffectProcessor
         VideoEffectKind.AiUpscale => effect.GetParameter("Scaling") == 1 && effect.GetParameter("ImproveSharpness") == 0,
         VideoEffectKind.AiZDepth => effect.GetParameter("Visualization") == 0 && effect.GetParameter("DepthMin") == 0 && effect.GetParameter("DepthMax") == 1 && effect.GetParameter("Invert") == 0,
         VideoEffectKind.AiSmartMask => effect.GetParameter("Visualization") == 0 && effect.GetParameter("Confidence") == 0 && effect.GetParameter("Invert") == 0,
+        VideoEffectKind.ColorGrading =>
+            effect.GetParameter("Lift_R") == 0 && effect.GetParameter("Lift_G") == 0 && effect.GetParameter("Lift_B") == 0 && effect.GetParameter("Lift_Y") == 0 &&
+            effect.GetParameter("Gamma_R") == 1 && effect.GetParameter("Gamma_G") == 1 && effect.GetParameter("Gamma_B") == 1 && effect.GetParameter("Gamma_Y") == 1 &&
+            effect.GetParameter("Gain_R") == 1 && effect.GetParameter("Gain_G") == 1 && effect.GetParameter("Gain_B") == 1 && effect.GetParameter("Gain_Y") == 1 &&
+            effect.GetParameter("Offset_R") == 0 && effect.GetParameter("Offset_G") == 0 && effect.GetParameter("Offset_B") == 0 && effect.GetParameter("Offset_Y") == 0 &&
+            effect.GetParameter("ExposureLnAdjust") == 0 && effect.GetParameter("BrightnessAdjust") == 0 && effect.GetParameter("ContrastAdjust") == 0 && effect.GetParameter("SaturationAdjust") == 1 &&
+            effect.GetParameter("TemperatureAdjust") == 0 && effect.GetParameter("TintAdjust") == 0 &&
+            effect.GetParameter("InMinAdjust") == 0 && effect.GetParameter("InMaxAdjust") == 1 && effect.GetParameter("OutMinAdjust") == 0 && effect.GetParameter("OutMaxAdjust") == 1 &&
+            effect.GetParameter("HueAdjust") == 0 && effect.GetParameter("SatAdjust") == 1 && effect.GetParameter("ValAdjust") == 1 &&
+            (effect.Lut is null || effect.GetParameter("LUTGain_0") == 0 || effect.GetParameter("LUTEnable_0") == 1) &&
+            (effect.LookLut is null || effect.GetParameter("LUTGain_1") == 0 || effect.GetParameter("LUTEnable_1") == 1),
         _ => false
     };
 
@@ -60,6 +71,7 @@ internal static partial class VideoEffectProcessor
             var amount = effect.Amount;
             switch (effect.Kind)
             {
+                case VideoEffectKind.ColorGrading: output = ApplyColorGrading(output, effect); break;
                 case VideoEffectKind.Lut3D: output = ApplyLut(output, effect.Lut!, amount, P("Interpolation") == 1); break;
                 case VideoEffectKind.GaussianBlur:
                 case VideoEffectKind.QuickBlur:

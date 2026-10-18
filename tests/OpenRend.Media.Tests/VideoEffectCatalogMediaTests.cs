@@ -51,6 +51,7 @@ public sealed class VideoEffectCatalogMediaTests(MediaFixture fixture) : IClassF
             case VideoEffectKind.AiColorization: effect.SetParameter("ColorShiftA", .5); break;
             case VideoEffectKind.AiZDepth: effect.SetParameter("Visualization", 2); break;
             case VideoEffectKind.AiSmartMask: effect.SetParameter("Visualization", 1); break;
+            case VideoEffectKind.ColorGrading: effect.SetParameter("ExposureLnAdjust", 1); break;
             case VideoEffectKind.Lut3D:
                 effect.Lut = CubeLutParser.Parse("LUT_3D_SIZE 2\n0 0 0\n0 0 1\n0 1 0\n0 1 1\n1 0 0\n1 0 1\n1 1 0\n1 1 1\n");
                 break;
