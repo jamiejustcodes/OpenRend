@@ -122,11 +122,15 @@ public partial class MainWindow : Window
             vm.Editor.SetVideoSourceMode(id, mode);
             vm.Status = mode == VideoSourceMode.Loop ? "Video event looping enabled." : "Video event holds its last frame beyond the source.";
         });
-        Timeline.VideoFadeCurveRequested += (id, curve, fadeOut) => Guard(() =>
+        Timeline.VideoFadeCurveRequested += (id, curve, reciprocal, fadeOut) => Guard(() =>
         {
             Pause();
-            vm.Editor.SetVideoFadeCurve(id, curve, fadeOut);
-            vm.Status = fadeOut ? $"Video fade-out curve set to {curve}." : $"Video fade-in curve set to {curve}.";
+            vm.Editor.SetVideoFadeCurve(id, curve, reciprocal, fadeOut);
+            vm.Status = fadeOut
+                ? $"Video fade-out curve set to {curve}."
+                : reciprocal.HasValue && reciprocal.Value != curve
+                    ? $"Video crossfade curve set to In {curve}, Out {reciprocal.Value}."
+                    : $"Video fade-in curve set to {curve}.";
         });
         Timeline.VideoEventActionRequested += async (id, action) =>
         {

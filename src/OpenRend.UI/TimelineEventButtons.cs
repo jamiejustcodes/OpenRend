@@ -156,7 +156,7 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(fadeInCurves, "FadeInCurveMenu");
         var fadeOutCurves = new MenuItem { Header = "Fade Out Curve" };
         AutomationProperties.SetAutomationId(fadeOutCurves, "FadeOutCurveMenu");
-        foreach (var curve in (VideoFadeCurve[])Enum.GetValues(typeof(VideoFadeCurve)))
+        foreach (var curve in FadeCurveOrder)
         {
             var inItem = new MenuItem { Header = curve.ToString(), IsCheckable = true };
             AutomationProperties.SetAutomationId(inItem, $"FadeInCurve_{curve}");
@@ -166,7 +166,7 @@ public sealed partial class TimelineView
                 var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
                     .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
                 if (IsEnabled && events.Length == 1)
-                    VideoFadeCurveRequested?.Invoke(events[0].Id, inCurve, false);
+                    VideoFadeCurveRequested?.Invoke(events[0].Id, inCurve, null, false);
             };
             fadeInCurves.Items.Add(inItem);
 
@@ -178,12 +178,52 @@ public sealed partial class TimelineView
                 var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
                     .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
                 if (IsEnabled && events.Length == 1)
-                    VideoFadeCurveRequested?.Invoke(events[0].Id, outCurve, true);
+                    VideoFadeCurveRequested?.Invoke(events[0].Id, outCurve, null, true);
             };
             fadeOutCurves.Items.Add(outItem);
         }
+
+        var fadeType = new MenuItem { Header = "Fade Type" };
+        AutomationProperties.SetAutomationId(fadeType, "FadeTypeMenu");
+        var fadeTypeGrid = new UniformGrid { Rows = 5, Columns = 5, Margin = new Thickness(4) };
+        var fadeTypeButtons = new (Button Button, VideoFadeCurve InCurve, VideoFadeCurve OutRecipCurve)[25];
+        var cellIndex = 0;
+        for (var r = 0; r < 5; r++)
+        {
+            var outRecip = FadeCurveOrder[r];
+            for (var c = 0; c < 5; c++)
+            {
+                var inCurve = FadeCurveOrder[c];
+                var btn = new Button
+                {
+                    Width = 32,
+                    Height = 28,
+                    Margin = new Thickness(1),
+                    Background = new SolidColorBrush(Color.FromRgb(35, 35, 35)),
+                    BorderBrush = new SolidColorBrush(Color.FromRgb(70, 70, 70)),
+                    BorderThickness = new Thickness(1),
+                    ToolTip = $"In: {inCurve}, Out: {outRecip}",
+                    Content = CreateFadeThumbnail(inCurve, outRecip)
+                };
+                AutomationProperties.SetAutomationId(btn, $"FadeType_{outRecip}_{inCurve}");
+                AutomationProperties.SetName(btn, $"Fade Type In {inCurve} Out {outRecip}");
+                btn.Click += (_, _) =>
+                {
+                    menu.IsOpen = false;
+                    var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                        .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                    if (IsEnabled && events.Length == 1)
+                        VideoFadeCurveRequested?.Invoke(events[0].Id, inCurve, outRecip, false);
+                };
+                fadeTypeButtons[cellIndex++] = (btn, inCurve, outRecip);
+                fadeTypeGrid.Children.Add(btn);
+            }
+        }
+        fadeType.Items.Add(fadeTypeGrid);
+
         menu.Items.Add(fadeInCurves);
         menu.Items.Add(fadeOutCurves);
+        menu.Items.Add(fadeType);
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
@@ -212,12 +252,23 @@ public sealed partial class TimelineView
             fadeInCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             fadeOutCurves.Visibility = hasFadeOut ? Visibility.Visible : Visibility.Collapsed;
             fadeOutCurves.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            fadeType.Visibility = hasFadeIn ? Visibility.Visible : Visibility.Collapsed;
+            fadeType.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             if (video.Length == 1)
             {
                 foreach (MenuItem item in fadeInCurves.Items)
                     item.IsChecked = item.Header.ToString() == video[0].Clip.FadeInCurve.ToString();
                 foreach (MenuItem item in fadeOutCurves.Items)
                     item.IsChecked = item.Header.ToString() == video[0].Clip.FadeOutCurve.ToString();
+                var currentIn = video[0].Clip.FadeInCurve;
+                var currentRecip = video[0].Clip.FadeInReciprocalCurve;
+                var isPlain = video[0].Clip.FadeInTransition is null;
+                foreach (var (btn, inC, outR) in fadeTypeButtons)
+                {
+                    var isCurrent = isPlain && inC == currentIn && outR == currentRecip;
+                    btn.BorderBrush = isCurrent ? new SolidColorBrush(Color.FromRgb(200, 144, 0)) : new SolidColorBrush(Color.FromRgb(70, 70, 70));
+                    btn.BorderThickness = isCurrent ? new Thickness(2) : new Thickness(1);
+                }
             }
             split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
@@ -285,5 +336,56 @@ public sealed partial class TimelineView
         dc.DrawLine(pen, new Point(x, y + 10), new Point(x + 12, y));
         dc.DrawLine(pen, new Point(x, y), new Point(x, y + 10));
         dc.DrawLine(pen, new Point(x + 12, y), new Point(x + 12, y + 10));
+    }
+
+    private static readonly VideoFadeCurve[] FadeCurveOrder =
+    [
+        VideoFadeCurve.Linear,
+        VideoFadeCurve.Fast,
+        VideoFadeCurve.Slow,
+        VideoFadeCurve.Smooth,
+        VideoFadeCurve.Sharp
+    ];
+
+    private static Image CreateFadeThumbnail(VideoFadeCurve inCurve, VideoFadeCurve outRecip)
+    {
+        var group = new DrawingGroup();
+        group.Children.Add(new GeometryDrawing(
+            new SolidColorBrush(Color.FromRgb(25, 25, 25)),
+            null,
+            new RectangleGeometry(new Rect(0, 0, 28, 22))));
+
+        var outGeo = new StreamGeometry();
+        using (var ctx = outGeo.Open())
+        {
+            ctx.BeginFigure(new Point(3, 3), false, false);
+            for (var i = 1; i <= 10; i++)
+            {
+                var t = i / 10.0;
+                var x = 3 + 22 * t;
+                var y = 3 + 16 * VideoFadeInterpolation.Evaluate(outRecip, t);
+                ctx.LineTo(new Point(x, y), true, false);
+            }
+        }
+        outGeo.Freeze();
+        group.Children.Add(new GeometryDrawing(null, new Pen(new SolidColorBrush(Color.FromRgb(74, 144, 226)), 1.5), outGeo));
+
+        var inGeo = new StreamGeometry();
+        using (var ctx = inGeo.Open())
+        {
+            ctx.BeginFigure(new Point(3, 19), false, false);
+            for (var i = 1; i <= 10; i++)
+            {
+                var t = i / 10.0;
+                var x = 3 + 22 * t;
+                var y = 19 - 16 * VideoFadeInterpolation.Evaluate(inCurve, t);
+                ctx.LineTo(new Point(x, y), true, false);
+            }
+        }
+        inGeo.Freeze();
+        group.Children.Add(new GeometryDrawing(null, new Pen(new SolidColorBrush(Color.FromRgb(0, 210, 255)), 1.5), inGeo));
+        group.Freeze();
+
+        return new Image { Source = new DrawingImage(group), Width = 28, Height = 22, IsHitTestVisible = false };
     }
 }
