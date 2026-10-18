@@ -338,4 +338,80 @@ public sealed class TimelineTests
         Assert.Equal(80, editor.SnapFrame(78, 3, clip.Id));
         Assert.Equal(0, editor.SnapFrame(-2, 3));
     }
+
+    [Fact]
+    public void MoveSelectionToNewTrackCreatesNewLayerAndMovesPrimaryClipWithUndoRedo()
+    {
+        var (editor, media, track) = Create();
+        var clip = editor.PlaceClip(media.Id, track.Id, 10, 60);
+        Assert.Single(editor.Project.Tracks);
+        Assert.Contains(clip, track.Clips);
+
+        var newTrack = editor.MoveSelectionToNewTrack([clip.Id], clip.Id, 1, TrackKind.Video, 25);
+        Assert.NotNull(newTrack);
+        Assert.Equal(TrackKind.Video, newTrack.Kind);
+        Assert.Equal("Video 2", newTrack.Name);
+        Assert.Equal(2, editor.Project.Tracks.Count);
+        Assert.Empty(track.Clips);
+        Assert.Contains(clip, newTrack.Clips);
+        Assert.Equal(25, clip.StartFrame);
+
+        // Undo restores original single track and clip position
+        Assert.True(editor.Undo());
+        Assert.Single(editor.Project.Tracks);
+        Assert.Equal(track.Id, editor.Project.Tracks[0].Id);
+        Assert.Single(editor.Project.Tracks[0].Clips);
+        Assert.Equal(10, editor.Project.Tracks[0].Clips[0].StartFrame);
+
+        // Redo re-creates the track and moved clip
+        Assert.True(editor.Redo());
+        Assert.Equal(2, editor.Project.Tracks.Count);
+        Assert.Equal(25, editor.Project.Tracks[1].Clips[0].StartFrame);
+    }
+
+    [Fact]
+    public void MoveSelectionToNewTrackSyncsLinkedClipsHorizontally()
+    {
+        var editor = new TimelineEditor(new ProjectDocument());
+        var media = new MediaAsset { Path = "test.mp4", DurationSeconds = 10, HasVideo = true, HasAudio = true };
+        editor.AddMedia(media);
+        var videoTrack = editor.AddTrack(TrackKind.Video);
+        var audioTrack = editor.AddTrack(TrackKind.Audio);
+        var videoClip = editor.PlaceClip(media.Id, videoTrack.Id, 10, 60);
+        var audioClip = editor.PlaceClip(media.Id, audioTrack.Id, 10, 60);
+        editor.LinkClips([videoClip.Id, audioClip.Id]);
+
+        // Drag video clip down to create a new video layer at index 1 (between video and audio)
+        var newTrack = editor.MoveSelectionToNewTrack([videoClip.Id], videoClip.Id, 1, TrackKind.Video, 30);
+        Assert.Equal(3, editor.Project.Tracks.Count);
+        Assert.Equal(newTrack.Id, editor.Project.Tracks[1].Id);
+        Assert.Contains(videoClip, newTrack.Clips);
+        Assert.Equal(30, videoClip.StartFrame);
+
+        // Linked audio clip is still on the audio track, but shifted horizontally in sync!
+        Assert.Contains(audioClip, audioTrack.Clips);
+        Assert.Equal(30, audioClip.StartFrame);
+    }
+
+    [Fact]
+    public void MoveSelectionToNewTrackRejectsIncompatibleMediaAndLockedClips()
+    {
+        var editor = new TimelineEditor(new ProjectDocument());
+        var videoMedia = new MediaAsset { Path = "test.mp4", DurationSeconds = 10, HasVideo = true, HasAudio = false };
+        var audioMedia = new MediaAsset { Path = "test.wav", DurationSeconds = 10, HasVideo = false, HasAudio = true };
+        editor.AddMedia(videoMedia);
+        editor.AddMedia(audioMedia);
+        var videoTrack = editor.AddTrack(TrackKind.Video);
+        var audioTrack = editor.AddTrack(TrackKind.Audio);
+        var videoClip = editor.PlaceClip(videoMedia.Id, videoTrack.Id, 0, 60);
+        var audioClip = editor.PlaceClip(audioMedia.Id, audioTrack.Id, 0, 60);
+
+        // Cannot move audio media to video track or video media to audio track
+        Assert.Throws<InvalidOperationException>(() => editor.MoveSelectionToNewTrack([audioClip.Id], audioClip.Id, 0, TrackKind.Video, 10));
+        Assert.Throws<InvalidOperationException>(() => editor.MoveSelectionToNewTrack([videoClip.Id], videoClip.Id, 1, TrackKind.Audio, 10));
+
+        // Locked clip rejection
+        editor.SetClipLock(videoClip.Id, true);
+        Assert.Throws<InvalidOperationException>(() => editor.MoveSelectionToNewTrack([videoClip.Id], videoClip.Id, 1, TrackKind.Video, 10));
+    }
 }

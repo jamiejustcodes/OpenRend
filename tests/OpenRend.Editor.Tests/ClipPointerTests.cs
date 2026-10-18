@@ -134,4 +134,17 @@ public sealed class ClipPointerTests
         Assert.Equal(incoming.Id, target.IncomingClipId);
         Assert.Null(view.TransitionAt(new Point(cutX + 7, 80), new VideoTransition()));
     });
+
+    [Fact]
+    public void CtrlShiftMDoesNotSwallowShortcutAllowingAudioMute() => Sta(() =>
+    {
+        var (view, _, _) = Create();
+        // Shift+M without Ctrl triggers Solo on the timeline track
+        Assert.True(view.HandleKeyboardInput(Key.M, ModifierKeys.Shift));
+        // M without Ctrl triggers Mute on the timeline track
+        Assert.True(view.HandleKeyboardInput(Key.M, ModifierKeys.None));
+        // Ctrl+Shift+M is not handled by the timeline view, so it propagates to MainWindow for audio mute
+        Assert.False(view.HandleKeyboardInput(Key.M, ModifierKeys.Control | ModifierKeys.Shift));
+        Assert.False(view.HandleKeyboardInput(Key.M, ModifierKeys.Control));
+    });
 }

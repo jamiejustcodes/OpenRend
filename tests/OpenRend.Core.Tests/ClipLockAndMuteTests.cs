@@ -127,4 +127,35 @@ public sealed class ClipLockAndMuteTests
             if (File.Exists(tempPath)) File.Delete(tempPath);
         }
     }
+
+    [Fact]
+    public void MutingAudioWithIgnoreGroupsLeavesLinkedVideoUnmutedAndEvaluated()
+    {
+        var media = new MediaAsset { Path = Path.GetFullPath("test_av.mp4"), HasVideo = true, HasAudio = true, DurationSeconds = 10 };
+        var videoClip = new TimelineClip { MediaId = media.Id, StartFrame = 0, DurationFrames = 90 };
+        var audioClip = new TimelineClip { MediaId = media.Id, StartFrame = 0, DurationFrames = 90 };
+        var videoTrack = new TimelineTrack { Kind = TrackKind.Video, Clips = [videoClip] };
+        var audioTrack = new TimelineTrack { Kind = TrackKind.Audio, Clips = [audioClip] };
+        var project = new ProjectDocument
+        {
+            Media = [media],
+            Tracks = [videoTrack, audioTrack]
+        };
+        project.Validate();
+        var editor = new TimelineEditor(project);
+        editor.LinkClips([videoClip.Id, audioClip.Id]);
+        Assert.NotNull(videoClip.GroupId);
+        Assert.Equal(videoClip.GroupId, audioClip.GroupId);
+
+        // Mute audio with ignoreGroups: true (the Ctrl+Shift+M / MuteAudio button workflow)
+        editor.SetSelectionMute([audioClip.Id], true, ignoreGroups: true);
+        Assert.True(audioClip.IsMuted);
+        Assert.False(videoClip.IsMuted);
+
+        // Timeline evaluation: video is present, audio is empty
+        var evaluated = TimelineEvaluator.Evaluate(project, 15);
+        Assert.Single(evaluated.Video);
+        Assert.Equal(videoClip.Id, evaluated.Video[0].Clip.Id);
+        Assert.Empty(evaluated.Audio);
+    }
 }
