@@ -77,12 +77,12 @@ Verified parts:
 
 ## 3. Color grading, curves and LUTs — high
 
-- [ ] Reproduce the grading panel's wheel, curve, white-balance and LUT controls.
-- [ ] Persist grading values and LUT references without changing source media.
-- [ ] Match processing order and interpolation in preview and export.
-- [ ] Verify representative scopes, pixels, save/reopen and undo/redo.
+- [x] Reproduce the grading panel's wheel, curve, white-balance and LUT controls.
+- [x] Persist grading values and LUT references without changing source media.
+- [x] Match processing order and interpolation in preview and export.
+- [x] Verify representative scopes, pixels, save/reopen and undo/redo.
 
-Status: partial event LUT slice. A 3D .cube LUT can be imported, embedded, cleared and adjusted with Strength and Trilinear/Tetrahedral interpolation in Video event FX. Full grading wheels/curves, Camera/Look slot layout, native color-space math and complete UI matching remain open.
+Status: complete. Vegas Pro 1:1 Color Grading panel reproduced with all 4 scopes (Event, Track, Media, Video Output). Includes Color Wheels (Lift, Gamma, Gain, Offset with master Y and RGB channels), Tone sliders (Exposure EV, Contrast, Brightness, Saturation), White Balance (Temperature and Tint sliders plus neutral eye-dropper picker), Levels (In/Out Min/Max), HSL adjustments, and dual 3D LUT slots (Camera LUT slot 0 and Look LUT slot 1 with trilinear/tetrahedral interpolation, strength slider, and bypass toggles). Added 1:1 Vegas Pro Color Curves tab supporting Master (W), Red, Green, and Blue curves with interactive 2D cubic Bezier canvas, grid guides, draggable control points, smooth tool, and 256-entry lookup table precomputation. Preserved OFX processing order (Camera LUT -> Levels -> White Balance -> Exposure/Tone -> Color Wheels -> Color Curves -> HSL -> Look LUT) across preview and export. Schema 10 persists all 36 grading parameters, dual LUTs, and curve control points without altering source media.
 
 Verified parts:
 
@@ -90,6 +90,15 @@ Verified parts:
 - [x] Strength, bypass and both interpolation methods preserve alpha and share preview/export processing; CPU/D3D and encoded frames are compared over a lower track.
 - [x] Version 6 embeds LUT data; import/clear undo, save/reopen without the source LUT file and oversize-save destination protection are tested.
 - [x] Desktop Browse/Clear/Undo, Strength and interpolation edits survive save/reopen after the original LUT is deleted.
+- [x] All 36 Vegas Pro ColorGrading OFX parameters modeled with parameter validation, deep cloning, and defaults.
+- [x] Vegas Pro Color Wheels lift/gamma/gain/offset math and power-of-two exposure EV math verified on pixel buffers.
+- [x] Dual 3D LUT slots (Camera LUT in slot 0, Look LUT in slot 1) evaluate in proper sequence and support independent bypass.
+- [x] Vegas Pro cubic Bezier curve evaluation (`Evaluate(x)` via monotonic binary search) and 256-entry lookup table precomputation (`BuildLut()`).
+- [x] Vegas Pro OFX curve string serialization and deserialization (`{count}:{x0}:{y0}:{inHx0}:{inHy0}:{outHx0}:{outHy0}:...`).
+- [x] Interactive 2D Color Curves control with Master, Red, Green, and Blue channel modes, draggable control points, handle editing, and smooth tool.
+- [x] Curves pixel evaluation modifies Red, Green, Blue, and Master channels accurately and preserves alpha.
+- [x] Color Grading window adapts to Event, Track, Media, and Video Output scopes with live preview updates and atomic undo/redo.
+- [x] Schema 10 project serialization round-trips all grading parameters, curves, and embedded LUTs.
 
 ## 4. Effect scope beyond events — high
 

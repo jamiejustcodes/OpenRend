@@ -70,6 +70,9 @@
         <MenuItem x:Name="MediaEffectsMenu" Header="Media FX…" Click="MediaEffectsClick"/>
         <MenuItem x:Name="VideoOutputEffectsMenu" Header="Video Output FX…" Click="VideoOutputEffectsClick"/>
         <MenuItem x:Name="ColorGradingMenu" Header="Color Grading…" InputGestureText="Ctrl+Shift+G" Click="ColorGradingClick"/>
+        <MenuItem x:Name="VideoTrackColorGradingMenu" Header="Video Track Color Grading…" Click="VideoTrackColorGradingClick"/>
+        <MenuItem x:Name="MediaColorGradingMenu" Header="Media Color Grading…" Click="MediaColorGradingClick"/>
+        <MenuItem x:Name="VideoOutputColorGradingMenu" Header="Video Output Color Grading…" Click="VideoOutputColorGradingClick"/>
         <MenuItem Header="Clip properties" Click="ClipPropertiesClick"/>
         <Separator/>
         <MenuItem Header="Scene Detection…" Click="SceneDetectionClick"/>
@@ -116,6 +119,7 @@
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
+                      <MenuItem Header="Media Color Grading…" Click="MediaColorGradingClick"/>
                     </ContextMenu>
                   </ListBox.ContextMenu>
                   <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>

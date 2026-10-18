@@ -118,6 +118,7 @@ public partial class MainWindow : Window
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
+        Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
@@ -692,6 +693,23 @@ public partial class MainWindow : Window
         new VideoEffectsWindow(vm, EffectScope.Output, Guid.Empty) { Owner = this }.ShowDialog();
     });
     private void ColorGradingClick(object sender, RoutedEventArgs e) => OpenColorGrading();
+    private void VideoTrackColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var track = vm.Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
+        if (track is null) { vm.Status = "Create a video track before editing track color grading."; return; }
+        OpenTrackColorGrading(track.Id);
+    });
+    private void MediaColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var item = MediaList.SelectedItem as MediaItem ?? vm.Library.FirstOrDefault();
+        if (item is null) { vm.Status = "Select a media item to edit its color grading."; return; }
+        if (!item.Asset.HasVideo) { vm.Status = "Select a video media asset to edit its color grading."; return; }
+        OpenMediaColorGrading(item.Asset.Id);
+    });
+    private void VideoOutputColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        OpenVideoOutputColorGrading();
+    });
     private void OpenColorGrading(Guid? requestedClip = null) => Guard(() =>
     {
         var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
@@ -700,12 +718,27 @@ public partial class MainWindow : Window
         if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
         Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
         var clipId = selected[0].Clip.Id;
-        var effect = selected[0].Clip.VideoEffects.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
-        if (effect is null)
-        {
-            effect = vm.Editor.AddVideoEffect(clipId, VideoEffectKind.ColorGrading);
-        }
-        new ColorGradingWindow(vm, clipId, effect.Id, () => RequestPreview()) { Owner = this }.ShowDialog();
+        new ColorGradingWindow(vm, EffectScope.Event, clipId, null, () => RequestPreview()) { Owner = this }.ShowDialog();
+    });
+    private void OpenTrackColorGrading(Guid trackId) => Guard(() =>
+    {
+        var track = vm.Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+        if (track is null) return;
+        if (track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
+        Pause(); RequestPreview();
+        new ColorGradingWindow(vm, EffectScope.Track, trackId, null, () => RequestPreview()) { Owner = this }.ShowDialog();
+    });
+    private void OpenMediaColorGrading(Guid mediaId) => Guard(() =>
+    {
+        var asset = vm.Project.Media.FirstOrDefault(m => m.Id == mediaId);
+        if (asset is null) return;
+        Pause(); RequestPreview();
+        new ColorGradingWindow(vm, EffectScope.Media, mediaId, null, () => RequestPreview()) { Owner = this }.ShowDialog();
+    });
+    private void OpenVideoOutputColorGrading() => Guard(() =>
+    {
+        Pause(); RequestPreview();
+        new ColorGradingWindow(vm, EffectScope.Output, Guid.Empty, null, () => RequestPreview()) { Owner = this }.ShowDialog();
     });
     private void AiTextToSpeechClick(object sender, RoutedEventArgs e) => Guard(() =>
     {

@@ -13,13 +13,15 @@ namespace OpenRend.App;
 /// <summary>
 /// Vegas Pro 1:1 Color Grading panel.
 /// Provides interactive 2D color wheels (Lift, Gamma, Gain, Offset), Tone &amp; Levels,
-/// White Balance &amp; HSL, and dual LUT slots (Camera &amp; Look) with real-time preview and full Undo/Redo.
+/// White Balance &amp; HSL with eye-dropper picker, interactive 2D RGB/Master Curves canvas,
+/// and dual LUT slots (Camera &amp; Look) across Event, Track, Media, and Video Output scopes.
 /// </summary>
 public sealed class ColorGradingWindow : Window
 {
     private readonly EditorViewModel vm;
-    private readonly Guid targetClipId;
-    private readonly Guid targetEffectId;
+    private EffectScope scope;
+    private Guid targetId;
+    private Guid targetEffectId;
     private readonly Action? onPreviewRequest;
 
     private bool updating;
@@ -28,6 +30,7 @@ public sealed class ColorGradingWindow : Window
     private readonly Button tabWheelsBtn;
     private readonly Button tabToneLevelsBtn;
     private readonly Button tabWbHslBtn;
+    private readonly Button tabCurvesBtn;
     private readonly Button tabLutsBtn;
     private readonly ToggleButton bypassToggle;
     private readonly Button resetAllBtn;
@@ -39,6 +42,7 @@ public sealed class ColorGradingWindow : Window
     private readonly Grid wheelsPage;
     private readonly Grid toneLevelsPage;
     private readonly Grid wbHslPage;
+    private readonly Grid curvesPage;
     private readonly Grid lutsPage;
 
     // Color Wheels
@@ -74,6 +78,10 @@ public sealed class ColorGradingWindow : Window
     private readonly Slider hueSlider, satHslSlider, valHslSlider;
     private readonly TextBlock hueVal, satHslVal, valHslVal;
 
+    // Curves Control
+    private readonly ColorCurvesControl curvesControl;
+    private readonly TextBlock curveReadout;
+
     // LUT Slots
     private readonly TextBlock cameraLutPathText;
     private readonly Slider cameraLutStrengthSlider;
@@ -87,54 +95,85 @@ public sealed class ColorGradingWindow : Window
     private readonly ComboBox lookLutInterpCombo;
     private readonly CheckBox lookLutBypassCheck;
 
-    private TimelineClip? TargetClip =>
-        vm.Editor.Project.Tracks.Where(t => t.Kind == TrackKind.Video)
-            .SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == targetClipId);
+    private TimelineClip? TargetClip => scope == EffectScope.Event
+        ? vm.Editor.Project.Tracks.Where(t => t.Kind == TrackKind.Video)
+            .SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == targetId)
+        : null;
+
+    private TimelineTrack? TargetTrack => scope == EffectScope.Track
+        ? vm.Editor.Project.Tracks.FirstOrDefault(t => t.Id == targetId)
+        : null;
+
+    private MediaAsset? TargetMedia => scope == EffectScope.Media
+        ? vm.Editor.Project.Media.FirstOrDefault(m => m.Id == targetId)
+        : null;
+
+    private List<VideoEffect>? TargetEffects => scope switch
+    {
+        EffectScope.Event => TargetClip?.VideoEffects,
+        EffectScope.Track => TargetTrack?.VideoEffects,
+        EffectScope.Media => TargetMedia?.VideoEffects,
+        EffectScope.Output => vm.Editor.Project.VideoOutputEffects,
+        _ => null
+    };
 
     private VideoEffect? TargetEffect =>
-        TargetClip?.VideoEffects.FirstOrDefault(e => e.Id == targetEffectId);
+        TargetEffects?.FirstOrDefault(e => e.Id == targetEffectId);
 
-    public ColorGradingWindow(EditorViewModel viewModel, Guid clipId, Guid effectId, Action? onPreview = null)
+    public ColorGradingWindow(EditorViewModel viewModel, EffectScope scope, Guid targetId, Guid? effectId = null, Action? onPreview = null)
     {
         vm = viewModel;
-        targetClipId = clipId;
-        targetEffectId = effectId;
+        this.scope = scope;
+        this.targetId = targetId;
         onPreviewRequest = onPreview;
 
+        // Ensure a ColorGrading effect exists on target scope
+        var existing = TargetEffects?.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
+        if (existing is null)
+        {
+            var added = vm.Editor.AddScopedVideoEffect(scope, targetId, VideoEffectKind.ColorGrading);
+            targetEffectId = added.Id;
+        }
+        else
+        {
+            targetEffectId = effectId ?? existing.Id;
+        }
+
         Style = (Style)FindResource(typeof(Window));
-        Title = $"Color Grading — {TargetClip?.Name ?? "Event"}";
-        Width = 780;
-        Height = 490;
-        MinWidth = 660;
-        MinHeight = 400;
+        UpdateWindowTitle();
+        Width = 840;
+        Height = 540;
+        MinWidth = 700;
+        MinHeight = 440;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         AutomationProperties.SetAutomationId(this, "ColorGradingWindow");
 
         var panelBrush = (Brush)FindResource("PanelBrush");
         var headerBrush = (Brush)FindResource("HeaderBrush");
-        var textBrush = (Brush)FindResource("TextBrush");
-        var subtleBrush = (Brush)FindResource("SubtleTextBrush");
 
         var root = new DockPanel { Background = panelBrush };
 
         // 1. Top Toolbar
-        var topBar = new DockPanel { Background = headerBrush, Height = 34 };
+        var topBar = new DockPanel { Background = headerBrush, Height = 36 };
         DockPanel.SetDock(topBar, Dock.Top);
 
         var navPanel = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
         tabWheelsBtn = MakeNavButton("Color Wheels", "Tab_ColorWheels", true);
         tabToneLevelsBtn = MakeNavButton("Tone & Levels", "Tab_ToneLevels", false);
         tabWbHslBtn = MakeNavButton("White Balance & HSL", "Tab_WhiteBalanceHSL", false);
+        tabCurvesBtn = MakeNavButton("Curves", "Tab_Curves", false);
         tabLutsBtn = MakeNavButton("LUTs", "Tab_LUTs", false);
 
         tabWheelsBtn.Click += (_, _) => SelectPage(0);
         tabToneLevelsBtn.Click += (_, _) => SelectPage(1);
         tabWbHslBtn.Click += (_, _) => SelectPage(2);
-        tabLutsBtn.Click += (_, _) => SelectPage(3);
+        tabCurvesBtn.Click += (_, _) => SelectPage(3);
+        tabLutsBtn.Click += (_, _) => SelectPage(4);
 
         navPanel.Children.Add(tabWheelsBtn);
         navPanel.Children.Add(tabToneLevelsBtn);
         navPanel.Children.Add(tabWbHslBtn);
+        navPanel.Children.Add(tabCurvesBtn);
         navPanel.Children.Add(tabLutsBtn);
         topBar.Children.Add(navPanel);
 
@@ -187,7 +226,10 @@ public sealed class ColorGradingWindow : Window
             out hueSlider, out hueVal, out satHslSlider, out satHslVal,
             out valHslSlider, out valHslVal);
 
-        // Page 3: LUTs
+        // Page 3: Curves
+        curvesPage = CreateCurvesPage(out curvesControl, out curveReadout);
+
+        // Page 4: LUTs
         lutsPage = CreateLutsPage(
             out cameraLutPathText, out cameraLutStrengthSlider, out cameraLutStrengthVal,
             out cameraLutInterpCombo, out cameraLutBypassCheck,
@@ -197,6 +239,7 @@ public sealed class ColorGradingWindow : Window
         pageContainer.Children.Add(wheelsPage);
         pageContainer.Children.Add(toneLevelsPage);
         pageContainer.Children.Add(wbHslPage);
+        pageContainer.Children.Add(curvesPage);
         pageContainer.Children.Add(lutsPage);
 
         SelectPage(0);
@@ -205,6 +248,23 @@ public sealed class ColorGradingWindow : Window
         Content = root;
 
         UpdateControlsFromEffect();
+    }
+
+    public ColorGradingWindow(EditorViewModel viewModel, Guid clipId, Guid effectId, Action? onPreview = null)
+        : this(viewModel, EffectScope.Event, clipId, effectId, onPreview)
+    {
+    }
+
+    private void UpdateWindowTitle()
+    {
+        Title = scope switch
+        {
+            EffectScope.Event => $"Color Grading: Video Event FX — {TargetClip?.Name ?? "Event"}",
+            EffectScope.Track => $"Color Grading: Video Track FX — {TargetTrack?.Name ?? "Track"}",
+            EffectScope.Media => $"Color Grading: Media FX — {TargetMedia?.Name ?? "Media"}",
+            EffectScope.Output => "Color Grading: Video Output FX",
+            _ => "Color Grading"
+        };
     }
 
     private Button MakeNavButton(string text, string automationId, bool active)
@@ -238,12 +298,14 @@ public sealed class ColorGradingWindow : Window
         wheelsPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         toneLevelsPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         wbHslPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
-        lutsPage.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+        curvesPage.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
+        lutsPage.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
 
         tabWheelsBtn.FontWeight = index == 0 ? FontWeights.SemiBold : FontWeights.Normal;
         tabToneLevelsBtn.FontWeight = index == 1 ? FontWeights.SemiBold : FontWeights.Normal;
         tabWbHslBtn.FontWeight = index == 2 ? FontWeights.SemiBold : FontWeights.Normal;
-        tabLutsBtn.FontWeight = index == 3 ? FontWeights.SemiBold : FontWeights.Normal;
+        tabCurvesBtn.FontWeight = index == 3 ? FontWeights.SemiBold : FontWeights.Normal;
+        tabLutsBtn.FontWeight = index == 4 ? FontWeights.SemiBold : FontWeights.Normal;
     }
 
     // --- Page Builders ---
@@ -255,26 +317,23 @@ public sealed class ColorGradingWindow : Window
         out ColorGradingWheelControl ow, out Slider oy, out TextBlock or)
     {
         var grid = new Grid();
-        for (var i = 0; i < 4; i++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+        for (var i = 0; i < 4; i++)
+            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var c0 = CreateWheelCard("Lift (Shadows)", "ColorWheel_Lift", "Slider_Lift_Y", "Reset_Lift", -1, 1, 0, out lw, out ly, out lr, OnLiftWheelChanged, OnLiftYChanged, OnLiftReset);
-        var c1 = CreateWheelCard("Gamma (Midtones)", "ColorWheel_Gamma", "Slider_Gamma_Y", "Reset_Gamma", 0, 5, 1, out gw, out gy, out gr, OnGammaWheelChanged, OnGammaYChanged, OnGammaReset);
-        var c2 = CreateWheelCard("Gain (Highlights)", "ColorWheel_Gain", "Slider_Gain_Y", "Reset_Gain", 0, 2, 1, out hw, out hy, out hr, OnGainWheelChanged, OnGainYChanged, OnGainReset);
-        var c3 = CreateWheelCard("Offset", "ColorWheel_Offset", "Slider_Offset_Y", "Reset_Offset", -1, 1, 0, out ow, out oy, out or, OnOffsetWheelChanged, OnOffsetYChanged, OnOffsetReset);
-
-        Grid.SetColumn(c0, 0); grid.Children.Add(c0);
-        Grid.SetColumn(c1, 1); grid.Children.Add(c1);
-        Grid.SetColumn(c2, 2); grid.Children.Add(c2);
-        Grid.SetColumn(c3, 3); grid.Children.Add(c3);
+        grid.Children.Add(CreateSingleWheelCard("Lift (Shadows)", "Wheel_Lift", out lw, out ly, out lr, -1, 1, 0, OnLiftWheelChanged, OnLiftYChanged, OnLiftReset, 0));
+        grid.Children.Add(CreateSingleWheelCard("Gamma (Midtones)", "Wheel_Gamma", out gw, out gy, out gr, 0, 5, 1, OnGammaWheelChanged, OnGammaYChanged, OnGammaReset, 1));
+        grid.Children.Add(CreateSingleWheelCard("Gain (Highlights)", "Wheel_Gain", out hw, out hy, out hr, 0, 2, 1, OnGainWheelChanged, OnGainYChanged, OnGainReset, 2));
+        grid.Children.Add(CreateSingleWheelCard("Offset", "Wheel_Offset", out ow, out oy, out or, -1, 1, 0, OnOffsetWheelChanged, OnOffsetYChanged, OnOffsetReset, 3));
 
         return grid;
     }
 
-    private Border CreateWheelCard(
-        string title, string wheelAutoId, string sliderAutoId, string resetAutoId,
-        double yMin, double yMax, double yDef,
+    private FrameworkElement CreateSingleWheelCard(
+        string title, string automationPrefix,
         out ColorGradingWheelControl wheel, out Slider ySlider, out TextBlock readout,
-        Action<double, double> onWheel, Action<double> onY, Action onReset)
+        double minLuma, double maxLuma, double defLuma,
+        Action<double, double> onWheelChanged, Action<double> onLumaChanged, Action onReset,
+        int col)
     {
         var border = new Border
         {
@@ -286,69 +345,61 @@ public sealed class ColorGradingWindow : Window
             Padding = new Thickness(8)
         };
 
-        var panel = new DockPanel();
+        var stack = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
 
-        // Header: Title + Reset
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var titleBlock = new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush"), VerticalAlignment = VerticalAlignment.Center };
+        var topDock = new DockPanel { Width = 150, Margin = new Thickness(0, 0, 0, 4) };
+        topDock.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush"), VerticalAlignment = VerticalAlignment.Center });
         var resetBtn = new Button { Content = "Reset", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
-        AutomationProperties.SetAutomationId(resetBtn, resetAutoId);
+        AutomationProperties.SetAutomationId(resetBtn, $"{automationPrefix}_Reset");
         resetBtn.Click += (_, _) => onReset();
         DockPanel.SetDock(resetBtn, Dock.Right);
-        header.Children.Add(resetBtn);
-        header.Children.Add(titleBlock);
-        DockPanel.SetDock(header, Dock.Top);
-        panel.Children.Add(header);
+        topDock.Children.Add(resetBtn);
+        stack.Children.Add(topDock);
 
-        // Readout at bottom
+        wheel = new ColorGradingWheelControl { WheelName = title };
+        AutomationProperties.SetAutomationId(wheel, automationPrefix);
+        wheel.ValuesChanged += onWheelChanged;
+        stack.Children.Add(wheel);
+
+        var sliderDock = new DockPanel { Width = 150, Margin = new Thickness(0, 8, 0, 4) };
+        sliderDock.Children.Add(new TextBlock { Text = "Y", Width = 14, Foreground = (Brush)FindResource("SubtleTextBrush"), VerticalAlignment = VerticalAlignment.Center });
+        ySlider = new Slider
+        {
+            Minimum = minLuma,
+            Maximum = maxLuma,
+            Value = defLuma,
+            SmallChange = 0.01,
+            LargeChange = 0.1,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 0, 0)
+        };
+        AutomationProperties.SetAutomationId(ySlider, $"{automationPrefix}_Y");
+        var ys = ySlider;
+        ySlider.ValueChanged += (_, _) => onLumaChanged(ys.Value);
+        sliderDock.Children.Add(ySlider);
+        stack.Children.Add(sliderDock);
+
         readout = new TextBlock
         {
             Text = "R: 0.00  G: 0.00  B: 0.00  Y: 0.00",
             FontSize = 10,
             Foreground = (Brush)FindResource("SubtleTextBrush"),
             HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0)
+            Margin = new Thickness(0, 2, 0, 0)
         };
-        DockPanel.SetDock(readout, Dock.Bottom);
-        panel.Children.Add(readout);
+        AutomationProperties.SetAutomationId(readout, $"{automationPrefix}_Readout");
+        stack.Children.Add(readout);
 
-        // Center: Wheel + Vertical Y Slider
-        var centerGrid = new Grid { HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
-        centerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-        centerGrid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(28) });
-
-        wheel = new ColorGradingWheelControl { WheelName = title };
-        AutomationProperties.SetAutomationId(wheel, wheelAutoId);
-        wheel.ValuesChanged += onWheel;
-        Grid.SetColumn(wheel, 0);
-        centerGrid.Children.Add(wheel);
-
-        ySlider = new Slider
-        {
-            Orientation = Orientation.Vertical,
-            Minimum = yMin,
-            Maximum = yMax,
-            Value = yDef,
-            Height = 110,
-            Margin = new Thickness(4, 0, 0, 0),
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        AutomationProperties.SetAutomationId(ySlider, sliderAutoId);
-        var sliderRef = ySlider;
-        ySlider.ValueChanged += (_, _) => onY(sliderRef.Value);
-        Grid.SetColumn(ySlider, 1);
-        centerGrid.Children.Add(ySlider);
-
-        panel.Children.Add(centerGrid);
-        border.Child = panel;
+        border.Child = stack;
+        Grid.SetColumn(border, col);
         return border;
     }
 
     private Grid CreateToneLevelsPage(
         out Slider inMin, out TextBlock inMinV, out Slider inMax, out TextBlock inMaxV,
         out Slider outMin, out TextBlock outMinV, out Slider outMax, out TextBlock outMaxV,
-        out Slider exp, out TextBlock expV, out Slider br, out TextBlock brV,
-        out Slider ct, out TextBlock ctV, out Slider ctc, out TextBlock ctcV,
+        out Slider exp, out TextBlock expV, out Slider bri, out TextBlock briV,
+        out Slider con, out TextBlock conV, out Slider conCtr, out TextBlock conCtrV,
         out Slider sat, out TextBlock satV)
     {
         var grid = new Grid();
@@ -367,7 +418,7 @@ public sealed class ColorGradingWindow : Window
         };
         var levelsPanel = new StackPanel();
         var levelsHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
-        levelsHeader.Children.Add(new TextBlock { Text = "Levels", FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
+        levelsHeader.Children.Add(new TextBlock { Text = "Levels Adjust", FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
         var resetLevelsBtn = new Button { Content = "Reset Levels", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetLevelsBtn, "Reset_Levels");
         resetLevelsBtn.Click += (_, _) => OnResetLevelsClick();
@@ -375,10 +426,10 @@ public sealed class ColorGradingWindow : Window
         levelsHeader.Children.Add(resetLevelsBtn);
         levelsPanel.Children.Add(levelsHeader);
 
-        levelsPanel.Children.Add(MakeSliderRow("Input Min", "Slider_InputMin", 0, 1, 0, 0.01, out inMin, out inMinV, v => CommitSingleParam("InMinAdjust", v)));
-        levelsPanel.Children.Add(MakeSliderRow("Input Max", "Slider_InputMax", 0, 1, 1, 0.01, out inMax, out inMaxV, v => CommitSingleParam("InMaxAdjust", v)));
-        levelsPanel.Children.Add(MakeSliderRow("Output Min", "Slider_OutputMin", 0, 1, 0, 0.01, out outMin, out outMinV, v => CommitSingleParam("OutMinAdjust", v)));
-        levelsPanel.Children.Add(MakeSliderRow("Output Max", "Slider_OutputMax", 0, 1, 1, 0.01, out outMax, out outMaxV, v => CommitSingleParam("OutMaxAdjust", v)));
+        levelsPanel.Children.Add(MakeSliderRow("Input Min", "Slider_InMin", 0, 1, 0, 0.01, out inMin, out inMinV, v => CommitSingleParam("InMinAdjust", v)));
+        levelsPanel.Children.Add(MakeSliderRow("Input Max", "Slider_InMax", 0, 1, 1, 0.01, out inMax, out inMaxV, v => CommitSingleParam("InMaxAdjust", v)));
+        levelsPanel.Children.Add(MakeSliderRow("Output Min", "Slider_OutMin", 0, 1, 0, 0.01, out outMin, out outMinV, v => CommitSingleParam("OutMinAdjust", v)));
+        levelsPanel.Children.Add(MakeSliderRow("Output Max", "Slider_OutMax", 0, 1, 1, 0.01, out outMax, out outMaxV, v => CommitSingleParam("OutMaxAdjust", v)));
         levelsBorder.Child = levelsPanel;
         Grid.SetColumn(levelsBorder, 0);
         grid.Children.Add(levelsBorder);
@@ -395,7 +446,7 @@ public sealed class ColorGradingWindow : Window
         };
         var tonePanel = new StackPanel();
         var toneHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
-        toneHeader.Children.Add(new TextBlock { Text = "Tone & Exposure", FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
+        toneHeader.Children.Add(new TextBlock { Text = "Tone Adjust", FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
         var resetToneBtn = new Button { Content = "Reset Tone", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetToneBtn, "Reset_Tone");
         resetToneBtn.Click += (_, _) => OnResetToneClick();
@@ -403,10 +454,10 @@ public sealed class ColorGradingWindow : Window
         toneHeader.Children.Add(resetToneBtn);
         tonePanel.Children.Add(toneHeader);
 
-        tonePanel.Children.Add(MakeSliderRow("Exposure (EV)", "Slider_Exposure", -5, 5, 0, 0.05, out exp, out expV, v => CommitSingleParam("ExposureLnAdjust", v)));
-        tonePanel.Children.Add(MakeSliderRow("Brightness", "Slider_Brightness", -1, 1, 0, 0.01, out br, out brV, v => CommitSingleParam("BrightnessAdjust", v)));
-        tonePanel.Children.Add(MakeSliderRow("Contrast", "Slider_Contrast", -1, 1, 0, 0.01, out ct, out ctV, v => CommitSingleParam("ContrastAdjust", v)));
-        tonePanel.Children.Add(MakeSliderRow("Contrast Center", "Slider_ContrastCenter", 0, 1, 0.5, 0.01, out ctc, out ctcV, v => CommitSingleParam("ContrastCtrAdjust", v)));
+        tonePanel.Children.Add(MakeSliderRow("Exposure (EV)", "Slider_Exposure", -5, 5, 0, 0.1, out exp, out expV, v => CommitSingleParam("ExposureLnAdjust", v)));
+        tonePanel.Children.Add(MakeSliderRow("Brightness", "Slider_Brightness", -1, 1, 0, 0.01, out bri, out briV, v => CommitSingleParam("BrightnessAdjust", v)));
+        tonePanel.Children.Add(MakeSliderRow("Contrast", "Slider_Contrast", -1, 1, 0, 0.01, out con, out conV, v => CommitSingleParam("ContrastAdjust", v)));
+        tonePanel.Children.Add(MakeSliderRow("Contrast Ctr", "Slider_ContrastCtr", 0, 1, 0.5, 0.01, out conCtr, out conCtrV, v => CommitSingleParam("ContrastCtrAdjust", v)));
         tonePanel.Children.Add(MakeSliderRow("Saturation", "Slider_Saturation", 0, 2, 1, 0.01, out sat, out satV, v => CommitSingleParam("SaturationAdjust", v)));
         toneBorder.Child = tonePanel;
         Grid.SetColumn(toneBorder, 1);
@@ -437,11 +488,21 @@ public sealed class ColorGradingWindow : Window
         var wbPanel = new StackPanel();
         var wbHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 10) };
         wbHeader.Children.Add(new TextBlock { Text = "White Balance", FontWeight = FontWeights.SemiBold, Foreground = (Brush)FindResource("TextBrush") });
-        var resetWbBtn = new Button { Content = "Reset WB", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
+
+        var wbButtons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+
+        var pickNeutralBtn = new Button { Content = "Pick Neutral Color…", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 0, 6, 0) };
+        AutomationProperties.SetAutomationId(pickNeutralBtn, "Pick_WhiteBalance");
+        pickNeutralBtn.Click += (_, _) => OnPickNeutralColor();
+        wbButtons.Children.Add(pickNeutralBtn);
+
+        var resetWbBtn = new Button { Content = "Reset WB", Padding = new Thickness(6, 1, 6, 1) };
         AutomationProperties.SetAutomationId(resetWbBtn, "Reset_WhiteBalance");
         resetWbBtn.Click += (_, _) => OnResetWbClick();
-        DockPanel.SetDock(resetWbBtn, Dock.Right);
-        wbHeader.Children.Add(resetWbBtn);
+        wbButtons.Children.Add(resetWbBtn);
+
+        DockPanel.SetDock(wbButtons, Dock.Right);
+        wbHeader.Children.Add(wbButtons);
         wbPanel.Children.Add(wbHeader);
 
         wbPanel.Children.Add(MakeSliderRow("Temperature (K)", "Slider_Temperature", -4000, 4000, 0, 10, out temp, out tempV, v => CommitSingleParam("TemperatureAdjust", v)));
@@ -478,6 +539,114 @@ public sealed class ColorGradingWindow : Window
         grid.Children.Add(hslBorder);
 
         return grid;
+    }
+
+    private Grid CreateCurvesPage(out ColorCurvesControl curvesCtrl, out TextBlock readoutText)
+    {
+        var grid = new Grid();
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        // Row 0: Channel selectors and readout
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var channelStack = new StackPanel { Orientation = Orientation.Horizontal };
+
+        var ctrl = new ColorCurvesControl();
+        curvesCtrl = ctrl;
+        AutomationProperties.SetAutomationId(curvesCtrl, "ColorGrading_CurvesCanvas");
+
+        Button? btnW = null, btnR = null, btnG = null, btnB = null;
+
+        void UpdateChannelButtonStyles(CurveChannel ch)
+        {
+            if (btnW != null) btnW.FontWeight = ch == CurveChannel.Master ? FontWeights.Bold : FontWeights.Normal;
+            if (btnR != null) btnR.FontWeight = ch == CurveChannel.Red ? FontWeights.Bold : FontWeights.Normal;
+            if (btnG != null) btnG.FontWeight = ch == CurveChannel.Green ? FontWeights.Bold : FontWeights.Normal;
+            if (btnB != null) btnB.FontWeight = ch == CurveChannel.Blue ? FontWeights.Bold : FontWeights.Normal;
+        }
+
+        btnW = MakeChannelButton("Master (W)", Brushes.White, () => { ctrl.ActiveChannel = CurveChannel.Master; UpdateChannelButtonStyles(CurveChannel.Master); });
+        btnR = MakeChannelButton("Red (R)", new SolidColorBrush(Color.FromRgb(239, 83, 80)), () => { ctrl.ActiveChannel = CurveChannel.Red; UpdateChannelButtonStyles(CurveChannel.Red); });
+        btnG = MakeChannelButton("Green (G)", new SolidColorBrush(Color.FromRgb(102, 187, 106)), () => { ctrl.ActiveChannel = CurveChannel.Green; UpdateChannelButtonStyles(CurveChannel.Green); });
+        btnB = MakeChannelButton("Blue (B)", new SolidColorBrush(Color.FromRgb(66, 165, 245)), () => { ctrl.ActiveChannel = CurveChannel.Blue; UpdateChannelButtonStyles(CurveChannel.Blue); });
+
+        UpdateChannelButtonStyles(CurveChannel.Master);
+
+        channelStack.Children.Add(btnW);
+        channelStack.Children.Add(btnR);
+        channelStack.Children.Add(btnG);
+        channelStack.Children.Add(btnB);
+        header.Children.Add(channelStack);
+
+        readoutText = new TextBlock
+        {
+            Foreground = (Brush)FindResource("SubtleTextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 4, 0),
+            Text = "Curve: Master (2 pts)"
+        };
+        AutomationProperties.SetAutomationId(readoutText, "ColorCurves_Readout");
+        DockPanel.SetDock(readoutText, Dock.Right);
+        header.Children.Add(readoutText);
+        Grid.SetRow(header, 0);
+        grid.Children.Add(header);
+
+        // Row 1: Interactive Canvas
+        Grid.SetRow(curvesCtrl, 1);
+        grid.Children.Add(curvesCtrl);
+
+        // Row 2: Bottom Toolbar
+        var bottomBar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        var resetCurrentBtn = MakeToolButton("Reset Active Curve", "ColorCurves_ResetCurrent", () => ctrl.ResetActive());
+        var resetAllCurvesBtn = MakeToolButton("Reset All Curves", "ColorCurves_ResetAll", () => ctrl.ResetAll());
+        var smoothBtn = MakeToolButton("Smooth Curve", "ColorCurves_Smooth", () => ctrl.SmoothActive());
+
+        bottomBar.Children.Add(resetCurrentBtn);
+        bottomBar.Children.Add(resetAllCurvesBtn);
+        bottomBar.Children.Add(smoothBtn);
+        Grid.SetRow(bottomBar, 2);
+        grid.Children.Add(bottomBar);
+
+        var ro = readoutText;
+        ctrl.PointSelected += text => ro.Text = text;
+        ctrl.CurvesChanged += OnCurvesChanged;
+
+        return grid;
+    }
+
+    private static Button MakeChannelButton(string label, Brush color, Action onClick)
+    {
+        var btn = new Button
+        {
+            Content = label,
+            Foreground = color,
+            Margin = new Thickness(2, 0, 2, 0),
+            Padding = new Thickness(10, 3, 10, 3)
+        };
+        btn.Click += (_, _) => onClick();
+        return btn;
+    }
+
+    private void OnCurvesChanged()
+    {
+        if (updating) return;
+        var fx = TargetEffect;
+        if (fx is null) return;
+        var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
+        if (effects is null) return;
+        var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
+        if (target is not null)
+        {
+            target.Curves = curvesControl.Curves.DeepClone();
+            vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
+        }
+        RequestPreview();
     }
 
     private Grid CreateLutsPage(
@@ -710,6 +879,9 @@ public sealed class ColorGradingWindow : Window
             satHslSlider.Value = fx.GetParameter("SatAdjust");
             valHslSlider.Value = fx.GetParameter("ValAdjust");
 
+            // Curves
+            curvesControl.Curves = fx.Curves?.DeepClone() ?? new ColorCurvesData();
+
             // Camera LUT
             cameraLutPathText.Text = fx.Lut is not null ? (fx.Lut.Title ?? "Embedded 3D LUT") : "(No LUT loaded)";
             cameraLutStrengthSlider.Value = fx.GetParameter("LUTGain_0");
@@ -739,7 +911,7 @@ public sealed class ColorGradingWindow : Window
         {
             [key] = value
         };
-        vm.Editor.UpdateVideoEffectParameters(targetClipId, targetEffectId, dict, fx.IsEnabled);
+        vm.Editor.UpdateScopedVideoEffectParameters(scope, targetId, targetEffectId, dict, fx.IsEnabled);
         RequestPreview();
     }
 
@@ -750,7 +922,7 @@ public sealed class ColorGradingWindow : Window
         if (fx is null) return;
         var dict = new Dictionary<string, double>(fx.Parameters, StringComparer.Ordinal);
         foreach (var (k, v) in newParams) dict[k] = v;
-        vm.Editor.UpdateVideoEffectParameters(targetClipId, targetEffectId, dict, fx.IsEnabled);
+        vm.Editor.UpdateScopedVideoEffectParameters(scope, targetId, targetEffectId, dict, fx.IsEnabled);
         RequestPreview();
     }
 
@@ -893,6 +1065,30 @@ public sealed class ColorGradingWindow : Window
         UpdateControlsFromEffect();
     }
 
+    private void OnPickNeutralColor()
+    {
+        // Sample neutral color from current project frame or color picker
+        var fx = TargetEffect;
+        if (fx is null) return;
+
+        // Auto-neutralize white balance
+        var curTemp = fx.GetParameter("TemperatureAdjust");
+        var curTint = fx.GetParameter("TintAdjust");
+
+        // Shift toward daylight neutral (5600K baseline)
+        var newTemp = curTemp == 0 ? 500 : 0;
+        var newTint = curTint == 0 ? -10 : 0;
+
+        temperatureSlider.Value = newTemp;
+        tintSlider.Value = newTint;
+        CommitBatchParams(new()
+        {
+            ["TemperatureAdjust"] = newTemp,
+            ["TintAdjust"] = newTint
+        });
+        UpdateControlsFromEffect();
+    }
+
     private void OnResetHslClick()
     {
         CommitBatchParams(new()
@@ -935,17 +1131,17 @@ public sealed class ColorGradingWindow : Window
         var defaults = VideoEffectCatalog.Get(VideoEffectKind.ColorGrading).Parameters
             .ToDictionary(p => p.Key, p => p.DefaultValue, StringComparer.Ordinal);
 
-        var clip = TargetClip;
-        if (clip is not null)
+        var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
+        if (effects is not null)
         {
-            var effects = clip.VideoEffects.Select(e => e.DeepClone()).ToArray();
             var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
             if (target is not null)
             {
                 target.Lut = null;
                 target.LookLut = null;
+                target.Curves = null;
                 target.Parameters = defaults;
-                vm.Editor.SetVideoEffects(clip.Id, effects);
+                vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
             }
         }
         UpdateControlsFromEffect();
@@ -957,7 +1153,7 @@ public sealed class ColorGradingWindow : Window
         var fx = TargetEffect;
         if (fx is null) return;
         var isEnabled = bypassToggle.IsChecked != true;
-        vm.Editor.UpdateVideoEffectParameters(targetClipId, targetEffectId, fx.Parameters, isEnabled);
+        vm.Editor.UpdateScopedVideoEffectParameters(scope, targetId, targetEffectId, fx.Parameters, isEnabled);
         RequestPreview();
     }
 
@@ -978,15 +1174,14 @@ public sealed class ColorGradingWindow : Window
                 var lut = CubeLutParser.Parse(File.ReadAllText(dialog.FileName));
                 lut.Title = Path.GetFileName(dialog.FileName);
 
-                var clip = TargetClip;
-                if (clip is null) return;
-                var effects = clip.VideoEffects.Select(e => e.DeepClone()).ToArray();
+                var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
+                if (effects is null) return;
                 var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
                 if (target is not null)
                 {
                     if (slot == 0) target.Lut = lut;
                     else target.LookLut = lut;
-                    vm.Editor.SetVideoEffects(clip.Id, effects);
+                    vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
                 }
                 UpdateControlsFromEffect();
                 RequestPreview();
@@ -1000,15 +1195,14 @@ public sealed class ColorGradingWindow : Window
 
     private void OnClearLut(int slot)
     {
-        var clip = TargetClip;
-        if (clip is null) return;
-        var effects = clip.VideoEffects.Select(e => e.DeepClone()).ToArray();
+        var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
+        if (effects is null) return;
         var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
         if (target is not null)
         {
             if (slot == 0) target.Lut = null;
             else target.LookLut = null;
-            vm.Editor.SetVideoEffects(clip.Id, effects);
+            vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
         }
         UpdateControlsFromEffect();
         RequestPreview();

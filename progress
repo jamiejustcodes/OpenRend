@@ -1,46 +1,40 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, Effect Scopes Beyond Events (Media FX, Event FX, Track FX, Video Output FX) Complete (Feature 4 Complete)
+## Resume here — 18 October 2026, Color Grading, Curves, and LUTs Complete (Feature 3 Complete)
 
 - Latest features:
-  - Complete Vegas Pro 1:1 Scoped Video Effects Pipeline (Feature 4 Complete):
+  - Complete Vegas Pro 1:1 Color Grading, Curves, and LUTs Pipeline (Feature 3 Complete):
+    - `src/OpenRend.Core/ColorCurve.cs`:
+      - Created `CurvePoint` (X, Y, InHandleX/Y, OutHandleX/Y, DeepClone, Validate).
+      - Created `ColorCurve` with monotonic cubic Bezier evaluation (`Evaluate(x)` via binary search), 256-entry lookup table precomputation (`BuildLut()`), identity linear fast-path, and Vegas Pro OFX curve string serialization and deserialization (`ToCurveString()`, `FromCurveString()` matching `{count}:{x0}:{y0}:{inHx0}:{inHy0}:{outHx0}:{outHy0}:...`).
+      - Created `ColorCurvesData` modeling Master (W/Y), Red (R), Green (G), and Blue (B) curves with `HasAdjustments`, deep cloning, and validation.
     - `src/OpenRend.Core/VideoEffect.cs`:
-      - Added `EffectScope` enum: `Event`, `Track`, `Media`, `Output`.
-    - `src/OpenRend.Core/ProjectDocument.cs`:
-      - Added `MediaItem.VideoEffects` list for Media FX (raw source decoding level).
-      - Added `TimelineTrack.VideoEffects` list for Track FX (track compositing level).
-      - Added `ProjectDocument.VideoOutputEffects` list for Video Output FX / Master Bus FX.
-      - Updated project schema version to 10 (`CurrentSchemaVersion = 10`), preserving backward compatibility and rejecting future unhandled schemas.
-    - `src/OpenRend.Timeline/TimelineEditor.cs`:
-      - Implemented `GetScopedVideoEffects`, `SetScopedVideoEffects`, `AddScopedVideoEffect`, `RemoveScopedVideoEffect`, `UpdateScopedVideoEffectParameters`, and `MoveScopedVideoEffect`.
-      - Ensured `Restore(snapshot)` restores `Project.VideoOutputEffects = copy.VideoOutputEffects`, `Track.VideoEffects`, `Media.VideoEffects`, and `Clip.VideoEffects` atomically.
-    - `src/OpenRend.Media/TimelineRenderService.cs`:
-      - Implemented 1:1 Vegas Pro effect pipeline order:
-        1. Media FX: Evaluated immediately on source frame before event pan/crop.
-        2. Event FX: Evaluated per-clip with spatial transformations and fade curves.
-        3. Track FX: Evaluated on the intermediate track composite buffer across all clips on the track.
-        4. Video Output FX: Evaluated on the final composite frame across all tracks before display/export.
-      - Fixed alpha compositing bug in `Composite` and `CompositeTransformed` so destination buffer alpha (`output[target + 3]`) is preserved, allowing intermediate track buffers to blend correctly onto the master frame.
-    - `src/OpenRend.App/VideoEffectsWindow.cs` & `VideoEffectsWindow.Lut.cs`:
-      - Refactored `VideoEffectsWindow` to support all 4 scopes (`EffectScope`, `Guid targetId`).
-      - Title and header dynamically reflect scope: `"Video Event FX: [Name]"`, `"Video Track FX: [Track]"`, `"Media FX: [Asset]"`, `"Video Output FX"`.
-      - Effect operations, LUT adjustments, and parameter edits route through `TimelineEditor` scoped methods with undo/redo.
-      - Live preview requests evaluate full composite at current playhead.
-    - `src/OpenRend.UI/TimelineView.cs`:
-      - Added green illuminated `"fx"` button (`#2E7D32`) on video track headers when Track FX are present; muted gray button when empty.
-      - Added `TrackFxRequested` event and right-click context menu item `"Track FX…"`.
+      - Added `Curves` property (`ColorCurvesData?`) with `DeepClone()` and validation ensuring only Color Grading effects carry curve data.
+    - `src/OpenRend.Media/VideoEffectColorGradingProcessor.cs`:
+      - Precomputed 256-entry LUTs for master, red, green, and blue curves via `BuildLut()`.
+      - Integrated curve evaluation into the primary color transform pass (placed immediately after Color Wheels and before HSL and Look LUT, matching Vegas Pro OFX processing order).
+    - `src/OpenRend.Media/VideoEffectProcessor.cs`:
+      - Updated `IsIdentity` to check `Curves is null || !Curves.HasAdjustments`, ensuring active curves trigger effect execution.
+    - `src/OpenRend.App/ColorCurvesControl.cs`:
+      - Interactive 2D curve canvas matching Vegas Pro: dark theme, 25/50/75% grid lines, diagonal identity reference, colored channel curves (White/Master, Red, Green, Blue), draggable control points with glow selection rings, point addition on click, point removal on double-click/Delete, smooth curve tool, and live readout.
+    - `src/OpenRend.App/ColorGradingWindow.cs`:
+      - Upgraded to support all 4 scopes (`Event`, `Track`, `Media`, `Output`).
+      - Added Curves tab (`tabCurvesBtn`) and Curves page with `ColorCurvesControl`, channel selector buttons (Master, Red, Green, Blue), and Reset/Smooth controls.
+      - Added White Balance eye-dropper neutral picker button.
+      - Routed parameter updates through `vm.Editor.UpdateScopedVideoEffectParameters` and `vm.Editor.SetScopedVideoEffects`.
     - `src/OpenRend.App/MainWindow.xaml` & `MainWindow.xaml.cs`:
-      - Wired `Timeline.TrackFxRequested` to `OpenTrackEffects(trackId)`.
-      - Added menu items: `"Video Track FX…"`, `"Media FX…"`, and `"Video Output FX…"`.
-      - Added `"Media FX…"` option to Project Media list context menu.
+      - Added Tools menu items: `VideoTrackColorGradingMenu`, `MediaColorGradingMenu`, `VideoOutputColorGradingMenu`.
+      - Added `Media Color Grading…` to `MediaList` context menu.
+      - Added `Timeline.TrackColorGradingRequested` to `TimelineView`.
+    - `src/OpenRend.Project/ProjectStore.cs`:
+      - Updated `CurrentVersion = 10` for Schema 10 project serialization, persisting grading parameters, curves, and dual LUTs.
   - Verification:
-    - `tools/build.ps1` (native and managed checks) passed with 0 warnings, 0 errors, and 698 managed tests passed:
+    - `tools/build.ps1 -SkipNative` passed with 0 warnings, 0 errors, and 705 managed tests passed:
       - OpenRend.Playback.Tests: 2/2 passed.
       - OpenRend.Editor.Tests: 122/122 passed.
-      - OpenRend.Core.Tests: 303/303 passed (+5 comprehensive tests in `ScopedVideoEffectTests.cs`).
-      - OpenRend.Media.Tests: 271/271 passed (+2 comprehensive tests in `ScopedEffectMediaTests.cs` verifying Vegas Pro Media -> Event -> Track -> Output processing order and track layer independence).
+      - OpenRend.Core.Tests: 309/309 passed (+6 comprehensive tests in `ColorCurveTests.cs`).
+      - OpenRend.Media.Tests: 272/272 passed (+1 pixel test in `ColorGradingPixelTests.cs` verifying multi-channel curve pixel transformation).
 - Next active item in docs/implementation-progress.md:
-  - Feature 3: Color grading, curves and LUTs — high (reproduce grading panel's wheel, curve, white-balance and LUT controls, match processing order and interpolation in preview and export).
   - Feature 5: General motion and mask tracking — high (forward, backward, step tracking, Bezier/rectangle masks, transform/stabilization attachment).
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.

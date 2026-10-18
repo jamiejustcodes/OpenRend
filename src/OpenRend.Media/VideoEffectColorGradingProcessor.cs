@@ -73,6 +73,14 @@ internal static partial class VideoEffectProcessor
         var valHsl = P("ValAdjust");
         var hasHsl = hue != 0 || satHsl != 1 || valHsl != 1;
 
+        // 7. Precompute Curves LUTs
+        var curves = effect.Curves;
+        var hasCurves = curves is not null && curves.HasAdjustments;
+        var masterLut = hasCurves && !curves!.Master.IsIdentity ? curves.Master.BuildLut() : null;
+        var redLut = hasCurves && !curves!.Red.IsIdentity ? curves.Red.BuildLut() : null;
+        var greenLut = hasCurves && !curves!.Green.IsIdentity ? curves.Green.BuildLut() : null;
+        var blueLut = hasCurves && !curves!.Blue.IsIdentity ? curves.Blue.BuildLut() : null;
+
         // Apply primary grading operations in single color transform pass
         output = Color(output, (red, green, blue) =>
         {
@@ -155,6 +163,28 @@ internal static partial class VideoEffectProcessor
                 red += offsetR;
                 green += offsetG;
                 blue += offsetB;
+            }
+
+            // Curves (RGB / Master)
+            if (hasCurves)
+            {
+                var rByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(red, 0.0, 1.0) * 255.0), 0, 255);
+                var gByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(green, 0.0, 1.0) * 255.0), 0, 255);
+                var bByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(blue, 0.0, 1.0) * 255.0), 0, 255);
+
+                if (masterLut is not null)
+                {
+                    rByte = masterLut[rByte];
+                    gByte = masterLut[gByte];
+                    bByte = masterLut[bByte];
+                }
+                if (redLut is not null) rByte = redLut[rByte];
+                if (greenLut is not null) gByte = greenLut[gByte];
+                if (blueLut is not null) bByte = blueLut[bByte];
+
+                red = rByte / 255.0;
+                green = gByte / 255.0;
+                blue = bByte / 255.0;
             }
 
             // HSL

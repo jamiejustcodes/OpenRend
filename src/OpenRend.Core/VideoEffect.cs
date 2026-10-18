@@ -27,6 +27,7 @@ public sealed class VideoEffect
     public bool IsEnabled { get; set; } = true;
     public CubeLut? Lut { get; set; }
     public CubeLut? LookLut { get; set; }
+    public ColorCurvesData? Curves { get; set; }
     public double Amount { get; set; }
     public double SecondaryAmount { get; set; }
     public Dictionary<string, double> Parameters { get; set; } = [];
@@ -69,6 +70,7 @@ public sealed class VideoEffect
         copy.Parameters = new(Parameters, StringComparer.Ordinal);
         copy.Lut = Lut?.DeepClone();
         copy.LookLut = LookLut?.DeepClone();
+        copy.Curves = Curves?.DeepClone();
         return copy;
     }
 
@@ -80,8 +82,11 @@ public sealed class VideoEffect
             throw new InvalidDataException("Only a LUT or Color Grading effect can contain Camera LUT data.");
         if (Kind != VideoEffectKind.ColorGrading && LookLut is not null)
             throw new InvalidDataException("Only a Color Grading effect can contain Look LUT data.");
+        if (Kind != VideoEffectKind.ColorGrading && Curves is not null)
+            throw new InvalidDataException("Only a Color Grading effect can contain Color Curves data.");
         Lut?.Validate();
         LookLut?.Validate();
+        Curves?.Validate();
         var definitions = VideoEffectCatalog.Get(Kind).Parameters;
         if (Parameters.Any(pair => pair.Key is "Amount" or "SecondaryAmount" || !definitions.Any(parameter => parameter.Key == pair.Key)))
             throw new InvalidDataException("Video effect contains an unknown parameter.");

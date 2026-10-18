@@ -144,4 +144,30 @@ public sealed class ColorGradingPixelTests
         var bothBypassed = VideoEffectProcessor.Apply(source, 1, 1, [effect]);
         Assert.Equal(source, bothBypassed);
     }
+
+    [Fact]
+    public void ColorCurvesModifyPixelsAccuratelyPerChannelAndMaster()
+    {
+        var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        var curves = new ColorCurvesData();
+        // Boost midtones on Red channel
+        curves.Red.Points.Add(new CurvePoint { X = 0.5, Y = 0.8 });
+        curves.Red.SortPoints();
+        effect.Curves = curves;
+
+        var midGray = SolidBgra(128, 128, 128, 255, 1);
+        var result = VideoEffectProcessor.Apply(midGray, 1, 1, [effect]);
+        // Red is index 2, Green is index 1, Blue is index 0
+        Assert.True(result[2] > 180, $"Expected boosted red, got {result[2]}");
+        Assert.InRange(result[1], 126, 130); // Green unchanged
+        Assert.InRange(result[0], 126, 130); // Blue unchanged
+
+        // Now also pull down Blue via Blue curve
+        curves.Blue.Points.Add(new CurvePoint { X = 0.5, Y = 0.2 });
+        curves.Blue.SortPoints();
+        var result2 = VideoEffectProcessor.Apply(midGray, 1, 1, [effect]);
+        Assert.True(result2[2] > 180);
+        Assert.True(result2[0] < 80, $"Expected suppressed blue, got {result2[0]}");
+    }
 }
+

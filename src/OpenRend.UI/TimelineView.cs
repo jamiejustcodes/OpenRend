@@ -82,6 +82,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
+    public event Action<Guid>? TrackColorGradingRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -1023,6 +1024,10 @@ public sealed partial class TimelineView : FrameworkElement
                     var trackFx = new MenuItem { Header = "Track FX…" };
                     trackFx.Click += (_, _) => TrackFxRequested?.Invoke(track.Id);
                     menu.Items.Add(trackFx);
+
+                    var trackColorGrading = new MenuItem { Header = "Track Color Grading…" };
+                    trackColorGrading.Click += (_, _) => TrackColorGradingRequested?.Invoke(track.Id);
+                    menu.Items.Add(trackColorGrading);
                 }
 
                 menu.Items.Add(new Separator());

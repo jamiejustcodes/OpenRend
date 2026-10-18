@@ -113,7 +113,7 @@ public sealed class ClipLockAndMuteTests
         {
             await ProjectStore.SaveAsync(editor.Project, tempPath);
             var json = await File.ReadAllTextAsync(tempPath);
-            Assert.Contains("\"Version\": 9", json);
+            Assert.Contains($"\"Version\": {ProjectStore.CurrentVersion}", json);
             Assert.Contains("\"IsLocked\": true", json);
             Assert.Contains("\"IsMuted\": true", json);
 
