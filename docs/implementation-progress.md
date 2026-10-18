@@ -43,7 +43,7 @@ Verified parts:
 
 - [x] Explicit finite-video Loop/HoldLastFrame modes preserve rational source phase, trim/split/clipboard/save/reopen and undo/redo, with shared CPU/D3D/encoded evaluation and a desktop Loop/extended-trim workflow. Legacy events retain bounded playback.
 
-Automatic placement keeps legacy events bounded. Explicit finite-video Loop/Hold modes allow source extensions; audio retains its existing bounds. Same-start overlaps after clamping at project zero are unsupported, and a displacement exactly equal to the gap is a no-op. Event-level locks and the complete native exception/fallback path remain pending. The current properties window exposes the supported plug-in removal and undo controls; it does not establish complete target UI parity.
+- [x] Video fade curves and 5×5 Fade Type reciprocal crossfades: Linear, Fast, Slow, Smooth, and Sharp curves for isolated fades and plain crossfade evaluation. Context menu exposes Fade In Curve, Fade Out Curve, and 5×5 Fade Type thumbnail grid matching Vegas Pro layout. Split envelope preservation, undo/redo, schema 8 persistence, and shared CPU/GPU/export rendering are verified.
 
 OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered on the cut. Factory-default parity is still unverified.
 

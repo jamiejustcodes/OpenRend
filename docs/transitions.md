@@ -36,6 +36,22 @@ Preview and export use the same paired interpolation of source color and alpha c
 
 Project save/reopen, undo/redo, split envelopes and tested clipboard rate conversions preserve transition decisions. Unsplit crossfade lengths follow later moves and trims, including after removing the plug-in. Split pieces retain their original envelope.
 
+## Video fade curves and Fade Type crossfades
+
+The timeline model stores Linear, Fast, Slow, Smooth and Sharp video fade-in/out curves alongside reciprocal curves (`FadeInReciprocalCurve` and `FadeOutReciprocalCurve`). Isolated fades use these shapes in the shared preview/export evaluator. Fade-out complements the shape output ($1 - \text{Evaluate}(\text{curve}, progress)$), and split pieces retain their original envelope position.
+
+In a plain crossfade (without a transition plug-in), the incoming event's `FadeInCurve` controls the incoming event weight, while the incoming event's `FadeInReciprocalCurve` controls the outgoing event weight ($1 - \text{Evaluate}(\text{FadeInReciprocalCurve}, progress)$). The outgoing event's fade-out curve is inert during the crossfade.
+
+Timeline video events provide context menu controls:
+- **Fade In Curve** / **Fade Out Curve**: submenus with Linear, Fast, Slow, Smooth and Sharp items.
+- **Fade Type**: a 5×5 thumbnail grid of 25 buttons matching Vegas Pro layout:
+  - Columns represent the incoming curve (Linear, Fast, Slow, Smooth, Sharp).
+  - Rows represent the outgoing reciprocal curve (Linear, Fast, Slow, Smooth, Sharp).
+  - Each button displays a vector preview with falling blue outgoing and rising cyan incoming curves, and the active curve pair is highlighted with a gold outline.
+  - Selecting any grid cell clears the transition plug-in and sets the reciprocal crossfade curve pair.
+
+Projects save as version 8 and read versions 1–8; older projects retain linear fades. Audio keeps its existing linear fades.
+
 ## Current limits
 
 Only Default Dissolve is supported. The broader transition catalog, progress curves and full browser/properties layout remain pending. The current properties window exposes plug-in removal and history controls.

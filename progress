@@ -1,16 +1,24 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, fade-grid checkpoint
+## Resume here — 18 October 2026, reciprocal fade-curves and 5×5 Fade Type grid complete
 
-- Latest pushed commit: `a379ae1`. Source engine `97ab917` and video Loop menu/trim/clipboard `0ce3264` are complete in their supported scope. No top-level parity group is complete.
-- Corrected `tools/build.ps1` passed native integration and **633 managed checks**: Core259, Editor111, Media242, Playback2, Desktop19; failed/skipped0. Release build: 0 warnings, 0 errors. Log `.local/source-loop-final-build.log`; isolated preferences/recovery `.local/source-loop-final-gate` and desktop checks enabled.
-- Finite video supports explicit Switches > Loop: repeat source or hold its final decoded frame, with rational continuous source timing, trim/split/clipboard/save/reopen and undo/redo. Schema7 preserves the legacy Bounded default. Preview/export share mapping; original media is unchanged.
-- Limits: audio looping and default-loop preferences remain open. Disabling Loop rejects a phase requiring fractional project-frame offsets instead of silently rounding. Arbitrary VFR/per-stream duration equivalence is unverified. Linked audio keeps its existing bounds. The complete transition catalog, event locks, progress curves and exact UI matching remain open.
-- Package refreshed at `dist/OpenRend/OpenRend.exe`; packaged Loop/extended-trim/save/reopen workflow passed1/1. Logs `.local/source-loop-package.log` and `.local/source-loop-package-test.log`.
-- Active item: video fade curves. Five proposed shapes agree within one 8-bit unit at 15 isolated-head points. Isolated-tail samples establish output complement rather than reversing the input for asymmetric shapes. Plain overlap samples identify the incoming event's curve pair; six native UI cells establish the 5-by-5 grid axes and selecting a cell removes the transition plugin. No fade-curve implementation has landed yet.
-- Remaining rendering question: Default Dissolve differs from a plain linear crossfade in the measured fixture. A controlled low-color comparison is being prepared before changing this path. Exact native floating-point, HDR, source-alpha, audio and export equivalence remain unverified. Research stays private under ignored scratch.
-- Comparison fixture: all six UI edits explicitly undone; original Dissolve strip returned and title is clean. The own fixture is currently open for the next guarded measurement, with no file save. Restore the comparison app to empty before a final handoff.
-- Keep `scratch/GEMINI-HANDOFF.md` updated with private evidence and exact continuation state. Stage explicit paths only; private research/generated binaries stay uncommitted.
+- Latest commits:
+  - `48efd1a`: feat: add reciprocal fade curves for plain crossfades and split envelope preservation
+  - `6b95896`: feat: composite reciprocal fade curves in preview and export
+  - `1db4429`: feat: add 5x5 fade type thumbnail grid to timeline event context menu
+- Native integration and managed test suites passed:
+  - OpenRend.Core.Tests: 276/276 passed (added reciprocal evaluation matching Vegas Pro measurements and undo/redo).
+  - OpenRend.Editor.Tests: 112/112 passed (added FadeTypeMenu and grid cell selection checks).
+  - OpenRend.Media.Tests: 248/248 passed (added CPU/GPU/encoded timing parity test).
+  - OpenRend.App.Tests: Desktop workflow test `VideoFadeCurveMenuPersistsCurvesAndSurvivesSaveReopen` passed with UI tests enabled.
+- Parity scope achieved:
+  - Video fade curves: Linear, Fast, Slow, Smooth, Sharp.
+  - Context menu: Fade In Curve, Fade Out Curve, and 5×5 Fade Type thumbnail grid matching Vegas Pro layout (columns = incoming curve, rows = outgoing reciprocal curve, vector thumbnail preview with falling blue / rising cyan curves and active cell gold outline).
+  - Selecting any grid cell clears transition plug-in and applies the reciprocal crossfade curve pair.
+  - Reciprocal plain crossfade evaluation in CPU/GPU compositor and MP4 export.
+  - Split clip envelope preservation, undo/redo, and schema 8 persistence.
+- Next active item in docs/implementation-progress.md:
+  - Check transition progress curves and transition catalog expansion under Feature 1, or proceed to Feature 2 (Render templates and range options / channel mapping). Reverse engineer with REA skill to ensure 1:1 code and UI parity.
 
 Updated: 2026-10-17, UK time. Current request: implement the importance-ordered feature list in `docs/implementation-progress.md` with matching functions and UI, plus the requested startup project-creation screen. Keep this file usable for Gemini continuation. Startup presets/recent projects, custom render settings, event LUTs and the transition processing/removal/automatic-placement slice passed a full552-test gate. Overlap-properties UI and saved browser favorites passed the combined565-test gate; final favorites-handler cleanup passed a focused desktop check. Whole-frame overlap-to-cut conversion, its keyboard workflow and preview/export checks passed the587-test gate. Finite-video source modes passed the633-test gate; fade-curve ownership and interpolation are the next transition questions. Full feature/UI parity remains partial. Private comparison material stays in ignored `scratch/` and must not be committed.
 
