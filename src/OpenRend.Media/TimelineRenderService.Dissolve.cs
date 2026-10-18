@@ -7,14 +7,14 @@ namespace OpenRend.Media;
 public sealed partial class TimelineRenderService
 {
     private byte[] RenderDissolve(ProjectDocument project, long frame, EvaluatedClip outgoing, EvaluatedClip incoming,
-        double progress, int width, int height)
+        EvaluatedDissolve dissolve, int width, int height)
     {
         var output = new byte[checked(width * height * 4)];
         if (outgoing.Track.Opacity <= 0) return output;
-        var first = outgoing.Clip.Opacity <= 0 || progress >= 1 ? null : PrepareDissolveLayer(project, frame, outgoing, width, height);
-        var second = incoming.Clip.Opacity <= 0 || progress <= 0 ? null : PrepareDissolveLayer(project, frame, incoming, width, height);
-        var firstWeight = (float)(outgoing.Clip.Opacity * (1 - progress));
-        var secondWeight = (float)(incoming.Clip.Opacity * progress);
+        var firstWeight = (float)(outgoing.Clip.Opacity * (dissolve.OutgoingWeight ?? (1 - dissolve.Progress)));
+        var secondWeight = (float)(incoming.Clip.Opacity * (dissolve.IncomingWeight ?? dissolve.Progress));
+        var first = outgoing.Clip.Opacity <= 0 || firstWeight <= 0 ? null : PrepareDissolveLayer(project, frame, outgoing, width, height);
+        var second = incoming.Clip.Opacity <= 0 || secondWeight <= 0 ? null : PrepareDissolveLayer(project, frame, incoming, width, height);
         for (var y = 0; y < height; y++)
         for (var x = 0; x < width; x++)
         {

@@ -56,4 +56,43 @@ public sealed class VideoFadeCurveMediaTests
         }
         finally { Directory.Delete(folder, true); }
     }
+
+    [Fact]
+    public async Task ReciprocalCrossfadeSharesCpuGpuAndEncodedTiming()
+    {
+        var red = new MediaAsset { Path = "openrend://color?hex=#C80000", HasVideo = true, DurationSeconds = 3 };
+        var green = new MediaAsset { Path = "openrend://color?hex=#00C800", HasVideo = true, DurationSeconds = 3 };
+        var outgoing = new TimelineClip { MediaId = red.Id, StartFrame = 0, DurationFrames = 45, FadeOutFrames = 30 };
+        var incoming = new TimelineClip { MediaId = green.Id, StartFrame = 15, DurationFrames = 45, FadeInFrames = 30,
+            FadeInCurve = VideoFadeCurve.Linear, FadeInReciprocalCurve = VideoFadeCurve.Fast };
+        var project = new ProjectDocument { Width = 32, Height = 24, FrameRate = new(30, 1), Media = [red, green],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming] }] };
+        project.Validate();
+
+        using var media = new MediaService();
+        using var cpu = new TimelineRenderService(media, false);
+        using var gpu = new TimelineRenderService(media);
+
+        // At frame 30 (t=0.5): incoming Linear=0.5 (Green=200*0.5=100), outgoing 1-Fast(0.5)=0.25 (Red=200*0.25=50)
+        var expected = cpu.RenderFrame(project, 30, 32, 24);
+        var actual = gpu.RenderFrame(project, 30, 32, 24);
+        for (var i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(expected[i] - actual[i]), 0, 1);
+        Assert.InRange(Math.Abs(expected[1] - 100), 0, 1);
+        Assert.InRange(Math.Abs(expected[2] - 50), 0, 1);
+
+        var folder = Path.Combine(Path.GetTempPath(), "openrend-recip-crossfade-" + Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
+        try
+        {
+            var output = Path.Combine(folder, "recip.mp4"); await new ExportService(cpu).ExportAsync(project, output);
+            using var decoded = new MediaService();
+            var encoded = decoded.GetFrame(output, project.FrameRate.Seconds(30), 32, 24);
+            for (var i = 0; i < expected.Length; i++) Assert.InRange(Math.Abs(expected[i] - encoded[i]), 0, 6);
+
+            var before = Enumerable.Range(15, 30).Select(f => cpu.RenderFrame(project, f, 32, 24)).ToArray();
+            var editor = new TimelineEditor(project);
+            editor.SplitClip(incoming.Id, 25);
+            for (var i = 0; i < 30; i++) Assert.Equal(before[i], cpu.RenderFrame(project, 15 + i, 32, 24));
+        }
+        finally { Directory.Delete(folder, true); }
+    }
 }

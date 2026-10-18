@@ -52,7 +52,7 @@ public sealed partial class TimelineRenderService : IDisposable
                     var incoming = layers.FirstOrDefault(candidate => candidate.Clip.Id == dissolve.IncomingClipId);
                     if (incoming is not null)
                     {
-                        var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve.Progress, width, height);
+                        var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve, width, height);
                         if (compositor is not null)
                         {
                             if (NativeMethods.CompositorLayer(compositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
