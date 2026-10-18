@@ -21,7 +21,7 @@ public sealed class VideoSourceModeTests
     [InlineData(VideoSourceMode.Bounded, 0, 20)]
     [InlineData(VideoSourceMode.Loop, -7, 300)]
     [InlineData(VideoSourceMode.HoldLastFrame, 400, 300)]
-    public async Task SchemaSevenPreservesSourceModesAndSignedLoopPhase(VideoSourceMode mode, long phase, long duration)
+    public async Task CurrentSchemaPreservesSourceModesAndSignedLoopPhase(VideoSourceMode mode, long phase, long duration)
     {
         var (editor, clip) = Create(mode, sourcePhase: phase, duration: duration);
         var folder = Path.Combine(Path.GetTempPath(), "OpenRendTests", Guid.NewGuid().ToString("N")); Directory.CreateDirectory(folder);
@@ -29,7 +29,7 @@ public sealed class VideoSourceModeTests
         {
             var path = Path.Combine(folder, "source-mode.openrend"); await ProjectStore.SaveAsync(editor.Project, path);
             var json = JsonNode.Parse(await File.ReadAllTextAsync(path))!;
-            Assert.Equal(7, (int)json["Version"]!);
+            Assert.Equal(ProjectStore.CurrentVersion, (int)json["Version"]!);
             var restored = (await ProjectStore.LoadAsync(path)).Tracks[0].Clips[0];
             Assert.Equal(mode, restored.VideoSourceMode); Assert.Equal(phase, restored.SourceInFrame); Assert.Equal(duration, restored.DurationFrames);
             var clone = editor.Project.DeepClone(); clone.Tracks[0].Clips[0].VideoSourceMode = VideoSourceMode.Bounded;

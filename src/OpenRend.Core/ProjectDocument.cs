@@ -89,6 +89,9 @@ public sealed class ProjectDocument
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
                 if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null))
                     throw new InvalidDataException("Video transitions require a video clip.");
+                if (!Enum.IsDefined(clip.FadeInCurve) || !Enum.IsDefined(clip.FadeOutCurve) ||
+                    track.Kind != TrackKind.Video && (clip.FadeInCurve != VideoFadeCurve.Linear || clip.FadeOutCurve != VideoFadeCurve.Linear))
+                    throw new InvalidDataException("Video fade curves require a video clip and a supported shape.");
                 clip.FadeInTransition?.Validate();
                 clip.FadeOutTransition?.Validate();
                 if (clip.Crop is not null)
@@ -155,6 +158,8 @@ public sealed class TimelineClip
     public double Opacity { get; set; } = 1;
     public long FadeInFrames { get; set; }
     public long FadeOutFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeInCurve { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeOutCurve { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeInTransition { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeOutTransition { get; set; }
     public long FadeOffsetFrames { get; set; }

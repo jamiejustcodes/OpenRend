@@ -62,7 +62,7 @@ public static class TimelineEvaluator
             {
                 if (frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
                 var local = frame - clip.StartFrame;
-                var fade = transitionOpacity.TryGetValue(clip.Id, out var blend) ? blend : FadeAt(clip, local);
+                var fade = transitionOpacity.TryGetValue(clip.Id, out var blend) ? blend : track.Kind == TrackKind.Video ? VideoFadeAt(clip, local) : FadeAt(clip, local);
                 var (left, right) = BalanceStages(track, clip);
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
@@ -87,6 +87,22 @@ public static class TimelineEvaluator
         var overlap = clips.Where(clip => clip.StartFrame < end && clip.EndFrame > start).ToArray();
         return !overlap.Select(clip => Math.Max(start, clip.StartFrame)).Any(position =>
             overlap.Count(clip => clip.StartFrame <= position && position < clip.EndFrame) > 2);
+    }
+
+    public static double VideoFadeAt(TimelineClip clip, double localFrame)
+    {
+        var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
+        var position = localFrame + clip.FadeOffsetFrames;
+        var fade = 1.0;
+        if (clip.FadeInFrames > 0)
+            fade = VideoFadeInterpolation.Evaluate(clip.FadeInCurve, position / clip.FadeInFrames);
+        if (clip.FadeOutFrames > 0)
+        {
+            // A tail complements the curve's output; reversing its input swaps Fast and Slow.
+            var progress = (position - (envelope - clip.FadeOutFrames)) / clip.FadeOutFrames;
+            fade = Math.Min(fade, 1 - VideoFadeInterpolation.Evaluate(clip.FadeOutCurve, progress));
+        }
+        return fade;
     }
 
     public static double FadeAt(TimelineClip clip, double localFrame)
