@@ -96,10 +96,16 @@ public partial class MainWindow : Window
             {
                 var settings = EditingPreferencesStore.Load(EditingPreferencesPath);
                 vm.Editor.ConvertCutToDissolve(gesture.OutgoingClipId, gesture.IncomingClipId,
-                    settings.OverlapFrames(vm.Project.FrameRate), settings.CutOverlapAlignment);
+                    settings.OverlapFrames(vm.Project.FrameRate), settings.CutOverlapAlignment, gesture.Transition);
             }
-            else vm.Editor.ApplyDissolve(gesture.OutgoingClipId, gesture.IncomingClipId);
-            vm.Status = gesture.IsCut ? "Cut converted to Default Dissolve." : "Default Dissolve applied to the dropped overlap.";
+            else vm.Editor.ApplyDissolve(gesture.OutgoingClipId, gesture.IncomingClipId, gesture.Transition);
+            vm.Status = gesture.IsCut
+                ? (gesture.Transition.Kind == VideoTransitionKind.Dissolve && gesture.Transition.Preset == "Default"
+                    ? "Cut converted to Default Dissolve."
+                    : $"Cut converted to {gesture.Transition.Kind} ({gesture.Transition.Preset}).")
+                : (gesture.Transition.Kind == VideoTransitionKind.Dissolve && gesture.Transition.Preset == "Default"
+                    ? "Default Dissolve applied to the dropped overlap."
+                    : $"{gesture.Transition.Kind} ({gesture.Transition.Preset}) applied to the dropped overlap.");
         });
         Timeline.SplitRequested += () => Guard(vm.Split);
         Timeline.OverlapToCutRequested += (outgoing, incoming) => Guard(() =>
@@ -468,8 +474,23 @@ public partial class MainWindow : Window
     {
         Pause();
         if (gesture.Mode == "Move")
-            vm.Editor.MoveSelection(vm.Selection, gesture.ClipId, gesture.TrackId, gesture.Start, vm.IgnoreGroups);
-        else vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, vm.IgnoreGroups);
+        {
+            if (gesture.NewTrackIndex is { } newIdx && gesture.NewTrackKind is { } newKind)
+            {
+                var newTrack = vm.Editor.MoveSelectionToNewTrack(vm.Selection, gesture.ClipId, newIdx, newKind, gesture.Start, vm.IgnoreGroups);
+                vm.Status = $"Created new {newKind} layer '{newTrack.Name}' and moved event.";
+            }
+            else
+            {
+                vm.Editor.MoveSelection(vm.Selection, gesture.ClipId, gesture.TrackId, gesture.Start, vm.IgnoreGroups);
+                vm.Status = $"Moved event to {TimelineView.FormatTimecode(gesture.Start, vm.Project.FrameRate)}.";
+            }
+        }
+        else
+        {
+            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, vm.IgnoreGroups);
+            vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
+        }
     }
     private TimelineClip? SelectedClip => vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
     private void UpdateInspector()
@@ -816,7 +837,7 @@ public partial class MainWindow : Window
         if (selected.Length == 0) { vm.Status = "Select an audio event (or linked clip) to mute/unmute."; return; }
         Pause();
         var allMuted = selected.All(s => s.Clip.IsMuted);
-        vm.Editor.SetSelectionMute(selected.Select(s => s.Clip.Id), !allMuted);
+        vm.Editor.SetSelectionMute(selected.Select(s => s.Clip.Id), !allMuted, ignoreGroups: true);
         UpdateInspector();
         RequestPreview();
         vm.Status = allMuted ? "Unmuted audio event(s)." : "Muted audio event(s).";

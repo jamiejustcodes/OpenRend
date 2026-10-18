@@ -125,10 +125,14 @@
               <TabItem Header="All Plug-ins" IsSelected="True" AutomationProperties.AutomationId="AllTransitionPlugins"/>
               <TabItem x:Name="FavoriteTransitionsCategory" Header="Favorites" AutomationProperties.AutomationId="FavoriteTransitions"/>
               <TabItem Header="Fades"/>
+              <TabItem Header="Wipes"/>
+              <TabItem Header="Reveals"/>
+              <TabItem Header="Transforms"/>
+              <TabItem Header="3D and Peels"/>
             </TabControl>
             <TextBox x:Name="TransitionSearch" Grid.Row="1" Margin="5,3" Padding="5,1" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions"/>
             <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" AutomationProperties.Name="Transition plug-ins">
+              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" SelectionChanged="TransitionPluginSelectionChanged" AutomationProperties.Name="Transition plug-ins">
                 <ListBoxItem x:Name="DissolvePluginItem" IsSelected="True" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Dissolve">
                   <DockPanel>
                     <ToggleButton x:Name="FavoriteDissolve" Content="☆" Width="22" Height="20" Padding="0" Margin="0,0,4,0" Foreground="#E3C454" FocusVisualStyle="{StaticResource KeyboardFocus}" Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve" AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve">
