@@ -501,6 +501,7 @@ public sealed partial class TimelineEditor
         EnsureUnlocked(track, clip);
         Execute(_ =>
         {
+            var delta = sourceIn - clip.SourceInFrame;
             if (clip.Crop is not null) clip.CropOffsetFrames = checked(clip.CropOffsetFrames + checked(sourceIn - clip.SourceInFrame));
             clip.SourceInFrame = clip.VideoSourceMode == VideoSourceMode.HoldLastFrame ? Math.Max(0, sourceIn) : sourceIn;
             clip.DurationFrames = duration;
@@ -508,6 +509,17 @@ public sealed partial class TimelineEditor
             clip.FadeOutFrames = Math.Min(clip.FadeOutFrames, duration - clip.FadeInFrames);
             clip.FadeOffsetFrames = 0;
             clip.FadeDurationFrames = null;
+            if (clip.Transcript is not null && delta != 0)
+            {
+                clip.Transcript.Words = clip.Transcript.Words
+                    .Where(w => w.EndFrame > delta)
+                    .Select(w =>
+                    {
+                        var c = w.DeepClone();
+                        c.StartFrame = Math.Max(0, c.StartFrame - delta);
+                        return c;
+                    }).ToList();
+            }
             EnsureSourceBounds(clip, Project.Media.Single(m => m.Id == clip.MediaId));
         });
     }
@@ -527,6 +539,36 @@ public sealed partial class TimelineEditor
         var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
         right.FadeOffsetFrames += leftDuration;
         right.FadeDurationFrames = envelope;
+
+        if (clip.Transcript is not null)
+        {
+            var origWords = clip.Transcript.Words;
+            clip.Transcript.Words = origWords
+                .Where(w => w.StartFrame < leftDuration)
+                .Select(w =>
+                {
+                    var c = w.DeepClone();
+                    if (c.EndFrame > leftDuration) c.DurationFrames = Math.Max(0, leftDuration - c.StartFrame);
+                    return c;
+                }).ToList();
+
+            right.Transcript = new ClipTranscript
+            {
+                Language = clip.Transcript.Language,
+                Words = origWords
+                    .Where(w => w.EndFrame > leftDuration)
+                    .Select(w =>
+                    {
+                        var c = w.DeepClone();
+                        var oldStart = c.StartFrame;
+                        var oldEnd = c.EndFrame;
+                        c.StartFrame = Math.Max(0, oldStart - leftDuration);
+                        c.DurationFrames = Math.Max(0, oldEnd - Math.Max(leftDuration, oldStart));
+                        return c;
+                    }).ToList()
+            };
+        }
+
         Execute(_ =>
         {
             clip.DurationFrames = leftDuration;

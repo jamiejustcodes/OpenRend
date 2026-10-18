@@ -143,12 +143,23 @@ Verified parts:
 
 ## 6. Transcript-driven timeline editing — medium
 
-- [ ] Persist word timing for source media and timeline events.
-- [ ] Synchronize transcript selection, cursor and timeline event highlighting.
-- [ ] Cut, paste, split, delete and move linked events from transcript interactions.
-- [ ] Reproduce the transcript and subtitle controls and verify edit fidelity after save/reopen.
+- [x] Persist word timing for source media and timeline events.
+- [x] Synchronize transcript selection, cursor and timeline event highlighting.
+- [x] Cut, paste, split, delete and move linked events from transcript interactions.
+- [x] Reproduce the transcript and subtitle controls and verify edit fidelity after save/reopen.
 
-Status: queued. OpenRend already has transcription and subtitle generation; editing from the transcript is pending.
+Status: complete. 1:1 Vegas Pro Text-Based Editing window reproduced (`TextBasedEditingWindow.cs`) matching `TextbasedEditing.dll` (`ArrangersUserControl`, `SpeechEventControl`). Word-level timing model (`WordTiming`, `ClipTranscript`) stores precise integer frames, duration, confidence, and speaker on `TimelineClip`. Dynamic playhead synchronization highlights the active spoken word in real time with Vegas Gold glow. Word selection supports multi-word range selection, word editing, and quick action bar: Cut (`Ctrl+X`), Delete (`Del`), Split Here (`S`), and Copy (`Ctrl+C`). Timeline editing engine (`TimelineEditor.Transcript.cs`) provides atomic word-boundary split (`SplitClipAtWord`), head/middle/tail range deletion with auto-ripple (`DeleteTranscriptRange`), range cutting (`CutTranscriptRange`), and pause detection/deletion (`DeletePauses`). Schema 10 persists clip transcripts across save/reopen and undo/redo.
+
+Verified parts:
+
+- [x] WordTiming frame calculation, validation, cloning, equality, and JSON serialization.
+- [x] ClipTranscript active word retrieval at playhead frame and range intersection queries.
+- [x] SetClipTranscript and GetClipTranscript survive atomic undo and redo.
+- [x] SplitClipAtWord partitions transcript words at exact split frame, re-normalizing relative word offsets on the new right clip.
+- [x] DeleteTranscriptRange trims head, trims tail, or performs middle cut with ripple, shifting subsequent clips and preserving remaining words.
+- [x] CutTranscriptRange extracts selected words and executes timeline cut atomically.
+- [x] DeletePauses scans speech gaps and removes pauses across the timeline with ripple.
+- [x] Synchronized playhead tracking and event context menu (`Text-Based Editing…`) integration.
 
 ## 7. Project interchange — medium
 

@@ -151,6 +151,7 @@ public sealed class ProjectDocument
                         mt.Validate();
                     }
                 }
+                clip.Transcript?.Validate();
             }
         }
     }
@@ -240,6 +241,8 @@ public sealed class TimelineClip
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<MotionTrackData> MotionTracks { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public ClipTranscript? Transcript { get; set; }
     public TimelineClip DeepClone()
     {
         var clone = (TimelineClip)MemberwiseClone();
@@ -248,6 +251,7 @@ public sealed class TimelineClip
         clone.FadeOutTransition = FadeOutTransition?.DeepClone();
         clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
         clone.MotionTracks = MotionTracks.Select(track => track.DeepClone()).ToList();
+        clone.Transcript = Transcript?.DeepClone();
         return clone;
     }
 }

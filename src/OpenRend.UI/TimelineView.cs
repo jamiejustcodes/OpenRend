@@ -84,6 +84,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? TrackFxRequested;
     public event Action<Guid>? TrackColorGradingRequested;
     public event Action<Guid>? MotionTrackingRequested;
+    public event Action<Guid>? TextBasedEditingRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";

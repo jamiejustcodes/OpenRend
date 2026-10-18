@@ -80,6 +80,7 @@
         <Separator/>
         <MenuItem x:Name="AiTextToSpeechMenu" Header="AI Text to S_peech" InputGestureText="Ctrl+Shift+P" Click="AiTextToSpeechClick"/>
         <MenuItem x:Name="AiSpeechToTextMenu" Header="AI Speech to Tex_t" Click="AiSpeechToTextClick"/>
+        <MenuItem x:Name="TextBasedEditingMenu" Header="Text-Based Editing…" Click="TextBasedEditingClick"/>
         <MenuItem x:Name="AiAutoReframeMenu" Header="AI Auto _Reframe" Click="AiAutoReframeClick"/>
         <Separator/>
         <MenuItem Header="Render as…" Click="ExportClick"/>

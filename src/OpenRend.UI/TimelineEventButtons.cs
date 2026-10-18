@@ -103,13 +103,14 @@ public sealed partial class TimelineView
             TransitionPropertiesRequested?.Invoke(clipId);
             return;
         }
-        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia" or "ColorGrading" or "MotionTracking")
+        if (action is "PanCrop" or "VideoEffects" or "EditTextMedia" or "ColorGrading" or "MotionTracking" or "TextBasedEditing")
         {
             if (VideoEventActionRequested is not null) VideoEventActionRequested.Invoke(clipId, action);
             else if (action == "PanCrop") PanCropRequested?.Invoke();
             else if (action == "VideoEffects") VideoEffectsRequested?.Invoke();
             else if (action == "ColorGrading") ColorGradingRequested?.Invoke();
             else if (action == "MotionTracking") MotionTrackingRequested?.Invoke(clipId);
+            else if (action == "TextBasedEditing") TextBasedEditingRequested?.Invoke(clipId);
         }
         else if (action == "More")
         {
@@ -142,6 +143,8 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(grading, "ColorGradingEventMenu");
         var tracking = Add("Motion Tracking…", () => { if (clipId is { } id) InvokeEventAction(id, "MotionTracking"); else MotionTrackingRequested?.Invoke(clipId ?? Guid.Empty); });
         AutomationProperties.SetAutomationId(tracking, "MotionTrackingEventMenu");
+        var tbe = Add("Text-Based Editing…", () => { if (clipId is { } id) InvokeEventAction(id, "TextBasedEditing"); else TextBasedEditingRequested?.Invoke(clipId ?? Guid.Empty); });
+        AutomationProperties.SetAutomationId(tbe, "TextBasedEditingEventMenu");
         var transition = Add("Transition Properties…", () =>
         {
             var id = clipId ?? Project.Tracks.Where(track => track.Kind == TrackKind.Video)

@@ -121,6 +121,7 @@ public partial class MainWindow : Window
         Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.MotionTrackingRequested += id => OpenMotionTracking(id);
+        Timeline.TextBasedEditingRequested += id => OpenTextBasedEditing(id);
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
             Pause();
@@ -761,6 +762,16 @@ public partial class MainWindow : Window
     {
         Pause();
         new SpeechToTextWindow(vm) { Owner = this }.ShowDialog();
+    });
+    private void TextBasedEditingClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        OpenTextBasedEditing(vm.Selection.Count == 1 ? vm.Selection.First() : null);
+    });
+    public void OpenTextBasedEditing(Guid? clipId = null) => Guard(() =>
+    {
+        Pause();
+        new TextBasedEditingWindow(vm, clipId, RequestPreview) { Owner = this }.Show();
     });
     private void AiAutoReframeClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
