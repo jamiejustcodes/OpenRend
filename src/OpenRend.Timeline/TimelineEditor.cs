@@ -118,7 +118,7 @@ public sealed class TimelineEditor
         return clip;
     }
 
-    public void ApplyDissolve(Guid outgoingClipId, Guid incomingClipId)
+    public void ApplyDissolve(Guid outgoingClipId, Guid incomingClipId, VideoTransition? transition = null)
     {
         if (outgoingClipId == incomingClipId) throw new ArgumentException("Choose two different video events.");
         var (outgoingTrack, outgoing) = FindClip(outgoingClipId);
@@ -135,14 +135,30 @@ public sealed class TimelineEditor
         if (outgoingTrack.Clips.Any(clip => clip.Id != outgoingClipId && clip.Id != incomingClipId &&
             clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame))
             throw new InvalidOperationException("A dissolve requires exactly two events in the overlap.");
+        var appliedTransition = (transition ?? new VideoTransition()).DeepClone();
+        appliedTransition.Validate();
         Execute(_ =>
         {
             // The two fade lengths follow the integer-frame overlap, including after save and undo.
             outgoing.FadeOutFrames = overlap;
             incoming.FadeInFrames = overlap;
-            incoming.FadeInTransition = new VideoTransition();
+            incoming.FadeInTransition = appliedTransition;
             outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
             outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
+        });
+    }
+
+    public void SetVideoTransition(Guid clipId, VideoTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        transition.Validate();
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Transitions are only available for video clips.");
+        var cloned = transition.DeepClone();
+        Execute(_ =>
+        {
+            clip.FadeInTransition = cloned;
         });
     }
 
@@ -220,7 +236,7 @@ public sealed class TimelineEditor
         Execute(_ => { clip.VideoSourceMode = mode; clip.SourceInFrame = changed.SourceInFrame; });
     }
 
-    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds)
+    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds, VideoTransition? transition = null)
     {
         var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
         var selected = Project.Tracks.Where(track => track.Kind == TrackKind.Video)
@@ -231,23 +247,23 @@ public sealed class TimelineEditor
             var outgoing = selected[0];
             var incoming = selected[1];
             if (outgoing.Track != incoming.Track || outgoing.Clip.EndFrame <= incoming.Clip.StartFrame) return 0;
-            ApplyDissolve(outgoing.Clip.Id, incoming.Clip.Id);
+            ApplyDissolve(outgoing.Clip.Id, incoming.Clip.Id, transition);
             return 1;
         }
-        return ApplyDissolvesToAdjacent(selected.Select(item => item.Clip.Id));
+        return ApplyDissolvesToAdjacent(selected.Select(item => item.Clip.Id), transition);
     }
 
-    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds, long automaticOverlapFrames, bool ripple)
+    public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds, long automaticOverlapFrames, bool ripple, VideoTransition? transition = null)
     {
         if (automaticOverlapFrames <= 0) throw new ArgumentOutOfRangeException(nameof(automaticOverlapFrames));
         var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
         var selected = Project.Tracks.Where(track => track.Kind == TrackKind.Video)
             .SelectMany(track => track.Clips.Where(clip => ids.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
-        if (selected.Length != 1) return ApplyDissolveToSelection(ids);
+        if (selected.Length != 1) return ApplyDissolveToSelection(ids, transition);
         var (track, incoming) = selected[0];
         if (incoming.FadeInFrames != 0 || incoming.FadeOutFrames != 0 || track.Clips.Any(clip =>
             clip.Id != incoming.Id && clip.StartFrame < incoming.EndFrame && clip.EndFrame > incoming.StartFrame))
-            return ApplyDissolvesToAdjacent(ids);
+            return ApplyDissolvesToAdjacent(ids, transition);
         var outgoing = track.Clips.Where(clip => clip.Id != incoming.Id && clip.EndFrame <= incoming.StartFrame)
             .OrderByDescending(clip => clip.EndFrame).ThenByDescending(clip => clip.StartFrame).FirstOrDefault();
         // A displacement that only closes the gap cannot create a dissolve.
@@ -291,14 +307,14 @@ public sealed class TimelineEditor
                 clip.CropOffsetFrames = change.CropOffsetFrames;
             }
             outgoing.FadeOutFrames = incoming.FadeInFrames = overlap;
-            incoming.FadeInTransition = new VideoTransition();
+            incoming.FadeInTransition = (transition ?? new VideoTransition()).DeepClone();
             outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
             outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
         });
         return 1;
     }
 
-    public void ConvertCutToDissolve(Guid outgoingClipId, Guid incomingClipId, long overlapFrames, CutTransitionAlignment alignment)
+    public void ConvertCutToDissolve(Guid outgoingClipId, Guid incomingClipId, long overlapFrames, CutTransitionAlignment alignment, VideoTransition? transition = null)
     {
         if (overlapFrames <= 0) throw new ArgumentOutOfRangeException(nameof(overlapFrames));
         if (!Enum.IsDefined(alignment)) throw new ArgumentOutOfRangeException(nameof(alignment));
@@ -333,6 +349,8 @@ public sealed class TimelineEditor
         if (outgoingTrack.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
             clip.StartFrame < extendedOutgoing.EndFrame && clip.EndFrame > extendedIncoming.StartFrame))
             throw new InvalidOperationException("A dissolve requires exactly two events in the overlap.");
+        var appliedTransition = (transition ?? new VideoTransition()).DeepClone();
+        appliedTransition.Validate();
         Execute(_ =>
         {
             outgoing.DurationFrames = extendedOutgoing.DurationFrames;
@@ -342,7 +360,7 @@ public sealed class TimelineEditor
             // Extending a take adds handles; existing media and crop keyframes keep their timeline positions.
             if (incoming.Crop is not null) incoming.CropOffsetFrames = checked(incoming.CropOffsetFrames - before);
             outgoing.FadeOutFrames = incoming.FadeInFrames = overlapFrames;
-            incoming.FadeInTransition = new VideoTransition();
+            incoming.FadeInTransition = appliedTransition;
             outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
             outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
         });
@@ -408,7 +426,7 @@ public sealed class TimelineEditor
             incoming.FadeInTransition = null;
         });
     }
-    public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds)
+    public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds, VideoTransition? transition = null)
     {
         var selected = ExpandSelection(selectedClipIds, ignoreGroups: true);
         var pairs = new List<(TimelineClip Outgoing, TimelineClip Incoming)>();
@@ -446,13 +464,15 @@ public sealed class TimelineEditor
                 if (fade.In > clip.DurationFrames - fade.Out)
                     throw new InvalidOperationException("The overlap conflicts with an existing fade.");
             }
+        var appliedTransition = (transition ?? new VideoTransition()).DeepClone();
+        appliedTransition.Validate();
         Execute(_ =>
         {
             foreach (var (outgoing, incoming) in pairs)
             {
                 var overlap = outgoing.EndFrame - incoming.StartFrame;
                 outgoing.FadeOutFrames = incoming.FadeInFrames = overlap;
-                incoming.FadeInTransition = new VideoTransition();
+                incoming.FadeInTransition = appliedTransition.DeepClone();
                 outgoing.FadeOffsetFrames = incoming.FadeOffsetFrames = 0;
                 outgoing.FadeDurationFrames = incoming.FadeDurationFrames = null;
             }
@@ -583,6 +603,44 @@ public sealed class TimelineEditor
             foreach (var item in selected) item.Clip.StartFrame = positions[item.Clip.Id];
             if (source != target) { source.Clips.Remove(primary); target.Clips.Add(primary); }
         });
+    }
+
+    public TimelineTrack MoveSelectionToNewTrack(IEnumerable<Guid> ids, Guid primaryClipId, int targetTrackIndex, TrackKind newTrackKind, long start, bool ignoreGroups = false)
+    {
+        ArgumentNullException.ThrowIfNull(ids);
+        var selected = SelectedClips(ids.Append(primaryClipId), ignoreGroups);
+        var (source, primary) = FindClip(primaryClipId);
+        var primaryMedia = Project.Media.Single(m => m.Id == primary.MediaId);
+        if (newTrackKind == TrackKind.Video && !primaryMedia.HasVideo) throw new InvalidOperationException("Audio media cannot be placed on a video track.");
+        if (newTrackKind == TrackKind.Audio && !primaryMedia.HasAudio) throw new InvalidOperationException("Video media cannot be placed on an audio track.");
+
+        var delta = checked(start - primary.StartFrame);
+        var positions = new Dictionary<Guid, long>();
+        foreach (var item in selected)
+        {
+            EnsureUnlocked(item.Track, item.Clip);
+            var moved = item.Clip.DeepClone();
+            moved.StartFrame = checked(moved.StartFrame + delta);
+            EnsureTimelineBounds(moved);
+            EnsureSourceBounds(moved, Project.Media.Single(m => m.Id == moved.MediaId));
+            positions.Add(moved.Id, moved.StartFrame);
+        }
+
+        var newTrack = new TimelineTrack
+        {
+            Kind = newTrackKind,
+            Name = $"{newTrackKind} {Project.Tracks.Count(t => t.Kind == newTrackKind) + 1}"
+        };
+
+        Execute(_ =>
+        {
+            var clampedIndex = Math.Clamp(targetTrackIndex, 0, Project.Tracks.Count);
+            Project.Tracks.Insert(clampedIndex, newTrack);
+            foreach (var item in selected) item.Clip.StartFrame = positions[item.Clip.Id];
+            source.Clips.Remove(primary);
+            newTrack.Clips.Add(primary);
+        });
+        return newTrack;
     }
 
     public void TrimSelection(Guid primaryClipId, long newStart, long sourceIn, long duration, bool ignoreGroups = false)
