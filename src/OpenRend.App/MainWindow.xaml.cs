@@ -70,7 +70,8 @@ public partial class MainWindow : Window
         Timeline.SeekRequested += frame => { Pause(); vm.Position = frame; UpdatePosition(); RequestPreview(); };
         Timeline.SelectionChanged += () =>
         {
-            vm.Selection.Clear(); vm.Selection.UnionWith(vm.Editor.ExpandSelection(Timeline.Selection, vm.IgnoreGroups));
+            var ignore = Timeline.IgnoreGroups || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
+            vm.Selection.Clear(); vm.Selection.UnionWith(vm.Editor.ExpandSelection(Timeline.Selection, ignore));
             Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector();
             CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0;
         };
@@ -170,6 +171,8 @@ public partial class MainWindow : Window
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
         Timeline.DuplicateTrackRequested += id => Guard(() => vm.Editor.DuplicateTrack(id));
         Timeline.DeleteTrackRequested += id => Guard(() => vm.Editor.DeleteTrack(id));
+        Timeline.UnlinkRequested += () => UnlinkClick(this, new RoutedEventArgs());
+        Timeline.LinkRequested += () => LinkClick(this, new RoutedEventArgs());
 
         Preview.CanvasMouseDown += OnPreviewMouseDown;
         Preview.CanvasMouseMove += OnPreviewMouseMove;
@@ -223,6 +226,7 @@ public partial class MainWindow : Window
     {
         revision++;
         Timeline.Project = vm.Project;
+        Timeline.IgnoreGroups = vm.IgnoreGroups;
         Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection);
         Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector();
         UndoMenu.IsEnabled = UndoButton.IsEnabled = vm.Editor.CanUndo;
@@ -479,24 +483,26 @@ public partial class MainWindow : Window
     private void ApplyGesture(ClipGesture gesture)
     {
         Pause();
+        var ignoreGroups = gesture.IgnoreGroups || vm.IgnoreGroups;
+        var movingIds = ignoreGroups ? new[] { gesture.ClipId } : (IEnumerable<Guid>)vm.Selection;
         if (gesture.Mode == "Move")
         {
             if (gesture.NewTrackIndex is { } newIdx && gesture.NewTrackKind is { } newKind)
             {
-                var newTrack = vm.Editor.MoveSelectionToNewTrack(vm.Selection, gesture.ClipId, newIdx, newKind, gesture.Start, vm.IgnoreGroups);
+                var newTrack = vm.Editor.MoveSelectionToNewTrack(movingIds, gesture.ClipId, newIdx, newKind, gesture.Start, ignoreGroups);
                 var trackIndex = vm.Project.Tracks.IndexOf(newTrack);
                 if (trackIndex >= 0) Timeline.ActivateTrack(trackIndex);
                 vm.Status = $"Created new {newKind} layer '{newTrack.Name}' and moved event.";
             }
             else
             {
-                vm.Editor.MoveSelection(vm.Selection, gesture.ClipId, gesture.TrackId, gesture.Start, vm.IgnoreGroups);
+                vm.Editor.MoveSelection(movingIds, gesture.ClipId, gesture.TrackId, gesture.Start, ignoreGroups);
                 vm.Status = $"Moved event to {TimelineView.FormatTimecode(gesture.Start, vm.Project.FrameRate)}.";
             }
         }
         else
         {
-            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, vm.IgnoreGroups);
+            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups);
             vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
     }
@@ -1054,9 +1060,14 @@ public partial class MainWindow : Window
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }
-    private void LinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.LinkClips(vm.Selection); });
-    private void UnlinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.UnlinkClips(vm.Selection); });
-    private void IgnoreGroupsClick(object sender, RoutedEventArgs e) { vm.IgnoreGroups = IgnoreGroupsMenu.IsChecked; }
+    private void LinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.LinkClips(vm.Selection); vm.Status = "Linked selected clips into a group."; });
+    private void UnlinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.UnlinkClips(vm.Selection); vm.Status = "Unlinked clip group."; });
+    private void IgnoreGroupsClick(object sender, RoutedEventArgs e)
+    {
+        vm.IgnoreGroups = IgnoreGroupsMenu.IsChecked;
+        Timeline.IgnoreGroups = vm.IgnoreGroups;
+        vm.Status = vm.IgnoreGroups ? "Ignore clip groups enabled." : "Ignore clip groups disabled.";
+    }
     private void VideoTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p => p.Tracks.Insert(0, new TimelineTrack
     { Kind = TrackKind.Video, Name = $"Video {p.Tracks.Count(t => t.Kind == TrackKind.Video) + 1}" })));
     private void AudioTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.AddTrack(TrackKind.Audio));
@@ -1133,6 +1144,7 @@ public partial class MainWindow : Window
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
+            Key.U when ctrl && shift => () => { IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked; IgnoreGroupsClick(this, e); },
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
             Key.X when ctrl => () => CutClick(this, e),

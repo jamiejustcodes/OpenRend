@@ -39,7 +39,7 @@
         <Separator/>
         <MenuItem Header="Link selected clips" InputGestureText="G" Click="LinkClick"/>
         <MenuItem Header="Unlink clip group" InputGestureText="U" Click="UnlinkClick"/>
-        <MenuItem x:Name="IgnoreGroupsMenu" Header="Ignore clip groups" IsCheckable="True" Click="IgnoreGroupsClick"/>
+        <MenuItem x:Name="IgnoreGroupsMenu" Header="Ignore clip groups" InputGestureText="Ctrl+Shift+U" IsCheckable="True" Click="IgnoreGroupsClick"/>
         <Separator/>
         <MenuItem Header="Switches">
           <MenuItem x:Name="LockEventMenu" Header="Lock" InputGestureText="Ctrl+Shift+L" Click="LockEventClick"/>

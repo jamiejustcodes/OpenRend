@@ -237,4 +237,38 @@ public sealed class ClipPointerTests
         Assert.Equal(1, audioOverVideoLower.TrackIndex);
         Assert.Equal(TrackKind.Audio, audioOverVideoLower.NewTrackKind);
     });
+
+    [Fact]
+    public void DragOntoExistingTrackOfSameKindDropsOntoTargetTrack() => Sta(() =>
+    {
+        var (view, track0, _) = Create();
+        var track1 = new TimelineTrack { Kind = TrackKind.Video };
+        view.Project.Tracks.Add(track1); // Track 0 at 46..115, Track 1 at 115..184
+
+        // Dragging from Track 0 down into Track 1 at y = 140 (inside Track 1):
+        var result = view.EvaluateDragTarget(140, TrackKind.Video, sourceTrackIndex: 0);
+        Assert.False(result.IsNewTrack);
+        Assert.Equal(1, result.TrackIndex);
+
+        // Dragging along same track at y = 55 (near top of track 0) with sourceTrackIndex = 0:
+        var sameTrack = view.EvaluateDragTarget(55, TrackKind.Video, sourceTrackIndex: 0);
+        Assert.False(sameTrack.IsNewTrack);
+        Assert.Equal(0, sameTrack.TrackIndex);
+    });
+
+    [Fact]
+    public void DragThresholdConstantIsPositive() => Sta(() =>
+    {
+        Assert.True(TimelineView.DragDistanceThreshold >= 4.0);
+    });
+
+    [Fact]
+    public void IgnoreGroupsPropertyDefaultsToFalseAndCanBeToggled() => Sta(() =>
+    {
+        var (view, _, _) = Create();
+        Assert.False(view.IgnoreGroups);
+        view.IgnoreGroups = true;
+        Assert.True(view.IgnoreGroups);
+    });
 }
+

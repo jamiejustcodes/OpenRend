@@ -1,8 +1,24 @@
 # OpenRend development handoff
 
-## Resume here — 18 October 2026, Transcript-Driven Timeline Editing Complete (Feature 6 Complete)
+## Resume here — 19 October 2026, Timeline Click-to-Seek, Track Drop & Group Separation Fixes
 
-- Latest features:
+- Latest fixes:
+  - Timeline Drag Threshold & Click-to-Seek Fix:
+    - Added `DragDistanceThreshold` (4px) to `TimelineView.cs`.
+    - Clicking on an event now cleanly selects and seeks playhead without triggering drag cursor or ghost rendering. Drag only initiates after cursor moves 4px.
+  - Track Dropping & Horizontal Move Fix:
+    - Resolved header collision in `EvaluateDragTarget`: passed `sourceTrackIndex` so clicks on event header (y: 1..18 within track) do not falsely trigger new-track insertion when moving on the same track or dropping onto other existing compatible tracks.
+  - Audio and Video Separation Workflow:
+    - Added `IgnoreGroups` support to `TimelineView` and `ClipGesture`.
+    - Holding `Alt` while clicking or dragging bypasses group expansion, allowing instant independent movement of audio or video.
+    - Added `Ctrl+Shift+U` shortcut to toggle Ignore Groups.
+    - Added `Group -> Unlink clip group (U)` and `Link selected clips (G)` to event right-click context menu and wired `UnlinkRequested`/`LinkRequested` events.
+    - Fixed right-click hit testing on timeline clips so right-clicking an unselected clip selects it before opening context menu.
+  - Unit Tests & Packaging:
+    - Added 3 unit tests to `ClipPointerTests.cs`. All 727 managed tests pass (0 failed).
+    - Packaged updated binaries to `dist/OpenRend/OpenRend.exe`.
+
+- Previous features:
   - Complete Vegas Pro 1:1 Transcript-Driven Timeline Editing Pipeline (Feature 6 Complete):
     - `src/OpenRend.Core/TranscriptData.cs`:
       - Created `TranscriptWordKind` (`Word`, `Pause`), `WordTiming` (Word, StartFrame, DurationFrames, EndFrame, Confidence, Speaker, Kind, DeepClone, Validate, Equals).

@@ -10,7 +10,7 @@ using OpenRend.Core;
 
 namespace OpenRend.UI;
 
-public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null);
+public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null, bool IgnoreGroups = false);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
 public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition, bool IsCut = false);
 
@@ -43,6 +43,8 @@ public sealed partial class TimelineView : FrameworkElement
         set { if (pixelsPerSecond == value) return; pixelsPerSecond = value; RefreshGeometry(); }
     }
     public bool Snapping { get; set; } = true;
+    public bool IgnoreGroups { get; set; }
+    internal bool ShouldIgnoreGroups => IgnoreGroups || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
     private double offset;
     public double Offset
     {
@@ -61,6 +63,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<long>? SeekRequested;
     public event Action? SelectionChanged;
     public event Action<ClipGesture>? EditRequested;
+    public event Action? UnlinkRequested;
+    public event Action? LinkRequested;
     public event Action<Guid, string>? TrackAction;
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
@@ -96,6 +100,9 @@ public sealed partial class TimelineView : FrameworkElement
     private TrackKind destinationNewTrackKind;
     private long? snappedFrame;
     private HashSet<Guid>? movingClipIds;
+    private bool isDragging;
+    private bool alreadySelectedOnDown;
+    public const double DragDistanceThreshold = 4.0;
     private bool seeking;
     private Guid? levelTrack;
     private string? levelKind;
@@ -118,6 +125,7 @@ public sealed partial class TimelineView : FrameworkElement
         pressedEventButton = null;
         if (selectingLoop) loopRegion = loopBeforeDrag;
         selectingLoop = false;
+        isDragging = false; alreadySelectedOnDown = false;
         dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
         destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
         CancelTrackLevelInput();
@@ -366,7 +374,7 @@ public sealed partial class TimelineView : FrameworkElement
         var index = (int)Math.Floor((y - RulerHeight + VerticalOffset) / TrackHeight);
         return index >= 0 && index < Project.Tracks.Count ? Project.Tracks[index] : null;
     }
-    internal (bool IsNewTrack, int TrackIndex, TrackKind NewTrackKind) EvaluateDragTarget(double y, TrackKind sourceTrackKind)
+    internal (bool IsNewTrack, int TrackIndex, TrackKind NewTrackKind) EvaluateDragTarget(double y, TrackKind sourceTrackKind, int? sourceTrackIndex = null)
     {
         const double boundaryThreshold = 18.0;
         var timelineTop = RulerHeight - VerticalOffset;
@@ -377,12 +385,12 @@ public sealed partial class TimelineView : FrameworkElement
             return (true, 0, sourceTrackKind);
         }
 
-        if (y < timelineTop + boundaryThreshold || y < RulerHeight)
+        if (y < timelineTop + (sourceTrackIndex.HasValue ? 4.0 : boundaryThreshold) || y < RulerHeight)
         {
             return (true, 0, sourceTrackKind);
         }
 
-        if (y >= timelineBottom - boundaryThreshold)
+        if (y >= timelineBottom - (sourceTrackIndex.HasValue ? 4.0 : boundaryThreshold))
         {
             return (true, Project.Tracks.Count, sourceTrackKind);
         }
@@ -395,6 +403,24 @@ public sealed partial class TimelineView : FrameworkElement
 
         if (track.Kind == sourceTrackKind)
         {
+            if (sourceTrackIndex.HasValue)
+            {
+                if (trackIndex == sourceTrackIndex.Value)
+                {
+                    return (false, trackIndex, sourceTrackKind);
+                }
+                const double interTrackMargin = 4.0;
+                if (offsetInTrack < interTrackMargin)
+                {
+                    return (true, trackIndex, sourceTrackKind);
+                }
+                if (offsetInTrack > TrackHeight - interTrackMargin)
+                {
+                    return (true, trackIndex + 1, sourceTrackKind);
+                }
+                return (false, trackIndex, sourceTrackKind);
+            }
+
             if (offsetInTrack < boundaryThreshold)
             {
                 return (true, trackIndex, sourceTrackKind);
@@ -412,8 +438,10 @@ public sealed partial class TimelineView : FrameworkElement
     }
     private HashSet<Guid> GetMovingClipIds(TimelineClip primary)
     {
-        var ids = Selection.Contains(primary.Id) ? Selection.ToHashSet() : [primary.Id];
-        if (primary.GroupId.HasValue)
+        var ids = ShouldIgnoreGroups
+            ? [primary.Id]
+            : (Selection.Contains(primary.Id) ? Selection.ToHashSet() : [primary.Id]);
+        if (primary.GroupId.HasValue && !ShouldIgnoreGroups)
         {
             var grouped = Project.Tracks.SelectMany(t => t.Clips)
                 .Where(c => c.GroupId == primary.GroupId.Value)
@@ -488,7 +516,7 @@ public sealed partial class TimelineView : FrameworkElement
         DrawLoopRegion(dc);
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, RulerHeight, Math.Max(0, ActualWidth - HeaderWidth), Math.Max(0, ActualHeight - RulerHeight))));
         var insertionY = 0.0;
-        if (destinationIsNewTrack && dragging is not null && mode == "Move")
+        if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
         {
             var pSlot = Math.Clamp(destinationNewTrackIndex, 0, Project.Tracks.Count);
             insertionY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
@@ -523,7 +551,7 @@ public sealed partial class TimelineView : FrameworkElement
             if (y + TrackHeight < RulerHeight || y > ActualHeight) continue;
             dc.DrawLine(new Pen(Brush("#111111"), 3), new Point(HeaderWidth, y + TrackHeight), new Point(ActualWidth, y + TrackHeight));
 
-            if (!destinationIsNewTrack && destination == i && dragging is not null && mode == "Move" && track.Kind == dragTrack?.Kind)
+            if (!destinationIsNewTrack && destination == i && isDragging && dragging is not null && mode == "Move" && track.Kind == dragTrack?.Kind)
             {
                 dc.DrawRectangle(null, new Pen(Brush("#00D2FF"), 1.5), new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
             }
@@ -533,8 +561,8 @@ public sealed partial class TimelineView : FrameworkElement
                 var start = clip.StartFrame;
                 var duration = clip.DurationFrames;
                 var cy = y;
-                var isPrimaryDragged = dragging?.Id == clip.Id;
-                var isMovingMember = dragging is not null && mode == "Move" && movingClipIds is not null && movingClipIds.Contains(clip.Id);
+                var isPrimaryDragged = isDragging && dragging?.Id == clip.Id;
+                var isMovingMember = isDragging && dragging is not null && mode == "Move" && movingClipIds is not null && movingClipIds.Contains(clip.Id);
 
                 if (isMovingMember)
                 {
@@ -612,7 +640,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var fadePen = new Pen(Brush("#E4E4E4"), 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
-                var edgeMode = dragging?.Id == clip.Id ? mode : hoverClipId == clip.Id ? hoverMode : "";
+                var edgeMode = isDragging && dragging?.Id == clip.Id ? mode : hoverClipId == clip.Id ? hoverMode : "";
                 if (edgeMode is "TrimLeft" or "TrimRight")
                 {
                     var edgeX = edgeMode == "TrimLeft" ? rect.Left + 1 : rect.Right - 1;
@@ -678,7 +706,7 @@ public sealed partial class TimelineView : FrameworkElement
                 Text(dc, "V", 235, y + 47);
             }
         }
-        if (destinationIsNewTrack && dragging is not null && mode == "Move")
+        if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
         {
             var pSlot = Math.Clamp(destinationNewTrackIndex, 0, Project.Tracks.Count);
             var headerY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
@@ -711,7 +739,7 @@ public sealed partial class TimelineView : FrameworkElement
             dc.DrawLine(new Pen(Brush("#F0F0F0"), 1), new Point(playX, 32), new Point(playX, ActualHeight));
             dc.DrawGeometry(Brush("#D8B85D"), null, Geometry.Parse($"M {playX.ToString(CultureInfo.InvariantCulture)},32 l -4,-6 8,0 Z"));
         }
-        if (snappedFrame.HasValue && dragging is not null)
+        if (snappedFrame.HasValue && isDragging && dragging is not null)
         {
             var snapX = X(snappedFrame.Value);
             if (snapX >= HeaderWidth && snapX <= ActualWidth)
@@ -739,6 +767,7 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
+        isDragging = false; alreadySelectedOnDown = false;
         if (BeginEventButton(origin)) { e.Handled = true; return; }
         if (origin.X < HeaderWidth)
         {
@@ -780,10 +809,19 @@ public sealed partial class TimelineView : FrameworkElement
         {
             seeking = true; SeekRequested?.Invoke(FrameAt(origin.X)); CaptureMouse(); return;
         }
-        SelectClip(dragging.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
+        alreadySelectedOnDown = Selection.Contains(dragging.Id);
+        if (!alreadySelectedOnDown || Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            SelectClip(dragging.Id, Keyboard.Modifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
+        }
+        else
+        {
+            activeClipId = dragging.Id;
+            ActivateTrack(Project.Tracks.IndexOf(dragTrack!));
+            InvalidateVisual();
+        }
         if (dragTrack!.IsLocked || dragging.IsLocked) { dragging = null; return; }
         mode = hit!.Value.Mode;
-        Cursor = mode == "Move" ? Cursors.SizeAll : Cursors.SizeWE;
         destination = Project.Tracks.IndexOf(dragTrack); delta = 0;
         destinationIsNewTrack = false;
         destinationNewTrackIndex = destination;
@@ -800,6 +838,13 @@ public sealed partial class TimelineView : FrameworkElement
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
         if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
         if (dragging is null) { UpdateHover(p); return; }
+
+        if (!isDragging)
+        {
+            if ((p - origin).Length < DragDistanceThreshold) return;
+            isDragging = true;
+            Cursor = mode == "Move" ? Cursors.SizeAll : Cursors.SizeWE;
+        }
 
         // Edge auto-scrolling during drag (Vegas Pro feel)
         if (p.X > ActualWidth - 30) Offset = Math.Max(0, Offset + 15);
@@ -819,7 +864,8 @@ public sealed partial class TimelineView : FrameworkElement
                 : dragging.StartFrame;
             delta = Math.Max(-minStart, delta);
 
-            var targetResult = EvaluateDragTarget(p.Y, dragTrack!.Kind);
+            var sourceTrackIdx = dragTrack is not null ? Project.Tracks.IndexOf(dragTrack) : (int?)null;
+            var targetResult = EvaluateDragTarget(p.Y, dragTrack!.Kind, sourceTrackIdx);
             destinationIsNewTrack = targetResult.IsNewTrack;
             destinationNewTrackKind = targetResult.NewTrackKind;
             if (targetResult.IsNewTrack)
@@ -909,6 +955,8 @@ public sealed partial class TimelineView : FrameworkElement
         }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
+        var wasDragging = isDragging;
+        isDragging = false;
         var clip = dragging; dragging = null;
         base.OnMouseLeftButtonUp(e); seeking = false; ReleaseMouseCapture();
         if (commitLevel)
@@ -919,7 +967,15 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (clip is not null)
         {
-            if (mode == "Move")
+            if (!wasDragging)
+            {
+                if (alreadySelectedOnDown && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                {
+                    SelectClip(clip.Id, false, ensureVisible: false);
+                }
+                SeekRequested?.Invoke(FrameAt(origin.X));
+            }
+            else if (mode == "Move")
             {
                 if (destinationIsNewTrack)
                 {
@@ -931,7 +987,8 @@ public sealed partial class TimelineView : FrameworkElement
                         clip.DurationFrames,
                         "Move",
                         NewTrackIndex: destinationNewTrackIndex,
-                        NewTrackKind: destinationNewTrackKind));
+                        NewTrackKind: destinationNewTrackKind,
+                        IgnoreGroups: ShouldIgnoreGroups));
                 }
                 else if (!Project.Tracks[destination].IsLocked && (delta != 0 || Project.Tracks[destination].Id != dragTrack?.Id))
                 {
@@ -941,7 +998,8 @@ public sealed partial class TimelineView : FrameworkElement
                         clip.StartFrame + delta,
                         clip.SourceInFrame,
                         clip.DurationFrames,
-                        "Move"));
+                        "Move",
+                        IgnoreGroups: ShouldIgnoreGroups));
                 }
             }
             else if (delta != 0)
@@ -953,12 +1011,14 @@ public sealed partial class TimelineView : FrameworkElement
                     clip.StartFrame + left,
                     clip.SourceInFrame + left,
                     clip.DurationFrames + (mode == "TrimRight" ? delta : -left),
-                    mode));
+                    mode,
+                    IgnoreGroups: ShouldIgnoreGroups));
             }
         }
         destinationIsNewTrack = false;
         movingClipIds = null;
         snappedFrame = null;
+        alreadySelectedOnDown = false;
         UpdateHover(e.GetPosition(this));
         InvalidateVisual();
     }
@@ -969,6 +1029,7 @@ public sealed partial class TimelineView : FrameworkElement
         selectingLoop = false;
         pressedEventButton = null;
         adjustingLevel = false; seeking = false;
+        isDragging = false; alreadySelectedOnDown = false;
         dragging = null; dragTrack = null; mode = ""; delta = 0;
         destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
         ClearHover();
@@ -995,11 +1056,18 @@ public sealed partial class TimelineView : FrameworkElement
     {
         base.OnMouseRightButtonUp(e);
         var p = e.GetPosition(this);
-        if (p.X < HeaderWidth)
+        if (p.X >= HeaderWidth)
         {
-            var track = TrackAt(p.Y);
-            var trackIndex = track is not null ? Project.Tracks.IndexOf(track) : 0;
-            var menu = new ContextMenu();
+            var hit = HitClip(p);
+            if (hit is not null && !Selection.Contains(hit.Value.Clip.Id))
+            {
+                SelectClip(hit.Value.Clip.Id, false, ensureVisible: false);
+            }
+            return;
+        }
+        var track = TrackAt(p.Y);
+        var trackIndex = track is not null ? Project.Tracks.IndexOf(track) : 0;
+        var menu = new ContextMenu();
 
             var insertVideo = new MenuItem { Header = "Insert Video Track", InputGestureText = "Ctrl+Shift+Q" };
             insertVideo.Click += (_, _) => InsertVideoTrackRequested?.Invoke(trackIndex);
@@ -1047,6 +1115,5 @@ public sealed partial class TimelineView : FrameworkElement
             menu.Placement = PlacementMode.MousePoint;
             menu.IsOpen = true;
             e.Handled = true;
-        }
     }
 }

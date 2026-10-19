@@ -259,6 +259,15 @@ public sealed partial class TimelineView
         menu.Items.Add(fadeOutCurves);
         menu.Items.Add(fadeType);
         menu.Items.Add(new Separator());
+        var groupMenu = new MenuItem { Header = "Group" };
+        var unlink = new MenuItem { Header = "Unlink clip group", InputGestureText = "U" };
+        unlink.Click += (_, _) => UnlinkRequested?.Invoke();
+        var link = new MenuItem { Header = "Link selected clips", InputGestureText = "G" };
+        link.Click += (_, _) => LinkRequested?.Invoke();
+        groupMenu.Items.Add(unlink);
+        groupMenu.Items.Add(link);
+        menu.Items.Add(groupMenu);
+        menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
         menu.Items.Add(new Separator());
