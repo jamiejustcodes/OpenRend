@@ -270,5 +270,85 @@ public sealed class ClipPointerTests
         view.IgnoreGroups = true;
         Assert.True(view.IgnoreGroups);
     });
+
+    [Fact]
+    public void SimulateDragEmitsEditRequestedWithMovedStartFrame() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        ClipGesture? received = null;
+        view.EditRequested += g => received = g;
+
+        // Clip is at X: 354..554, Y: 46..115. Center is (450, 80).
+        view.StartDragForTesting(new Point(450, 80));
+        // Drag 100px to the right (= 30 frames at 100 px/sec and 30 fps)
+        view.DragMoveForTesting(new Point(550, 80));
+        view.CompleteDragGesture(new Point(550, 80), ModifierKeys.None);
+
+        Assert.NotNull(received);
+        Assert.Equal(clip.Id, received.ClipId);
+        Assert.Equal("Move", received.Mode);
+        Assert.Equal(60, received.Start); // 30 + 30
+        Assert.Equal(track.Id, received.TrackId);
+        Assert.Null(received.NewTrackIndex);
+    });
+
+    [Fact]
+    public void SimulateDragDownToBottomEmptyAreaEmitsEditRequestedWithNewTrackAtBottom() => Sta(() =>
+    {
+        var (view, track, clip) = Create();
+        ClipGesture? received = null;
+        view.EditRequested += g => received = g;
+
+        // Project has 1 track (height 69, bottom at 115).
+        view.StartDragForTesting(new Point(450, 80));
+        // Drag down into empty area at Y = 250:
+        view.DragMoveForTesting(new Point(450, 250));
+        view.CompleteDragGesture(new Point(450, 250), ModifierKeys.None);
+
+        Assert.NotNull(received);
+        Assert.Equal(clip.Id, received.ClipId);
+        Assert.Equal("Move", received.Mode);
+        Assert.Equal(1, received.NewTrackIndex); // New track at index 1 (bottom)
+        Assert.Equal(TrackKind.Video, received.NewTrackKind);
+    });
+
+    [Fact]
+    public void SimulateDragDownToExistingTrackEmitsEditRequestedWithTargetTrackId() => Sta(() =>
+    {
+        var (view, track0, clip) = Create();
+        var track1 = new TimelineTrack { Kind = TrackKind.Video };
+        view.Project.Tracks.Add(track1); // Track 0 at 46..115, Track 1 at 115..184
+        ClipGesture? received = null;
+        view.EditRequested += g => received = g;
+
+        view.StartDragForTesting(new Point(450, 80));
+        // Drag down into Track 1 at Y = 145:
+        view.DragMoveForTesting(new Point(450, 145));
+        view.CompleteDragGesture(new Point(450, 145), ModifierKeys.None);
+
+        Assert.NotNull(received);
+        Assert.Equal(clip.Id, received.ClipId);
+        Assert.Equal("Move", received.Mode);
+        Assert.Equal(track1.Id, received.TrackId);
+        Assert.Null(received.NewTrackIndex);
+    });
+
+    [Fact]
+    public void SimulateClickWithoutMovingEmitsSeekRequestedWithoutDrag() => Sta(() =>
+    {
+        var (view, _, clip) = Create();
+        ClipGesture? editReceived = null;
+        long? seekReceived = null;
+        view.EditRequested += g => editReceived = g;
+        view.SeekRequested += f => seekReceived = f;
+
+        view.StartDragForTesting(new Point(450, 80));
+        // Move only 1px (below 4px threshold):
+        view.DragMoveForTesting(new Point(451, 80));
+        view.CompleteDragGesture(new Point(451, 80), ModifierKeys.None);
+
+        Assert.Null(editReceived);
+        Assert.NotNull(seekReceived);
+    });
 }
 

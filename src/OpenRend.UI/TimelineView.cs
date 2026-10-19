@@ -385,12 +385,12 @@ public sealed partial class TimelineView : FrameworkElement
             return (true, 0, sourceTrackKind);
         }
 
-        if (y < timelineTop + (sourceTrackIndex.HasValue ? 4.0 : boundaryThreshold) || y < RulerHeight)
+        if (y < timelineTop || y < RulerHeight)
         {
             return (true, 0, sourceTrackKind);
         }
 
-        if (y >= timelineBottom - (sourceTrackIndex.HasValue ? 4.0 : boundaryThreshold))
+        if (y >= timelineBottom)
         {
             return (true, Project.Tracks.Count, sourceTrackKind);
         }
@@ -955,83 +955,172 @@ public sealed partial class TimelineView : FrameworkElement
         }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
-        var wasDragging = isDragging;
-        isDragging = false;
-        var clip = dragging; dragging = null;
-        base.OnMouseLeftButtonUp(e); seeking = false; ReleaseMouseCapture();
+        var p = e.GetPosition(this);
+        base.OnMouseLeftButtonUp(e);
+        seeking = false;
+
         if (commitLevel)
         {
             SetTrackLevel(levelTrack!.Value, levelKind!, pendingLevel);
-            UpdateHover(e.GetPosition(this));
+            ReleaseMouseCapture();
+            UpdateHover(p);
             return;
         }
-        if (clip is not null)
-        {
-            if (!wasDragging)
-            {
-                if (alreadySelectedOnDown && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
-                {
-                    SelectClip(clip.Id, false, ensureVisible: false);
-                }
-                SeekRequested?.Invoke(FrameAt(origin.X));
-            }
-            else if (mode == "Move")
-            {
-                if (destinationIsNewTrack)
-                {
-                    EditRequested?.Invoke(new ClipGesture(
-                        clip.Id,
-                        Guid.Empty,
-                        clip.StartFrame + delta,
-                        clip.SourceInFrame,
-                        clip.DurationFrames,
-                        "Move",
-                        NewTrackIndex: destinationNewTrackIndex,
-                        NewTrackKind: destinationNewTrackKind,
-                        IgnoreGroups: ShouldIgnoreGroups));
-                }
-                else if (!Project.Tracks[destination].IsLocked && (delta != 0 || Project.Tracks[destination].Id != dragTrack?.Id))
-                {
-                    EditRequested?.Invoke(new ClipGesture(
-                        clip.Id,
-                        Project.Tracks[destination].Id,
-                        clip.StartFrame + delta,
-                        clip.SourceInFrame,
-                        clip.DurationFrames,
-                        "Move",
-                        IgnoreGroups: ShouldIgnoreGroups));
-                }
-            }
-            else if (delta != 0)
-            {
-                var left = mode == "TrimLeft" ? delta : 0;
-                EditRequested?.Invoke(new ClipGesture(
-                    clip.Id,
-                    Project.Tracks[destination].Id,
-                    clip.StartFrame + left,
-                    clip.SourceInFrame + left,
-                    clip.DurationFrames + (mode == "TrimRight" ? delta : -left),
-                    mode,
-                    IgnoreGroups: ShouldIgnoreGroups));
-            }
-        }
+
+        CompleteDragGesture(p, Keyboard.Modifiers);
+        ReleaseMouseCapture();
+    }
+
+    internal void CompleteDragGesture(Point p, ModifierKeys modifiers)
+    {
+        var wasDragging = isDragging;
+        var clip = dragging;
+        var commitMode = mode;
+        var commitDelta = delta;
+        var commitDestination = destination;
+        var commitIsNewTrack = destinationIsNewTrack;
+        var commitNewTrackIndex = destinationNewTrackIndex;
+        var commitNewTrackKind = destinationNewTrackKind;
+        var commitDragTrack = dragTrack;
+        var commitOrigin = origin;
+        var commitAlreadySelected = alreadySelectedOnDown;
+        var commitIgnoreGroups = ShouldIgnoreGroups || modifiers.HasFlag(ModifierKeys.Alt);
+
+        // Reset drag fields before releasing capture so OnLostMouseCapture is a no-op
+        isDragging = false;
+        dragging = null;
+        dragTrack = null;
+        mode = "";
+        delta = 0;
         destinationIsNewTrack = false;
         movingClipIds = null;
         snappedFrame = null;
         alreadySelectedOnDown = false;
-        UpdateHover(e.GetPosition(this));
+        seeking = false;
+
+        if (clip is not null)
+        {
+            if (!wasDragging)
+            {
+                if (commitAlreadySelected && !modifiers.HasFlag(ModifierKeys.Control))
+                {
+                    SelectClip(clip.Id, false, ensureVisible: false);
+                }
+                SeekRequested?.Invoke(FrameAt(commitOrigin.X));
+            }
+            else if (commitMode == "Move")
+            {
+                if (commitIsNewTrack)
+                {
+                    EditRequested?.Invoke(new ClipGesture(
+                        clip.Id,
+                        Guid.Empty,
+                        clip.StartFrame + commitDelta,
+                        clip.SourceInFrame,
+                        clip.DurationFrames,
+                        "Move",
+                        NewTrackIndex: commitNewTrackIndex,
+                        NewTrackKind: commitNewTrackKind,
+                        IgnoreGroups: commitIgnoreGroups));
+                }
+                else if (commitDestination >= 0 && commitDestination < Project.Tracks.Count &&
+                         !Project.Tracks[commitDestination].IsLocked &&
+                         (commitDelta != 0 || Project.Tracks[commitDestination].Id != commitDragTrack?.Id))
+                {
+                    EditRequested?.Invoke(new ClipGesture(
+                        clip.Id,
+                        Project.Tracks[commitDestination].Id,
+                        clip.StartFrame + commitDelta,
+                        clip.SourceInFrame,
+                        clip.DurationFrames,
+                        "Move",
+                        IgnoreGroups: commitIgnoreGroups));
+                }
+            }
+            else if (commitDelta != 0)
+            {
+                var left = commitMode == "TrimLeft" ? commitDelta : 0;
+                var trackId = commitDestination >= 0 && commitDestination < Project.Tracks.Count
+                    ? Project.Tracks[commitDestination].Id
+                    : (commitDragTrack?.Id ?? Guid.Empty);
+                EditRequested?.Invoke(new ClipGesture(
+                    clip.Id,
+                    trackId,
+                    clip.StartFrame + left,
+                    clip.SourceInFrame + left,
+                    clip.DurationFrames + (commitMode == "TrimRight" ? commitDelta : -left),
+                    commitMode,
+                    IgnoreGroups: commitIgnoreGroups));
+            }
+        }
+
+        UpdateHover(p);
         InvalidateVisual();
     }
+
+    internal void StartDragForTesting(Point p, ModifierKeys modifiers = ModifierKeys.None)
+    {
+        origin = p;
+        isDragging = false;
+        alreadySelectedOnDown = false;
+        var hit = HitClip(p);
+        if (hit is null) return;
+        dragTrack = hit.Value.Track;
+        dragging = hit.Value.Clip;
+        alreadySelectedOnDown = Selection.Contains(dragging.Id);
+        if (!alreadySelectedOnDown || modifiers.HasFlag(ModifierKeys.Control))
+        {
+            SelectClip(dragging.Id, modifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
+        }
+        if (dragTrack!.IsLocked || dragging.IsLocked) { dragging = null; return; }
+        mode = hit.Value.Mode;
+        destination = Project.Tracks.IndexOf(dragTrack);
+        delta = 0;
+        destinationIsNewTrack = false;
+        destinationNewTrackIndex = destination;
+        destinationNewTrackKind = dragTrack.Kind;
+        movingClipIds = GetMovingClipIds(dragging);
+    }
+
+    internal void DragMoveForTesting(Point p)
+    {
+        if (dragging is null) return;
+        if (!isDragging)
+        {
+            if ((p - origin).Length < DragDistanceThreshold) return;
+            isDragging = true;
+        }
+        delta = Project.FrameRate.Frames((p.X - origin.X) / PixelsPerSecond);
+        if (mode == "Move")
+        {
+            var sourceTrackIdx = dragTrack is not null ? Project.Tracks.IndexOf(dragTrack) : (int?)null;
+            var targetResult = EvaluateDragTarget(p.Y, dragTrack!.Kind, sourceTrackIdx);
+            destinationIsNewTrack = targetResult.IsNewTrack;
+            destinationNewTrackKind = targetResult.NewTrackKind;
+            if (targetResult.IsNewTrack)
+            {
+                destinationNewTrackIndex = targetResult.TrackIndex;
+            }
+            else
+            {
+                destination = targetResult.TrackIndex;
+            }
+        }
+    }
+
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        if (isDragging || dragging is not null)
+        {
+            isDragging = false; alreadySelectedOnDown = false;
+            dragging = null; dragTrack = null; mode = ""; delta = 0;
+            destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
+        }
         if (selectingLoop) loopRegion = loopBeforeDrag;
         selectingLoop = false;
         pressedEventButton = null;
         adjustingLevel = false; seeking = false;
-        isDragging = false; alreadySelectedOnDown = false;
-        dragging = null; dragTrack = null; mode = ""; delta = 0;
-        destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
         ClearHover();
         InvalidateVisual();
     }

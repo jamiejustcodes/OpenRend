@@ -484,7 +484,8 @@ public partial class MainWindow : Window
     {
         Pause();
         var ignoreGroups = gesture.IgnoreGroups || vm.IgnoreGroups;
-        var movingIds = ignoreGroups ? new[] { gesture.ClipId } : (IEnumerable<Guid>)vm.Selection;
+        var selection = vm.Selection.Contains(gesture.ClipId) ? vm.Selection : [gesture.ClipId];
+        var movingIds = ignoreGroups ? new[] { gesture.ClipId } : (IEnumerable<Guid>)selection;
         if (gesture.Mode == "Move")
         {
             if (gesture.NewTrackIndex is { } newIdx && gesture.NewTrackKind is { } newKind)
@@ -505,6 +506,7 @@ public partial class MainWindow : Window
             vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups);
             vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
+        RequestPreview();
     }
     private TimelineClip? SelectedClip => vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
     private void UpdateInspector()
