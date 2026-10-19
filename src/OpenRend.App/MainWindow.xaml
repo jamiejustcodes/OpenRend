@@ -91,33 +91,173 @@
       </DockPanel>
       <TextBlock Text="{Binding Title}" HorizontalAlignment="Center" FontSize="11" FontWeight="SemiBold" IsHitTestVisible="False"/>
     </Grid>
-    <Border Grid.Row="1" Background="#262626" Padding="3,1" BorderBrush="#111111" BorderThickness="0,0,0,2">
+    <Border Grid.Row="1" Background="{StaticResource ColorD}" Padding="4,2" BorderBrush="{StaticResource ColorBG}" BorderThickness="0,0,0,1">
       <StackPanel Orientation="Horizontal">
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="New project" ToolTip="New project (Ctrl+N)" Click="NewClick"><Image Source="{StaticResource Icon.New}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Open" ToolTip="Open project (Ctrl+O)" Click="OpenClick"><Image Source="{StaticResource Icon.Open}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Save" ToolTip="Save project (Ctrl+S)" Click="SaveClick"><Image Source="{StaticResource Icon.Save}"/></Button>
-        <Button x:Name="RenderButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Render as…" ToolTip="Render as (Ctrl+Shift+E)" Click="ExportClick"><Image Source="{StaticResource Icon.Render}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Project settings" ToolTip="Project settings (Alt+Enter)" Click="SettingsClick"><Image Source="{StaticResource Icon.Settings}"/></Button>
-        <Button x:Name="CutButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Cut" ToolTip="Cut (Ctrl+X)" Click="CutClick"><Image Source="{StaticResource Icon.Cut}"/></Button>
-        <Button x:Name="CopyButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Copy" ToolTip="Copy (Ctrl+C)" Click="CopyClick"><Image Source="{StaticResource Icon.Copy}"/></Button>
-        <Button x:Name="PasteButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Paste" ToolTip="Paste (Ctrl+V)" Click="PasteClick"><Image Source="{StaticResource Icon.Paste}"/></Button>
-        <Button x:Name="UndoButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Undo" ToolTip="Undo (Ctrl+Z)" Click="UndoClick"><Image Source="{StaticResource Icon.Undo}"/></Button>
-        <Button x:Name="RedoButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Redo" ToolTip="Redo (Ctrl+Y)" Click="RedoClick"><Image Source="{StaticResource Icon.Redo}"/></Button>
+        <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_add}" AutomationProperties.Name="New project" ToolTip="New project (Ctrl+N)" Click="NewClick"/>
+        <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_folder}" AutomationProperties.Name="Open" ToolTip="Open project (Ctrl+O)" Click="OpenClick"/>
+        <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_save}" AutomationProperties.Name="Save" ToolTip="Save project (Ctrl+S)" Click="SaveClick"/>
+        <Button x:Name="RenderButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_render}" AutomationProperties.Name="Render as…" ToolTip="Render as (Ctrl+Shift+E)" Click="ExportClick"/>
+        <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_settings}" AutomationProperties.Name="Project settings" ToolTip="Project settings (Alt+Enter)" Click="SettingsClick"/>
+        <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
+        <Button x:Name="CutButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_cut}" AutomationProperties.Name="Cut" ToolTip="Cut (Ctrl+X)" Click="CutClick"/>
+        <Button x:Name="CopyButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_copy}" AutomationProperties.Name="Copy" ToolTip="Copy (Ctrl+C)" Click="CopyClick"/>
+        <Button x:Name="PasteButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_paste}" AutomationProperties.Name="Paste" ToolTip="Paste (Ctrl+V)" Click="PasteClick"/>
+        <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
+        <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_undo}" AutomationProperties.Name="Undo" ToolTip="Undo (Ctrl+Z)" Click="UndoClick"/>
+        <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_redo}" AutomationProperties.Name="Redo" ToolTip="Redo (Ctrl+Y)" Click="RedoClick"/>
       </StackPanel>
     </Border>
     <Grid Grid.Row="2" x:Name="Workspace" Margin="4,0">
       <Grid.ColumnDefinitions><ColumnDefinition x:Name="MediaWidth" Width="*" MinWidth="280"/><ColumnDefinition Width="5"/><ColumnDefinition x:Name="PreviewWidth" Width="844" MinWidth="320"/><ColumnDefinition Width="5"/><ColumnDefinition Width="122"/></Grid.ColumnDefinitions>
       <TabControl x:Name="ToolsTabs" TabStripPlacement="Bottom" SelectedIndex="1">
-        <TabItem Header="Explorer"><DockPanel><StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Height="32"><Button Content="Choose folder…" Click="BrowseFolderClick"/><TextBlock x:Name="FolderLabel" Text="Choose a folder to browse media" TextTrimming="CharacterEllipsis" MaxWidth="300" Margin="6,0"/></StackPanel><ListBox x:Name="ExplorerList" DisplayMemberPath="Name" MouseDoubleClick="ExplorerDoubleClick"/></DockPanel></TabItem>
+        <!-- 1:1 Vegas Pro UnifiedExplorer Tab -->
+        <TabItem Header="Explorer">
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30" />
+              <RowDefinition Height="1" />
+              <RowDefinition Height="*" />
+            </Grid.RowDefinitions>
+            
+            <!-- 1:1 Vegas Pro ExplorerToolbar -->
+            <Grid Grid.Row="0" Background="{StaticResource ColorD}">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+                <ColumnDefinition Width="Auto" />
+              </Grid.ColumnDefinitions>
+              
+              <!-- Navigation buttons -->
+              <StackPanel Orientation="Horizontal" Grid.Column="0" Margin="2,0">
+                <Button x:Name="ExplorerBack" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_back}" ToolTip="Back" Click="ExplorerBackClick" Margin="1,0"/>
+                <Button x:Name="ExplorerForward" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_forward}" ToolTip="Forward" Click="ExplorerForwardClick" Margin="1,0"/>
+                <Button x:Name="ExplorerUp" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_folder_up}" ToolTip="Up one folder" Click="ExplorerUpClick" Margin="1,0"/>
+              </StackPanel>
+
+              <!-- Location path box & breadcrumbs -->
+              <Grid Grid.Column="1" Margin="4,2">
+                <TextBox x:Name="ExplorerPathBox" Style="{StaticResource SearchBoxStyle}" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" Padding="6,2" VerticalContentAlignment="Center" KeyDown="ExplorerPathKeyDown"/>
+                <TextBlock x:Name="FolderLabel" Text="Choose a folder to browse media" Foreground="{StaticResource TextColorGrey}" VerticalAlignment="Center" Margin="8,0" IsHitTestVisible="False" Visibility="Collapsed"/>
+              </Grid>
+
+              <!-- Browse button for compatibility -->
+              <Button Grid.Column="2" Style="{StaticResource TextButton}" Content="Browse…" Click="BrowseFolderClick" Margin="2,3"/>
+
+              <!-- Toolbar actions -->
+              <StackPanel Orientation="Horizontal" Grid.Column="3" Margin="2,0">
+                <Button x:Name="ExplorerRefresh" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_refresh}" ToolTip="Refresh (F5)" Click="ExplorerRefreshClick" Margin="1,0"/>
+                <ToggleButton x:Name="ExplorerAutoPlay" Style="{StaticResource IconToggleButton}" ContentTemplate="{StaticResource ic_autoplay}" ToolTip="Auto Play" Margin="1,0"/>
+                <Menu Background="Transparent" VerticalAlignment="Center" Margin="1,0">
+                  <MenuItem Style="{StaticResource IconMenuItem}" HeaderTemplate="{StaticResource ic_view}" ToolTip="View">
+                    <MenuItem Header="Large Icons" Click="ExplorerViewModeClick" Tag="Icons"/>
+                    <MenuItem Header="Details" Click="ExplorerViewModeClick" Tag="Details"/>
+                    <MenuItem Header="List" Click="ExplorerViewModeClick" Tag="List"/>
+                  </MenuItem>
+                </Menu>
+              </StackPanel>
+            </Grid>
+
+            <!-- 1px Divider -->
+            <Border Grid.Row="1" Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorD}" BorderThickness="0,0,0,1"/>
+
+            <!-- Main Content: Left Nav Tree + Splitter + Right Content List -->
+            <Grid Grid.Row="2">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200" MinWidth="140" MaxWidth="380"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <!-- Left Navigation TreeView matching Vegas Pro ExplorerNavigationView -->
+              <TreeView x:Name="ExplorerNavTree" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,4" SelectedItemChanged="ExplorerNavTreeChanged">
+                <TreeViewItem Header="Quick Access" IsExpanded="True">
+                  <TreeViewItem Header="Desktop" Tag="Desktop"/>
+                  <TreeViewItem Header="Documents" Tag="Documents"/>
+                  <TreeViewItem Header="Downloads" Tag="Downloads"/>
+                  <TreeViewItem Header="Videos" Tag="Videos"/>
+                </TreeViewItem>
+                <TreeViewItem Header="This PC" IsExpanded="True">
+                  <TreeViewItem Header="Local Disk (C:)" Tag="C:\"/>
+                  <TreeViewItem Header="Volume (D:)" Tag="D:\"/>
+                  <TreeViewItem Header="Volume (E:)" Tag="E:\"/>
+                </TreeViewItem>
+              </TreeView>
+
+              <!-- Splitter -->
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+
+              <!-- Right Explorer Content List -->
+              <Grid Grid.Column="2" Background="{StaticResource ColorD}">
+                <ListBox x:Name="ExplorerList" DisplayMemberPath="Name" MouseDoubleClick="ExplorerDoubleClick" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4">
+                  <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                      <Setter Property="Padding" Value="4,3"/>
+                      <Setter Property="Margin" Value="0,1"/>
+                      <Setter Property="Template">
+                        <Setter.Value>
+                          <ControlTemplate TargetType="ListBoxItem">
+                            <Border x:Name="ItemBorder" Background="Transparent" Padding="{TemplateBinding Padding}">
+                              <DockPanel LastChildFill="True">
+                                <ContentControl DockPanel.Dock="Left" Width="20" Height="20" ContentTemplate="{StaticResource ic_video_type}" Style="{StaticResource BaseContentControl}" Margin="0,0,6,0"/>
+                                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" Visibility="Collapsed" x:Name="HoverActions">
+                                  <Button Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_add}" Width="20" Height="20" ToolTip="Add to Project" Click="ExplorerItemAddClick"/>
+                                  <Button Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_play}" Width="20" Height="20" ToolTip="Preview" Click="ExplorerItemPreviewClick"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Name}" VerticalAlignment="Center" Foreground="{StaticResource TextColor}" TextTrimming="CharacterEllipsis"/>
+                              </DockPanel>
+                            </Border>
+                            <ControlTemplate.Triggers>
+                              <Trigger Property="IsMouseOver" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource HoverColor}"/>
+                                <Setter TargetName="HoverActions" Property="Visibility" Value="Visible"/>
+                              </Trigger>
+                              <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="ItemBorder" Property="Background" Value="{StaticResource ActiveColor}"/>
+                              </Trigger>
+                            </ControlTemplate.Triggers>
+                          </ControlTemplate>
+                        </Setter.Value>
+                      </Setter>
+                    </Style>
+                  </ListBox.ItemContainerStyle>
+                </ListBox>
+              </Grid>
+            </Grid>
+          </Grid>
+        </TabItem>
         <TabItem Header="Project Media">
-          <DockPanel>
-            <Border DockPanel.Dock="Top" Height="32" BorderBrush="#111111" BorderThickness="0,0,0,1"><StackPanel Orientation="Horizontal" VerticalAlignment="Center"><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Remove unused media" ToolTip="Remove unused media from project" Click="RemoveUnusedClick"><Image Source="{StaticResource Icon.Delete}"/></Button><Button Style="{StaticResource ToolbarButton}" Width="126" AutomationProperties.Name="Import Media…" Click="ImportClick"><StackPanel Orientation="Horizontal"><Image Source="{StaticResource Icon.Import}" Width="16" Height="16"/><TextBlock Text="Import Media…" Margin="5,0"/></StackPanel></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Add to timeline" Click="PlaceSelectedClick" ToolTip="Insert selected media at cursor"><Image Source="{StaticResource Icon.Play}"/></Button></StackPanel></Border>
-            <Border DockPanel.Dock="Bottom" Height="28" BorderBrush="#303030" BorderThickness="0,1,0,0"><TextBlock x:Name="MediaDetails" FontSize="11" TextTrimming="CharacterEllipsis" Margin="174,0,4,0"/></Border>
-            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="166"/><ColumnDefinition Width="6"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <DockPanel Background="#262626"><TextBlock x:Name="MediaCount" DockPanel.Dock="Bottom" Foreground="#B8B8B8" Margin="8,4" FontSize="10"/><TreeView x:Name="MediaTree" Background="#262626" Foreground="#DDDDDD" BorderThickness="0" FontSize="11" SelectedItemChanged="MediaFilterChanged" Padding="3,2"><TreeViewItem Header="All Media" Tag="All" IsSelected="True" IsExpanded="True"><TreeViewItem Header="Video" Tag="Video"/><TreeViewItem Header="Audio" Tag="Audio"/><TreeViewItem Header="Missing Media" Tag="Missing"/></TreeViewItem></TreeView></DockPanel>
-              <GridSplitter Grid.Column="1" Width="6" HorizontalAlignment="Stretch"/>
-              <Grid Grid.Column="2">
-                <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch">
+          <DockPanel Background="{StaticResource ColorBG}">
+            <Border DockPanel.Dock="Top" Height="30" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+              <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="4,0">
+                <Button Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_delete}" AutomationProperties.Name="Remove unused media" ToolTip="Remove unused media from project" Click="RemoveUnusedClick" Margin="2,0"/>
+                <Button Style="{StaticResource TextButton}" Width="120" AutomationProperties.Name="Import Media…" Click="ImportClick" Margin="2,0">
+                  <StackPanel Orientation="Horizontal">
+                    <ContentControl ContentTemplate="{StaticResource ic_folder_up}" Width="16" Height="16" Style="{StaticResource BaseContentControl}"/>
+                    <TextBlock Text="Import Media…" Margin="5,0"/>
+                  </StackPanel>
+                </Button>
+                <Button Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_play}" AutomationProperties.Name="Add to timeline" Click="PlaceSelectedClick" ToolTip="Insert selected media at cursor" Margin="2,0"/>
+              </StackPanel>
+            </Border>
+            <Border DockPanel.Dock="Bottom" Height="26" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0">
+              <TextBlock x:Name="MediaDetails" FontSize="11" Foreground="{StaticResource TextColorGrey}" TextTrimming="CharacterEllipsis" Margin="8,0"/>
+            </Border>
+            <Grid>
+              <Grid.ColumnDefinitions><ColumnDefinition Width="180"/><ColumnDefinition Width="4"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+              <DockPanel Background="{StaticResource ColorD}">
+                <TextBlock x:Name="MediaCount" DockPanel.Dock="Bottom" Foreground="{StaticResource TextColorGrey}" Margin="8,4" FontSize="10"/>
+                <TreeView x:Name="MediaTree" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectedItemChanged="MediaFilterChanged" Padding="3,2">
+                  <TreeViewItem Header="All Media" Tag="All" IsSelected="True" IsExpanded="True">
+                    <TreeViewItem Header="Video" Tag="Video"/>
+                    <TreeViewItem Header="Audio" Tag="Audio"/>
+                    <TreeViewItem Header="Missing Media" Tag="Missing"/>
+                  </TreeViewItem>
+                </TreeView>
+              </DockPanel>
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
+                <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch" Background="{StaticResource ColorBG}" BorderThickness="0">
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
@@ -125,52 +265,180 @@
                     </ContextMenu>
                   </ListBox.ContextMenu>
                   <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                  <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="Width" Value="128"/><Setter Property="Height" Value="104"/><Setter Property="Padding" Value="5"/><Setter Property="Foreground" Value="#E8E8E8"/><Setter Property="VerticalContentAlignment" Value="Top"/></Style></ListBox.ItemContainerStyle>
-                  <ListBox.ItemTemplate><DataTemplate><StackPanel><Border Background="#181818" Width="116" Height="66"><Image Source="{Binding Thumbnail}" Stretch="Uniform"/></Border><TextBlock Text="{Binding Name}" FontSize="11" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" Height="28" Margin="0,2,0,0"/></StackPanel></DataTemplate></ListBox.ItemTemplate>
+                  <ListBox.ItemContainerStyle>
+                    <Style TargetType="ListBoxItem">
+                      <Setter Property="Width" Value="128"/><Setter Property="Height" Value="104"/><Setter Property="Padding" Value="4"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="VerticalContentAlignment" Value="Top"/>
+                    </Style>
+                  </ListBox.ItemContainerStyle>
+                  <ListBox.ItemTemplate>
+                    <DataTemplate>
+                      <StackPanel>
+                        <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Width="116" Height="66">
+                          <Image Source="{Binding Thumbnail}" Stretch="Uniform"/>
+                        </Border>
+                        <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{StaticResource TextColor}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" Height="28" Margin="0,2,0,0"/>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ListBox.ItemTemplate>
                 </ListBox>
-                <TextBlock x:Name="EmptyLibrary" Text="Import video or audio&#10;Ctrl+I or drop files here" TextAlignment="Center" Foreground="#B8B8B8" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <TextBlock x:Name="EmptyLibrary" Text="Import video or audio&#10;Ctrl+I or drop files here" TextAlignment="Center" Foreground="{StaticResource TextColorGrey}" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/>
               </Grid>
             </Grid>
           </DockPanel>
         </TabItem>
+        <!-- 1:1 Vegas Pro Transitions Tab -->
         <TabItem Header="Transitions">
-          <Grid Background="#262626">
-            <Grid.RowDefinitions><RowDefinition Height="30"/><RowDefinition Height="32"/><RowDefinition Height="*"/></Grid.RowDefinitions>
-            <TabControl x:Name="TransitionCategories" Grid.Row="0" Background="#262626" BorderThickness="0" SelectionChanged="TransitionCategoryChanged" AutomationProperties.Name="Transition categories">
-              <TabItem Header="All Plug-ins" IsSelected="True" AutomationProperties.AutomationId="AllTransitionPlugins"/>
-              <TabItem x:Name="FavoriteTransitionsCategory" Header="Favorites" AutomationProperties.AutomationId="FavoriteTransitions"/>
-              <TabItem Header="Fades"/>
-              <TabItem Header="Wipes"/>
-              <TabItem Header="Reveals"/>
-              <TabItem Header="Transforms"/>
-              <TabItem Header="3D and Peels"/>
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+
+            <!-- 1:1 Vegas Pro Category Tabs with Embedded Search -->
+            <TabControl x:Name="TransitionCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="TransitionCategoryChanged" AutomationProperties.Name="Transition categories">
+              <TabItem x:Name="AllTransitionPluginsTab" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="AllTransitionPlugins">
+                <TabItem.Header>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*" MinWidth="130" MaxWidth="220"/>
+                      <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ContentControl Grid.Column="0" ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Margin="4,0,2,0" Style="{StaticResource BaseContentControl}"/>
+                    <TextBox x:Name="TransitionSearch" Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Background="Transparent" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,2" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions" AutomationProperties.AutomationId="TransitionSearch"/>
+                  </Grid>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem x:Name="FavoriteTransitionsCategory" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="FavoriteTransitions">
+                <TabItem.Header>
+                  <StackPanel Orientation="Horizontal" Margin="4,0">
+                    <ContentControl ContentTemplate="{StaticResource ic_favorite}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,4,0"/>
+                    <TextBlock Text="Favorites" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  </StackPanel>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem Header="Fades" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Wipes" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Reveals" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Transforms" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="3D and Peels" Style="{StaticResource TabItemLabelHeaderStyle}"/>
             </TabControl>
-            <TextBox x:Name="TransitionSearch" Grid.Row="1" Margin="5,3" Padding="5,1" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions"/>
-            <Grid Grid.Row="2"><Grid.ColumnDefinitions><ColumnDefinition Width="150"/><ColumnDefinition Width="5"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-              <ListBox x:Name="TransitionPlugIns" Background="#303030" Foreground="#E6E6E6" BorderThickness="0" FontSize="12" SelectionChanged="TransitionPluginSelectionChanged" AutomationProperties.Name="Transition plug-ins">
+
+            <!-- Main Split: Plugins List (left) + Splitter + Presets (right) -->
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <!-- Left Plugin List matching Vegas Pro ListViewListStyle -->
+              <ListBox x:Name="TransitionPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="TransitionPluginSelectionChanged" AutomationProperties.Name="Transition plug-ins">
                 <ListBoxItem x:Name="DissolvePluginItem" IsSelected="True" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Dissolve">
                   <DockPanel>
-                    <ToggleButton x:Name="FavoriteDissolve" Content="☆" Width="22" Height="20" Padding="0" Margin="0,0,4,0" Foreground="#E3C454" FocusVisualStyle="{StaticResource KeyboardFocus}" Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve" AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve">
-                      <ToggleButton.Template><ControlTemplate TargetType="ToggleButton">
-                        <Border x:Name="StarSurface" Background="Transparent"><TextBlock Text="{TemplateBinding Content}" Foreground="{TemplateBinding Foreground}" FontFamily="Segoe UI Symbol" FontSize="14" HorizontalAlignment="Center" VerticalAlignment="Center" IsHitTestVisible="False"/></Border>
-                        <ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="StarSurface" Property="Background" Value="#46535B"/></Trigger></ControlTemplate.Triggers>
-                      </ControlTemplate></ToggleButton.Template>
-                    </ToggleButton>
-                    <TextBlock Text="Dissolve" VerticalAlignment="Center"/>
+                    <ToggleButton x:Name="FavoriteDissolve" Style="{StaticResource FavoritesToggleButton}" Width="22" Height="20" Margin="0,0,4,0" Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve" AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve"/>
+                    <ContentControl Width="20" Height="20" ContentTemplate="{StaticResource ic_transition}" Style="{StaticResource BaseContentControl}" Margin="0,0,6,0"/>
+                    <TextBlock Text="Dissolve" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
                   </DockPanel>
                 </ListBoxItem>
               </ListBox>
-              <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
-              <ListBox x:Name="TransitionPresets" Grid.Column="2" Padding="7" BorderThickness="0" Background="#262626" ScrollViewer.HorizontalScrollBarVisibility="Disabled" KeyDown="TransitionPresetKeyDown" PreviewMouseMove="TransitionPresetMouseMove" AutomationProperties.Name="Transition presets">
-                <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                <ListBoxItem x:Name="DefaultDissolvePreset" Width="124" Height="103" Padding="4" Margin="2" IsSelected="True" MouseDoubleClick="TransitionPresetDoubleClick" PreviewMouseLeftButtonDown="TransitionPresetMouseDown" PreviewMouseRightButtonDown="TransitionPresetMouseDown" AutomationProperties.Name="Default" ToolTip="Double-click to add to the selection, or drag to a video overlap.">
-                  <Grid><StackPanel><Border Width="110" Height="69" BorderBrush="#777777" BorderThickness="1"><Border.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#316E9C" Offset="0"/><GradientStop Color="#A8A8A8" Offset="0.5"/><GradientStop Color="#B97344" Offset="1"/></LinearGradientBrush></Border.Background></Border><TextBlock Text="Default" TextAlignment="Center" Margin="0,4,0,0" Foreground="#E6E6E6" FontSize="11"/></StackPanel>
-                    <Button x:Name="AddDefaultDissolve" Content="+" Width="21" Height="21" Padding="0" HorizontalAlignment="Right" VerticalAlignment="Top" Click="ApplyDefaultDissolveClick" AutomationProperties.Name="Add Default Dissolve" ToolTip="Add to selected events"/>
-                  </Grid>
-                </ListBoxItem>
-              </ListBox>
-              <TextBlock x:Name="EmptyTransitions" Grid.Column="2" Text="No transitions match your search." Foreground="#B8B8B8" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+
+              <!-- Right Presets Grid matching Vegas Pro VideoFXWPFContainerStyle -->
+              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
+                <ListBox x:Name="TransitionPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" KeyDown="TransitionPresetKeyDown" PreviewMouseMove="TransitionPresetMouseMove" AutomationProperties.Name="Transition presets">
+                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                  <ListBoxItem x:Name="DefaultDissolvePreset" Width="128" Height="108" Padding="4" Margin="3" IsSelected="True" MouseDoubleClick="TransitionPresetDoubleClick" PreviewMouseLeftButtonDown="TransitionPresetMouseDown" PreviewMouseRightButtonDown="TransitionPresetMouseDown" AutomationProperties.Name="Default" ToolTip="Double-click to add to the selection, or drag to a video overlap.">
+                    <Grid>
+                      <StackPanel>
+                        <Border Width="116" Height="70" BorderBrush="{StaticResource ColorL}" BorderThickness="1" CornerRadius="1">
+                          <Border.Background>
+                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
+                              <GradientStop Color="#204060" Offset="0"/>
+                              <GradientStop Color="#406080" Offset="0.5"/>
+                              <GradientStop Color="#805030" Offset="1"/>
+                            </LinearGradientBrush>
+                          </Border.Background>
+                          <!-- 2px progress bar indicator matching Vegas Pro -->
+                          <Border VerticalAlignment="Bottom" Height="2" Background="{StaticResource ActiveColor}"/>
+                        </Border>
+                        <TextBlock Text="Default" TextAlignment="Center" Margin="0,5,0,0" Foreground="{StaticResource TextColor}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+                      </StackPanel>
+                      <Button x:Name="AddDefaultDissolve" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_add}" Width="22" Height="22" Background="{StaticResource ColorM}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2" Click="ApplyDefaultDissolveClick" AutomationProperties.Name="Add Default Dissolve" ToolTip="Add to selected events"/>
+                    </Grid>
+                  </ListBoxItem>
+                </ListBox>
+                <TextBlock x:Name="EmptyTransitions" Text="No transitions match your search." Foreground="{StaticResource TextColorGrey}" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+              </Grid>
             </Grid>
+
+            <!-- Bottom 26px Info Bar in ColorD -->
+            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
+              <TextBlock x:Name="TransitionInfoText" Text="Crossfade between overlapping video events." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
+          </Grid>
+        </TabItem>
+        <!-- 1:1 Vegas Pro Video FX Tab -->
+        <TabItem Header="Video FX">
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+
+            <!-- Video FX Category Tabs with Embedded Search -->
+            <TabControl x:Name="VideoFxCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="VideoFxCategoryChanged" AutomationProperties.Name="Video FX categories">
+              <TabItem x:Name="AllVideoFxPluginsTab" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="AllVideoFxPlugins">
+                <TabItem.Header>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*" MinWidth="130" MaxWidth="220"/>
+                    </Grid.ColumnDefinitions>
+                    <ContentControl Grid.Column="0" ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Margin="4,0,2,0" Style="{StaticResource BaseContentControl}"/>
+                    <TextBox x:Name="VideoFxSearch" Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Background="Transparent" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,2" VerticalContentAlignment="Center" TextChanged="VideoFxSearchChanged" AutomationProperties.Name="Search video FX" AutomationProperties.AutomationId="VideoFxSearch"/>
+                  </Grid>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem x:Name="FavoriteFxCategory" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="FavoriteVideoFx">
+                <TabItem.Header>
+                  <StackPanel Orientation="Horizontal" Margin="4,0">
+                    <ContentControl ContentTemplate="{StaticResource ic_favorite}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,4,0"/>
+                    <TextBlock Text="Favorites" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  </StackPanel>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem Header="Color" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Blurs" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Artistic" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Generators" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+            </TabControl>
+
+            <!-- Video FX Split: Left Plugins + Splitter + Right Presets -->
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <ListBox x:Name="VideoFxPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="VideoFxPluginSelectionChanged" AutomationProperties.Name="Video FX plug-ins"/>
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
+                <ListBox x:Name="VideoFxPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="VideoFxPresetDoubleClick" AutomationProperties.Name="Video FX presets">
+                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                </ListBox>
+                <TextBlock x:Name="EmptyVideoFx" Text="No video effects match your search." Foreground="{StaticResource TextColorGrey}" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+              </Grid>
+            </Grid>
+
+            <!-- Bottom 26px Info Bar in ColorD -->
+            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
+              <TextBlock x:Name="VideoFxInfoText" Text="Apply GPU and CPU video effects to events or tracks." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
           </Grid>
         </TabItem>
         <TabItem Header="Clip Properties">
@@ -202,7 +470,7 @@
             <ComboBox x:Name="PreviewZoom" Width="80" Margin="6,0" SelectionChanged="QualityChanged" SelectedIndex="0"><ComboBoxItem Content="100 %"/><ComboBoxItem Content="200 %"/><ComboBoxItem Content="50 %"/></ComboBox>
           </StackPanel>
           <Border Grid.Row="1" Background="Black" Margin="0,4,0,0"><local:PreviewHost x:Name="Preview"/></Border>
-          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Go to start" ToolTip="Go to start (Ctrl+Home)" Click="StartClick"><Image Source="{StaticResource Icon.First}"/></Button><Button x:Name="PlayButton" Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Play" ToolTip="Play / pause (Space)" Click="PlayClick"><Image Source="{StaticResource Icon.Play}"/></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Pause" ToolTip="Pause (Enter)" Click="PauseClick"><Image Source="{StaticResource Icon.Pause}"/></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Stop" ToolTip="Stop (Esc)" Click="StopClick"><Image Source="{StaticResource Icon.Stop}"/></Button></StackPanel>
+          <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Go to start" ToolTip="Go to start (Ctrl+Home)" Click="StartClick" ContentTemplate="{StaticResource ic_first}"/><Button x:Name="PreviewPlayButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Play" ToolTip="Play / pause (Space)" Click="PlayClick" ContentTemplate="{StaticResource ic_play}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Pause" ToolTip="Pause (Enter)" Click="PauseClick" ContentTemplate="{StaticResource ic_pause}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Stop" ToolTip="Stop (Esc)" Click="StopClick" ContentTemplate="{StaticResource ic_stop}"/></StackPanel>
           <TextBlock Grid.Row="3" x:Name="PreviewInfo" Margin="9,4" Foreground="#B8B8B8" FontSize="11"/>
         </Grid>
       </TabItem></TabControl>
@@ -225,22 +493,39 @@
       <ui:TimelineView x:Name="Timeline"/>
       <Grid Grid.Row="1" Background="#262626"><Grid.ColumnDefinitions><ColumnDefinition Width="256"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ScrollBar x:Name="TimelineScroll" Grid.Column="1" Orientation="Horizontal" Minimum="0" ViewportSize="100" SmallChange="20" LargeChange="100" ValueChanged="TimelineScrollChanged" ToolTip="Timeline horizontal scroll"/></Grid>
     </Grid>
-    <Border Grid.Row="5" Background="#262626" Padding="4,2" BorderBrush="#111111" BorderThickness="0,1,0,0"><DockPanel>
-      <StackPanel Orientation="Horizontal" DockPanel.Dock="Right"><TextBlock x:Name="Timecode" FontSize="11" FontFamily="Consolas" Width="105" Text="00:00:00:00"/><Button Style="{StaticResource ToolbarButton}" Content="−" Click="ZoomOutClick" ToolTip="Zoom out"/><Button Style="{StaticResource ToolbarButton}" Content="+" Click="ZoomInClick" ToolTip="Zoom in"/><Button Style="{StaticResource ToolbarButton}" Content="↔" Click="FitClick" ToolTip="Fit timeline"/></StackPanel>
-      <StackPanel Orientation="Horizontal"><TextBlock x:Name="PlaybackRate" Text="Rate: 0.00" Width="252" FontSize="11"/>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Play from start" Click="PlayFromStartClick" ToolTip="Play from start (Shift+Space)"><Image Source="{StaticResource Icon.First}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Play" Click="PlayClick" ToolTip="Play / pause (Space)"><Image Source="{StaticResource Icon.Play}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Pause" Click="PauseClick" ToolTip="Pause (Enter)"><Image Source="{StaticResource Icon.Pause}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Stop" Click="StopClick" ToolTip="Stop (Esc)"><Image Source="{StaticResource Icon.Stop}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Go to start" Click="StartClick" ToolTip="Go to start (Ctrl+Home)"><Image Source="{StaticResource Icon.First}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Go to end" Click="EndClick" ToolTip="Go to end (Ctrl+End)"><Image Source="{StaticResource Icon.Last}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Previous frame" Click="PreviousClick" ToolTip="Previous frame (Alt+Left)"><Image Source="{StaticResource Icon.StepPrevious}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Next frame" Click="NextClick" ToolTip="Next frame (Alt+Right)"><Image Source="{StaticResource Icon.StepNext}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Split" Click="SplitClick" ToolTip="Split (S)"><Image Source="{StaticResource Icon.Split}"/></Button>
-        <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Delete" Click="DeleteClick" ToolTip="Delete"><Image Source="{StaticResource Icon.Delete}"/></Button>
-        <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Click="SnapClick"/><CheckBox x:Name="RippleToggle" Content="Ripple" Click="RippleClick"/>
-      </StackPanel>
-    </DockPanel></Border>
+    <!-- 1:1 Vegas Pro Transport Bar -->
+    <Border Grid.Row="5" Background="{StaticResource ColorD}" Padding="4,2" BorderBrush="{StaticResource ColorBG}" BorderThickness="0,1,0,0">
+      <DockPanel>
+        <!-- Right side: Timecode in sunken display + Zoom buttons -->
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+          <Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,2" Margin="4,0">
+            <TextBlock x:Name="Timecode" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" Text="00:00:00:00"/>
+          </Border>
+          <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>
+          <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in" Foreground="{StaticResource TextColor}"/>
+          <Button Style="{StaticResource IconButton}" Content="↔" Width="24" Height="24" Click="FitClick" ToolTip="Fit timeline" Foreground="{StaticResource TextColor}"/>
+        </StackPanel>
+
+        <!-- Left side: Transport Buttons & Rate -->
+        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+          <TextBlock x:Name="PlaybackRate" Text="Rate: 0.00" Width="180" FontSize="11" Foreground="{StaticResource TextColorGrey}" Margin="6,0"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_first}" AutomationProperties.Name="Play from start" Click="PlayFromStartClick" ToolTip="Play from start (Shift+Space)"/>
+          <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_play}" AutomationProperties.Name="Play" Click="PlayClick" ToolTip="Play / pause (Space)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_pause}" AutomationProperties.Name="Pause" Click="PauseClick" ToolTip="Pause (Enter)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_stop}" AutomationProperties.Name="Stop" Click="StopClick" ToolTip="Stop (Esc)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_first}" AutomationProperties.Name="Go to start" Click="StartClick" ToolTip="Go to start (Ctrl+Home)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_last}" AutomationProperties.Name="Go to end" Click="EndClick" ToolTip="Go to end (Ctrl+End)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_previous}" AutomationProperties.Name="Previous frame" Click="PreviousClick" ToolTip="Previous frame (Alt+Left)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_next}" AutomationProperties.Name="Next frame" Click="NextClick" ToolTip="Next frame (Alt+Right)"/>
+          <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_split}" AutomationProperties.Name="Split" Click="SplitClick" ToolTip="Split (S)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_delete}" AutomationProperties.Name="Delete" Click="DeleteClick" ToolTip="Delete"/>
+          <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
+          <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="6,0"/>
+          <CheckBox x:Name="RippleToggle" Content="Ripple" Foreground="{StaticResource TextColor}" Click="RippleClick" Margin="6,0"/>
+        </StackPanel>
+      </DockPanel>
+    </Border>
     <DockPanel Grid.Row="6" Margin="8,3"><ProgressBar DockPanel.Dock="Right" Width="160" Maximum="1" Value="{Binding Progress}"/><Button x:Name="CancelRender" DockPanel.Dock="Right" Content="Cancel render" Visibility="Collapsed" Click="CancelExportClick" Padding="7,1"/><TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" Foreground="#B8B8B8" FontSize="11"/></DockPanel>
   </Grid>
 </Window>

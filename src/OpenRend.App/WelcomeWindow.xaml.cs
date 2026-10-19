@@ -84,9 +84,10 @@ public partial class WelcomeWindow : Window
         NewPage.Visibility = page == NewPage ? Visibility.Visible : Visibility.Collapsed;
         OpenPage.Visibility = page == OpenPage ? Visibility.Visible : Visibility.Collapsed;
         HelpPage.Visibility = page == HelpPage ? Visibility.Visible : Visibility.Collapsed;
-        NewPageButton.Background = page == NewPage ? new SolidColorBrush(Color.FromRgb(57, 142, 212)) : Brushes.Transparent;
-        OpenPageButton.Background = page == OpenPage ? new SolidColorBrush(Color.FromRgb(57, 142, 212)) : Brushes.Transparent;
-        HelpPageButton.Background = page == HelpPage ? new SolidColorBrush(Color.FromRgb(57, 142, 212)) : Brushes.Transparent;
+        var activeBrush = (Brush)FindResource("ActiveColor");
+        NewPageButton.Background = page == NewPage ? activeBrush : Brushes.Transparent;
+        OpenPageButton.Background = page == OpenPage ? activeBrush : Brushes.Transparent;
+        HelpPageButton.Background = page == HelpPage ? activeBrush : Brushes.Transparent;
     }
     private void NewPageClick(object sender, RoutedEventArgs e) => ShowPage(NewPage);
     private void OpenPageClick(object sender, RoutedEventArgs e) => ShowPage(OpenPage);

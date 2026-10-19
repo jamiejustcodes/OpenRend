@@ -202,7 +202,7 @@ public partial class MainWindow : Window
             try { await ProjectStore.SaveAsync(vm.Project.DeepClone(), recoveryPath); }
             catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
         };
-        Loaded += (_, _) => { initialized = true; LoadWorkspace(); InitializeTransitionBrowser(); Refresh(); autosave.Start(); };
+        Loaded += (_, _) => { initialized = true; LoadWorkspace(); InitializeTransitionBrowser(); InitializeToolsViews(); Refresh(); autosave.Start(); };
     }
 
     private void Guard(Action action)
@@ -593,7 +593,8 @@ public partial class MainWindow : Window
             var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
             playback = session;
-            PlayButton.Content = new Image { Source = (ImageSource)FindResource("Icon.Pause"), Width = 16, Height = 16 };
+            PlayButton.ContentTemplate = (DataTemplate)FindResource("ic_pause");
+            if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_pause");
             PlaybackRate.Text = "Rate: 1.00"; timer.Start(); vm.Status = "Playing timeline.";
         }
         finally { if (generation == playbackGeneration) playbackStarting = false; }
@@ -606,7 +607,8 @@ public partial class MainWindow : Window
         {
             playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null; UpdatePosition();
         }
-        PlayButton.Content = new Image { Source = (ImageSource)FindResource("Icon.Play"), Width = 16, Height = 16 };
+        PlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
+        if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         PlaybackRate.Text = "Rate: 0.00";
         LeftMeter.Height = RightMeter.Height = 0;
         RequestPreview();
