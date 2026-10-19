@@ -1,12 +1,49 @@
+# Build & binaries
 **/bin/
 **/obj/
-.vs/
-.deps/
-.local/
 build/
 dist/
 TestResults/
+.deps/
+.local/
+scratch/
+
+# IDE & Editor files
+.vs/
+.vscode/
+.idea/
 *.user
+*.suo
+*.userosv
+*.sln.docstates
+
+# OS metadata
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Logs & temp files
+*.log
+*.tmp
+*.bak
+*.swp
+
+# Media captures & recordings
+*.mp4
+*.mov
+*.avi
+*.mkv
 *.partial.mp4
 tests/native/fixture.*
-scratch/
+
+# AI & Agent artifacts
+AGENTS.md
+GEMINI.md
+progress
+.agents/
+.gemini/
+.claude/
+.cursor/
+.cursorrules
+brag-output/
+brag-output-*/
