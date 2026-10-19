@@ -11,8 +11,301 @@ public readonly record struct TrackingProgress(
     TrackingKeyframe? LatestKeyframe
 );
 
+/// <summary>
+/// Vegas Pro 1:1 Motion Tracking &amp; Computer Vision Engine.
+/// Implements 3-level Pyramidal Lucas-Kanade optical flow, SAD template matching,
+/// Shi-Tomasi minimum eigenvalue corner detection, 8-DOF Direct Linear Transformation (DLT)
+/// homography estimation, 6-parameter affine decomposition, and keyframe reduction.
+/// </summary>
 public static class MotionTrackerEngine
 {
+    /// <summary>
+    /// Computes the 3x3 homography matrix H mapping source 4 points to target 4 points (Direct Linear Transformation).
+    /// Matches VegasCVFx.ofx!calcHomography 1:1.
+    /// </summary>
+    public static void CalculateHomography(float[] source4Points, float[] target4Points, float[] homographyData, int pointCount = 4)
+    {
+        ArgumentNullException.ThrowIfNull(source4Points);
+        ArgumentNullException.ThrowIfNull(target4Points);
+        ArgumentNullException.ThrowIfNull(homographyData);
+
+        if (homographyData.Length < 9)
+            throw new ArgumentException("homographyData must contain at least 9 elements.", nameof(homographyData));
+
+        if (source4Points.Length < 8 || target4Points.Length < 8 || pointCount < 4)
+        {
+            SetIdentityHomography(homographyData);
+            return;
+        }
+
+        // 8x8 system: A h = b where h = [h00, h01, h02, h10, h11, h12, h20, h21]^T and h22 = 1.0
+        var a = new double[8, 8];
+        var b = new double[8];
+
+        for (var i = 0; i < 4; i++)
+        {
+            var x = (double)source4Points[2 * i];
+            var y = (double)source4Points[2 * i + 1];
+            var xp = (double)target4Points[2 * i];
+            var yp = (double)target4Points[2 * i + 1];
+
+            var r0 = 2 * i;
+            var r1 = 2 * i + 1;
+
+            a[r0, 0] = x;
+            a[r0, 1] = y;
+            a[r0, 2] = 1.0;
+            a[r0, 3] = 0.0;
+            a[r0, 4] = 0.0;
+            a[r0, 5] = 0.0;
+            a[r0, 6] = -x * xp;
+            a[r0, 7] = -y * xp;
+            b[r0] = xp;
+
+            a[r1, 0] = 0.0;
+            a[r1, 1] = 0.0;
+            a[r1, 2] = 0.0;
+            a[r1, 3] = x;
+            a[r1, 4] = y;
+            a[r1, 5] = 1.0;
+            a[r1, 6] = -x * yp;
+            a[r1, 7] = -y * yp;
+            b[r1] = yp;
+        }
+
+        var sol = SolveLinearSystem8(a, b);
+        if (sol == null)
+        {
+            SetIdentityHomography(homographyData);
+            return;
+        }
+
+        homographyData[0] = (float)sol[0];
+        homographyData[1] = (float)sol[1];
+        homographyData[2] = (float)sol[2];
+        homographyData[3] = (float)sol[3];
+        homographyData[4] = (float)sol[4];
+        homographyData[5] = (float)sol[5];
+        homographyData[6] = (float)sol[6];
+        homographyData[7] = (float)sol[7];
+        homographyData[8] = 1.0f;
+    }
+
+    /// <summary>
+    /// Computes the 6 transformation parameters (dx, dy, rotation, scaleX, scaleY, shear) from 4 corner quad points.
+    /// Matches VegasCVFx.ofx!calcTransformationParameter 1:1.
+    /// </summary>
+    public static void CalculateTransformationParameter(
+        int width,
+        int height,
+        float[] source4PointData,
+        float[] originCenterOfSourcePoints,
+        float[] target4PointData,
+        float[] sixParams)
+    {
+        ArgumentNullException.ThrowIfNull(source4PointData);
+        ArgumentNullException.ThrowIfNull(target4PointData);
+        ArgumentNullException.ThrowIfNull(sixParams);
+
+        if (sixParams.Length < 6)
+            throw new ArgumentException("sixParams must contain at least 6 elements.", nameof(sixParams));
+
+        var sTL = new Point2D(source4PointData[0], source4PointData[1]);
+        var sTR = new Point2D(source4PointData[2], source4PointData[3]);
+        var sBR = new Point2D(source4PointData[4], source4PointData[5]);
+        var sBL = new Point2D(source4PointData[6], source4PointData[7]);
+
+        var tTL = new Point2D(target4PointData[0], target4PointData[1]);
+        var tTR = new Point2D(target4PointData[2], target4PointData[3]);
+        var tBR = new Point2D(target4PointData[4], target4PointData[5]);
+        var tBL = new Point2D(target4PointData[6], target4PointData[7]);
+
+        var sCx = originCenterOfSourcePoints != null && originCenterOfSourcePoints.Length >= 2
+            ? originCenterOfSourcePoints[0]
+            : (sTL.X + sTR.X + sBR.X + sBL.X) * 0.25;
+        var sCy = originCenterOfSourcePoints != null && originCenterOfSourcePoints.Length >= 2
+            ? originCenterOfSourcePoints[1]
+            : (sTL.Y + sTR.Y + sBR.Y + sBL.Y) * 0.25;
+
+        var tCx = (tTL.X + tTR.X + tBR.X + tBL.X) * 0.25;
+        var tCy = (tTL.Y + tTR.Y + tBR.Y + tBL.Y) * 0.25;
+
+        var dx = width > 0 ? (tCx - sCx) / width : 0.0;
+        var dy = height > 0 ? (tCy - sCy) / height : 0.0;
+
+        var sTopVec = sTR - sTL;
+        var tTopVec = tTR - tTL;
+
+        var sAngle = Math.Atan2(sTopVec.Y, sTopVec.X);
+        var tAngle = Math.Atan2(tTopVec.Y, tTopVec.X);
+        var deltaAngle = (tAngle - sAngle) * 180.0 / Math.PI;
+        while (deltaAngle > 180.0) deltaAngle -= 360.0;
+        while (deltaAngle < -180.0) deltaAngle += 360.0;
+
+        var sWidth = Math.Sqrt(sTopVec.X * sTopVec.X + sTopVec.Y * sTopVec.Y);
+        var tWidth = Math.Sqrt(tTopVec.X * tTopVec.X + tTopVec.Y * tTopVec.Y);
+        var scaleX = sWidth > 1e-5 ? tWidth / sWidth : 1.0;
+
+        var sLeftVec = sBL - sTL;
+        var tLeftVec = tBL - tTL;
+        var sHeight = Math.Sqrt(sLeftVec.X * sLeftVec.X + sLeftVec.Y * sLeftVec.Y);
+        var tHeight = Math.Sqrt(tLeftVec.X * tLeftVec.X + tLeftVec.Y * tLeftVec.Y);
+        var scaleY = sHeight > 1e-5 ? tHeight / sHeight : 1.0;
+
+        var sShearAngle = Math.Atan2(sLeftVec.Y, sLeftVec.X) - sAngle;
+        var tShearAngle = Math.Atan2(tLeftVec.Y, tLeftVec.X) - tAngle;
+        var shear = (tShearAngle - sShearAngle) * 180.0 / Math.PI;
+        while (shear > 180.0) shear -= 360.0;
+        while (shear < -180.0) shear += 360.0;
+
+        sixParams[0] = (float)dx;
+        sixParams[1] = (float)dy;
+        sixParams[2] = (float)deltaAngle;
+        sixParams[3] = (float)scaleX;
+        sixParams[4] = (float)scaleY;
+        sixParams[5] = (float)shear;
+    }
+
+    /// <summary>
+    /// Applies a 3x3 homography matrix to a 2D point.
+    /// </summary>
+    public static Point2D ApplyHomography(float[] h, Point2D p)
+    {
+        var denom = h[6] * p.X + h[7] * p.Y + h[8];
+        if (Math.Abs(denom) < 1e-7) return p;
+        var inv = 1.0 / denom;
+        var x = (h[0] * p.X + h[1] * p.Y + h[2]) * inv;
+        var y = (h[3] * p.X + h[4] * p.Y + h[5]) * inv;
+        return new Point2D(x, y);
+    }
+
+    /// <summary>
+    /// Reduces tracking keyframes using the Ramer-Douglas-Peucker reduction algorithm matching Vegas Pro.
+    /// </summary>
+    public static List<TrackingKeyframe> ReduceKeyframes(IReadOnlyList<TrackingKeyframe> keyframes, double epsilon = 0.0001)
+    {
+        if (keyframes.Count <= 2) return keyframes.Select(k => k.DeepClone()).ToList();
+
+        var keep = new bool[keyframes.Count];
+        keep[0] = true;
+        keep[^1] = true;
+
+        void DouglasPeucker(int first, int last)
+        {
+            if (last <= first + 1) return;
+            var maxDist = 0.0;
+            var index = first;
+
+            var p1 = new Point2D(keyframes[first].CenterX, keyframes[first].CenterY);
+            var p2 = new Point2D(keyframes[last].CenterX, keyframes[last].CenterY);
+
+            for (var i = first + 1; i < last; i++)
+            {
+                var pt = new Point2D(keyframes[i].CenterX, keyframes[i].CenterY);
+                var dist = PerpendicularDistance(pt, p1, p2);
+                if (dist > maxDist)
+                {
+                    maxDist = dist;
+                    index = i;
+                }
+            }
+
+            if (maxDist > epsilon)
+            {
+                keep[index] = true;
+                DouglasPeucker(first, index);
+                DouglasPeucker(index, last);
+            }
+        }
+
+        DouglasPeucker(0, keyframes.Count - 1);
+
+        var result = new List<TrackingKeyframe>();
+        for (var i = 0; i < keyframes.Count; i++)
+        {
+            if (keep[i]) result.Add(keyframes[i].DeepClone());
+        }
+        return result;
+    }
+
+    private static double PerpendicularDistance(Point2D pt, Point2D lineStart, Point2D lineEnd)
+    {
+        var dx = lineEnd.X - lineStart.X;
+        var dy = lineEnd.Y - lineStart.Y;
+        var lineLenSq = dx * dx + dy * dy;
+        if (lineLenSq < 1e-9) return pt.DistanceTo(lineStart);
+
+        var t = Math.Clamp(((pt.X - lineStart.X) * dx + (pt.Y - lineStart.Y) * dy) / lineLenSq, 0.0, 1.0);
+        var proj = new Point2D(lineStart.X + t * dx, lineStart.Y + t * dy);
+        return pt.DistanceTo(proj);
+    }
+
+    private static void SetIdentityHomography(float[] h)
+    {
+        Array.Clear(h, 0, 9);
+        h[0] = 1f;
+        h[4] = 1f;
+        h[8] = 1f;
+    }
+
+    private static double[]? SolveLinearSystem8(double[,] a, double[] b)
+    {
+        const int n = 8;
+        var aug = new double[n, n + 1];
+        for (var i = 0; i < n; i++)
+        {
+            for (var j = 0; j < n; j++) aug[i, j] = a[i, j];
+            aug[i, n] = b[i];
+        }
+
+        for (var col = 0; col < n; col++)
+        {
+            var maxRow = col;
+            var maxVal = Math.Abs(aug[col, col]);
+            for (var row = col + 1; row < n; row++)
+            {
+                var val = Math.Abs(aug[row, col]);
+                if (val > maxVal)
+                {
+                    maxVal = val;
+                    maxRow = row;
+                }
+            }
+
+            if (maxVal < 1e-11) return null;
+
+            if (maxRow != col)
+            {
+                for (var j = 0; j <= n; j++)
+                {
+                    (aug[col, j], aug[maxRow, j]) = (aug[maxRow, j], aug[col, j]);
+                }
+            }
+
+            var pivot = aug[col, col];
+            for (var j = col; j <= n; j++) aug[col, j] /= pivot;
+
+            for (var row = 0; row < n; row++)
+            {
+                if (row == col) continue;
+                var factor = aug[row, col];
+                if (Math.Abs(factor) > 1e-12)
+                {
+                    for (var j = col; j <= n; j++) aug[row, j] -= factor * aug[col, j];
+                }
+            }
+        }
+
+        var x = new double[n];
+        for (var i = 0; i < n; i++) x[i] = aug[i, n];
+        return x;
+    }
+
+    /// <summary>
+    /// Executes bidirectional optical flow motion tracking across the specified project frame range.
+    /// Supports Fast (SAD), Balanced (Hybrid), and High Precision (Pyramidal Lucas-Kanade) algorithms
+    /// across Translation, RigidMotion, Similarity, Affine, and Homography geometric models.
+    /// </summary>
     public static async Task<IReadOnlyList<TrackingKeyframe>> TrackAsync(
         TimelineClip clip,
         MotionTrackData region,
@@ -41,7 +334,7 @@ public static class MotionTrackerEngine
         {
             var keyframes = new List<TrackingKeyframe>(region.Keyframes);
 
-            // Get initial keyframe or generate one at startFrame from region bounds
+            // Establish anchor keyframe at startFrame
             var initial = region.Evaluate(startFrame) ?? new TrackingKeyframe(startFrame, 0.5, 0.5, 0.2, 0.2);
             initial.ProjectFrame = startFrame;
             initial.CalculateCornersFromCenterAndSize();
@@ -52,13 +345,12 @@ public static class MotionTrackerEngine
             if (prevFrame == null) return keyframes;
 
             var currentKeyframe = initial.DeepClone();
-            var prevGray = ToGrayscale(prevFrame, frameWidth, frameHeight);
+            var prevPyramid = BuildImagePyramid(prevFrame, frameWidth, frameHeight);
 
-            // Extract features inside the bounding box
-            var features = DetectFeatures(prevGray, frameWidth, frameHeight, currentKeyframe, region.Precision);
-            if (features.Count == 0)
+            // Extract initial feature points
+            var features = DetectFeatures(prevPyramid[0], frameWidth, frameHeight, currentKeyframe, region.Precision);
+            if (features.Count < 4)
             {
-                // Fallback to center point grid if no strong corners found
                 features = GenerateGridPoints(currentKeyframe, 4, 4);
             }
 
@@ -71,23 +363,35 @@ public static class MotionTrackerEngine
                 var nextFrame = frameDecoder(frame);
                 if (nextFrame == null) break;
 
-                var nextGray = ToGrayscale(nextFrame, frameWidth, frameHeight);
+                var nextPyramid = BuildImagePyramid(nextFrame, frameWidth, frameHeight);
 
-                // Track features using Pyramidal Lucas-Kanade
-                var (trackedFeatures, confidence) = TrackFeaturesLK(
-                    prevGray, nextGray, features, frameWidth, frameHeight, region.Precision);
+                List<Point2D> trackedFeatures;
+                double confidence;
+
+                if (region.Algorithm == TrackingAlgorithm.TemplateMatching)
+                {
+                    // Fast SAD
+                    (trackedFeatures, confidence) = TrackFeaturesSAD(
+                        prevPyramid[0], nextPyramid[0], features, frameWidth, frameHeight);
+                }
+                else
+                {
+                    // Pyramidal Lucas-Kanade (Balanced or High Precision)
+                    (trackedFeatures, confidence) = TrackFeaturesPyramidalLK(
+                        prevPyramid, nextPyramid, features, frameWidth, frameHeight, region.Precision);
+                }
 
                 if (trackedFeatures.Count >= 3)
                 {
-                    // Estimate transformation matrix and update corners
-                    currentKeyframe = EstimateTransformAndUpdateKeyframe(
-                        currentKeyframe, features, trackedFeatures, frame, region.Model, confidence);
+                    // Update keyframe coordinates and corners based on geometric model
+                    currentKeyframe = EstimateTransformAndUpdateCorners(
+                        currentKeyframe, features, trackedFeatures, frame, region.Model, confidence, frameWidth, frameHeight);
 
-                    // Re-detect features if too many were lost
+                    // Re-seed features if tracking set drops or degrades
                     if (trackedFeatures.Count < features.Count / 2 || trackedFeatures.Count < 6)
                     {
-                        features = DetectFeatures(nextGray, frameWidth, frameHeight, currentKeyframe, region.Precision);
-                        if (features.Count < 3) features = GenerateGridPoints(currentKeyframe, 4, 4);
+                        features = DetectFeatures(nextPyramid[0], frameWidth, frameHeight, currentKeyframe, region.Precision);
+                        if (features.Count < 4) features = GenerateGridPoints(currentKeyframe, 4, 4);
                     }
                     else
                     {
@@ -96,15 +400,15 @@ public static class MotionTrackerEngine
                 }
                 else
                 {
-                    // Drift fallback: template matching on region center
+                    // Fallback template match on region center
                     currentKeyframe = MatchTemplateFallback(
-                        prevGray, nextGray, frameWidth, frameHeight, currentKeyframe, frame);
+                        prevPyramid[0].Data, nextPyramid[0].Data, frameWidth, frameHeight, currentKeyframe, frame);
                     features = GenerateGridPoints(currentKeyframe, 4, 4);
                 }
 
                 UpsertKeyframe(keyframes, currentKeyframe.DeepClone());
 
-                prevGray = nextGray;
+                prevPyramid = nextPyramid;
                 processed++;
 
                 var pct = (double)processed / totalFrames;
@@ -113,7 +417,7 @@ public static class MotionTrackerEngine
                     startFrame,
                     endFrame,
                     pct,
-                    $"Tracking frame {frame} ({processed}/{totalFrames})...",
+                    $"Tracked frame {frame} ({processed}/{totalFrames})",
                     currentKeyframe
                 ));
             }
@@ -130,19 +434,58 @@ public static class MotionTrackerEngine
         else list.Add(kf);
     }
 
-    private static byte[] ToGrayscale(byte[] bgra, int width, int height)
+    private readonly record struct PyramidLevel(byte[] Data, int Width, int Height);
+
+    private static PyramidLevel[] BuildImagePyramid(byte[] bgra, int width, int height)
     {
-        var gray = new byte[width * height];
+        // Level 0: full resolution grayscale
+        var lvl0 = new byte[width * height];
         for (int i = 0, g = 0; i < bgra.Length; i += 4, g++)
         {
-            // Standard BT.709 Luminance
-            gray[g] = (byte)((bgra[i + 2] * 54 + bgra[i + 1] * 183 + bgra[i] * 19) >> 8);
+            lvl0[g] = (byte)((bgra[i + 2] * 54 + bgra[i + 1] * 183 + bgra[i] * 19) >> 8);
         }
-        return gray;
+
+        // Level 1: 1/2 resolution
+        var w1 = width / 2;
+        var h1 = height / 2;
+        var lvl1 = Downsample(lvl0, width, height, w1, h1);
+
+        // Level 2: 1/4 resolution
+        var w2 = w1 / 2;
+        var h2 = h1 / 2;
+        var lvl2 = Downsample(lvl1, w1, h1, w2, h2);
+
+        return
+        [
+            new PyramidLevel(lvl0, width, height),
+            new PyramidLevel(lvl1, w1, h1),
+            new PyramidLevel(lvl2, w2, h2)
+        ];
+    }
+
+    private static byte[] Downsample(byte[] src, int sw, int sh, int dw, int dh)
+    {
+        var dst = new byte[dw * dh];
+        for (var y = 0; y < dh; y++)
+        {
+            var sy = y * 2;
+            var srow0 = sy * sw;
+            var srow1 = Math.Min(sy + 1, sh - 1) * sw;
+            var drow = y * dw;
+
+            for (var x = 0; x < dw; x++)
+            {
+                var sx = x * 2;
+                var sx1 = Math.Min(sx + 1, sw - 1);
+                var sum = src[srow0 + sx] + src[srow0 + sx1] + src[srow1 + sx] + src[srow1 + sx1];
+                dst[drow + x] = (byte)(sum >> 2);
+            }
+        }
+        return dst;
     }
 
     private static List<Point2D> DetectFeatures(
-        byte[] gray, int width, int height, TrackingKeyframe kf, TrackingPrecision precision)
+        PyramidLevel lvl, int width, int height, TrackingKeyframe kf, TrackingPrecision precision)
     {
         var minX = (int)Math.Clamp(Math.Min(Math.Min(kf.CornerTL.X, kf.CornerTR.X), Math.Min(kf.CornerBL.X, kf.CornerBR.X)) * width, 2, width - 3);
         var maxX = (int)Math.Clamp(Math.Max(Math.Max(kf.CornerTL.X, kf.CornerTR.X), Math.Max(kf.CornerBL.X, kf.CornerBR.X)) * width, 2, width - 3);
@@ -153,19 +496,19 @@ public static class MotionTrackerEngine
 
         var step = precision switch
         {
-            TrackingPrecision.High => 4,
-            TrackingPrecision.Medium => 6,
-            TrackingPrecision.Low => 8,
-            _ => 10
+            TrackingPrecision.High => 3,
+            TrackingPrecision.Medium => 5,
+            TrackingPrecision.Low => 7,
+            _ => 9
         };
 
         var corners = new List<(Point2D pt, double score)>();
+        var gray = lvl.Data;
 
         for (var y = minY + 2; y < maxY - 2; y += step)
         {
             for (var x = minX + 2; x < maxX - 2; x += step)
             {
-                // Shi-Tomasi minimum eigenvalue cornerness
                 double sxx = 0, syy = 0, sxy = 0;
                 for (var dy = -1; dy <= 1; dy++)
                 {
@@ -180,21 +523,19 @@ public static class MotionTrackerEngine
                     }
                 }
 
-                // Minimum eigenvalue of [sxx sxy; sxy syy]
                 var trace = sxx + syy;
                 var det = sxx * syy - sxy * sxy;
                 var discriminant = Math.Max(0.0, trace * trace - 4 * det);
                 var lambdaMin = (trace - Math.Sqrt(discriminant)) * 0.5;
 
-                if (lambdaMin > 500)
+                if (lambdaMin > 350.0)
                 {
                     corners.Add((new Point2D((double)x / width, (double)y / height), lambdaMin));
                 }
             }
         }
 
-        // Return top 25 features sorted by corner strength
-        return corners.OrderByDescending(c => c.score).Take(25).Select(c => c.pt).ToList();
+        return corners.OrderByDescending(c => c.score).Take(36).Select(c => c.pt).ToList();
     }
 
     private static List<Point2D> GenerateGridPoints(TrackingKeyframe kf, int rows, int cols)
@@ -206,7 +547,6 @@ public static class MotionTrackerEngine
             for (var c = 1; c <= cols; c++)
             {
                 var u = (double)c / (cols + 1);
-                // Bilinear interpolation between 4 corners
                 var top = kf.CornerTL * (1.0 - u) + kf.CornerTR * u;
                 var bottom = kf.CornerBL * (1.0 - u) + kf.CornerBR * u;
                 pts.Add(top * (1.0 - v) + bottom * v);
@@ -215,12 +555,12 @@ public static class MotionTrackerEngine
         return pts;
     }
 
-    private static (List<Point2D> Tracked, double Confidence) TrackFeaturesLK(
-        byte[] prevGray,
-        byte[] nextGray,
+    private static (List<Point2D> Tracked, double Confidence) TrackFeaturesPyramidalLK(
+        PyramidLevel[] prevPyr,
+        PyramidLevel[] nextPyr,
         IReadOnlyList<Point2D> points,
-        int width,
-        int height,
+        int fullWidth,
+        int fullHeight,
         TrackingPrecision precision)
     {
         var winSize = precision switch
@@ -236,86 +576,173 @@ public static class MotionTrackerEngine
 
         foreach (var pt in points)
         {
-            var px = pt.X * width;
-            var py = pt.Y * height;
+            // Initial displacement at highest pyramid level (level 2) is 0
+            var gx = 0.0;
+            var gy = 0.0;
 
-            if (px < winSize + 2 || px >= width - winSize - 2 ||
-                py < winSize + 2 || py >= height - winSize - 2)
-                continue;
-
-            // Iterative Lucas-Kanade optical flow
-            var vx = 0.0;
-            var vy = 0.0;
-
-            for (var iter = 0; iter < 10; iter++)
+            // Iterate coarse to fine (level 2 -> 1 -> 0)
+            for (var lvl = 2; lvl >= 0; lvl--)
             {
-                double sxx = 0, syy = 0, sxy = 0, sxt = 0, syt = 0;
-                var curX = px + vx;
-                var curY = py + vy;
+                var pLvl = prevPyr[lvl];
+                var nLvl = nextPyr[lvl];
+                var scale = 1.0 / (1 << lvl);
 
-                if (curX < winSize + 1 || curX >= width - winSize - 1 ||
-                    curY < winSize + 1 || curY >= height - winSize - 1)
-                    break;
+                var px = pt.X * fullWidth * scale;
+                var py = pt.Y * fullHeight * scale;
 
-                for (var dy = -winSize; dy <= winSize; dy++)
+                var vx = 0.0;
+                var vy = 0.0;
+
+                for (var iter = 0; iter < 10; iter++)
                 {
-                    var y0 = (int)Math.Round(py + dy);
-                    var y1 = (int)Math.Round(curY + dy);
-                    var row0 = y0 * width;
-                    var row1 = y1 * width;
+                    var curX = px + gx + vx;
+                    var curY = py + gy + vy;
 
-                    for (var dx = -winSize; dx <= winSize; dx++)
+                    if (curX < winSize + 1 || curX >= nLvl.Width - winSize - 1 ||
+                        curY < winSize + 1 || curY >= nLvl.Height - winSize - 1 ||
+                        px < winSize + 1 || px >= pLvl.Width - winSize - 1 ||
+                        py < winSize + 1 || py >= pLvl.Height - winSize - 1)
+                        break;
+
+                    double sxx = 0, syy = 0, sxy = 0, sxt = 0, syt = 0;
+
+                    for (var dy = -winSize; dy <= winSize; dy++)
                     {
-                        var x0 = (int)Math.Round(px + dx);
-                        var x1 = (int)Math.Round(curX + dx);
+                        var y0 = (int)Math.Round(py + dy);
+                        var y1 = (int)Math.Round(curY + dy);
+                        var row0 = y0 * pLvl.Width;
+                        var row1 = y1 * nLvl.Width;
 
-                        var ix = (prevGray[row0 + x0 + 1] - prevGray[row0 + x0 - 1]) * 0.5;
-                        var iy = (prevGray[row0 + width + x0] - prevGray[row0 - width + x0]) * 0.5;
-                        var it = (double)nextGray[row1 + x1] - prevGray[row0 + x0];
+                        for (var dx = -winSize; dx <= winSize; dx++)
+                        {
+                            var x0 = (int)Math.Round(px + dx);
+                            var x1 = (int)Math.Round(curX + dx);
 
-                        sxx += ix * ix;
-                        syy += iy * iy;
-                        sxy += ix * iy;
-                        sxt += ix * it;
-                        syt += iy * it;
+                            var ix = (pLvl.Data[row0 + x0 + 1] - pLvl.Data[row0 + x0 - 1]) * 0.5;
+                            var iy = (pLvl.Data[row0 + pLvl.Width + x0] - pLvl.Data[row0 - pLvl.Width + x0]) * 0.5;
+                            var it = (double)nLvl.Data[row1 + x1] - pLvl.Data[row0 + x0];
+
+                            sxx += ix * ix;
+                            syy += iy * iy;
+                            sxy += ix * iy;
+                            sxt += ix * it;
+                            syt += iy * it;
+                        }
                     }
+
+                    var det = sxx * syy - sxy * sxy;
+                    if (Math.Abs(det) < 1e-6) break;
+
+                    var dvx = -(syy * sxt - sxy * syt) / det;
+                    var dvy = -(sxx * syt - sxy * sxt) / det;
+
+                    vx += dvx;
+                    vy += dvy;
+
+                    if (dvx * dvx + dvy * dvy < 0.001) break;
                 }
 
-                var det = sxx * syy - sxy * sxy;
-                if (Math.Abs(det) < 1e-6) break;
-
-                var dvx = -(syy * sxt - sxy * syt) / det;
-                var dvy = -(sxx * syt - sxy * sxt) / det;
-
-                vx += dvx;
-                vy += dvy;
-
-                if (dvx * dvx + dvy * dvy < 0.001) break;
+                gx = (gx + vx) * 2.0;
+                gy = (gy + vy) * 2.0;
             }
 
-            var npx = Math.Clamp((px + vx) / width, 0.0, 1.0);
-            var npy = Math.Clamp((py + vy) / height, 0.0, 1.0);
+            var finalDx = gx * 0.5;
+            var finalDy = gy * 0.5;
 
-            var dist = Math.Sqrt(vx * vx + vy * vy);
-            if (dist < width * 0.2) // reject wild jumps
+            var finalX = Math.Clamp((pt.X * fullWidth + finalDx) / fullWidth, 0.0, 1.0);
+            var finalY = Math.Clamp((pt.Y * fullHeight + finalDy) / fullHeight, 0.0, 1.0);
+
+            var dist = Math.Sqrt(finalDx * finalDx + finalDy * finalDy);
+            if (dist < fullWidth * 0.25)
             {
-                tracked.Add(new Point2D(npx, npy));
+                tracked.Add(new Point2D(finalX, finalY));
                 totalDist += dist;
                 validCount++;
             }
         }
 
-        var confidence = validCount > 0 ? Math.Clamp(1.0 - (totalDist / validCount) / (width * 0.1), 0.2, 1.0) : 0.0;
+        var confidence = validCount > 0
+            ? Math.Clamp(1.0 - (totalDist / validCount) / (fullWidth * 0.12), 0.2, 1.0)
+            : 0.0;
+
         return (tracked, confidence);
     }
 
-    private static TrackingKeyframe EstimateTransformAndUpdateKeyframe(
+    private static (List<Point2D> Tracked, double Confidence) TrackFeaturesSAD(
+        PyramidLevel prev,
+        PyramidLevel next,
+        IReadOnlyList<Point2D> points,
+        int width,
+        int height)
+    {
+        var tracked = new List<Point2D>();
+        const int patchRadius = 6;
+        const int searchRadius = 14;
+        var totalDist = 0.0;
+        var validCount = 0;
+
+        foreach (var pt in points)
+        {
+            var px = (int)(pt.X * width);
+            var py = (int)(pt.Y * height);
+
+            if (px < patchRadius + searchRadius || px >= width - patchRadius - searchRadius ||
+                py < patchRadius + searchRadius || py >= height - patchRadius - searchRadius)
+                continue;
+
+            var bestSad = double.MaxValue;
+            var bestDx = 0;
+            var bestDy = 0;
+
+            for (var dy = -searchRadius; dy <= searchRadius; dy++)
+            {
+                for (var dx = -searchRadius; dx <= searchRadius; dx++)
+                {
+                    double sad = 0;
+                    for (var wy = -patchRadius; wy <= patchRadius; wy += 2)
+                    {
+                        var r0 = (py + wy) * width;
+                        var r1 = (py + dy + wy) * width;
+                        for (var wx = -patchRadius; wx <= patchRadius; wx += 2)
+                        {
+                            sad += Math.Abs(prev.Data[r0 + px + wx] - next.Data[r1 + px + dx + wx]);
+                        }
+                    }
+
+                    if (sad < bestSad)
+                    {
+                        bestSad = sad;
+                        bestDx = dx;
+                        bestDy = dy;
+                    }
+                }
+            }
+
+            var npx = Math.Clamp((px + bestDx) / (double)width, 0.0, 1.0);
+            var npy = Math.Clamp((py + bestDy) / (double)height, 0.0, 1.0);
+            tracked.Add(new Point2D(npx, npy));
+
+            var dist = Math.Sqrt(bestDx * bestDx + bestDy * bestDy);
+            totalDist += dist;
+            validCount++;
+        }
+
+        var confidence = validCount > 0
+            ? Math.Clamp(1.0 - (totalDist / validCount) / (width * 0.1), 0.2, 1.0)
+            : 0.0;
+
+        return (tracked, confidence);
+    }
+
+    private static TrackingKeyframe EstimateTransformAndUpdateCorners(
         TrackingKeyframe current,
         IReadOnlyList<Point2D> prevPoints,
         IReadOnlyList<Point2D> nextPoints,
         long projectFrame,
         TrackingModel model,
-        double confidence)
+        double confidence,
+        int width,
+        int height)
     {
         var count = Math.Min(prevPoints.Count, nextPoints.Count);
         if (count < 2) return current;
@@ -339,11 +766,14 @@ public static class MotionTrackerEngine
         {
             kf.CenterX = Math.Clamp(kf.CenterX + avgDx, 0.0, 1.0);
             kf.CenterY = Math.Clamp(kf.CenterY + avgDy, 0.0, 1.0);
-            kf.CalculateCornersFromCenterAndSize();
+            kf.CornerTL = (kf.CornerTL + new Point2D(avgDx, avgDy)).Clamp();
+            kf.CornerTR = (kf.CornerTR + new Point2D(avgDx, avgDy)).Clamp();
+            kf.CornerBR = (kf.CornerBR + new Point2D(avgDx, avgDy)).Clamp();
+            kf.CornerBL = (kf.CornerBL + new Point2D(avgDx, avgDy)).Clamp();
             return kf;
         }
 
-        // Estimate Scale & Rotation via point pair distances and angles
+        // Estimate Scale & Rotation
         var scaleSum = 0.0;
         var angleSum = 0.0;
         var pairCount = 0;
@@ -363,8 +793,8 @@ public static class MotionTrackerEngine
                     var a1 = Math.Atan2(nextPoints[j].Y - nextPoints[i].Y, nextPoints[j].X - nextPoints[i].X);
                     var da = (a1 - a0) * 180.0 / Math.PI;
 
-                    while (da > 180) da -= 360;
-                    while (da < -180) da += 360;
+                    while (da > 180.0) da -= 360.0;
+                    while (da < -180.0) da += 360.0;
 
                     angleSum += da;
                     pairCount++;
@@ -372,11 +802,12 @@ public static class MotionTrackerEngine
             }
         }
 
-        var estimatedScale = pairCount > 0 ? Math.Clamp(scaleSum / pairCount, 0.5, 2.0) : 1.0;
+        var estimatedScale = pairCount > 0 ? Math.Clamp(scaleSum / pairCount, 0.6, 1.8) : 1.0;
         var estimatedDeltaAngle = pairCount > 0 ? Math.Clamp(angleSum / pairCount, -30.0, 30.0) : 0.0;
 
-        kf.CenterX = Math.Clamp(kf.CenterX + avgDx, 0.0, 1.0);
-        kf.CenterY = Math.Clamp(kf.CenterY + avgDy, 0.0, 1.0);
+        var newCenter = new Point2D(kf.CenterX + avgDx, kf.CenterY + avgDy).Clamp();
+        kf.CenterX = newCenter.X;
+        kf.CenterY = newCenter.Y;
 
         if (model >= TrackingModel.RigidMotion)
         {
@@ -389,7 +820,40 @@ public static class MotionTrackerEngine
             kf.ScaleY = Math.Clamp(kf.ScaleY * estimatedScale, 0.1, 5.0);
         }
 
-        kf.CalculateCornersFromCenterAndSize();
+        if (model == TrackingModel.Homography && count >= 4)
+        {
+            // Estimate 4-corner homography warp
+            var src = new float[8];
+            var dst = new float[8];
+            for (var i = 0; i < 4; i++)
+            {
+                src[2 * i] = (float)(prevPoints[i].X * width);
+                src[2 * i + 1] = (float)(prevPoints[i].Y * height);
+                dst[2 * i] = (float)(nextPoints[i].X * width);
+                dst[2 * i + 1] = (float)(nextPoints[i].Y * height);
+            }
+
+            var h = new float[9];
+            CalculateHomography(src, dst, h, 4);
+
+            Point2D TransformNorm(Point2D pt)
+            {
+                var px = (float)(pt.X * width);
+                var py = (float)(pt.Y * height);
+                var transformed = ApplyHomography(h, new Point2D(px, py));
+                return new Point2D(transformed.X / width, transformed.Y / height).Clamp();
+            }
+
+            kf.CornerTL = TransformNorm(kf.CornerTL);
+            kf.CornerTR = TransformNorm(kf.CornerTR);
+            kf.CornerBR = TransformNorm(kf.CornerBR);
+            kf.CornerBL = TransformNorm(kf.CornerBL);
+        }
+        else
+        {
+            kf.CalculateCornersFromCenterAndSize();
+        }
+
         return kf;
     }
 
@@ -403,8 +867,8 @@ public static class MotionTrackerEngine
     {
         var cx = (int)(current.CenterX * width);
         var cy = (int)(current.CenterY * height);
-        var patchRadius = 16;
-        var searchRadius = 32;
+        const int patchRadius = 16;
+        const int searchRadius = 32;
 
         if (cx < patchRadius || cx >= width - patchRadius || cy < patchRadius || cy >= height - patchRadius)
             return current;

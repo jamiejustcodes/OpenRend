@@ -33,6 +33,15 @@ public enum TrackingShape
     Bezier
 }
 
+public enum FrameStatus
+{
+    NotAnalyzed,
+    NoMotionVectors,
+    LowPrecision,
+    HasMotionVectors,
+    ManuallyAdjusted
+}
+
 public readonly record struct Point2D(double X, double Y)
 {
     public static Point2D Zero => new(0, 0);
@@ -127,6 +136,8 @@ public sealed class MotionTrackData
     public TrackingPrecision Precision { get; set; } = TrackingPrecision.High;
     public List<CurvePoint> BezierPoints { get; set; } = [];
     public List<TrackingKeyframe> Keyframes { get; set; } = [];
+
+    public override string ToString() => Name;
 
     public MotionTrackData DeepClone() => new()
     {

@@ -120,4 +120,72 @@ public sealed class MotionTrackerMediaTests
         Assert.InRange(kf0.CenterX, expectedX - 0.05, expectedX + 0.05);
         Assert.InRange(kf0.CenterY, expectedY - 0.05, expectedY + 0.05);
     }
+
+    [Fact]
+    public void CalculateHomographyMapsQuadPointsAccurately()
+    {
+        // Source rectangle: (10, 10), (110, 10), (110, 90), (10, 90)
+        float[] src = [10f, 10f, 110f, 10f, 110f, 90f, 10f, 90f];
+        // Target quad with perspective distortion: (20, 15), (125, 25), (105, 100), (15, 85)
+        float[] dst = [20f, 15f, 125f, 25f, 105f, 100f, 15f, 85f];
+
+        var h = new float[9];
+        MotionTrackerEngine.CalculateHomography(src, dst, h, 4);
+
+        for (var i = 0; i < 4; i++)
+        {
+            var p = new Point2D(src[2 * i], src[2 * i + 1]);
+            var mapped = MotionTrackerEngine.ApplyHomography(h, p);
+            Assert.Equal(dst[2 * i], mapped.X, 2);
+            Assert.Equal(dst[2 * i + 1], mapped.Y, 2);
+        }
+    }
+
+    [Fact]
+    public void CalculateTransformationParameterExtractsAccurateAffineParameters()
+    {
+        const int width = 1920;
+        const int height = 1080;
+
+        // Source quad at center: (860, 440), (1060, 440), (1060, 640), (860, 640) -> 200x200, center (960, 540)
+        float[] src = [860f, 440f, 1060f, 440f, 1060f, 640f, 860f, 640f];
+        float[] srcCenter = [960f, 540f];
+
+        // Target quad shifted by +192px (+0.1) in X, +108px (+0.1) in Y, scaled 2x -> 400x400
+        // Target center = (1152, 648)
+        // Target TL = (952, 448), TR = (1352, 448), BR = (1352, 848), BL = (952, 848)
+        float[] dst = [952f, 448f, 1352f, 448f, 1352f, 848f, 952f, 848f];
+
+        var sixParams = new float[6];
+        MotionTrackerEngine.CalculateTransformationParameter(width, height, src, srcCenter, dst, sixParams);
+
+        // sixParams: [dx, dy, angle, scaleX, scaleY, shear]
+        Assert.Equal(0.1f, sixParams[0], 2); // dx = +0.1
+        Assert.Equal(0.1f, sixParams[1], 2); // dy = +0.1
+        Assert.Equal(0.0f, sixParams[2], 1); // angle = 0
+        Assert.Equal(2.0f, sixParams[3], 2); // scaleX = 2.0
+        Assert.Equal(2.0f, sixParams[4], 2); // scaleY = 2.0
+        Assert.Equal(0.0f, sixParams[5], 1); // shear = 0
+    }
+
+    [Fact]
+    public void ReduceKeyframesSimplifiesCollinearFramesPreservingEndpoints()
+    {
+        var list = new List<TrackingKeyframe>
+        {
+            new(0, 0.1, 0.1, 0.2, 0.2),
+            new(1, 0.2, 0.2, 0.2, 0.2), // perfectly collinear
+            new(2, 0.3, 0.3, 0.2, 0.2), // perfectly collinear
+            new(3, 0.4, 0.4, 0.2, 0.2), // perfectly collinear
+            new(4, 0.5, 0.5, 0.2, 0.2)
+        };
+
+        var reduced = MotionTrackerEngine.ReduceKeyframes(list, epsilon: 0.001);
+
+        // Intermediate linear frames are pruned, retaining start and end
+        Assert.Equal(2, reduced.Count);
+        Assert.Equal(0, reduced[0].ProjectFrame);
+        Assert.Equal(4, reduced[1].ProjectFrame);
+    }
 }
+
