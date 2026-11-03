@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -128,6 +128,14 @@ public partial class MainWindow : Window
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
+        Timeline.TrackCompositeModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackCompositeMode(id, mode);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+            vm.Status = $"Track compositing mode set to {mode}.";
+        });
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.MotionTrackingRequested += id => OpenMotionTracking(id);
         Timeline.TextBasedEditingRequested += id => OpenTextBasedEditing(id);

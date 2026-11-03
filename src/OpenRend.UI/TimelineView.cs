@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -87,6 +87,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
     public event Action<Guid>? TrackColorGradingRequested;
+    public event Action<Guid, TrackCompositeMode>? TrackCompositeModeRequested;
     public event Action<Guid>? MotionTrackingRequested;
     public event Action<Guid>? TextBasedEditingRequested;
     public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
@@ -678,6 +679,7 @@ public sealed partial class TimelineView : FrameworkElement
             Text(dc, "···", 4, y + 1, size: 12);
             Text(dc, $"{i + 1}", 5, y + 24, size: 11);
             Text(dc, t.Name, 30, y + 5, size: 11, maxWidth: 145);
+            if (t.Kind == TrackKind.Video && t.CompositeMode != TrackCompositeMode.SourceAlpha) Text(dc, $"[{t.CompositeMode}]", 180, y + 5, Brush("#00D2FF"), 10);
             foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
             {
                 var bounds = TrackButtonBounds(t.Id, action);
@@ -1227,6 +1229,33 @@ public sealed partial class TimelineView : FrameworkElement
                     var trackColorGrading = new MenuItem { Header = "Track Color Grading…" };
                     trackColorGrading.Click += (_, _) => TrackColorGradingRequested?.Invoke(track.Id);
                     menu.Items.Add(trackColorGrading);
+
+                    var compModeMenu = new MenuItem { Header = "Compositing Mode" };
+                    var modes = new (TrackCompositeMode Mode, string Label)[]
+                    {
+                        (TrackCompositeMode.SourceAlpha, "Source Alpha"),
+                        (TrackCompositeMode.Add, "Add"),
+                        (TrackCompositeMode.Subtract, "Subtract"),
+                        (TrackCompositeMode.Multiply, "Multiply"),
+                        (TrackCompositeMode.Screen, "Screen"),
+                        (TrackCompositeMode.Overlay, "Overlay"),
+                        (TrackCompositeMode.HardLight, "Hard Light"),
+                        (TrackCompositeMode.Darken, "Darken"),
+                        (TrackCompositeMode.Lighten, "Lighten"),
+                        (TrackCompositeMode.Difference, "Difference"),
+                        (TrackCompositeMode.DifferenceSquared, "Difference Squared"),
+                        (TrackCompositeMode.Dodge, "Dodge"),
+                        (TrackCompositeMode.Burn, "Burn"),
+                        (TrackCompositeMode.Cut, "Cut")
+                    };
+                    foreach (var (m, label) in modes)
+                    {
+                        var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = track.CompositeMode == m };
+                        var targetMode = m;
+                        item.Click += (_, _) => TrackCompositeModeRequested?.Invoke(track.Id, targetMode);
+                        compModeMenu.Items.Add(item);
+                    }
+                    menu.Items.Add(compModeMenu);
                 }
 
 

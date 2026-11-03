@@ -1,4 +1,4 @@
-using OpenRend.Core;
+﻿using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -88,6 +88,16 @@ public sealed partial class TimelineEditor
         }
         Execute(p => p.Tracks.Insert(sourceIndex + 1, clone));
         return clone;
+    }
+
+    public void SetTrackCompositeMode(Guid trackId, TrackCompositeMode mode)
+    {
+        var track = FindTrack(trackId);
+        EnsureUnlocked(track);
+        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Compositing modes are only available for video tracks.");
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        if (track.CompositeMode == mode) return;
+        Execute(_ => track.CompositeMode = mode);
     }
 
     public void DeleteTrack(Guid trackId)

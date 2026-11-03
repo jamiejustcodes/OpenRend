@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
@@ -30,6 +30,25 @@ public readonly record struct Rational
 }
 
 public enum TrackKind { Video, Audio }
+
+[JsonConverter(typeof(JsonStringEnumConverter<TrackCompositeMode>))]
+public enum TrackCompositeMode
+{
+    SourceAlpha = 2,
+    Add = 4,
+    Subtract = 5,
+    Multiply = 6,
+    Cut = 7,
+    Screen = 8,
+    Overlay = 9,
+    HardLight = 10,
+    Dodge = 11,
+    Burn = 12,
+    Darken = 13,
+    Lighten = 14,
+    Difference = 15,
+    DifferenceSquared = 16
+}
 
 public sealed class ProjectDocument
 {
@@ -116,6 +135,9 @@ public sealed class ProjectDocument
         foreach (var track in Tracks)
         {
             if (track == null || track.Id == Guid.Empty || !trackIds.Add(track.Id) || !Enum.IsDefined(track.Kind) || track.Clips == null) throw new InvalidDataException("Track is invalid.");
+            if (!Enum.IsDefined(track.CompositeMode)) throw new InvalidDataException("Track composite mode is invalid.");
+            if (track.Kind != TrackKind.Video && track.CompositeMode != TrackCompositeMode.SourceAlpha)
+                throw new InvalidDataException("Audio tracks only support SourceAlpha composite mode.");
             if (!double.IsFinite(track.Gain) || track.Gain < 0 || !double.IsFinite(track.Opacity) || track.Opacity is < 0 or > 1 || !double.IsFinite(track.Pan) || track.Pan is < -1 or > 1) throw new InvalidDataException("Track levels are invalid.");
             if (track.VideoEffects != null)
             {
@@ -236,6 +258,7 @@ public sealed class TimelineTrack
     public double Gain { get; set; } = 1;
     public double Opacity { get; set; } = 1;
     public double Pan { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public TrackCompositeMode CompositeMode { get; set; } = TrackCompositeMode.SourceAlpha;
     public List<TimelineClip> Clips { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
@@ -253,6 +276,7 @@ public sealed class TimelineTrack
         Gain = Gain,
         Opacity = Opacity,
         Pan = Pan,
+        CompositeMode = CompositeMode,
         Clips = Clips.Select(c => c.DeepClone()).ToList(),
         VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
         Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()

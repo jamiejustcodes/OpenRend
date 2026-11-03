@@ -180,4 +180,45 @@ public sealed class TrackLevelsTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void TrackCompositeMode_ValidatesAndClonesCorrectly()
+    {
+        var (project, track, _) = Create(TrackKind.Video);
+        Assert.Equal(TrackCompositeMode.SourceAlpha, track.CompositeMode);
+        track.CompositeMode = TrackCompositeMode.Multiply;
+        var clone = project.DeepClone();
+        Assert.Equal(TrackCompositeMode.Multiply, clone.Tracks[0].CompositeMode);
+
+        project.Validate();
+
+        // Audio track cannot have custom composite mode
+        var (audioProject, audioTrack, _) = Create(TrackKind.Audio);
+        audioTrack.CompositeMode = TrackCompositeMode.Add;
+        Assert.Throws<InvalidDataException>(() => audioProject.Validate());
+
+        // Invalid enum cast
+        track.CompositeMode = (TrackCompositeMode)9999;
+        Assert.Throws<InvalidDataException>(() => project.Validate());
+    }
+
+    [Fact]
+    public void SetTrackCompositeMode_PerformsUndoRedoAndValidatesKind()
+    {
+        var (project, track, _) = Create(TrackKind.Video);
+        var editor = new TimelineEditor(project);
+
+        editor.SetTrackCompositeMode(track.Id, TrackCompositeMode.Screen);
+        Assert.Equal(TrackCompositeMode.Screen, project.Tracks[0].CompositeMode);
+
+        Assert.True(editor.Undo());
+        Assert.Equal(TrackCompositeMode.SourceAlpha, project.Tracks[0].CompositeMode);
+
+        Assert.True(editor.Redo());
+        Assert.Equal(TrackCompositeMode.Screen, project.Tracks[0].CompositeMode);
+
+        var (audioProject, audioTrack, _) = Create(TrackKind.Audio);
+        var audioEditor = new TimelineEditor(audioProject);
+        Assert.Throws<InvalidOperationException>(() => audioEditor.SetTrackCompositeMode(audioTrack.Id, TrackCompositeMode.Add));
+    }
 }

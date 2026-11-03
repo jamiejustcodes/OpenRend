@@ -1,4 +1,4 @@
-using System.Runtime.Versioning;
+﻿using System.Runtime.Versioning;
 using OpenRend.Core;
 using OpenRend.Timeline;
 
@@ -50,12 +50,14 @@ public sealed partial class TimelineRenderService : IDisposable
             {
                 var track = trackGroup.First().Track;
                 var hasTrackEffects = VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
-                var trackBuffer = hasTrackEffects ? new byte[checked(width * height * 4)] : output;
-                var currentCompositor = hasTrackEffects ? null : compositor;
+                var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
+                var needsOwnBuffer = hasTrackEffects || customBlend;
+                var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
+                var currentCompositor = needsOwnBuffer ? null : compositor;
 
                 foreach (var layer in trackGroup)
                 {
-                    var effOpacity = hasTrackEffects ? (track.Opacity > 0 ? layer.Opacity / track.Opacity : layer.Opacity) : layer.Opacity;
+                    var effOpacity = needsOwnBuffer ? (track.Opacity > 0 ? layer.Opacity / track.Opacity : layer.Opacity) : layer.Opacity;
                     if (layer.Dissolve is { } dissolve)
                     {
                         if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
@@ -68,7 +70,7 @@ public sealed partial class TimelineRenderService : IDisposable
                                 if (NativeMethods.CompositorLayer(currentCompositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
                                     throw NativeMethods.Error("Could not composite dissolve timeline layer");
                             }
-                            else Composite(trackBuffer, width, height, dissolvePixels, width, height, hasTrackEffects ? 1.0 : layer.Track.Opacity);
+                            else Composite(trackBuffer, width, height, dissolvePixels, width, height, needsOwnBuffer ? 1.0 : layer.Track.Opacity);
                             continue;
                         }
                     }
@@ -147,21 +149,23 @@ public sealed partial class TimelineRenderService : IDisposable
                     else Composite(trackBuffer, width, height, pixels, layerWidth, layerHeight, effOpacity);
                 }
 
-                if (hasTrackEffects)
+                if (needsOwnBuffer)
                 {
-                    trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
-                    if (compositor != null)
+                    if (hasTrackEffects)
+                    {
+                        trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
+                    }
+                    if (compositor != null && !customBlend)
                     {
                         if (NativeMethods.CompositorLayer(compositor, trackBuffer, width, height, width * 4, track.Opacity) < 0)
                             throw NativeMethods.Error("Could not composite track FX layer");
                     }
                     else
                     {
-                        Composite(output, width, height, trackBuffer, width, height, track.Opacity);
+                        Composite(output, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
                     }
                 }
             }
-
             if (compositor != null && NativeMethods.CompositorReadback(compositor, output, output.Length) < 0)
                 throw NativeMethods.Error("Could not read composited timeline frame");
 
@@ -279,7 +283,7 @@ public sealed partial class TimelineRenderService : IDisposable
         return output;
     }
 
-    private static void Composite(byte[] output, int width, int height, byte[] layer, int layerWidth, int layerHeight, double opacity)
+    private static void Composite(byte[] output, int width, int height, byte[] layer, int layerWidth, int layerHeight, double opacity, TrackCompositeMode mode = TrackCompositeMode.SourceAlpha)
     {
         var left = (width - layerWidth) / 2;
         var top = (height - layerHeight) / 2;
@@ -289,23 +293,63 @@ public sealed partial class TimelineRenderService : IDisposable
             var target = ((y + top) * width + left) * 4;
             for (var x = 0; x < layerWidth; x++, source += 4, target += 4)
             {
-                var alpha = opacity * layer[source + 3] / 255;
-                if (alpha >= 1)
+                var alpha = opacity * layer[source + 3] / 255.0;
+                if (alpha <= 0) continue;
+
+                if (mode == TrackCompositeMode.Cut)
                 {
-                    output[target] = layer[source];
-                    output[target + 1] = layer[source + 1];
-                    output[target + 2] = layer[source + 2];
-                    output[target + 3] = 255;
+                    var cutFactor = 1.0 - alpha;
+                    for (var channel = 0; channel < 4; channel++)
+                        output[target + channel] = (byte)Math.Clamp((int)Math.Round(output[target + channel] * cutFactor), 0, 255);
+                    continue;
                 }
-                else if (alpha > 0)
+
+                if (mode == TrackCompositeMode.SourceAlpha)
                 {
-                    for (var channel = 0; channel < 3; channel++)
-                        output[target + channel] = (byte)Math.Clamp((int)Math.Round(layer[source + channel] * alpha + output[target + channel] * (1 - alpha)), 0, 255);
-                    output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
+                    if (alpha >= 1)
+                    {
+                        output[target] = layer[source];
+                        output[target + 1] = layer[source + 1];
+                        output[target + 2] = layer[source + 2];
+                        output[target + 3] = 255;
+                    }
+                    else
+                    {
+                        for (var channel = 0; channel < 3; channel++)
+                            output[target + channel] = (byte)Math.Clamp((int)Math.Round(layer[source + channel] * alpha + output[target + channel] * (1 - alpha)), 0, 255);
+                        output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
+                    }
+                    continue;
                 }
+
+                for (var channel = 0; channel < 3; channel++)
+                {
+                    var s = layer[source + channel] / 255.0;
+                    var d = output[target + channel] / 255.0;
+                    var blended = BlendChannel(mode, s, d);
+                    output[target + channel] = (byte)Math.Clamp((int)Math.Round((blended * alpha + d * (1.0 - alpha)) * 255.0), 0, 255);
+                }
+                output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
             }
         }
     }
+
+    private static double BlendChannel(TrackCompositeMode mode, double s, double d) => mode switch
+    {
+        TrackCompositeMode.Add => Math.Min(1.0, s + d),
+        TrackCompositeMode.Subtract => Math.Max(0.0, d - s),
+        TrackCompositeMode.Multiply => s * d,
+        TrackCompositeMode.Screen => s + d - s * d,
+        TrackCompositeMode.Overlay => d < 0.5 ? 2.0 * s * d : 1.0 - 2.0 * (1.0 - s) * (1.0 - d),
+        TrackCompositeMode.HardLight => s < 0.5 ? 2.0 * s * d : 1.0 - 2.0 * (1.0 - s) * (1.0 - d),
+        TrackCompositeMode.Darken => Math.Min(s, d),
+        TrackCompositeMode.Lighten => Math.Max(s, d),
+        TrackCompositeMode.Difference => Math.Abs(d - s),
+        TrackCompositeMode.DifferenceSquared => (d - s) * (d - s),
+        TrackCompositeMode.Dodge => s >= 1.0 ? 1.0 : Math.Min(1.0, d / (1.0 - s)),
+        TrackCompositeMode.Burn => s <= 0.0 ? 0.0 : 1.0 - Math.Min(1.0, (1.0 - d) / s),
+        _ => s
+    };
 
     private static NativeMethods.LayerTransform SamplingTransform(CropState crop, int sourceWidth, int sourceHeight, int width, int height)
     {
