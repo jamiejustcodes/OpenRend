@@ -1541,11 +1541,25 @@ public partial class MainWindow : Window
     });
     private async void SaveSnapshotClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
-        var dialog = new SaveFileDialog { Filter = "PNG image|*.png", DefaultExt = ".png", FileName = "Frame.png" };
+        var baseName = Path.GetFileNameWithoutExtension(string.IsNullOrWhiteSpace(vm.Project.Name) ? "Snapshot" : vm.Project.Name);
+        var defaultName = $"{baseName}_Frame{vm.Position:D6}.png";
+        var dialog = new SaveFileDialog
+        {
+            Filter = "PNG Image (*.png)|*.png|JPEG Image (*.jpg;*.jpeg)|*.jpg;*.jpeg|TIFF Image (*.tif;*.tiff)|*.tif;*.tiff",
+            DefaultExt = ".png",
+            FileName = defaultName
+        };
         if (dialog.ShowDialog(this) != true) return;
         if (vm.Project.Media.Any(m => string.Equals(Path.GetFullPath(m.Path), Path.GetFullPath(dialog.FileName), StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Choose a snapshot destination different from the original media.");
-        var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(await CaptureFrameAsync()));
+        var ext = Path.GetExtension(dialog.FileName).ToLowerInvariant();
+        BitmapEncoder encoder = ext switch
+        {
+            ".jpg" or ".jpeg" => new JpegBitmapEncoder { QualityLevel = 95 },
+            ".tif" or ".tiff" => new TiffBitmapEncoder { Compression = TiffCompressOption.Zip },
+            _ => new PngBitmapEncoder()
+        };
+        encoder.Frames.Add(BitmapFrame.Create(await CaptureFrameAsync()));
         var temporary = dialog.FileName + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
         {

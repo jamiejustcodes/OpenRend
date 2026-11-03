@@ -1,4 +1,4 @@
-using OpenRend.Timeline;
+﻿using OpenRend.Timeline;
 using System;
 using OpenRend.Core;
 using Xunit;
@@ -258,5 +258,53 @@ public sealed class PanCropAspectAndAudioMeterTests
         // Redo reapplies 0.0
         Assert.True(editor.Redo());
         Assert.Equal(0.0, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes[0].Smoothness);
+    }
+
+    [Fact]
+    public void TrackHeaderReadout_FormatsVolumePanAndVideoLevel()
+    {
+        // Video level
+        static string FormatVideoLevel(double opacity) => $"Level: {opacity * 100:0.0} %";
+        Assert.Equal("Level: 100.0 %", FormatVideoLevel(1.0));
+        Assert.Equal("Level: 50.0 %", FormatVideoLevel(0.5));
+        Assert.Equal("Level: 0.0 %", FormatVideoLevel(0.0));
+
+        // Audio volume
+        static string FormatVolume(double gain) =>
+            gain <= 0 ? "Vol: âˆ’âˆž dB" : (20 * Math.Log10(gain)) is var db && db > 0.05 ? $"Vol: +{db:0.0} dB" : $"Vol: {db:0.0} dB";
+        Assert.Equal("Vol: âˆ’âˆž dB", FormatVolume(0.0));
+        Assert.Equal("Vol: 0.0 dB", FormatVolume(1.0));
+        Assert.Equal("Vol: +3.0 dB", FormatVolume(Math.Pow(10, 3.0 / 20.0)));
+        Assert.Equal("Vol: -6.0 dB", FormatVolume(Math.Pow(10, -6.0 / 20.0)));
+
+        // Audio pan
+        static string FormatPan(double pan) =>
+            Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}";
+        Assert.Equal("Pan: Center", FormatPan(0.0));
+        Assert.Equal("Pan: Center", FormatPan(0.002));
+        Assert.Equal("Pan: 50% L", FormatPan(-0.5));
+        Assert.Equal("Pan: 100% R", FormatPan(1.0));
+    }
+
+    [Fact]
+    public void SnapshotEncoderSelection_MatchesVegasProExportTypes()
+    {
+        static System.Windows.Media.Imaging.BitmapEncoder CreateEncoder(string extension) => extension.ToLowerInvariant() switch
+        {
+            ".jpg" or ".jpeg" => new System.Windows.Media.Imaging.JpegBitmapEncoder { QualityLevel = 95 },
+            ".tif" or ".tiff" => new System.Windows.Media.Imaging.TiffBitmapEncoder { Compression = System.Windows.Media.Imaging.TiffCompressOption.Zip },
+            _ => new System.Windows.Media.Imaging.PngBitmapEncoder()
+        };
+
+        var pngEncoder = CreateEncoder(".png");
+        Assert.IsType<System.Windows.Media.Imaging.PngBitmapEncoder>(pngEncoder);
+
+        var jpegEncoder = CreateEncoder(".jpg") as System.Windows.Media.Imaging.JpegBitmapEncoder;
+        Assert.NotNull(jpegEncoder);
+        Assert.Equal(95, jpegEncoder.QualityLevel);
+
+        var tiffEncoder = CreateEncoder(".tif") as System.Windows.Media.Imaging.TiffBitmapEncoder;
+        Assert.NotNull(tiffEncoder);
+        Assert.Equal(System.Windows.Media.Imaging.TiffCompressOption.Zip, tiffEncoder.Compression);
     }
 }

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -328,7 +328,7 @@ public sealed partial class TimelineView : FrameworkElement
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
         var y = RulerHeight + index * TrackHeight - VerticalOffset;
-        return level switch { "Opacity" => new Rect(116, y + 25, 124, 20), "Gain" => new Rect(84, y + 25, 48, 20), _ => new Rect(137, y + 46, 43, 18) };
+        return level switch { "Opacity" => new Rect(116, y + 25, 124, 20), "Gain" => new Rect(108, y + 25, 90, 20), _ => new Rect(108, y + 46, 90, 18) };
     }
     internal double ReadTrackLevel(Guid trackId, string level)
     {
@@ -696,8 +696,17 @@ public sealed partial class TimelineView : FrameworkElement
                 Text(dc, label, bounds.X + 5, bounds.Y + 1);
             }
             var gain = ReadTrackLevel(t.Id, "Gain"); var opacity = ReadTrackLevel(t.Id, "Opacity"); var pan = ReadTrackLevel(t.Id, "Pan");
-            Text(dc, t.Kind == TrackKind.Video ? $"Level: {opacity * 100:0.0} %" : gain > 0 ? $"{20 * Math.Log10(gain):0.0} dB" : "−∞ dB", 31, y + 28, Brush("#B8B8B8"), 11, t.Kind == TrackKind.Video ? 83 : 52);
-            if (t.Kind == TrackKind.Audio) Text(dc, Math.Abs(pan) < .005 ? "Center" : $"{Math.Abs(pan) * 100:0} % {(pan < 0 ? "L" : "R")}", 137, y + 28, Brush("#B8B8B8"), 11, 50);
+            if (t.Kind == TrackKind.Video)
+            {
+                Text(dc, $"Level: {opacity * 100:0.0} %", 31, y + 28, Brush("#B8B8B8"), 11, 83);
+            }
+            else
+            {
+                string volText = gain <= 0 ? "Vol: −∞ dB" : (20 * Math.Log10(gain)) is var db && db > 0.05 ? $"Vol: +{db:0.0} dB" : $"Vol: {db:0.0} dB";
+                Text(dc, volText, 31, y + 28, Brush("#B8B8B8"), 11, 75);
+                string panText = Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}";
+                Text(dc, panText, 31, y + 48, Brush("#B8B8B8"), 11, 75);
+            }
             foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
             {
                 var bounds = TrackLevelBounds(t.Id, level); var center = bounds.Y + bounds.Height / 2;
