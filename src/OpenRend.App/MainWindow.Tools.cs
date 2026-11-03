@@ -152,6 +152,111 @@ public partial class MainWindow
         // Preview clip playback in video preview
     }
 
+    private readonly HashSet<VideoEffectKind> favoriteVideoFx = [];
+
+    private record VideoFxPreset(string Name, Dictionary<string, double>? Parameters = null);
+
+    private static string GetFxCategory(VideoEffectDefinition def) => def.Category switch
+    {
+        "AI" => "AI/ML",
+        "Color" => "Color",
+        "Blur" => "Blur",
+        "Glow" => "Light",
+        "Stylize" => "Creative",
+        "Distort" => "Creative",
+        "Keying" or "Detail" or "Render" => "Utility",
+        _ => "Utility"
+    };
+
+    private static IReadOnlyList<VideoFxPreset> GetPresetsForEffect(VideoEffectKind kind) => kind switch
+    {
+        VideoEffectKind.BlackAndWhite =>
+        [
+            new("(Default)", new() { ["Amount"] = 1.0 }),
+            new("50% Blend", new() { ["Amount"] = 0.5 }),
+            new("High Contrast B&W", new() { ["Amount"] = 1.0 }),
+            new("Subtle Faded", new() { ["Amount"] = 0.75 })
+        ],
+        VideoEffectKind.GaussianBlur =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.4 }),
+            new("Light Blur", new() { ["Amount"] = 0.15 }),
+            new("Medium Blur", new() { ["Amount"] = 0.6 }),
+            new("Heavy Blur", new() { ["Amount"] = 1.2 }),
+            new("Extreme Dream", new() { ["Amount"] = 2.0 })
+        ],
+        VideoEffectKind.BrightnessContrast =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.0, ["SecondaryAmount"] = 0.0 }),
+            new("Brighter (+20%)", new() { ["Amount"] = 0.2, ["SecondaryAmount"] = 0.0 }),
+            new("Darker (-20%)", new() { ["Amount"] = -0.2, ["SecondaryAmount"] = 0.0 }),
+            new("High Contrast", new() { ["Amount"] = 0.05, ["SecondaryAmount"] = 0.4 }),
+            new("Low Contrast", new() { ["Amount"] = 0.0, ["SecondaryAmount"] = -0.3 }),
+            new("Punchy Colors", new() { ["Amount"] = 0.1, ["SecondaryAmount"] = 0.25 })
+        ],
+        VideoEffectKind.Sepia =>
+        [
+            new("(Default)", new() { ["Amount"] = 1.0 }),
+            new("Subtle Warmth", new() { ["Amount"] = 0.35 }),
+            new("Vintage 1890s", new() { ["Amount"] = 0.85 }),
+            new("Deep Copper", new() { ["Amount"] = 1.0 })
+        ],
+        VideoEffectKind.Vignette =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.65, ["Radius"] = 0.4, ["Softness"] = 0.5 }),
+            new("Subtle Falloff", new() { ["Amount"] = 0.35, ["Radius"] = 0.6, ["Softness"] = 0.4 }),
+            new("Dramatic Spotlight", new() { ["Amount"] = 0.9, ["Radius"] = 0.25, ["Softness"] = 0.6 }),
+            new("Heavy Lens", new() { ["Amount"] = 0.8, ["Radius"] = 0.35, ["Softness"] = 0.3 })
+        ],
+        VideoEffectKind.Glow =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.5, ["Radius"] = 0.8, ["Threshold"] = 0.6 }),
+            new("Soft Dreamy", new() { ["Amount"] = 0.8, ["Radius"] = 1.2, ["Threshold"] = 0.4 }),
+            new("Subtle Warmth", new() { ["Amount"] = 0.3, ["Radius"] = 0.5, ["Threshold"] = 0.7 }),
+            new("Intense Bloom", new() { ["Amount"] = 1.5, ["Radius"] = 1.5, ["Threshold"] = 0.3 })
+        ],
+        VideoEffectKind.FilmGrain =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.15, ["Size"] = 1 }),
+            new("Fine 35mm Grain", new() { ["Amount"] = 0.08, ["Size"] = 1 }),
+            new("Gritty 16mm Grain", new() { ["Amount"] = 0.25, ["Size"] = 2 }),
+            new("Vintage Super8", new() { ["Amount"] = 0.4, ["Size"] = 3 })
+        ],
+        VideoEffectKind.Border =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.05, ["Red"] = 1, ["Green"] = 1, ["Blue"] = 1 }),
+            new("Thin White", new() { ["Amount"] = 0.015, ["Red"] = 1, ["Green"] = 1, ["Blue"] = 1 }),
+            new("Thick Black", new() { ["Amount"] = 0.08, ["Red"] = 0, ["Green"] = 0, ["Blue"] = 0 }),
+            new("Golden Frame", new() { ["Amount"] = 0.04, ["Red"] = 0.85, ["Green"] = 0.7, ["Blue"] = 0.2 })
+        ],
+        VideoEffectKind.Levels =>
+        [
+            new("(Default)", new() { ["Gamma"] = 1.0, ["InputBlack"] = 0, ["InputWhite"] = 1 }),
+            new("Computer RGB to Studio RGB", new() { ["OutputBlack"] = 0.063, ["OutputWhite"] = 0.922 }),
+            new("Studio RGB to Computer RGB", new() { ["InputBlack"] = 0.063, ["InputWhite"] = 0.922 }),
+            new("Punch Midtones", new() { ["Gamma"] = 1.3 }),
+            new("Crush Blacks", new() { ["InputBlack"] = 0.1, ["Gamma"] = 0.9 })
+        ],
+        VideoEffectKind.Invert =>
+        [
+            new("(Default)", new() { ["Amount"] = 1.0 }),
+            new("Solarized 50%", new() { ["Amount"] = 0.5 })
+        ],
+        VideoEffectKind.Sharpen =>
+        [
+            new("(Default)", new() { ["Amount"] = 0.5 }),
+            new("Subtle Sharpen", new() { ["Amount"] = 0.25 }),
+            new("Medium Sharpen", new() { ["Amount"] = 0.8 }),
+            new("Crisp Detail", new() { ["Amount"] = 1.5 })
+        ],
+        _ =>
+        [
+            new("(Default)"),
+            new("Subtle Effect"),
+            new("Intense Effect")
+        ]
+    };
+
     // Video FX catalog and preset management
     private void InitializeVideoFxView()
     {
@@ -171,7 +276,7 @@ public partial class MainWindow
             var dock = new DockPanel();
             var star = new ToggleButton
             {
-                Content = "☆",
+                Content = "â˜†",
                 Width = 22,
                 Height = 20,
                 Padding = new Thickness(0),
@@ -181,6 +286,8 @@ public partial class MainWindow
                 ToolTip = $"Favorite {def.Name}"
             };
             AutomationProperties.SetName(star, $"Favorite {def.Name}");
+            star.Checked += (_, _) => { favoriteVideoFx.Add(def.Kind); star.Content = "â˜…"; };
+            star.Unchecked += (_, _) => { favoriteVideoFx.Remove(def.Kind); star.Content = "â˜†"; };
 
             var icon = new ContentControl
             {
@@ -219,8 +326,8 @@ public partial class MainWindow
         {
             if (obj is not ListBoxItem item || item.DataContext is not VideoEffectDefinition def) continue;
             var visible = category == "All Plug-ins" ||
-                          (category == "Favorites" && false) ||
-                          string.Equals(def.Category, category, StringComparison.OrdinalIgnoreCase);
+                          (category == "Favorites" && favoriteVideoFx.Contains(def.Kind)) ||
+                          string.Equals(GetFxCategory(def), category, StringComparison.OrdinalIgnoreCase);
             item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         }
     }
@@ -248,9 +355,12 @@ public partial class MainWindow
         if (VideoFxPlugIns.SelectedItem is ListBoxItem item && item.DataContext is VideoEffectDefinition def)
         {
             if (VideoFxInfoText is not null)
-                VideoFxInfoText.Text = $"Applies {def.Name} ({def.Category}) to selected video events.";
+            {
+                // 1:1 Vegas Pro OFX capability string & description
+                VideoFxInfoText.Text = $"Vegas {def.Name}: OFX, 32-bit floating point, GPU Accelerated, Grouping Vegas\\{GetFxCategory(def)}, Version 1.0 â€” Professional visual processing filter.";
+            }
 
-            var presets = new[] { "Default", "Reset to None" };
+            var presets = GetPresetsForEffect(def.Kind);
             foreach (var preset in presets)
             {
                 var card = new ListBoxItem
@@ -265,24 +375,35 @@ public partial class MainWindow
 
                 var grid = new Grid();
                 var sp = new StackPanel();
+
+                // Stylized preview background brush based on effect kind
+                Brush previewBrush = def.Kind switch
+                {
+                    VideoEffectKind.BlackAndWhite => new LinearGradientBrush(Color.FromRgb(30, 30, 30), Color.FromRgb(220, 220, 220), new Point(0, 0), new Point(1, 1)),
+                    VideoEffectKind.Sepia => new LinearGradientBrush(Color.FromRgb(60, 40, 20), Color.FromRgb(210, 180, 120), new Point(0, 0), new Point(1, 1)),
+                    VideoEffectKind.Invert => new LinearGradientBrush(Color.FromRgb(240, 240, 240), Color.FromRgb(20, 20, 40), new Point(0, 0), new Point(1, 1)),
+                    VideoEffectKind.GaussianBlur or VideoEffectKind.QuickBlur => new LinearGradientBrush(Color.FromRgb(40, 60, 80), Color.FromRgb(100, 130, 160), new Point(0, 0), new Point(1, 1)),
+                    VideoEffectKind.Glow => new LinearGradientBrush(Color.FromRgb(40, 30, 60), Color.FromRgb(240, 200, 100), new Point(0, 0), new Point(1, 1)),
+                    VideoEffectKind.ChromaKeyer => new SolidColorBrush(Color.FromRgb(30, 180, 40)),
+                    _ => new LinearGradientBrush(Color.FromRgb(0x22, 0x33, 0x44), Color.FromRgb(0x44, 0x22, 0x33), new Point(0, 0), new Point(1, 1))
+                };
+
                 var border = new Border
                 {
                     Width = 112,
                     Height = 68,
                     BorderBrush = (Brush)FindResource("ColorL"),
                     BorderThickness = new Thickness(1),
-                    Background = new LinearGradientBrush(
-                        Color.FromRgb(0x22, 0x33, 0x44),
-                        Color.FromRgb(0x44, 0x22, 0x33),
-                        new Point(0, 0), new Point(1, 1))
+                    Background = previewBrush
                 };
                 var nameBlock = new TextBlock
                 {
-                    Text = preset,
+                    Text = preset.Name,
                     TextAlignment = TextAlignment.Center,
                     Margin = new Thickness(0, 4, 0, 0),
                     Foreground = (Brush)FindResource("TextColor"),
-                    FontSize = 11
+                    FontSize = 11,
+                    TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 sp.Children.Add(border);
                 sp.Children.Add(nameBlock);
@@ -297,9 +418,9 @@ public partial class MainWindow
                     HorizontalAlignment = HorizontalAlignment.Right,
                     VerticalAlignment = VerticalAlignment.Top,
                     Margin = new Thickness(2),
-                    ToolTip = "Add to selected events"
+                    ToolTip = $"Add {preset.Name} to selected events"
                 };
-                addBtn.Click += (_, _) => ApplyVideoFx(def.Kind);
+                addBtn.Click += (_, _) => ApplyVideoFx(def.Kind, preset.Parameters);
 
                 grid.Children.Add(sp);
                 grid.Children.Add(addBtn);
@@ -312,10 +433,13 @@ public partial class MainWindow
     private void VideoFxPresetDoubleClick(object sender, MouseButtonEventArgs e)
     {
         if (VideoFxPresets.SelectedItem is ListBoxItem item && item.DataContext is VideoEffectDefinition def)
-            ApplyVideoFx(def.Kind);
+        {
+            var preset = item.Tag as VideoFxPreset;
+            ApplyVideoFx(def.Kind, preset?.Parameters);
+        }
     }
 
-    private void ApplyVideoFx(VideoEffectKind kind)
+    private void ApplyVideoFx(VideoEffectKind kind, Dictionary<string, double>? parameters = null)
     {
         var clips = vm.Project.Tracks.SelectMany(t => t.Clips).Where(c => vm.Selection.Contains(c.Id)).ToList();
         if (clips.Count == 0 && SelectedClip is { } sel) clips.Add(sel);
@@ -328,13 +452,20 @@ public partial class MainWindow
         foreach (var clip in clips)
         {
             var effects = clip.VideoEffects.ToList();
-            effects.Add(VideoEffect.Create(kind));
+            var fx = VideoEffect.Create(kind);
+            if (parameters != null)
+            {
+                foreach (var (k, v) in parameters)
+                {
+                    fx.Parameters[k] = v;
+                }
+            }
+            effects.Add(fx);
             vm.Editor.SetVideoEffects(clip.Id, effects);
         }
         vm.Status = $"Added {kind} effect to {clips.Count} event(s).";
         RequestPreview();
     }
-
     private record MediaGeneratorDef(string Name, string Category, string[] Presets, string Description);
 
     private static readonly MediaGeneratorDef[] MediaGenerators =
