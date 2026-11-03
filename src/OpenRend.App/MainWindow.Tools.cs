@@ -537,6 +537,21 @@ public partial class MainWindow
         }
     }
 
+    private void MediaGenSearchChanged(object sender, TextChangedEventArgs e)
+    {
+        if (MediaGenPlugIns is null || MediaGenSearch is null) return;
+        var query = MediaGenSearch.Text.Trim();
+
+        foreach (var obj in MediaGenPlugIns.Items)
+        {
+            if (obj is not ListBoxItem item || item.DataContext is not MediaGeneratorDef def) continue;
+            var visible = query.Length == 0 ||
+                          def.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                          def.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
+            item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
     private void MediaGenPluginSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (MediaGenPresets is null) return;
@@ -667,92 +682,33 @@ public partial class MainWindow
     private void InsertMediaGenerator(string plugin, string preset)
     {
         Pause();
-        string path;
-        string clipName;
-
-        switch (plugin)
+        var kind = plugin switch
         {
-            case "Solid Color":
-                var hex = preset switch
-                {
-                    "White" => "#FFFFFF",
-                    "Red" => "#EE3333",
-                    "Green" => "#33CC33",
-                    "Blue" => "#3366EE",
-                    "Yellow" => "#FCBF45",
-                    "Cyan" => "#00D2FF",
-                    "Magenta" => "#EE33CC",
-                    _ => "#000000"
-                };
-                path = $"openrend://color?hex={hex}";
-                clipName = $"Solid Color ({preset})";
-                break;
+            "Test Pattern" => MediaGeneratorKind.TestPattern,
+            "Solid Color" => MediaGeneratorKind.SolidColor,
+            "Checkerboard" => MediaGeneratorKind.Checkerboard,
+            "Color Gradient" => MediaGeneratorKind.ColorGradient,
+            "Noise Texture" => MediaGeneratorKind.NoiseTexture,
+            "Credit Roll" => MediaGeneratorKind.CreditRoll,
+            "Titles & Text" => MediaGeneratorKind.TitlesAndText,
+            _ => MediaGeneratorKind.SolidColor
+        };
 
-            case "Titles & Text":
-                path = $"openrend://text?preset={Uri.EscapeDataString(preset)}";
-                clipName = $"Titles & Text ({preset})";
-                break;
+        var videoTracks = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video).ToList();
+        var targetTrack = videoTracks.ElementAtOrDefault(Timeline.ActiveTrackIndex)
+            ?? videoTracks.FirstOrDefault();
 
-            case "Checkerboard":
-                path = "openrend://color?hex=#444444";
-                clipName = $"Checkerboard ({preset})";
-                break;
-
-            case "Test Pattern":
-                path = "openrend://color?hex=#808080";
-                clipName = $"Test Pattern ({preset})";
-                break;
-
-            default:
-                path = "openrend://color?hex=#222222";
-                clipName = $"{plugin} ({preset})";
-                break;
+        if (targetTrack is null)
+        {
+            targetTrack = vm.Editor.AddTrack(TrackKind.Video);
         }
 
-        var asset = new MediaAsset
-        {
-            Id = Guid.NewGuid(),
-            Path = path,
-            DurationSeconds = 86400.0,
-            Width = vm.Project.Width,
-            Height = vm.Project.Height,
-            FrameRate = vm.Project.FrameRate.Value,
-            HasVideo = true,
-            HasAudio = false
-        };
+        var startFrame = Math.Max(0, vm.Position);
+        var duration = vm.Project.FrameRate.Frames(5.0);
+        vm.Editor.AddGeneratedMediaClip(targetTrack.Id, startFrame, kind, preset, duration);
 
-        var cursorFrame = vm.Position;
-        var durFrames = vm.Project.FrameRate.Frames(5.0); // 5.0 seconds Vegas Pro default
-        var clip = new TimelineClip
-        {
-            MediaId = asset.Id,
-            Name = clipName,
-            StartFrame = cursorFrame,
-            DurationFrames = durFrames
-        };
-
-        vm.Editor.Execute(p =>
-        {
-            var mediaList = p.Media.ToList();
-            mediaList.Add(asset);
-            p.Media = mediaList;
-
-            var tracks = p.Tracks.ToList();
-            var videoTrack = tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
-            if (videoTrack is null)
-            {
-                videoTrack = new TimelineTrack { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Video 1" };
-                tracks.Insert(0, videoTrack);
-            }
-
-            var trackIndex = tracks.IndexOf(videoTrack);
-            var clips = videoTrack.Clips.ToList();
-            clips.Add(clip);
-            videoTrack.Clips = clips;
-            p.Tracks = tracks;
-        });
-
-        vm.Status = $"Inserted {clipName} at {OpenRend.UI.TimelineView.FormatTimecode(cursorFrame, vm.Project.FrameRate)}.";
+        vm.Status = $"Inserted {plugin} ({preset}) at {OpenRend.UI.TimelineView.FormatTimecode(startFrame, vm.Project.FrameRate)}.";
         RequestPreview();
+        Timeline.InvalidateVisual();
     }
 }

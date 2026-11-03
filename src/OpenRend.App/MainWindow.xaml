@@ -312,6 +312,66 @@
             </Grid>
           </DockPanel>
         </TabItem>
+        <!-- 1:1 Vegas Pro Media Generator Tab -->
+        <TabItem x:Name="MediaGeneratorTab" Header="Media Generator">
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+
+            <!-- Media Generator Category Tabs with Embedded Search -->
+            <TabControl x:Name="MediaGenCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="MediaGenCategoryChanged" AutomationProperties.Name="Media generator categories">
+              <TabItem x:Name="AllMediaGenPluginsTab" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="AllMediaGenPlugins">
+                <TabItem.Header>
+                  <Grid>
+                    <Grid.ColumnDefinitions>
+                      <ColumnDefinition Width="Auto"/>
+                      <ColumnDefinition Width="*" MinWidth="130" MaxWidth="220"/>
+                    </Grid.ColumnDefinitions>
+                    <ContentControl Grid.Column="0" ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Margin="4,0,2,0" Style="{StaticResource BaseContentControl}"/>
+                    <TextBox x:Name="MediaGenSearch" Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Background="Transparent" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,2" VerticalContentAlignment="Center" TextChanged="MediaGenSearchChanged" AutomationProperties.Name="Search media generators" AutomationProperties.AutomationId="MediaGenSearch"/>
+                  </Grid>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem x:Name="FavoriteMediaGenCategory" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="FavoriteMediaGen">
+                <TabItem.Header>
+                  <StackPanel Orientation="Horizontal" Margin="4,0">
+                    <ContentControl ContentTemplate="{StaticResource ic_favorite}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,4,0"/>
+                    <TextBlock Text="Favorites" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  </StackPanel>
+                </TabItem.Header>
+              </TabItem>
+              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Titles and Text" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+            </TabControl>
+
+            <!-- Media Generator Split: Left Plugins + Splitter + Right Presets -->
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <ListBox x:Name="MediaGenPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="MediaGenPluginSelectionChanged" AutomationProperties.Name="Media generator plug-ins"/>
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
+                <ListBox x:Name="MediaGenPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="MediaGenPresetDoubleClick" AutomationProperties.Name="Media generator presets">
+                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                </ListBox>
+                <TextBlock x:Name="EmptyMediaGen" Text="No media generators match your search." Foreground="{StaticResource TextColorGrey}" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+              </Grid>
+            </Grid>
+
+            <!-- Bottom 26px Info Bar in ColorD -->
+            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
+              <TextBlock x:Name="MediaGenInfoText" Text="Vegas Test Pattern: OFX, 32-bit floating point, GPU Accelerated, Grouping Vegas, Version 1.0" Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
+          </Grid>
+        </TabItem>
         <!-- 1:1 Vegas Pro Transitions Tab -->
         <TabItem Header="Transitions">
           <Grid Background="{StaticResource ColorBG}">
@@ -468,44 +528,6 @@
             <!-- Bottom 26px Info Bar in ColorD -->
             <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
               <TextBlock x:Name="VideoFxInfoText" Text="Apply GPU and CPU video effects to events or tracks." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
-            </Border>
-          </Grid>
-        </TabItem>
-        <!-- 1:1 Vegas Pro Media Generator Tab -->
-        <TabItem x:Name="MediaGeneratorTab" Header="Media Generator">
-          <Grid Background="{StaticResource ColorBG}">
-            <Grid.RowDefinitions>
-              <RowDefinition Height="30"/>
-              <RowDefinition Height="*"/>
-              <RowDefinition Height="26"/>
-            </Grid.RowDefinitions>
-
-            <TabControl x:Name="MediaGenCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="MediaGenCategoryChanged" AutomationProperties.Name="Media Generator categories">
-              <TabItem Header="All Plug-ins" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Favorites" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Titles and Text" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-            </TabControl>
-
-            <Grid Grid.Row="1">
-              <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
-                <ColumnDefinition Width="4"/>
-                <ColumnDefinition Width="*"/>
-              </Grid.ColumnDefinitions>
-
-              <ListBox x:Name="MediaGenPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="MediaGenPluginSelectionChanged" AutomationProperties.Name="Media generator plug-ins"/>
-              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
-              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
-                <ListBox x:Name="MediaGenPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="MediaGenPresetDoubleClick" AutomationProperties.Name="Media generator presets">
-                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                </ListBox>
-              </Grid>
-            </Grid>
-
-            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
-              <TextBlock x:Name="MediaGenInfoText" Text="Generate video events: Titles &amp; Text, Solid Colors, Color Gradients, Checkerboard, and Test Patterns." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
             </Border>
           </Grid>
         </TabItem>

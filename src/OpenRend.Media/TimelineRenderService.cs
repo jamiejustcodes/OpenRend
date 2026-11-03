@@ -1,4 +1,4 @@
-﻿using System.Runtime.Versioning;
+using System.Runtime.Versioning;
 using OpenRend.Core;
 using OpenRend.Timeline;
 
@@ -95,9 +95,9 @@ public sealed partial class TimelineRenderService : IDisposable
                         else Composite(trackBuffer, width, height, subtitlePixels, width, height, effOpacity);
                         continue;
                     }
-                    if (IsColorGeneratorLayer(layer))
+                    if (IsGeneratorLayer(layer))
                     {
-                        var colorPixels = RenderColorGenerator(layer.Media.Path, width, height);
+                        var colorPixels = MediaGeneratorSynthesizer.Render(layer.Media, width, height, frame);
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
                             colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
@@ -519,6 +519,13 @@ public sealed partial class TimelineRenderService : IDisposable
         }
 
         return style;
+    }
+
+    private static bool IsGeneratorLayer(EvaluatedClip layer)
+    {
+        return layer.Media.IsGenerated ||
+               layer.Media.Path.StartsWith("openrend://generator", StringComparison.OrdinalIgnoreCase) ||
+               layer.Media.Path.StartsWith("openrend://color", StringComparison.OrdinalIgnoreCase);
     }
 
     private static bool IsColorGeneratorLayer(EvaluatedClip layer)

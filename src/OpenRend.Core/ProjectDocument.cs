@@ -128,6 +128,10 @@ public sealed class ProjectDocument
                     effect.Validate();
                 }
             }
+            if (media.IsGenerated && media.Generator is not null)
+            {
+                media.Generator.Validate();
+            }
             mediaById.Add(media.Id, media);
         }
         var trackIds = new HashSet<Guid>();
@@ -229,7 +233,10 @@ public sealed class MediaAsset
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Path { get; set; } = "";
-    [JsonIgnore] public string Name => System.IO.Path.GetFileName(Path);
+    [JsonIgnore] public string Name => IsGenerated && Generator != null ? $"{Generator.Title} ({Generator.PresetName})" : System.IO.Path.GetFileName(Path);
+    public bool IsGenerated { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public MediaGeneratorData? Generator { get; set; }
     public double DurationSeconds { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
@@ -242,6 +249,7 @@ public sealed class MediaAsset
     {
         var clone = (MediaAsset)MemberwiseClone();
         clone.VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList();
+        clone.Generator = Generator?.DeepClone();
         return clone;
     }
 }
