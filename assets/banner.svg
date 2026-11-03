@@ -1,0 +1,214 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 440" width="1200" height="440">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0c0f14"/>
+      <stop offset="50%" stop-color="#141922"/>
+      <stop offset="100%" stop-color="#0d1117"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="20%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#7bbbea" stop-opacity="0.18"/>
+      <stop offset="100%" stop-color="#7bbbea" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="80%" cy="80%" r="50%">
+      <stop offset="0%" stop-color="#f2d46a" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#f2d46a" stop-opacity="0"/>
+    </radialGradient>
+    <linearGradient id="clipV1" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#2563eb"/>
+      <stop offset="100%" stop-color="#38bdf8"/>
+    </linearGradient>
+    <linearGradient id="clipV2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
+    </linearGradient>
+    <linearGradient id="clipA" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#059669"/>
+      <stop offset="100%" stop-color="#10b981"/>
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="120%">
+      <feDropShadow dx="0" dy="8" stdDeviation="16" flood-color="#000000" flood-opacity="0.5"/>
+    </filter>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1200" height="440" fill="url(#bg)"/>
+  <rect width="1200" height="440" fill="url(#glow)"/>
+  <rect width="1200" height="440" fill="url(#glow2)"/>
+
+  <!-- Subtle Grid Pattern -->
+  <g stroke="#ffffff" stroke-opacity="0.03" stroke-width="1">
+    <line x1="0" y1="40" x2="1200" y2="40"/>
+    <line x1="0" y1="80" x2="1200" y2="80"/>
+    <line x1="0" y1="120" x2="1200" y2="120"/>
+    <line x1="0" y1="160" x2="1200" y2="160"/>
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="280" x2="1200" y2="280"/>
+    <line x1="0" y1="320" x2="1200" y2="320"/>
+    <line x1="0" y1="360" x2="1200" y2="360"/>
+    <line x1="0" y1="400" x2="1200" y2="400"/>
+    <line x1="100" y1="0" x2="100" y2="440"/>
+    <line x1="300" y1="0" x2="300" y2="440"/>
+    <line x1="500" y1="0" x2="500" y2="440"/>
+    <line x1="700" y1="0" x2="700" y2="440"/>
+    <line x1="900" y1="0" x2="900" y2="440"/>
+    <line x1="1100" y1="0" x2="1100" y2="440"/>
+  </g>
+
+  <!-- Top Hero Info -->
+  <g transform="translate(60, 42)">
+    <!-- Brand Icon -->
+    <rect width="84" height="84" rx="20" fill="#1b222d" stroke="#2b3544" stroke-width="1.5" filter="url(#shadow)"/>
+    <g transform="translate(10, 10) scale(0.25)">
+      <path d="M58 54h79c42 0 66 23 66 57 0 26-14 45-37 53l38 38h-50l-47-51V119h28c16 0 25-5 25-15s-9-15-25-15H94v113H58Z" fill="#7bbbea"/>
+      <path d="m107 109 44 26-44 26Z" fill="#f2d46a"/>
+    </g>
+
+    <!-- Header Text -->
+    <text x="108" y="44" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="38" font-weight="800" fill="#ffffff" letter-spacing="-0.5">OpenRend</text>
+    <text x="108" y="72" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, Roboto, sans-serif" font-size="15" font-weight="400" fill="#94a3b8">Free, High-Performance Video Editor for Windows • C# / .NET 10 &amp; C++20</text>
+
+    <!-- Badges Row -->
+    <g transform="translate(0, 104)">
+      <!-- Badge 1 -->
+      <rect x="0" y="0" width="112" height="26" rx="6" fill="#1e2633" stroke="#2e3848" stroke-width="1"/>
+      <circle cx="12" cy="13" r="4" fill="#38bdf8"/>
+      <text x="24" y="17" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">.NET 10 WPF</text>
+
+      <!-- Badge 2 -->
+      <rect x="122" y="0" width="138" height="26" rx="6" fill="#1e2633" stroke="#2e3848" stroke-width="1"/>
+      <circle cx="134" cy="13" r="4" fill="#a855f7"/>
+      <text x="146" y="17" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">C++20 MEDIA CORE</text>
+
+      <!-- Badge 3 -->
+      <rect x="270" y="0" width="130" height="26" rx="6" fill="#1e2633" stroke="#2e3848" stroke-width="1"/>
+      <circle cx="282" cy="13" r="4" fill="#10b981"/>
+      <text x="294" y="17" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">FFMPEG ACCEL</text>
+
+      <!-- Badge 4 -->
+      <rect x="410" y="0" width="120" height="26" rx="6" fill="#1e2633" stroke="#2e3848" stroke-width="1"/>
+      <circle cx="422" cy="13" r="4" fill="#f59e0b"/>
+      <text x="434" y="17" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">63 FX &amp; OFX</text>
+
+      <!-- Badge 5 -->
+      <rect x="540" y="0" width="148" height="26" rx="6" fill="#1e2633" stroke="#2e3848" stroke-width="1"/>
+      <circle cx="552" cy="13" r="4" fill="#ec4899"/>
+      <text x="564" y="17" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="11" font-weight="600" fill="#cbd5e1">MOTION TRACKING</text>
+    </g>
+  </g>
+
+  <!-- Interactive Timeline Mockup Container -->
+  <g transform="translate(60, 196)" filter="url(#shadow)">
+    <!-- Main Board Frame -->
+    <rect width="1080" height="204" rx="12" fill="#13171f" stroke="#262f3d" stroke-width="1.5"/>
+
+    <!-- Track Header Bar Left (Headers column) -->
+    <rect width="140" height="204" rx="12" fill="#181e28"/>
+    <!-- Overwrite right rounded corners of header column -->
+    <rect x="120" y="0" width="20" height="204" fill="#181e28"/>
+    <line x1="140" y1="0" x2="140" y2="204" stroke="#262f3d" stroke-width="1.5"/>
+
+    <!-- Time Ruler Header Top -->
+    <rect x="140" y="0" width="940" height="28" fill="#171d26"/>
+    <line x1="140" y1="28" x2="1080" y2="28" stroke="#262f3d" stroke-width="1"/>
+
+    <!-- Ruler Ticks -->
+    <g stroke="#475569" stroke-width="1" opacity="0.6">
+      <line x1="160" y1="18" x2="160" y2="28"/><text x="160" y="14" font-family="monospace" font-size="9" fill="#64748b" text-anchor="middle">00:00</text>
+      <line x1="260" y1="22" x2="260" y2="28"/>
+      <line x1="360" y1="18" x2="360" y2="28"/><text x="360" y="14" font-family="monospace" font-size="9" fill="#64748b" text-anchor="middle">00:05</text>
+      <line x1="460" y1="22" x2="460" y2="28"/>
+      <line x1="560" y1="18" x2="560" y2="28"/><text x="560" y="14" font-family="monospace" font-size="9" fill="#64748b" text-anchor="middle">00:10</text>
+      <line x1="660" y1="22" x2="660" y2="28"/>
+      <line x1="760" y1="18" x2="760" y2="28"/><text x="760" y="14" font-family="monospace" font-size="9" fill="#64748b" text-anchor="middle">00:15</text>
+      <line x1="860" y1="22" x2="860" y2="28"/>
+      <line x1="960" y1="18" x2="960" y2="28"/><text x="960" y="14" font-family="monospace" font-size="9" fill="#64748b" text-anchor="middle">00:20</text>
+      <line x1="1060" y1="22" x2="1060" y2="28"/>
+    </g>
+
+    <!-- Track 1: Video Track Header -->
+    <g transform="translate(12, 38)">
+      <rect x="0" y="0" width="116" height="48" rx="6" fill="#1e2532"/>
+      <text x="10" y="20" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#e2e8f0">Track 1</text>
+      <text x="10" y="36" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" fill="#7bbbea">Video / FX</text>
+      <circle cx="86" cy="18" r="6" fill="#334155"/><text x="86" y="21" font-family="sans-serif" font-size="8" font-weight="700" fill="#94a3b8" text-anchor="middle">M</text>
+      <circle cx="102" cy="18" r="6" fill="#334155"/><text x="102" y="21" font-family="sans-serif" font-size="8" font-weight="700" fill="#94a3b8" text-anchor="middle">S</text>
+    </g>
+
+    <!-- Track 1: Clips Lane -->
+    <g transform="translate(140, 38)">
+      <!-- Clip A (H.264 Main) -->
+      <rect x="20" y="4" width="310" height="42" rx="6" fill="url(#clipV1)" opacity="0.9" stroke="#60a5fa" stroke-width="1"/>
+      <text x="32" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#ffffff">A001_C014_RAW.mp4</text>
+      <text x="32" y="37" font-family="monospace" font-size="9" fill="#bfdbfe">3840x2160 • 59.94 fps</text>
+
+      <!-- Crossfade Reciprocal Curve -->
+      <polygon points="310,4 350,4 310,46" fill="#f2d46a" opacity="0.45"/>
+      <polygon points="310,46 350,4 350,46" fill="#38bdf8" opacity="0.45"/>
+
+      <!-- Clip B (B-Roll) -->
+      <rect x="330" y="4" width="410" height="42" rx="6" fill="url(#clipV2)" opacity="0.9" stroke="#c084fc" stroke-width="1"/>
+      <text x="360" y="23" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#ffffff">B_ROLL_COLOR_GRADE.mov [LUT Rec709]</text>
+      <text x="360" y="37" font-family="monospace" font-size="9" fill="#e9d5ff">Vegas Pro 1:1 OFX • Homography LK</text>
+
+      <!-- Clip C -->
+      <rect x="760" y="4" width="220" height="42" rx="6" fill="url(#clipV1)" opacity="0.75" stroke="#60a5fa" stroke-width="1"/>
+      <text x="772" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="600" fill="#ffffff">OUTRO_TITLES.mp4</text>
+    </g>
+
+    <line x1="0" y1="94" x2="1080" y2="94" stroke="#222936" stroke-width="1"/>
+
+    <!-- Track 2: Audio Track Header -->
+    <g transform="translate(12, 102)">
+      <rect x="0" y="0" width="116" height="44" rx="6" fill="#1e2532"/>
+      <text x="10" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="12" font-weight="700" fill="#e2e8f0">Track 2</text>
+      <text x="10" y="33" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" fill="#10b981">Audio Master</text>
+      <circle cx="86" cy="18" r="6" fill="#334155"/><text x="86" y="21" font-family="sans-serif" font-size="8" font-weight="700" fill="#94a3b8" text-anchor="middle">M</text>
+      <circle cx="102" cy="18" r="6" fill="#334155"/><text x="102" y="21" font-family="sans-serif" font-size="8" font-weight="700" fill="#94a3b8" text-anchor="middle">S</text>
+    </g>
+
+    <!-- Track 2: Audio Waveform Lane -->
+    <g transform="translate(140, 102)">
+      <!-- Audio Clip 1 -->
+      <rect x="20" y="3" width="720" height="38" rx="6" fill="#064e3b" stroke="#059669" stroke-width="1" opacity="0.85"/>
+      <text x="32" y="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#6ee7b7">48kHz • 24-bit Stereo AAC</text>
+      <!-- Simulated Waveform -->
+      <path d="M 40,26 L 50,18 L 60,34 L 70,22 L 80,30 L 90,16 L 100,34 L 110,26 L 120,20 L 130,32 L 140,24 L 150,18 L 160,34 L 170,22 L 180,30 L 190,16 L 200,34 L 210,26 L 220,19 L 230,33 L 240,25 L 250,18 L 260,34 L 270,26 L 280,20 L 290,32 L 300,24 L 310,18 L 320,34 L 330,22 L 340,30 L 350,16 L 360,34 L 370,26 L 380,20 L 390,32 L 400,24 L 410,18 L 420,34 L 430,22 L 440,30 L 450,16 L 460,34 L 470,26 L 480,20 L 490,32 L 500,24 L 510,18 L 520,34 L 530,22 L 540,30 L 550,16 L 560,34 L 570,26 L 580,20 L 590,32 L 600,24 L 610,18 L 620,34 L 630,22 L 640,30 L 650,16 L 660,34 L 670,26 L 680,20 L 690,32 L 700,24 L 710,26" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round"/>
+
+      <!-- Audio Clip 2 -->
+      <rect x="760" y="3" width="220" height="38" rx="6" fill="#064e3b" stroke="#059669" stroke-width="1" opacity="0.85"/>
+      <path d="M 770,26 L 780,20 L 790,32 L 800,24 L 810,18 L 820,34 L 830,22 L 840,30 L 850,16 L 860,34 L 870,26 L 880,20 L 890,32 L 900,24 L 910,18 L 920,34 L 930,22 L 940,30 L 950,16 L 960,34" fill="none" stroke="#34d399" stroke-width="1.8" stroke-linecap="round"/>
+    </g>
+
+    <line x1="0" y1="152" x2="1080" y2="152" stroke="#222936" stroke-width="1"/>
+
+    <!-- Track 3: Overlay / Motion Track -->
+    <g transform="translate(12, 160)">
+      <rect x="0" y="0" width="116" height="34" rx="6" fill="#1e2532"/>
+      <text x="10" y="16" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="11" font-weight="700" fill="#e2e8f0">Track 3</text>
+      <text x="10" y="28" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="9" fill="#f59e0b">Motion Track</text>
+    </g>
+
+    <g transform="translate(140, 160)">
+      <rect x="180" y="3" width="380" height="28" rx="6" fill="#451a03" stroke="#d97706" stroke-width="1" opacity="0.8"/>
+      <!-- Keyframe diamonds -->
+      <polygon points="210,17 215,12 220,17 215,22" fill="#fbbf24"/>
+      <polygon points="280,17 285,12 290,17 285,22" fill="#fbbf24"/>
+      <polygon points="350,17 355,12 360,17 355,22" fill="#fbbf24"/>
+      <polygon points="420,17 425,12 430,17 425,22" fill="#fbbf24"/>
+      <polygon points="490,17 495,12 500,17 495,22" fill="#fbbf24"/>
+      <text x="230" y="20" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif" font-size="10" font-weight="600" fill="#fde68a">Homography Pyramidal LK (95% Conf)</text>
+    </g>
+
+    <!-- Playhead Scrub Line -->
+    <g transform="translate(480, 0)">
+      <!-- Line down entire timeline -->
+      <line x1="0" y1="16" x2="0" y2="204" stroke="#f2d46a" stroke-width="2"/>
+      <!-- Playhead Head Marker -->
+      <polygon points="-7,0 7,0 7,16 0,22 -7,16" fill="#f2d46a"/>
+      <!-- Current Timecode Badge -->
+      <rect x="-38" y="25" width="76" height="18" rx="4" fill="#f2d46a"/>
+      <text x="0" y="37" font-family="monospace" font-size="9" font-weight="800" fill="#1e293b" text-anchor="middle">00:08:14.02</text>
+    </g>
+  </g>
+</svg>

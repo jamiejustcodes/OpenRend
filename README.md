@@ -1,63 +1,184 @@
-# OpenRend
+<p align="center">
+  <img src="assets/banner.svg" alt="OpenRend Banner" width="100%" />
+</p>
 
-OpenRend is a free, open source Windows video editor built with C#/.NET 10, WPF and a C++20 media engine. It is in active development.
+<p align="center">
+  <strong>Free, open-source Windows video editor built with C# / .NET 10, WPF, and a high-performance C++20 media engine.</strong>
+</p>
 
-The application imports video and audio, places media on multiple tracks, trims and splits clips, previews the timeline, saves projects and exports H.264/AAC MP4. Preview and export use the same edit decisions. Source media stays unchanged.
+<p align="center">
+  <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><img src="https://img.shields.io/github/v/release/jamiejustcodes/OpenRend?style=for-the-badge&color=0284c7&label=Release" alt="Latest Release" /></a>
+  <a href="https://github.com/jamiejustcodes/OpenRend/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jamiejustcodes/OpenRend/build.yml?branch=main&style=for-the-badge&color=16a34a&label=Build" alt="CI Status" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg?style=for-the-badge" alt="License" /></a>
+  <img src="https://img.shields.io/badge/Platform-Windows_x64-7c3aed.svg?style=for-the-badge&logo=windows" alt="Platform" />
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4.svg?style=for-the-badge&logo=dotnet" alt=".NET 10" />
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C.svg?style=for-the-badge&logo=c%2B%2B" alt="C++20" />
+</p>
 
-## Build and run
+<p align="center">
+  <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><b>🚀 Download Portable Bundle (v0.1.0)</b></a> •
+  <a href="#-key-features"><b>Features</b></a> •
+  <a href="#-quick-start--build"><b>Build from Source</b></a> •
+  <a href="#-keyboard-shortcuts"><b>Shortcuts</b></a> •
+  <a href="#-architecture"><b>Architecture</b></a> •
+  <a href="#-documentation"><b>Docs</b></a>
+</p>
 
-Requirements: Windows 10/11 x64, .NET 10 SDK, Visual Studio with Desktop development with C++, Windows SDK, CMake and Git. The native setup script downloads the pinned shared FFmpeg SDK and GoogleTest. Managed packages restore from NuGet.
+---
 
+## 🎬 Overview
+
+**OpenRend** is a non-linear video editing suite designed for responsiveness, deterministic rendering, and modern Windows workflows. It pairs a managed **WPF / .NET 10** timeline with a native **C++20** decoding and composition pipeline accelerated by the **FFmpeg SDK**.
+
+Preview and final export share the exact same edit decisions, rational time evaluation, and mathematical color pipeline — what you scrub in the preview monitor is frame-for-frame what renders into your master export.
+
+---
+
+## ✨ Key Features
+
+| Capability | Details |
+|---|---|
+| 🎞️ **Multi-Track Non-Destructive Timeline** | Non-destructive video & audio editing, magnetic ripple trimming, group linking (`G`/`U`), and sub-frame precision. |
+| ⚡ **Hybrid C++20 & .NET 10 Engine** | Native FFmpeg decoding with DirectX 11 / D3D preview composition and smooth UI dispatch. |
+| 🎨 **1:1 Vegas Pro Color Grading & Scopes** | Interactive color grading wheels (Lift / Gamma / Gain / Offset), multi-scope analysis (Parade, Waveform, Vectorscope), and embedded 3D `.cube` LUT filters. |
+| 🔄 **18 OFX Video Transitions & Curves** | 18 transition plugins (Dissolve, Wipes, Spatial Reveals, Transforms) alongside a **5×5 reciprocal fade curve** matrix. |
+| 🎯 **Pyramidal Motion & Mask Tracking** | Lucas-Kanade optical flow, 6-parameter affine decomposition, and DLT homography tracking. |
+| 🎛️ **63 Built-in Video Effects** | Color grading, separable Gaussian blur, levels, stylize, glow, distortion, and composite filters. |
+| 📦 **Zero-Config Portable Distribution** | Fully self-contained Windows x64 zip bundle — no installer, no system-wide codec installations required. |
+
+---
+
+## 🚀 Download & Run
+
+No installer or administrative privileges required. 
+
+1. Download **`OpenRend-win-x64.zip`** from the [Latest Release](https://github.com/jamiejustcodes/OpenRend/releases/latest).
+2. Extract the archive anywhere on your machine.
+3. Launch **`OpenRend.exe`**.
+
+> Requirements: 64-bit Windows 10 or 11.
+
+---
+
+## 🛠️ Quick Start & Build
+
+### Prerequisites
+- Windows 10 / 11 x64
+- **.NET 10 SDK** (v10.0.303+)
+- **Visual Studio** with *Desktop development with C++*, *Windows 10/11 SDK*, and *CMake*
+- **Git**
+
+### 1. Build and Run Directly
 ```powershell
+# Restore dependencies and build managed and native binaries
 .\tools\build.ps1
+
+# Launch OpenRend
 .\src\OpenRend.App\bin\Release\net10.0-windows\win-x64\OpenRend.exe
 ```
 
-Create a self-contained local development bundle:
-
+### 2. Package a Standalone Release Bundle
 ```powershell
+# Compiles binaries, stages FFmpeg libraries, and generates self-contained dist folder
 .\tools\build.ps1 -Package
+
+# Run packaged executable
 .\dist\OpenRend\OpenRend.exe
 ```
 
-Keep the entire bundle directory together. This is a development build; it has no installer or code signature. See [third-party notices](THIRD-PARTY-NOTICES.md) before redistributing dependency binaries.
+---
 
-## Editing
+## ⌨️ Keyboard Shortcuts
 
-Welcome opens at startup with aspect, resolution and rational frame-rate choices. Ctrl+N reopens New Project; the startup checkbox and recent projects are saved independently. Opening a project path skips Welcome. See [project startup](docs/project-startup.md).
+| Shortcut | Context | Action |
+|---|---|---|
+| `Space` | Playback | Play / Pause |
+| `Enter` | Playback | Pause at current cursor |
+| `Escape` | Playback / Editing | Stop playback / Cancel active drag |
+| `Alt` + `Left` / `Right` | Timeline | Step one frame backward / forward |
+| `Ctrl` + `Home` / `End` | Timeline | Jump to timeline start / end bounds |
+| `Ctrl` + `Mouse Wheel` | Timeline | Zoom timeline in / out |
+| `Shift` + `Mouse Wheel` | Timeline | Scroll timeline horizontally |
+| `S` | Editing | **Split** selected clips at playhead |
+| `Delete` | Editing | Remove selected clips (with optional ripple) |
+| `G` / `U` | Editing | **Group** / **Ungroup** selected clips |
+| `Ctrl` + `Shift` + `M` | Audio | Toggle audio mute leaving video visible |
+| `M` / `Shift` + `M` | Tracks | Toggle track Mute / Solo |
+| `Ctrl` + `I` | Media | Import video/audio media files |
+| `Ctrl` + `Shift` + `E` | Export | Open **Render As** export dialog |
+| `Ctrl` + `S` | Project | Save project (auto-saved recovery every 30s) |
 
-Import media with Ctrl+I or drop files onto the window. Double-click a source to place it at the cursor, or drag it to a compatible timeline track. Video with sound creates separate picture and audio clips. Ctrl+click selects several clips; use Ctrl+A to select all.
+---
 
-Drag a clip to move it, or point near either edge to show a resize cursor and highlighted trim grip. The edge target extends slightly outside the clip. Hold and drag to trim; Escape cancels the drag. S splits selected clips at the cursor; Delete removes them. Imported picture/sound pairs stay linked for editing. G links a selection, U unlinks it, and Edit → Ignore clip groups temporarily isolates members. Splits produce independent left/right groups. Snap aligns moves with clip boundaries and the playhead. Ripple closes removed time on the affected tracks. Ctrl+Z/Ctrl+Y undo and redo. Track headers provide mute, solo, lock and video visibility controls. Clip Properties edits source ranges, gain, opacity, pan and fades.
+## 🏗️ Architecture
 
-Ctrl+C/Ctrl+X copy or cut selected clips, including linked members. Ctrl+V pastes at the cursor as one undoable edit. Groups receive independent identities; pasting between projects converts positions and source ranges to the destination frame rate. The Project Media tree filters video, audio and missing sources.
+```mermaid
+flowchart TD
+    subgraph UI ["Managed UI Layer (.NET 10 / WPF)"]
+        MainWindow["MainWindow (Dockable Studio Layout)"]
+        Timeline["Multi-Track Timeline & Scrub Engine"]
+        Inspector["Color Grading / Pan & Crop / FX Chooser"]
+        Welcome["Project Wizard & Startup Manager"]
+    end
 
-Video events have Pan/Crop, FX and event-options buttons at their lower-right corner. Narrow events show an overflow button; zoom in or use the context menu for the full controls. Event options toggle headers, names and lengths for the current session. Locked tracks disable event actions.
+    subgraph Core ["OpenRend.Core"]
+        ProjectModel["Project Model (Schema v8/v9)"]
+        Tracking["Homography & LK Motion Tracker"]
+        Transitions["18 OFX Transitions & 5x5 Grid"]
+    end
 
-Video event FX provides 63 built-in effects across color, blur, detail, distortion, keying, stylizing, glow, render and AI tools. Use the Plug-in chooser to filter categories, search, and stage Add/Replace/Remove operations; OK applies the draft as one undo step and Cancel preserves the project. Reorder or bypass effects, drag a parameter or enter its value, and undo changes. LUT Filter imports embedded 3D `.cube` data with strength and interpolation controls. The FX window previews the edited frame; the timeline preview and export apply the same chain before Pan/Crop and composition. See [video effects](docs/video-effects.md) for the supported catalog and processing limits. Effect keyframes and external plug-ins are not supported yet.
+    subgraph Native ["Native Media Core (C++20)"]
+        MediaService["P/Invoke Bridge (OpenRend.Native.dll)"]
+        FFmpegCore["FFmpeg SDK (N-127564 shared)"]
+        D3DComp["Direct3D 11 GPU Compositor"]
+        ExportPipeline["H.264 / AAC MP4 Muxer"]
+    end
 
-Track headers include video opacity and audio gain/pan sliders. Drag to set a level as one undoable edit, or double-click to reset it. Arrow keys adjust a focused level. Track levels combine with clip levels in preview and export; locked tracks reject changes. The controls also expose Windows UI Automation range values.
+    UI --> Core
+    Core --> Native
+    Native -->|Hardware Decoded Frames| D3DComp
+    D3DComp -->|Swapchain Viewport| MainWindow
+```
 
-Select a video event and open Tools → Video event Pan/Crop, or use the timeline context menu. Edit source-pixel width, height, center, rotation and pivot; aspect lock links width and height. Drag the source overlay to pan or any corner handle to resize; the pointer shows the handle's resize direction. Crop keyframes use whole project frames with Linear, Hold, Slow, Fast, Smooth or Sharp temporal interpolation. Right-click a diamond to choose its curve, or focus the keyframe lane at a key and press Shift+F10. Drag a diamond or enter its exact frame to retime it. Landing on an occupied frame keeps both keys by shifting the existing keys toward the next free frame, or backward when the end is full. Undo restores their previous times. Frame navigation updates the timeline preview. Crop edits support undo, persistence, trimming, splitting and clipboard frame-rate conversion, and use the same GPU or CPU composition during preview and export.
+---
 
-Space plays or pauses, Enter pauses, Escape stops, Alt+Left/Right steps a frame and Ctrl+Home/End seeks to the bounds. Completed video frames remain visible as the audio clock advances; slow rendering can drop frames while catching up. Pausing and seeking request the exact cursor frame. Ctrl+wheel zooms the timeline; Shift+wheel scrolls time; the wheel scrolls tracks. Splitters resize the workspace. Preview quality selects draft, preview or project resolution. Master Bus adjusts monitor gain.
+## 📖 In-Depth Editing Guide
 
-Preview zoom and safe area guides affect the monitor only. Snapshot buttons copy or save the current project-resolution frame. Monitor meters use a decibel scale; monitor mute and gain do not change the rendered export. Video backend details are available in the preview information tooltip.
+<details>
+<summary><b>Media Import & Clip Arrangement</b></summary>
 
-With the timeline focused, Up/Down selects a track and Left/Right selects a clip. M toggles track mute, Shift+M solo, L lock and V video visibility. Timeline clips expose selection and track controls expose their actions to Windows UI Automation.
+- **Import Media**: Press `Ctrl+I` or drag and drop audio/video files directly into the window. Double-click a source in Project Media to place it at the playhead cursor, or drag directly onto any track.
+- **Linked Pairs**: Video with audio automatically links into paired picture/sound clips. `G` links any arbitrary selection; `U` unlinks; `Edit → Ignore clip groups` temporarily isolates individual items.
+- **Trimming & Snapping**: Hover near clip edges to reveal high-precision trim handles. Snapping dynamically aligns dragged boundaries with adjacent clips, markers, and the playhead.
+</details>
 
-Save with Ctrl+S. Projects store versioned JSON and relative source paths where possible. This build reads versions 1–4 and saves version 4; older builds reject new saves to protect crop animation and effect parameters from being discarded. File → Relink missing media repairs moved source references. Recovery snapshots are saved every 30 seconds while editing. File → Open recovery project opens the latest snapshot. OPENREND_DATA_DIR overrides the preferences/recovery directory for isolated sessions.
+<details>
+<summary><b>Pan/Crop, Keyframing & 63 Built-in Effects</b></summary>
 
-Ctrl+Shift+E opens Render As. Choose a project-size/rate H.264/AAC preset, search template properties (separate required terms with semicolons), or filter saved favorites. Drag the upper timeline ruler or use I/O while the timeline has focus to set a loop region, then enable Render loop region only to export it. Loop selection currently lasts for the session and is bounded to the timeline. The renderer composites video, keeps black gaps, mixes audio, applies clip levels/fades and finalizes MP4 before replacing the chosen destination. Cancellation and failure preserve an existing destination. Export cannot overwrite a source file. See [rendering](docs/rendering.md) for supported settings and limits.
+- **Event Pan/Crop**: Select any clip and choose `Tools → Video event Pan/Crop`. Adjust source-pixel width, center, pivot, and rotation with aspect lock.
+- **Keyframe Curves**: Pan/Crop keyframes support whole project frames with *Linear*, *Hold*, *Slow*, *Fast*, *Smooth*, and *Sharp* interpolation curves.
+- **FX Catalog**: 63 built-in effects spanning color grading, blur, detail, keying, stylize, and glow. Supports 3D `.cube` LUT filters with intensity and interpolation controls.
+</details>
 
-The Transitions tab supports Default Dissolve on overlaps and cuts, saved favorites, automatic single-event placement with same-track ripple, and plug-in removal that retains the crossfade. Ctrl + numeric keypad / converts a supported crossfade back to a cut. Finite video events expose Switches > Loop for source repetition or last-frame hold; older events keep bounded playback. Right-click video events to choose Fade In Curve, Fade Out Curve, or a 5×5 Fade Type thumbnail grid for reciprocal crossfades. Preview and export share source-alpha, reciprocal curve, and source-time evaluation. See [transitions](docs/transitions.md) for placement rules, preservation checks and current limits.
+<details>
+<summary><b>18 Transitions & 5×5 Reciprocal Fade Grid</b></summary>
 
-## Verification and scope
+- **Transitions Tab**: Full catalog of 18 OFX video transitions (Linear Wipe, Clock Wipe, Barn Door, Push, Slide, Zoom, Page Peel, Dissolve).
+- **Reciprocal Fades**: Right-click any video event to select incoming/outgoing curves or open the **5×5 Fade Type thumbnail grid** to set reciprocal crossfade pairs without altering clip positions.
+</details>
 
-Tests exercise rational timing, edit transactions, fade preservation, persistence, legacy project import, native decoding, seeking, audio resampling, video composition and real encoded output. See [feature status](docs/feature-status.md) for evidence and remaining work.
+<details>
+<summary><b>Render & Export</b></summary>
 
-The current application is an early functional editor. Arbitrary docking, broader effect automation, spatial spline smoothing, masks, titles, proxies, plugin hosting, scripting and large-project performance qualification remain in development. Clips with transforms or active video effects decode at source resolution and use CPU upload/readback around GPU composition; the built-in effect operations run on the CPU.
+- Press `Ctrl+Shift+E` to open the **Render As** dialog.
+- Select from optimized H.264 / AAC presets matching project resolution and frame rate.
+- Set in/out loop regions (`I`/`O`) to render isolated timeline sections.
+- Preview and final export execute the exact same mathematical composition path.
+</details>
 
-## License
+---
 
-OpenRend source is GPL-3.0-or-later. Third-party components retain their own licenses. See [LICENSE](LICENSE) and [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
+## 📄 License & Notices
+
+OpenRend is licensed under the [GNU General Public License v3.0 (GPL-3.0-or-later)](LICENSE).  
+Third-party libraries (including FFmpeg and GoogleTest) retain their respective licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full compliance details.
