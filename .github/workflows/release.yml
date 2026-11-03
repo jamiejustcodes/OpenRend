@@ -1,0 +1,35 @@
+name: Release Bundle
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.303'
+
+      - name: Build and package
+        shell: pwsh
+        run: ./tools/build.ps1 -Package
+
+      - name: Archive release bundle
+        shell: pwsh
+        run: Compress-Archive -Path dist/OpenRend/* -DestinationPath dist/OpenRend-win-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: OpenRend ${{ github.ref_name }}
+          files: dist/OpenRend-win-x64.zip
+          generate_release_notes: true
