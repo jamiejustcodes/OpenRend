@@ -544,7 +544,9 @@
           </StackPanel>
           <Border Grid.Row="1" Background="Black" Margin="0,4,0,0"><local:PreviewHost x:Name="Preview"/></Border>
           <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Go to start" ToolTip="Go to start (Ctrl+Home)" Click="StartClick" ContentTemplate="{StaticResource ic_first}"/><Button x:Name="PreviewPlayButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Play" ToolTip="Play / pause (Space)" Click="PlayClick" ContentTemplate="{StaticResource ic_play}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Pause" ToolTip="Pause (Enter)" Click="PauseClick" ContentTemplate="{StaticResource ic_pause}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Stop" ToolTip="Stop (Esc)" Click="StopClick" ContentTemplate="{StaticResource ic_stop}"/></StackPanel>
-          <TextBlock Grid.Row="3" x:Name="PreviewInfo" Margin="9,4" Foreground="#B8B8B8" FontSize="11"/>
+          <Border Grid.Row="3" Background="#242424" BorderBrush="#1C1C1C" BorderThickness="0,1,0,0">
+            <TextBlock x:Name="PreviewInfo" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,2" Foreground="#C8C8C8" FontSize="11"/>
+          </Border>
         </Grid>
       </TabItem></TabControl>
       <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"/>

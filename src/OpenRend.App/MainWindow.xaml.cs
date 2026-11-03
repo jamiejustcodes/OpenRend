@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -258,7 +258,8 @@ public partial class MainWindow : Window
         Preview.CanvasMouseMove += OnPreviewMouseMove;
         Preview.CanvasMouseUp += OnPreviewMouseUp;
         Preview.CanvasMouseDoubleClick += OnPreviewMouseDoubleClick;
-        Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
+        Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
+        Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
         vm.Changed += Refresh;
         timer.Tick += async (_, _) =>
@@ -335,7 +336,7 @@ public partial class MainWindow : Window
         UpdateMediaFilter();
         TimelineScroll.Maximum = Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames) * Timeline.PixelsPerSecond);
         TimelineScroll.ViewportSize = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
-        PreviewInfo.Text = PreviewDescription();
+        UpdatePreviewStatus();
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
         UpdateRecordTimeDisplay();
         RequestPreview();
@@ -346,6 +347,139 @@ public partial class MainWindow : Window
         PreviewInfo.ToolTip = backend;
         System.Windows.Automation.AutomationProperties.SetHelpText(PreviewInfo, Preview.IsReady ? backend : "Preview is starting.");
         return $"Project: {vm.Project.Width}×{vm.Project.Height}, {vm.Project.FrameRate.Value:0.000}p     Preview: {previewWidth}×{previewHeight}     Frame: {(lastPreview < 0 ? "—" : lastPreview.ToString(CultureInfo.InvariantCulture))}     Display: {Preview.ActualWidth:0}×{Preview.ActualHeight:0}";
+    }
+    private void UpdatePreviewStatus()
+    {
+        var desc = PreviewDescription();
+        System.Windows.Automation.AutomationProperties.SetName(PreviewInfo, desc);
+        RenderPreviewStatusBadges();
+    }
+    private void RenderPreviewStatusBadges()
+    {
+        PreviewInfo.Inlines.Clear();
+
+        // Project format badge (page icon + resolution + framerate)
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateProjectIcon()));
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.Run($" {vm.Project.Width}×{vm.Project.Height}, {vm.Project.FrameRate.Value:0.000}p"));
+
+        // Segment separator
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateStatusDivider()));
+
+        // Preview format badge (monitor icon + preview resolution + framerate)
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreatePreviewIcon()));
+        var pw = previewWidth > 0 ? previewWidth : vm.Project.Width;
+        var ph = previewHeight > 0 ? previewHeight : vm.Project.Height;
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.Run($" {pw}×{ph}, {vm.Project.FrameRate.Value:0.000}p"));
+
+        // Segment separator
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateStatusDivider()));
+
+        // Frame counter badge (viewfinder corner icon + frame number)
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateFrameIcon()));
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.Run($" {(lastPreview < 0 ? "0" : lastPreview.ToString(CultureInfo.InvariantCulture))}"));
+
+        // Segment separator
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateStatusDivider()));
+
+        // Display canvas resolution badge (viewport icon + actual pixel dimensions)
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateDisplayIcon()));
+        var dw = (int)Math.Round(Preview.ActualWidth);
+        var dh = (int)Math.Round(Preview.ActualHeight);
+        PreviewInfo.Inlines.Add(new System.Windows.Documents.Run($" {dw}×{dh}"));
+    }
+    private static FrameworkElement CreateProjectIcon()
+    {
+        var canvas = new Canvas { Width = 11, Height = 13, Margin = new Thickness(0, 0, 5, -2), VerticalAlignment = VerticalAlignment.Center };
+        var body = new System.Windows.Shapes.Path
+        {
+            Fill = new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xDC)),
+            Data = Geometry.Parse("M 0,0 L 7,0 L 11,4 L 11,13 L 0,13 Z")
+        };
+        var fold = new System.Windows.Shapes.Path
+        {
+            Fill = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Data = Geometry.Parse("M 7,0 L 7,4 L 11,4 Z")
+        };
+        canvas.Children.Add(body);
+        canvas.Children.Add(fold);
+        return canvas;
+    }
+    private static FrameworkElement CreatePreviewIcon()
+    {
+        var grid = new Grid { Width = 13, Height = 12, Margin = new Thickness(0, 0, 5, -2), VerticalAlignment = VerticalAlignment.Center };
+        var screen = new System.Windows.Shapes.Rectangle
+        {
+            Stroke = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            StrokeThickness = 1,
+            Fill = new SolidColorBrush(Color.FromRgb(0x3A, 0x82, 0xD2)),
+            Height = 10,
+            VerticalAlignment = VerticalAlignment.Top
+        };
+        var stand = new System.Windows.Shapes.Rectangle
+        {
+            Fill = new SolidColorBrush(Color.FromRgb(0x80, 0x80, 0x80)),
+            Width = 5,
+            Height = 2,
+            VerticalAlignment = VerticalAlignment.Bottom,
+            HorizontalAlignment = HorizontalAlignment.Center
+        };
+        grid.Children.Add(screen);
+        grid.Children.Add(stand);
+        return grid;
+    }
+    private static FrameworkElement CreateFrameIcon()
+    {
+        var canvas = new Canvas { Width = 12, Height = 12, Margin = new Thickness(0, 0, 5, -2), VerticalAlignment = VerticalAlignment.Center };
+        var corners = new System.Windows.Shapes.Path
+        {
+            Stroke = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8)),
+            StrokeThickness = 1,
+            Data = Geometry.Parse("M 0.5,3 L 0.5,0.5 L 3,0.5  M 8.5,0.5 L 11.5,0.5 L 11.5,3  M 0.5,8.5 L 0.5,11.5 L 3,11.5  M 8.5,11.5 L 11.5,11.5 L 11.5,8.5")
+        };
+        var inner = new System.Windows.Shapes.Rectangle
+        {
+            Width = 6,
+            Height = 6,
+            Fill = new SolidColorBrush(Color.FromRgb(0x3A, 0x82, 0xD2))
+        };
+        Canvas.SetLeft(inner, 3);
+        Canvas.SetTop(inner, 3);
+        canvas.Children.Add(corners);
+        canvas.Children.Add(inner);
+        return canvas;
+    }
+    private static FrameworkElement CreateDisplayIcon()
+    {
+        var canvas = new Canvas { Width = 13, Height = 12, Margin = new Thickness(0, 0, 5, -2), VerticalAlignment = VerticalAlignment.Center };
+        var corners = new System.Windows.Shapes.Path
+        {
+            Stroke = new SolidColorBrush(Color.FromRgb(0xD8, 0xD8, 0xD8)),
+            StrokeThickness = 1,
+            Data = Geometry.Parse("M 0.5,3 L 0.5,0.5 L 3,0.5  M 9.5,0.5 L 12.5,0.5 L 12.5,3  M 0.5,8.5 L 0.5,11.5 L 3,11.5  M 9.5,11.5 L 12.5,11.5 L 12.5,8.5")
+        };
+        var inner = new System.Windows.Shapes.Rectangle
+        {
+            Width = 7,
+            Height = 5,
+            Stroke = new SolidColorBrush(Color.FromRgb(0xE8, 0x5D, 0x36)),
+            StrokeThickness = 1
+        };
+        Canvas.SetLeft(inner, 3);
+        Canvas.SetTop(inner, 3.5);
+        canvas.Children.Add(corners);
+        canvas.Children.Add(inner);
+        return canvas;
+    }
+    private static FrameworkElement CreateStatusDivider()
+    {
+        return new System.Windows.Shapes.Rectangle
+        {
+            Width = 1,
+            Height = 13,
+            Fill = new SolidColorBrush(Color.FromRgb(0x38, 0x38, 0x38)),
+            Margin = new Thickness(12, 0, 12, -2),
+            VerticalAlignment = VerticalAlignment.Center
+        };
     }
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -405,7 +539,7 @@ public partial class MainWindow : Window
                 // then catch up to its latest position instead of discarding every late frame.
                 if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
-                    Preview.Present(pixels, width, height); currentPreviewPixels = pixels; previewWidth = width; previewHeight = height; lastPreview = frame; PreviewInfo.Text = PreviewDescription(); FrameRendered?.Invoke(pixels, width, height);
+                    Preview.Present(pixels, width, height); currentPreviewPixels = pixels; previewWidth = width; previewHeight = height; lastPreview = frame; UpdatePreviewStatus(); FrameRendered?.Invoke(pixels, width, height);
                 }
                 else previewRequested = true;
             }
