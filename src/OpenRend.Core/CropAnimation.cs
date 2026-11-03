@@ -37,6 +37,7 @@ public sealed class CropKeyframe
     public CropState State { get; set; }
     // The left keyframe owns the interpolation of the following segment.
     public CropInterpolation Interpolation { get; set; }
+    public double Smoothness { get; set; } = 100.0;
     public CropKeyframe DeepClone() => (CropKeyframe)MemberwiseClone();
 }
 
@@ -53,6 +54,7 @@ public sealed class CropAnimation
         foreach (var key in Keyframes)
         {
             if (key is null || key.Frame < 0 || key.Frame <= previous || !Enum.IsDefined(key.Interpolation)) throw new InvalidDataException("Crop keyframes must be unique and ordered.");
+            if (!double.IsFinite(key.Smoothness) || key.Smoothness is < 0 or > 100) throw new InvalidDataException("Crop keyframe smoothness must be between 0 and 100.");
             key.State.Validate();
             previous = key.Frame;
         }
@@ -77,11 +79,12 @@ public sealed class CropAnimation
         // Subtract integer frames before converting, preserving precision on long projects.
         var progress = (double)(frame - left.Frame) / (right.Frame - left.Frame);
         var centered = progress - .5;
+        var s = Math.Clamp(left.Smoothness / 100.0, 0.0, 1.0);
         var weight = left.Interpolation switch
         {
             CropInterpolation.Slow => progress * progress,
             CropInterpolation.Fast => 1 - (1 - progress) * (1 - progress),
-            CropInterpolation.Smooth => progress * progress * (3 - 2 * progress),
+            CropInterpolation.Smooth => progress * (1.0 - s) + (progress * progress * (3.0 - 2.0 * progress)) * s,
             CropInterpolation.Sharp => .5 + 4 * centered * centered * centered,
             _ => progress
         };

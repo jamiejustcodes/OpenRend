@@ -1,4 +1,4 @@
-﻿using OpenRend.Core;
+using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -885,17 +885,18 @@ public sealed partial class TimelineEditor
         });
     }
 
-    public void SetCropKeyframe(Guid clipId, long localFrame, CropState state, CropInterpolation interpolation = CropInterpolation.Linear)
+    public void SetCropKeyframe(Guid clipId, long localFrame, CropState state, CropInterpolation interpolation = CropInterpolation.Linear, double smoothness = 100.0)
     {
         var (track, clip) = FindClip(clipId);
         EnsureUnlocked(track, clip);
         EnsureVideoCrop(track);
         if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
         if (!Enum.IsDefined(interpolation)) throw new ArgumentOutOfRangeException(nameof(interpolation));
+        if (!double.IsFinite(smoothness) || smoothness is < 0 or > 100) throw new ArgumentOutOfRangeException(nameof(smoothness));
         state.Validate();
         var frame = checked(localFrame + clip.CropOffsetFrames);
         var existing = clip.Crop?.Keyframes.FirstOrDefault(key => key.Frame == frame);
-        if (existing is not null && existing.State == state && existing.Interpolation == interpolation) return;
+        if (existing is not null && existing.State == state && existing.Interpolation == interpolation && Math.Abs(existing.Smoothness - smoothness) < 1e-6) return;
         var animation = clip.Crop?.DeepClone() ?? new CropAnimation();
         var offset = clip.CropOffsetFrames;
         if (clip.Crop is null && localFrame > 0)
@@ -914,12 +915,30 @@ public sealed partial class TimelineEditor
         var keyframe = animation.Keyframes.FirstOrDefault(key => key.Frame == frame);
         if (keyframe is null)
         {
-            animation.Keyframes.Add(new CropKeyframe { Frame = frame, State = state, Interpolation = interpolation });
+            animation.Keyframes.Add(new CropKeyframe { Frame = frame, State = state, Interpolation = interpolation, Smoothness = smoothness });
             animation.Keyframes.Sort((left, right) => left.Frame.CompareTo(right.Frame));
         }
-        else { keyframe.State = state; keyframe.Interpolation = interpolation; }
+        else { keyframe.State = state; keyframe.Interpolation = interpolation; keyframe.Smoothness = smoothness; }
         animation.Validate();
         Execute(_ => { clip.Crop = animation; clip.CropOffsetFrames = offset; });
+    }
+
+    public void SetCropKeyframeSmoothness(Guid clipId, long localFrame, double smoothness)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        EnsureVideoCrop(track);
+        if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
+        if (!double.IsFinite(smoothness) || smoothness is < 0 or > 100) throw new ArgumentOutOfRangeException(nameof(smoothness));
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        if (clip.Crop is null) return;
+        var existing = clip.Crop.Keyframes.FirstOrDefault(key => key.Frame == frame);
+        if (existing is null || Math.Abs(existing.Smoothness - smoothness) < 1e-6) return;
+        var animation = clip.Crop.DeepClone();
+        var keyframe = animation.Keyframes.Single(key => key.Frame == frame);
+        keyframe.Smoothness = smoothness;
+        animation.Validate();
+        Execute(_ => clip.Crop = animation);
     }
 
     public void MoveCropKeyframe(Guid clipId, long fromLocalFrame, long toLocalFrame, bool preserveDestination = false)

@@ -23,6 +23,8 @@ public sealed class PanCropWindow : Window
     private readonly TextBox frameField;
     private readonly TextBox keyframeField;
     private readonly ComboBox interpolation;
+    private readonly TextBox smoothnessField;
+    private readonly Slider smoothnessSlider;
     private readonly ComboBox presets;
     private readonly CheckBox lockAspect;
     private readonly TextBlock status;
@@ -101,7 +103,7 @@ public sealed class PanCropWindow : Window
                 7 => CalculateAspectCrop((double)vm.Project.Width / vm.Project.Height),
                 _ => identity
             };
-            Edit(() => editor.SetCropKeyframe(clipId, localFrame, preset, CurrentInterpolation));
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, preset, CurrentInterpolation, CurrentSmoothness));
         };
         presetRow.Children.Add(presets);
         var body = new Grid(); body.ColumnDefinitions.Add(new() { Width = new GridLength(244) }); body.ColumnDefinitions.Add(new());
@@ -126,8 +128,50 @@ public sealed class PanCropWindow : Window
         Section("Keyframe interpolation");
         interpolation = new ComboBox { ItemsSource = Enum.GetValues<CropInterpolation>(), Margin = new Thickness(12, 2, 2, 4) };
         AutomationProperties.SetName(interpolation, "Keyframe interpolation");
-        interpolation.SelectionChanged += (_, _) => { if (!refreshing && interpolation.SelectedItem is CropInterpolation value) Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, value)); };
+        interpolation.SelectionChanged += (_, _) =>
+        {
+            if (refreshing || interpolation.SelectedItem is not CropInterpolation value) return;
+            var isSmooth = value == CropInterpolation.Smooth;
+            if (smoothnessField is not null) smoothnessField.IsEnabled = isSmooth;
+            if (smoothnessSlider is not null) smoothnessSlider.IsEnabled = isSmooth;
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, value, CurrentSmoothness));
+        };
         properties.Children.Add(interpolation);
+        var smoothRow = new Grid { Height = 22, Margin = new Thickness(0, 2, 0, 4) };
+        smoothRow.ColumnDefinitions.Add(new() { Width = new GridLength(107) });
+        smoothRow.ColumnDefinitions.Add(new());
+        smoothRow.Children.Add(new TextBlock { Text = "Smoothness:", Margin = new Thickness(15, 2, 0, 0) });
+        var smoothPanel = new DockPanel { LastChildFill = true };
+        smoothnessField = new TextBox { Width = 45, TextAlignment = TextAlignment.Right, BorderThickness = new Thickness(0), Background = Brushes.Transparent, Padding = new Thickness(2, 0, 2, 0) };
+        AutomationProperties.SetName(smoothnessField, "Keyframe smoothness");
+        DockPanel.SetDock(smoothnessField, Dock.Right);
+        smoothPanel.Children.Add(smoothnessField);
+        smoothnessSlider = new Slider { Minimum = 0, Maximum = 100, Value = 100, SmallChange = 5, LargeChange = 10, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0) };
+        AutomationProperties.SetName(smoothnessSlider, "Keyframe smoothness slider");
+        smoothPanel.Children.Add(smoothnessSlider);
+        Grid.SetColumn(smoothPanel, 1);
+        smoothRow.Children.Add(smoothPanel);
+        properties.Children.Add(smoothRow);
+
+        smoothnessSlider.ValueChanged += (_, e) =>
+        {
+            if (refreshing) return;
+            var val = Math.Round(e.NewValue, 1);
+            smoothnessField.Text = val.ToString("0.0", CultureInfo.InvariantCulture);
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, CurrentInterpolation, val));
+        };
+        smoothnessField.KeyDown += (_, e) =>
+        {
+            if (e.Key == Key.Enter)
+            {
+                if (double.TryParse(smoothnessField.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v))
+                {
+                    v = Math.Clamp(v, 0, 100);
+                    Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, CurrentInterpolation, v));
+                }
+                e.Handled = true;
+            }
+        };
         Section("Source");
         lockAspect = new CheckBox { Content = "Lock aspect ratio", IsChecked = true, Margin = new Thickness(12, 4, 0, 4) };
         properties.Children.Add(lockAspect);
@@ -138,21 +182,21 @@ public sealed class PanCropWindow : Window
         body.Children.Add(toolbar);
         Grid.SetColumn(workspace, 1); body.Children.Add(workspace);
         workspace.PreviewChanged += value => { state = value; RefreshFields(); };
-        workspace.Committed += value => Edit(() => editor.SetCropKeyframe(clipId, localFrame, value, CurrentInterpolation));
+        workspace.Committed += value => Edit(() => editor.SetCropKeyframe(clipId, localFrame, value, CurrentInterpolation, CurrentSmoothness));
         workspace.Cancelled += Refresh;
         workspace.LockAspect = () => lockAspect.IsChecked == true;
-        workspace.OnRestoreClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, CropState.Identity(Source.Width, Source.Height), CurrentInterpolation));
+        workspace.OnRestoreClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, CropState.Identity(Source.Width, Source.Height), CurrentInterpolation, CurrentSmoothness));
         workspace.OnMatchOutputAspectClicked += () =>
         {
             double targetAspect = (double)vm.Project.Width / vm.Project.Height;
             double sourceAspect = (double)Source.Width / Source.Height;
             double w = sourceAspect > targetAspect ? Source.Height * targetAspect : Source.Width;
             double h = sourceAspect > targetAspect ? Source.Height : Source.Width / targetAspect;
-            Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation));
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation, CurrentSmoothness));
         };
-        workspace.OnCenterClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation));
-        workspace.OnFlipHorizontalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (180.0 - state.RotationDegrees) % 360.0 }, CurrentInterpolation));
-        workspace.OnFlipVerticalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (-state.RotationDegrees) % 360.0 }, CurrentInterpolation));
+        workspace.OnCenterClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation, CurrentSmoothness));
+        workspace.OnFlipHorizontalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (180.0 - state.RotationDegrees) % 360.0 }, CurrentInterpolation, CurrentSmoothness));
+        workspace.OnFlipVerticalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (-state.RotationDegrees) % 360.0 }, CurrentInterpolation, CurrentSmoothness));
         var bottom = new Grid(); bottom.RowDefinitions.Add(new() { Height = new GridLength(62) }); bottom.RowDefinitions.Add(new() { Height = new GridLength(42) });
         Grid.SetRow(bottom, 4); root.Children.Add(bottom);
         lane.Margin = new Thickness(145, 0, 8, 0); bottom.Children.Add(lane);
@@ -160,7 +204,7 @@ public sealed class PanCropWindow : Window
         lane.MoveKeyframe += MoveKeyframe;
         lane.InterpolationChanged += value => interpolation.SelectedItem = value;
         lane.DeleteKeyframeRequested += f => Edit(() => editor.RemoveCropKeyframe(clipId, f));
-        lane.AddKeyframeRequested += f => Edit(() => editor.SetCropKeyframe(clipId, f, state, CurrentInterpolation));
+        lane.AddKeyframeRequested += f => Edit(() => editor.SetCropKeyframe(clipId, f, state, CurrentInterpolation, CurrentSmoothness));
         bottom.Children.Add(new TextBlock { Text = "Position", VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7, 24, 0, 0), Width = 130, HorizontalAlignment = HorizontalAlignment.Left });
         var transport = new DockPanel { LastChildFill = false }; Grid.SetRow(transport, 1); bottom.Children.Add(transport);
         frameField = new TextBox { Width = 105, TextAlignment = TextAlignment.Right, Margin = new Thickness(3, 5, 6, 5) };
@@ -181,7 +225,7 @@ public sealed class PanCropWindow : Window
         transport.Children.Add(Button("◀", "Previous crop frame", () => SetFrame(localFrame - 1)));
         transport.Children.Add(Button("▶", "Next crop frame", () => SetFrame(localFrame + 1)));
         transport.Children.Add(Button("▶|", "Next crop keyframe", () => SeekKey(1)));
-        transport.Children.Add(Button("◆+", "Add crop keyframe", () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, CurrentInterpolation))));
+        transport.Children.Add(Button("◆+", "Add crop keyframe", () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state, CurrentInterpolation, CurrentSmoothness))));
         transport.Children.Add(Button("◆−", "Delete crop keyframe", () => Edit(() => editor.RemoveCropKeyframe(clipId, localFrame))));
         status = new TextBlock { Margin = new Thickness(8, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
         transport.Children.Add(status);
@@ -201,6 +245,7 @@ public sealed class PanCropWindow : Window
     private TimelineClip EventClip => editor.Project.Tracks.SelectMany(t => t.Clips).Single(c => c.Id == clipId);
     private MediaAsset Source => editor.Project.Media.Single(m => m.Id == EventClip.MediaId);
     private CropInterpolation CurrentInterpolation => interpolation.SelectedItem is CropInterpolation value ? value : CropInterpolation.Linear;
+    private double CurrentSmoothness => double.TryParse(smoothnessField?.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 100) : 100.0;
     private static Button Button(string text, string label, Action action)
     {
         var button = new Button { Content = text, ToolTip = label, Padding = new Thickness(6, 1, 6, 1), MinHeight = 23, VerticalAlignment = VerticalAlignment.Center };
@@ -231,13 +276,25 @@ public sealed class PanCropWindow : Window
             var current = checked(localFrame + EventClip.CropOffsetFrames);
             keyframeField.IsEnabled = EventClip.Crop?.Keyframes.Any(key => key.Frame == current) == true;
             keyframeField.Text = keyframeField.IsEnabled ? localFrame.ToString(CultureInfo.InvariantCulture) : "";
-            interpolation.SelectedItem = EventClip.Crop?.Keyframes.LastOrDefault(key => key.Frame <= current)?.Interpolation ?? CropInterpolation.Linear;
+            var activeKey = EventClip.Crop?.Keyframes.FirstOrDefault(key => key.Frame == current);
+            var currentKey = activeKey ?? EventClip.Crop?.Keyframes.LastOrDefault(key => key.Frame <= current);
+            interpolation.SelectedItem = currentKey?.Interpolation ?? CropInterpolation.Linear;
+            var currentSmoothness = currentKey?.Smoothness ?? 100.0;
+            smoothnessField.Text = currentSmoothness.ToString("0.0", CultureInfo.InvariantCulture);
+            smoothnessSlider.Value = currentSmoothness;
+            var isSmooth = interpolation.SelectedItem is CropInterpolation ci && ci == CropInterpolation.Smooth;
+            if (smoothnessField is not null) smoothnessField.IsEnabled = isSmooth;
+            if (smoothnessSlider is not null) smoothnessSlider.IsEnabled = isSmooth;
             lane.Interpolation = CurrentInterpolation;
-            workspace.State = state; workspace.SourceWidth = Math.Max(1, Source.Width); workspace.SourceHeight = Math.Max(1, Source.Height); workspace.InvalidateVisual();
+            workspace.State = state; workspace.SourceWidth = Math.Max(1, Source.Width); workspace.SourceHeight = Math.Max(1, Source.Height);
+            workspace.Keyframes = EventClip.Crop?.Keyframes.Select(k => k.DeepClone()).ToList();
+            workspace.CropOffsetFrames = EventClip.CropOffsetFrames;
+            workspace.ActiveLocalFrame = localFrame;
+            workspace.InvalidateVisual();
             lane.Duration = EventClip.DurationFrames; lane.Position = localFrame;
             lane.CanMove = EventClip.Crop is not null;
             lane.Rate = editor.Project.FrameRate;
-            lane.Keys = EventClip.Crop?.Keyframes.Select(key => (Int128)key.Frame - EventClip.CropOffsetFrames).Where(frame => frame >= 0 && frame < EventClip.DurationFrames).Select(frame => (long)frame).ToArray() ?? [0];
+            lane.KeyDetails = EventClip.Crop?.Keyframes.Select(key => (Frame: (long)((Int128)key.Frame - EventClip.CropOffsetFrames), key.Interpolation, key.Smoothness)).Where(item => item.Frame >= 0 && item.Frame < EventClip.DurationFrames).ToArray() ?? [(0, CropInterpolation.Linear, 100.0)];
             lane.InvalidateVisual();
         }
         finally { refreshing = false; }
@@ -263,7 +320,7 @@ public sealed class PanCropWindow : Window
             "CenterX" => state with { CenterX = value }, "CenterY" => state with { CenterY = value },
             "RotationDegrees" => state with { RotationDegrees = value }, "PivotX" => state with { PivotX = value }, _ => state with { PivotY = value }
         };
-        if (next != state) Edit(() => editor.SetCropKeyframe(clipId, localFrame, next, CurrentInterpolation));
+        if (next != state) Edit(() => editor.SetCropKeyframe(clipId, localFrame, next, CurrentInterpolation, CurrentSmoothness));
     }
     private void ApplyFrame()
     {
@@ -332,6 +389,9 @@ internal sealed class CropWorkspace : FrameworkElement
     public int SourceWidth { get; set; } = 1;
     public int SourceHeight { get; set; } = 1;
     public CropState State { get; set; }
+    public List<CropKeyframe>? Keyframes { get; set; }
+    public long CropOffsetFrames { get; set; }
+    public long ActiveLocalFrame { get; set; }
     public Func<bool>? LockAspect { get; set; }
     public event Action<CropState>? PreviewChanged;
     public event Action<CropState>? Committed;
@@ -418,6 +478,33 @@ internal sealed class CropWorkspace : FrameworkElement
         var mark = new[] { new Point(-.20, .35), new Point(-.20, -.35), new Point(.25, -.35), new Point(.25, -.20), new Point(-.04, -.20), new Point(-.04, -.03), new Point(.17, -.03), new Point(.17, .12), new Point(-.04, .12), new Point(-.04, .35), new Point(-.20, .35) };
         var path = mark.Select(p => ToDisplay(Rotate(new Point(State.CenterX + p.X * State.Width, State.CenterY + p.Y * State.Height)))).ToArray();
         for (var i = 1; i < path.Length; i++) { dc.DrawLine(new Pen(Brushes.White, 1), path[i - 1], path[i]); dc.DrawLine(pen, path[i - 1], path[i]); }
+
+        // Draw keyframe motion path trajectory when >= 2 keyframes exist
+        if (Keyframes is not null && Keyframes.Count >= 2)
+        {
+            var pathPen = new Pen(new SolidColorBrush(Color.FromRgb(0x00, 0xA2, 0xE8)), 1.5) { DashStyle = new DashStyle([4, 2], 0) };
+            var kfPoints = Keyframes.Select(k => ToDisplay(Rotate(new Point(k.State.CenterX, k.State.CenterY)))).ToArray();
+            for (var i = 1; i < kfPoints.Length; i++)
+            {
+                dc.DrawLine(pathPen, kfPoints[i - 1], kfPoints[i]);
+            }
+            for (var i = 0; i < Keyframes.Count; i++)
+            {
+                var kf = Keyframes[i];
+                var pt = kfPoints[i];
+                var isCurrent = (kf.Frame - CropOffsetFrames) == ActiveLocalFrame;
+                dc.PushTransform(new RotateTransform(45, pt.X, pt.Y));
+                if (isCurrent)
+                {
+                    dc.DrawRectangle(Brushes.White, new Pen(new SolidColorBrush(Color.FromRgb(0x00, 0xA2, 0xE8)), 2), new Rect(pt.X - 4, pt.Y - 4, 8, 8));
+                }
+                else
+                {
+                    dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(0x00, 0xA2, 0xE8)), new Pen(Brushes.White, 1), new Rect(pt.X - 3, pt.Y - 3, 6, 6));
+                }
+                dc.Pop();
+            }
+        }
     }
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
@@ -489,6 +576,17 @@ internal sealed class CropKeyframeLane : FrameworkElement
 {
     public long Duration { get; set; } = 1;
     public long Position { get; set; }
+    private (long Frame, CropInterpolation Interpolation, double Smoothness)[] keyDetails = [(0, CropInterpolation.Linear, 100.0)];
+    public (long Frame, CropInterpolation Interpolation, double Smoothness)[] KeyDetails
+    {
+        get => keyDetails;
+        set
+        {
+            keyDetails = value ?? [];
+            Keys = keyDetails.Select(k => k.Frame).ToArray();
+            InvalidateVisual();
+        }
+    }
     public long[] Keys { get; set; } = [0];
     public bool CanMove { get; set; }
     public CropInterpolation Interpolation { get; set; }
@@ -546,7 +644,8 @@ internal sealed class CropKeyframeLane : FrameworkElement
         activeMenuKey = frame;
         deleteItem.IsEnabled = frame > 0;
         Seek?.Invoke(frame);
-        foreach (var (curve, item) in curveItems) item.IsChecked = curve == Interpolation;
+        var detail = KeyDetails.FirstOrDefault(k => k.Frame == frame);
+        foreach (var (curve, item) in curveItems) item.IsChecked = curve == (detail.Frame == frame ? detail.Interpolation : Interpolation);
     }
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
     protected override void OnRender(DrawingContext dc)
@@ -559,10 +658,30 @@ internal sealed class CropKeyframeLane : FrameworkElement
             var text = new FormattedText(OpenRend.UI.TimelineView.FormatTimecode(frame, Rate), CultureInfo.InvariantCulture, FlowDirection.LeftToRight, new Typeface("Segoe UI"), 9, Brushes.Silver, VisualTreeHelper.GetDpi(this).PixelsPerDip);
             dc.DrawText(text, new Point(x + 3, 2));
         }
-        foreach (var frame in Keys)
+        foreach (var (frame, interp, smooth) in KeyDetails)
         {
             var x = FrameX(dragging == frame ? pendingFrame : frame);
-            dc.PushTransform(new RotateTransform(45, x, 31)); dc.DrawRectangle(frame == Position ? Brushes.White : Brushes.Silver, pen, new Rect(x - 3, 28, 6, 6)); dc.Pop();
+            var isSelected = frame == Position;
+            var fill = interp switch
+            {
+                CropInterpolation.Smooth => new SolidColorBrush(Color.FromRgb(0x00, 0xD2, 0xFF)),
+                CropInterpolation.Fast => new SolidColorBrush(Color.FromRgb(0x32, 0xCD, 0x32)),
+                CropInterpolation.Slow => new SolidColorBrush(Color.FromRgb(0xFF, 0x8C, 0x00)),
+                CropInterpolation.Sharp => new SolidColorBrush(Color.FromRgb(0xBF, 0x5A, 0xF2)),
+                CropInterpolation.Hold => new SolidColorBrush(Color.FromRgb(0xFF, 0xB3, 0x00)),
+                _ => isSelected ? Brushes.White : Brushes.Silver
+            };
+            var borderPen = new Pen(isSelected ? Brushes.White : Brushes.Black, 1);
+            if (interp == CropInterpolation.Hold)
+            {
+                dc.DrawRectangle(fill, borderPen, new Rect(x - 3, 28, 6, 6));
+            }
+            else
+            {
+                dc.PushTransform(new RotateTransform(45, x, 31));
+                dc.DrawRectangle(fill, borderPen, new Rect(x - 3, 28, 6, 6));
+                dc.Pop();
+            }
         }
         var cursor = FrameX(Position);
         dc.DrawLine(new Pen(Brushes.White, 1), new Point(cursor, 0), new Point(cursor, ActualHeight));
@@ -586,7 +705,20 @@ internal sealed class CropKeyframeLane : FrameworkElement
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (dragging is null) return;
+        if (dragging is null)
+        {
+            var pos = e.GetPosition(this);
+            var nearest = KeyDetails.FirstOrDefault(k => Math.Abs(FrameX(k.Frame) - pos.X) < 7 && Math.Abs(pos.Y - 31) <= 10);
+            if (nearest.Frame != 0 || (KeyDetails.Length > 0 && Math.Abs(FrameX(KeyDetails[0].Frame) - pos.X) < 7 && Math.Abs(pos.Y - 31) <= 10))
+            {
+                ToolTip = $"Frame {nearest.Frame}: {nearest.Interpolation}{(nearest.Interpolation == CropInterpolation.Smooth ? $" (Smoothness: {nearest.Smoothness:0.0}%)" : "")}";
+            }
+            else
+            {
+                ToolTip = null;
+            }
+            return;
+        }
         pendingFrame = FrameAt(e.GetPosition(this).X); InvalidateVisual();
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)

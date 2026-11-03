@@ -62,4 +62,70 @@ public sealed class CropCurveTests
         animation.Keyframes[1].Interpolation = CropInterpolation.Hold;
         Assert.Equal(new CropState(250, 140.625, 27.5, 37.5, 39.375, 177.5, 107.5), animation.Evaluate(15));
     }
+
+    [Fact]
+    public void SmoothnessFactorInterpolatesBetweenLinearAndCubicHermite()
+    {
+        // 0 to 60 frames, width 320 to 160 (delta = -160)
+        // At frame 15: progress = 0.25
+        // Linear width: 320 + (-160) * 0.25 = 280
+        // Full Smooth (100%): 320 + (-160) * (0.0625 * 2.5) = 295
+        var anim100 = new CropAnimation
+        {
+            Keyframes =
+            [
+                new() { Frame = 0, State = CropState.Identity(320, 180), Interpolation = CropInterpolation.Smooth, Smoothness = 100.0 },
+                new() { Frame = 60, State = CropState.Identity(320, 180) with { Width = 160, Height = 90 } }
+            ]
+        };
+        anim100.Validate();
+        Assert.Equal(295, anim100.Evaluate(15).Width, 6);
+
+        // 0% Smoothness -> behaves like linear
+        var anim0 = new CropAnimation
+        {
+            Keyframes =
+            [
+                new() { Frame = 0, State = CropState.Identity(320, 180), Interpolation = CropInterpolation.Smooth, Smoothness = 0.0 },
+                new() { Frame = 60, State = CropState.Identity(320, 180) with { Width = 160, Height = 90 } }
+            ]
+        };
+        anim0.Validate();
+        Assert.Equal(280, anim0.Evaluate(15).Width, 6);
+
+        // 50% Smoothness -> exact midpoint between linear (280) and smooth (295) = 287.5
+        var anim50 = new CropAnimation
+        {
+            Keyframes =
+            [
+                new() { Frame = 0, State = CropState.Identity(320, 180), Interpolation = CropInterpolation.Smooth, Smoothness = 50.0 },
+                new() { Frame = 60, State = CropState.Identity(320, 180) with { Width = 160, Height = 90 } }
+            ]
+        };
+        anim50.Validate();
+        Assert.Equal(287.5, anim50.Evaluate(15).Width, 6);
+    }
+
+    [Fact]
+    public void CropKeyframeSmoothnessValidatesBounds()
+    {
+        var anim = new CropAnimation
+        {
+            Keyframes =
+            [
+                new() { Frame = 0, State = CropState.Identity(320, 180), Interpolation = CropInterpolation.Smooth, Smoothness = 100.0 },
+                new() { Frame = 60, State = CropState.Identity(320, 180) with { Width = 160, Height = 90 } }
+            ]
+        };
+        anim.Validate();
+
+        anim.Keyframes[0].Smoothness = -5;
+        Assert.Throws<System.IO.InvalidDataException>(() => anim.Validate());
+
+        anim.Keyframes[0].Smoothness = 105;
+        Assert.Throws<System.IO.InvalidDataException>(() => anim.Validate());
+
+        anim.Keyframes[0].Smoothness = double.NaN;
+        Assert.Throws<System.IO.InvalidDataException>(() => anim.Validate());
+    }
 }

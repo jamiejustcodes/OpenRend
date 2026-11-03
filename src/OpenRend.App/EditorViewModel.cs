@@ -244,7 +244,7 @@ public sealed class EditorViewModel : ObservableObject
                 if (clip.Crop is { } crop)
                 {
                     // A lower destination rate can collapse several keys onto one frame.
-                    crop.Keyframes = crop.Keyframes.Select(key => new CropKeyframe { Frame = ConvertFrame(key.Frame), State = key.State, Interpolation = key.Interpolation })
+                    crop.Keyframes = crop.Keyframes.Select(key => new CropKeyframe { Frame = ConvertFrame(key.Frame), State = key.State, Interpolation = key.Interpolation, Smoothness = key.Smoothness })
                         .GroupBy(key => key.Frame).Select(group => group.Last()).OrderBy(key => key.Frame).ToList();
                 }
                 if (clip.GroupId is { } group)

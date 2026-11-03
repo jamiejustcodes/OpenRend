@@ -211,4 +211,52 @@ public sealed class PanCropAspectAndAudioMeterTests
         Assert.Equal(2, currentClip.Crop.Keyframes.Count);
         Assert.Equal(100, currentClip.Crop.Keyframes[1].Frame);
     }
+
+    [Fact]
+    public void PanCrop_SmoothnessAndInterpolation_PersistsAndEvaluatesCorrectly()
+    {
+        var doc = new ProjectDocument { Width = 1920, Height = 1080, FrameRate = new Rational(30, 1) };
+        var media = new MediaAsset { Id = Guid.NewGuid(), Path = "test.mp4", HasVideo = true, DurationSeconds = 10, Width = 1920, Height = 1080 };
+        doc.Media.Add(media);
+
+        var track = new TimelineTrack { Kind = TrackKind.Video };
+        doc.Tracks.Add(track);
+
+        var clip = new TimelineClip
+        {
+            MediaId = media.Id,
+            DurationFrames = 300,
+            Crop = new CropAnimation
+            {
+                Keyframes =
+                [
+                    new CropKeyframe { Frame = 0, State = CropState.Identity(1920, 1080), Interpolation = CropInterpolation.Smooth, Smoothness = 100.0 }
+                ]
+            }
+        };
+        track.Clips.Add(clip);
+
+        var editor = new TimelineEditor(doc);
+
+        // Add keyframe at frame 60 with zoom and 50% smoothness
+        var zoomState = new CropState(960, 540, 960, 540, 0, 960, 540);
+        editor.SetCropKeyframe(clip.Id, 60, zoomState, CropInterpolation.Smooth, smoothness: 50.0);
+
+        var currentClip = editor.Project.Tracks[0].Clips[0];
+        Assert.NotNull(currentClip.Crop);
+        Assert.Equal(2, currentClip.Crop.Keyframes.Count);
+        Assert.Equal(50.0, currentClip.Crop.Keyframes[1].Smoothness);
+
+        // Update keyframe 0 smoothness via SetCropKeyframeSmoothness
+        editor.SetCropKeyframeSmoothness(clip.Id, 0, 0.0);
+        Assert.Equal(0.0, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes[0].Smoothness);
+
+        // Undo restores 100.0
+        Assert.True(editor.Undo());
+        Assert.Equal(100.0, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes[0].Smoothness);
+
+        // Redo reapplies 0.0
+        Assert.True(editor.Redo());
+        Assert.Equal(0.0, editor.Project.Tracks[0].Clips[0].Crop!.Keyframes[0].Smoothness);
+    }
 }
