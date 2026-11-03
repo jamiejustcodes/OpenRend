@@ -167,6 +167,11 @@ public sealed class MixingConsoleWindow : Window
             Padding = new Thickness(0),
             ToolTip = "Track Audio FX"
         };
+        fxBtn.Click += (_, _) =>
+        {
+            var win = new AudioTrackFxWindow(vm, track.Id) { Owner = this };
+            win.ShowDialog();
+        };
         DockPanel.SetDock(fxBtn, Dock.Right);
         busRow.Children.Add(fxBtn);
 
@@ -407,13 +412,29 @@ public sealed class MixingConsoleWindow : Window
             }
         };
 
+        masterMuteBtn.Click += (_, _) =>
+        {
+            vm.Editor.SetMasterAudioMute(!vm.Project.MasterAudioMute);
+            masterMuteBtn.Background = vm.Project.MasterAudioMute ? new SolidColorBrush(Color.FromRgb(180, 40, 40)) : new SolidColorBrush(Color.FromRgb(45, 45, 45));
+            masterMuteBtn.Foreground = vm.Project.MasterAudioMute ? Brushes.White : Brushes.Silver;
+        };
+
         masterDimBtn.Click += (_, _) =>
         {
             isDimmed = !isDimmed;
+            vm.Editor.SetMasterAudioDim(isDimmed);
             masterDimBtn.Background = isDimmed ? new SolidColorBrush(Color.FromRgb(200, 140, 20)) : new SolidColorBrush(Color.FromRgb(45, 45, 45));
             masterDimBtn.Foreground = isDimmed ? Brushes.Black : Brushes.Silver;
         };
 
+        var masterFxBtn = new Button { Content = "fx", Width = 24, Height = 20, Margin = new Thickness(1), ToolTip = "Master Audio FX" };
+        masterFxBtn.Click += (_, _) =>
+        {
+            var win = new AudioTrackFxWindow(vm, Guid.Empty) { Owner = this };
+            win.ShowDialog();
+        };
+
+        btnRow.Children.Add(masterFxBtn);
         btnRow.Children.Add(masterMuteBtn);
         btnRow.Children.Add(masterDimBtn);
         Grid.SetRow(btnRow, 1);

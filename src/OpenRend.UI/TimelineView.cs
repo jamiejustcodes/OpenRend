@@ -86,6 +86,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
+    public event Action<Guid>? TrackAudioFxRequested;
+    public event Action<Guid>? TrackPhaseInvertRequested;
     public event Action<Guid>? TrackMotionRequested;
     public event Action<Guid>? TrackColorGradingRequested;
     public event Action<Guid, TrackCompositeMode>? TrackCompositeModeRequested;
@@ -321,7 +323,7 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, "Motion" => 138, _ => 230 };
+        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, "Motion" => 138, "Phase" => 138, _ => 230 };
         return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 47 : 4), 21, action == "Visible" ? 18 : 20);
     }
 
@@ -743,6 +745,25 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawRectangle(Brush(t.IsVisible ? "#438AC8" : "#404040"), null, TrackButtonBounds(t.Id, "Visible"));
                 Text(dc, "V", 235, y + 47);
             }
+            else if (t.Kind == TrackKind.Audio)
+            {
+                // Track Audio FX button [fx] at x = 161
+                var fxBounds = TrackButtonBounds(t.Id, "FX");
+                var hasFx = t.AudioEffects.Count > 0;
+                if (hasFx)
+                {
+                    dc.DrawRectangle(Brush("#2E7D32"), null, fxBounds);
+                }
+                Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
+
+                // Track Phase Inversion button [Ã¸] at x = 138
+                var phaseBounds = TrackButtonBounds(t.Id, "Phase");
+                if (t.InvertPhase)
+                {
+                    dc.DrawRectangle(Brush("#2B6CB0"), null, phaseBounds);
+                }
+                Text(dc, "Ã¸", phaseBounds.X + 5, phaseBounds.Y + 1, t.InvertPhase ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
+            }
         }
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
         {
@@ -830,7 +851,7 @@ public sealed partial class TimelineView : FrameworkElement
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
                     adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
-                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion" })
+                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase" })
                 {
                     if (action == "FX")
                     {
@@ -839,12 +860,25 @@ public sealed partial class TimelineView : FrameworkElement
                             TrackFxRequested?.Invoke(track.Id);
                             break;
                         }
+                        else if (track.Kind == TrackKind.Audio && TrackButtonBounds(track.Id, "FX").Contains(origin))
+                        {
+                            TrackAudioFxRequested?.Invoke(track.Id);
+                            break;
+                        }
                     }
                     else if (action == "Motion")
                     {
                         if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "Motion").Contains(origin))
                         {
                             TrackMotionRequested?.Invoke(track.Id);
+                            break;
+                        }
+                    }
+                    else if (action == "Phase")
+                    {
+                        if (track.Kind == TrackKind.Audio && TrackButtonBounds(track.Id, "Phase").Contains(origin))
+                        {
+                            TrackPhaseInvertRequested?.Invoke(track.Id);
                             break;
                         }
                     }
@@ -1306,6 +1340,14 @@ public sealed partial class TimelineView : FrameworkElement
                 }
                 else if (track.Kind == TrackKind.Audio)
                 {
+                    var trackFx = new MenuItem { Header = "Track FXâ€¦" };
+                    trackFx.Click += (_, _) => TrackAudioFxRequested?.Invoke(track.Id);
+                    menu.Items.Add(trackFx);
+
+                    var phase = new MenuItem { Header = "Invert Phase", IsCheckable = true, IsChecked = track.InvertPhase };
+                    phase.Click += (_, _) => TrackPhaseInvertRequested?.Invoke(track.Id);
+                    menu.Items.Add(phase);
+
                     var vol = new MenuItem { Header = "Volume", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Volume) };
                     vol.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Volume);
                     envMenu.Items.Add(vol);

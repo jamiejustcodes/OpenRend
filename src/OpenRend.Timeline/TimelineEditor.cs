@@ -1230,6 +1230,8 @@ public sealed partial class TimelineEditor
         var copy = snapshot.DeepClone();
         Project.Name = copy.Name; Project.Width = copy.Width; Project.Height = copy.Height; Project.FrameRate = copy.FrameRate;
         Project.Media = copy.Media; Project.Tracks = copy.Tracks; Project.VideoOutputEffects = copy.VideoOutputEffects;
+        Project.MasterAudioEffects = copy.MasterAudioEffects; Project.MasterAudioGain = copy.MasterAudioGain;
+        Project.MasterAudioMute = copy.MasterAudioMute; Project.MasterAudioDim = copy.MasterAudioDim;
         Project.Markers = copy.Markers; Project.Notes = copy.Notes;
     }
 }

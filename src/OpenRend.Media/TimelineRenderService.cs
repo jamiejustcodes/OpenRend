@@ -279,11 +279,17 @@ public sealed partial class TimelineRenderService : IDisposable
         if (frames < 0) throw new ArgumentOutOfRangeException(nameof(frames));
         var output = new float[checked(frames * MediaService.Channels)];
         if (frames == 0) return output;
+        if (project.MasterAudioMute) return output;
+
         var assets = project.Media.ToDictionary(asset => asset.Id);
         var solo = project.Tracks.Any(track => track.Kind == TrackKind.Audio && track.IsSolo);
+        float[]? trackBuffer = null;
+
         foreach (var track in project.Tracks)
         {
             if (track.Kind != TrackKind.Audio || track.IsMuted || (solo && !track.IsSolo)) continue;
+
+            bool hasClipsInWindow = false;
             foreach (var clip in track.Clips)
             {
                 if (clip.IsMuted || !assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0 || track.Gain <= 0) continue;
@@ -293,6 +299,14 @@ public sealed partial class TimelineRenderService : IDisposable
                 var first = (int)Math.Clamp(Math.Ceiling((start - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
                 var last = (int)Math.Clamp(Math.Ceiling((end - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
                 if (last <= first) continue;
+
+                if (!hasClipsInWindow)
+                {
+                    hasClipsInWindow = true;
+                    trackBuffer ??= new float[output.Length];
+                    Array.Clear(trackBuffer, 0, trackBuffer.Length);
+                }
+
                 var localStart = seconds + (double)first / MediaService.SampleRate - start;
                 var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
                 var decoded = media.GetAudio(asset.Path, sourceStart, last - first);
@@ -301,11 +315,49 @@ public sealed partial class TimelineRenderService : IDisposable
                     var localFrame = (localStart + (double)(sample - first) / MediaService.SampleRate) * project.FrameRate.Value;
                     var gains = TimelineEvaluator.AudioGains(track, clip, localFrame);
                     var source = (sample - first) * MediaService.Channels;
-                    output[sample * 2] += (float)(decoded[source] * gains.Left);
-                    output[sample * 2 + 1] += (float)(decoded[source + 1] * gains.Right);
+                    trackBuffer![sample * 2] += (float)(decoded[source] * gains.Left);
+                    trackBuffer![sample * 2 + 1] += (float)(decoded[source + 1] * gains.Right);
+                }
+            }
+
+            if (hasClipsInWindow && trackBuffer != null)
+            {
+                // 1. Track Phase Inversion
+                if (track.InvertPhase)
+                {
+                    AudioDspService.InvertPhase(trackBuffer);
+                }
+
+                // 2. Track Audio FX Chain (Track EQ, Track Compressor, Track Noise Gate)
+                if (track.AudioEffects != null && track.AudioEffects.Count > 0)
+                {
+                    AudioDspService.ProcessAudioChain(trackBuffer, MediaService.SampleRate, track.AudioEffects);
+                }
+
+                // 3. Accumulate track into master bus
+                for (var i = 0; i < output.Length; i++)
+                {
+                    output[i] += trackBuffer[i];
                 }
             }
         }
+
+        // 4. Master Audio FX Chain
+        if (project.MasterAudioEffects != null && project.MasterAudioEffects.Count > 0)
+        {
+            AudioDspService.ProcessAudioChain(output, MediaService.SampleRate, project.MasterAudioEffects);
+        }
+
+        // 5. Master Gain & Dim (-20 dB = 0.1)
+        var masterGain = (float)(project.MasterAudioGain * (project.MasterAudioDim ? 0.1 : 1.0));
+        if (Math.Abs(masterGain - 1.0f) > 1e-4f)
+        {
+            for (var i = 0; i < output.Length; i++)
+            {
+                output[i] *= masterGain;
+            }
+        }
+
         for (var i = 0; i < output.Length; i++) output[i] = Math.Clamp(output[i], -1, 1);
         return output;
     }

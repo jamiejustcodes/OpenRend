@@ -134,6 +134,17 @@ public partial class MainWindow : Window
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
+        Timeline.TrackAudioFxRequested += id => OpenTrackAudioEffects(id);
+        Timeline.TrackPhaseInvertRequested += id => Guard(() =>
+        {
+            var t = vm.Project.Tracks.FirstOrDefault(track => track.Id == id);
+            if (t != null)
+            {
+                vm.Editor.SetTrackInvertPhase(id, !t.InvertPhase);
+                Timeline.InvalidateVisual();
+                vm.Status = $"Track phase inversion: {(t.InvertPhase ? "Inverted" : "Normal")}.";
+            }
+        });
         Timeline.TrackMotionRequested += id => OpenTrackMotion(id);
         Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
         Timeline.TrackCompositeModeRequested += (id, mode) => Guard(() =>
@@ -1010,6 +1021,47 @@ public partial class MainWindow : Window
         Pause(); RequestPreview();
         new VideoEffectsWindow(vm, EffectScope.Track, track.Id) { Owner = this }.ShowDialog();
     });
+    private void TrackAudioFxClick(object sender, RoutedEventArgs e) => OpenTrackAudioEffects();
+    private void OpenTrackAudioEffects(Guid? requestedTrack = null) => Guard(() =>
+    {
+        var tracks = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Audio).ToArray();
+        if (tracks.Length == 0) { vm.Status = "Project has no audio tracks."; return; }
+        var track = requestedTrack is { } id
+            ? tracks.FirstOrDefault(t => t.Id == id)
+            : (Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count && vm.Project.Tracks[Timeline.ActiveTrackIndex].Kind == TrackKind.Audio
+                ? vm.Project.Tracks[Timeline.ActiveTrackIndex]
+                : tracks.FirstOrDefault());
+        if (track is null) { vm.Status = "Select an audio track to edit its audio effects."; return; }
+        if (track.IsLocked) { vm.Status = "Unlock the audio track before editing its audio effects."; return; }
+        Pause();
+        new AudioTrackFxWindow(vm, track.Id) { Owner = this }.ShowDialog();
+        Timeline.InvalidateVisual();
+    });
+
+    private void MasterAudioFxClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        new AudioTrackFxWindow(vm, Guid.Empty) { Owner = this }.ShowDialog();
+    });
+
+    private void MasterDimClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var dim = !vm.Project.MasterAudioDim;
+        vm.Editor.SetMasterAudioDim(dim);
+        MasterDimBtn.Background = dim ? new SolidColorBrush(Color.FromRgb(200, 140, 20)) : (Brush)FindResource("ButtonBackground");
+        MasterDimBtn.Foreground = dim ? Brushes.Black : (Brush)FindResource("TextColor");
+        vm.Status = $"Master audio dim: {(dim ? "-20 dB active" : "off")}.";
+    });
+
+    private void MasterMuteClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var mute = !vm.Project.MasterAudioMute;
+        vm.Editor.SetMasterAudioMute(mute);
+        MasterMuteBtn.Background = mute ? new SolidColorBrush(Color.FromRgb(180, 40, 40)) : (Brush)FindResource("ButtonBackground");
+        MasterMuteBtn.Foreground = mute ? Brushes.White : (Brush)FindResource("TextColor");
+        vm.Status = $"Master audio mute: {(mute ? "muted" : "unmuted")}.";
+    });
+
     private void TrackMotionClick(object sender, RoutedEventArgs e) => OpenTrackMotion();
     private void OpenTrackMotion(Guid? requestedTrack = null) => Guard(() =>
     {

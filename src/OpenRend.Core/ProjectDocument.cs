@@ -61,6 +61,14 @@ public sealed class ProjectDocument
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoOutputEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<AudioEffect> MasterAudioEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double MasterAudioGain { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool MasterAudioMute { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool MasterAudioDim { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<TimelineMarker> Markers { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<ProjectNoteItem> Notes { get; set; } = [];
@@ -75,6 +83,10 @@ public sealed class ProjectDocument
         Media = Media.Select(m => m.DeepClone()).ToList(),
         Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
         VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),
+        MasterAudioEffects = MasterAudioEffects.Select(e => e.DeepClone()).ToList(),
+        MasterAudioGain = MasterAudioGain,
+        MasterAudioMute = MasterAudioMute,
+        MasterAudioDim = MasterAudioDim,
         Markers = Markers.Select(m => m.DeepClone()).ToList(),
         Notes = Notes.Select(n => n.DeepClone()).ToList()
     };
@@ -90,6 +102,16 @@ public sealed class ProjectDocument
             foreach (var effect in VideoOutputEffects)
             {
                 if (effect == null || !outputEffectIds.Add(effect.Id)) throw new InvalidDataException("Video output effect IDs must be unique.");
+                effect.Validate();
+            }
+        }
+        if (!double.IsFinite(MasterAudioGain) || MasterAudioGain < 0) throw new InvalidDataException("Master audio gain is invalid.");
+        if (MasterAudioEffects != null)
+        {
+            var masterAudioEffectIds = new HashSet<Guid>();
+            foreach (var effect in MasterAudioEffects)
+            {
+                if (effect == null || !masterAudioEffectIds.Add(effect.Id)) throw new InvalidDataException("Master audio effect IDs must be unique.");
                 effect.Validate();
             }
         }
@@ -151,6 +173,17 @@ public sealed class ProjectDocument
                 foreach (var effect in track.VideoEffects)
                 {
                     if (effect == null || !trackEffectIds.Add(effect.Id)) throw new InvalidDataException("Track video effect IDs must be unique within a track.");
+                    effect.Validate();
+                }
+            }
+            if (track.AudioEffects != null)
+            {
+                if (track.Kind != TrackKind.Audio && track.AudioEffects.Count != 0)
+                    throw new InvalidDataException("Track audio effects require an audio track.");
+                var trackAudioEffectIds = new HashSet<Guid>();
+                foreach (var effect in track.AudioEffects)
+                {
+                    if (effect == null || !trackAudioEffectIds.Add(effect.Id)) throw new InvalidDataException("Track audio effect IDs must be unique within a track.");
                     effect.Validate();
                 }
             }
@@ -272,6 +305,10 @@ public sealed class TimelineTrack
     public TrackMotion? Motion { get; set; }
     public List<TimelineClip> Clips { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<AudioEffect> AudioEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool InvertPhase { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<ClipEnvelope>? Envelopes { get; set; }
@@ -291,6 +328,8 @@ public sealed class TimelineTrack
         Motion = Motion?.DeepClone(),
         Clips = Clips.Select(c => c.DeepClone()).ToList(),
         VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
+        AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList(),
+        InvertPhase = InvertPhase,
         Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()
     };
 }
