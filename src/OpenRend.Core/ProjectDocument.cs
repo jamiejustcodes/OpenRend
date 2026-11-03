@@ -354,6 +354,22 @@ public sealed class ProjectDocument
                         env.Validate();
                     }
                 }
+                if (clip.Takes != null)
+                {
+                    var takeIds = new HashSet<Guid>();
+                    foreach (var take in clip.Takes)
+                    {
+                        if (take == null || take.Id == Guid.Empty || !takeIds.Add(take.Id))
+                            throw new InvalidDataException("Take IDs must be unique and non-empty.");
+                        if (!mediaIds.Contains(take.MediaId))
+                            throw new InvalidDataException("A take references unknown media.");
+                        var takeSource = mediaById[take.MediaId];
+                        if (track.Kind == TrackKind.Video && !takeSource.HasVideo || track.Kind == TrackKind.Audio && !takeSource.HasAudio)
+                            throw new InvalidDataException("A take has no compatible media stream.");
+                    }
+                    if (clip.Takes.Count > 0 && (clip.ActiveTakeIndex < 0 || clip.ActiveTakeIndex >= clip.Takes.Count))
+                        throw new InvalidDataException("Active take index is out of bounds.");
+                }
                 clip.Transcript?.Validate();
             }
         }
@@ -432,6 +448,30 @@ public sealed class TimelineTrack
     };
 }
 
+public sealed class TimelineTake
+{
+    public Guid Id { get; set; } = Guid.NewGuid();
+    public Guid MediaId { get; set; }
+    public string Name { get; set; } = "Take";
+    public long SourceInFrame { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
+
+    public TimelineTake DeepClone() => new()
+    {
+        Id = Id,
+        MediaId = MediaId,
+        Name = Name,
+        SourceInFrame = SourceInFrame,
+        VideoSourceMode = VideoSourceMode
+    };
+
+    public void Validate()
+    {
+        if (Id == Guid.Empty || MediaId == Guid.Empty)
+            throw new InvalidDataException("Take IDs must be non-empty.");
+    }
+}
+
 public sealed class TimelineClip
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -467,6 +507,10 @@ public sealed class TimelineClip
     public ClipTranscript? Transcript { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public List<ClipEnvelope>? Envelopes { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<TimelineTake>? Takes { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int ActiveTakeIndex { get; set; }
     public TimelineClip DeepClone()
     {
         var clone = (TimelineClip)MemberwiseClone();
@@ -477,6 +521,7 @@ public sealed class TimelineClip
         clone.MotionTracks = MotionTracks.Select(track => track.DeepClone()).ToList();
         clone.Transcript = Transcript?.DeepClone();
         if (Envelopes != null) clone.Envelopes = Envelopes.Select(env => env.DeepClone()).ToList();
+        if (Takes != null) clone.Takes = Takes.Select(t => t.DeepClone()).ToList();
         return clone;
     }
 }

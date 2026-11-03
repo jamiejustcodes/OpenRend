@@ -93,6 +93,10 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, TrackCompositeMode>? TrackCompositeModeRequested;
     public event Action<Guid>? MotionTrackingRequested;
     public event Action<Guid>? TextBasedEditingRequested;
+    public event Action<Guid>? NextTakeRequested;
+    public event Action<Guid>? PreviousTakeRequested;
+    public event Action<Guid, int>? SelectTakeRequested;
+    public event Action<Guid>? DeleteTakeRequested;
     public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
@@ -619,7 +623,8 @@ public sealed partial class TimelineView : FrameworkElement
                     dc.DrawRectangle(Brush("#E0A020"), null, new Rect(lockX + 1, lockY + 5, 8, 6));
                     headerOffset = 13.0;
                 }
-                var displayName = clip.IsMuted ? $"{clip.Name} [Muted]" : clip.Name;
+                var takePrefix = clip.Takes is { Count: > 1 } ? $"[Take {clip.ActiveTakeIndex + 1}/{clip.Takes.Count}] " : "";
+                var displayName = clip.IsMuted ? $"{takePrefix}{clip.Name} [Muted]" : $"{takePrefix}{clip.Name}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {

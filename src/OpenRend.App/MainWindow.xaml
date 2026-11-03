@@ -54,6 +54,10 @@
           <MenuItem Header="Normalize audio" Click="NormalizeAudioClipClick"/>
           <MenuItem Header="Invert phase" Click="InvertPhaseClipClick"/>
         </MenuItem>
+        <MenuItem Header="Take">
+          <MenuItem Header="Next Take" InputGestureText="T" Click="NextTakeClick"/>
+          <MenuItem Header="Previous Take" InputGestureText="Shift+T" Click="PreviousTakeClick"/>
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="Window">

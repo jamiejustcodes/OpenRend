@@ -217,6 +217,10 @@ public partial class MainWindow : Window
             UpdateInspector();
             RequestPreview();
         });
+        Timeline.NextTakeRequested += id => Guard(() => { Pause(); vm.Editor.NextTake(id); UpdateInspector(); RequestPreview(); Refresh(); });
+        Timeline.PreviousTakeRequested += id => Guard(() => { Pause(); vm.Editor.PreviousTake(id); UpdateInspector(); RequestPreview(); Refresh(); });
+        Timeline.SelectTakeRequested += (id, idx) => Guard(() => { Pause(); vm.Editor.SetActiveTake(id, idx); UpdateInspector(); RequestPreview(); Refresh(); });
+        Timeline.DeleteTakeRequested += id => Guard(() => { Pause(); vm.Editor.DeleteActiveTake(id); UpdateInspector(); RequestPreview(); Refresh(); });
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
@@ -1392,6 +1396,26 @@ public partial class MainWindow : Window
         UpdateInspector();
         vm.Status = "Inverted audio phase for selected event(s).";
     });
+
+    private void NextTakeClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (Timeline.Selection.Count == 0) return;
+        Pause();
+        vm.Editor.NextTakeOnSelection(Timeline.Selection);
+        UpdateInspector();
+        RequestPreview();
+        Refresh();
+    });
+
+    private void PreviousTakeClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (Timeline.Selection.Count == 0) return;
+        Pause();
+        vm.Editor.PreviousTakeOnSelection(Timeline.Selection);
+        UpdateInspector();
+        RequestPreview();
+        Refresh();
+    });
     private void InsertSolidColorClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -1860,6 +1884,8 @@ public partial class MainWindow : Window
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
+            Key.T when !ctrl && !alt && !shift => () => NextTakeClick(this, e),
+            Key.T when !ctrl && !alt && shift => () => PreviousTakeClick(this, e),
             Key.N when ctrl && shift => () => ProjectNotesClick(this, e),
             Key.M when !ctrl && !shift && !alt => () => InsertMarkerClick(this, e),
             Key.L when ctrl && shift => () => LockEventClick(this, e),

@@ -165,6 +165,42 @@ public sealed partial class TimelineView
         switches.Items.Add(lockItem);
         menu.Items.Add(switches);
 
+        var takesMenu = new MenuItem { Header = "Take" };
+        AutomationProperties.SetAutomationId(takesMenu, "EventTakesMenu");
+        var nextTake = new MenuItem { Header = "Next Take", InputGestureText = "T" };
+        AutomationProperties.SetAutomationId(nextTake, "NextTakeMenuItem");
+        var prevTake = new MenuItem { Header = "Previous Take", InputGestureText = "Shift+T" };
+        AutomationProperties.SetAutomationId(prevTake, "PreviousTakeMenuItem");
+        var deleteTake = new MenuItem { Header = "Delete Active Take" };
+        AutomationProperties.SetAutomationId(deleteTake, "DeleteTakeMenuItem");
+
+        nextTake.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                NextTakeRequested?.Invoke(events[0].Id);
+        };
+        prevTake.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                PreviousTakeRequested?.Invoke(events[0].Id);
+        };
+        deleteTake.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                DeleteTakeRequested?.Invoke(events[0].Id);
+        };
+
+        takesMenu.Items.Add(nextTake);
+        takesMenu.Items.Add(prevTake);
+        takesMenu.Items.Add(deleteTake);
+        menu.Items.Add(takesMenu);
+
         lockItem.Click += (_, _) =>
         {
             var events = Project.Tracks.Where(track => !track.IsLocked)
@@ -322,6 +358,35 @@ public sealed partial class TimelineView
             muteItem.IsChecked = singleTarget.Clip?.IsMuted ?? false;
             lockItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             lockItem.IsChecked = isLocked;
+            var singleClip = singleTarget.Clip;
+            var hasTakes = singleClip?.Takes is { Count: > 1 };
+            takesMenu.Visibility = hasTakes ? Visibility.Visible : Visibility.Collapsed;
+            takesMenu.IsEnabled = IsEnabled && hasTakes && !singleTarget.Track!.IsLocked && !isLocked;
+            nextTake.IsEnabled = hasTakes;
+            prevTake.IsEnabled = hasTakes;
+            deleteTake.IsEnabled = hasTakes;
+            while (takesMenu.Items.Count > 3) takesMenu.Items.RemoveAt(takesMenu.Items.Count - 1);
+            if (hasTakes && singleClip?.Takes is { } tList)
+            {
+                takesMenu.Items.Add(new Separator());
+                for (int tIdx = 0; tIdx < tList.Count; tIdx++)
+                {
+                    var takeItemIdx = tIdx;
+                    var take = tList[tIdx];
+                    var takeMenuItem = new MenuItem
+                    {
+                        Header = $"Take {takeItemIdx + 1}: {take.Name}",
+                        IsCheckable = true,
+                        IsChecked = takeItemIdx == singleClip.ActiveTakeIndex
+                    };
+                    takeMenuItem.Click += (_, _) =>
+                    {
+                        if (IsEnabled && !singleTarget.Track!.IsLocked && !isLocked)
+                            SelectTakeRequested?.Invoke(singleClip.Id, takeItemIdx);
+                    };
+                    takesMenu.Items.Add(takeMenuItem);
+                }
+            }
             var hasFadeIn = video.Length == 1 && video[0].Clip.FadeInFrames > 0;
             var hasFadeOut = video.Length == 1 && video[0].Clip.FadeOutFrames > 0;
             fadeInCurves.Visibility = hasFadeIn ? Visibility.Visible : Visibility.Collapsed;
