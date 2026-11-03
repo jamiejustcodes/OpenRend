@@ -39,7 +39,7 @@ public sealed class EditorViewModel : ObservableObject
     public string? ProjectPath { get => projectPath; private set { SetProperty(ref projectPath, value); OnPropertyChanged(nameof(Title)); } }
     private bool dirty;
     public bool Dirty { get => dirty; private set { SetProperty(ref dirty, value); OnPropertyChanged(nameof(Title)); } }
-    public string Title => $"{Project.Name}{(Dirty ? " *" : "")} — OpenRend";
+    public string Title => $"{Project.Name}{(Dirty ? " *" : "")} \u2014 OpenRend";
     private long position;
     public long Position { get => position; set => SetProperty(ref position, Math.Clamp(value, 0, Project.DurationFrames)); }
     private bool busy;

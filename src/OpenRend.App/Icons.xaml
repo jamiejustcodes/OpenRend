@@ -675,4 +675,11 @@
       <Trigger Property="UIElement.IsEnabled" Value="False"><Setter TargetName="templateRoot" Property="UIElement.Opacity" Value="0.3" /></Trigger>
     </ControlTemplate.Triggers>
   </ControlTemplate>
+  <!-- 1:1 Vegas Pro Marker Flag / Pin Icon -->
+  <DataTemplate x:Key="ic_marker">
+    <Grid Width="16" Height="16">
+      <Path Data="M3,2 L12,2 C12.55,2 13,2.45 13,3 L13,8 C13,8.55 12.55,9 12,9 L7,9 L4,14 L3,14 Z" Fill="{StaticResource IconOutline}" />
+      <Path Data="M4,3 L12,3 L12,8 L6.5,8 L4,13 Z" Fill="{StaticResource IconYellow}" />
+    </Grid>
+  </DataTemplate>
 </ResourceDictionary>

@@ -41,6 +41,10 @@ public sealed class ProjectDocument
     public List<TimelineTrack> Tracks { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoOutputEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<TimelineMarker> Markers { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<ProjectNoteItem> Notes { get; set; } = [];
     [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
 
     public ProjectDocument DeepClone() => new()
@@ -51,7 +55,9 @@ public sealed class ProjectDocument
         FrameRate = FrameRate,
         Media = Media.Select(m => m.DeepClone()).ToList(),
         Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
-        VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList()
+        VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),
+        Markers = Markers.Select(m => m.DeepClone()).ToList(),
+        Notes = Notes.Select(n => n.DeepClone()).ToList()
     };
 
     public void Validate()
@@ -66,6 +72,24 @@ public sealed class ProjectDocument
             {
                 if (effect == null || !outputEffectIds.Add(effect.Id)) throw new InvalidDataException("Video output effect IDs must be unique.");
                 effect.Validate();
+            }
+        }
+        if (Markers != null)
+        {
+            var markerIds = new HashSet<Guid>();
+            foreach (var marker in Markers)
+            {
+                if (marker == null || !markerIds.Add(marker.Id)) throw new InvalidDataException("Marker IDs must be unique.");
+                marker.Validate();
+            }
+        }
+        if (Notes != null)
+        {
+            var noteIds = new HashSet<Guid>();
+            foreach (var note in Notes)
+            {
+                if (note == null || !noteIds.Add(note.Id)) throw new InvalidDataException("Project note IDs must be unique.");
+                note.Validate();
             }
         }
         var mediaIds = new HashSet<Guid>();

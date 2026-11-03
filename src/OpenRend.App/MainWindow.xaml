@@ -52,12 +52,17 @@
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_View">
+        <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
+        <Separator/>
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>
         <MenuItem Header="Zoom in" InputGestureText="+" Click="ZoomInClick"/>
         <MenuItem Header="Zoom out" InputGestureText="−" Click="ZoomOutClick"/>
         <MenuItem Header="Reset workspace" Click="ResetWorkspaceClick"/>
       </MenuItem>
       <MenuItem Header="_Insert">
+        <MenuItem x:Name="InsertMarkerMenu" Header="Marker" InputGestureText="M" Click="InsertMarkerClick" AutomationProperties.AutomationId="InsertMarkerMenu"/>
+        <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" InputGestureText="Ctrl+Shift+N" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
+        <Separator/>
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
@@ -520,6 +525,7 @@
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_split}" AutomationProperties.Name="Split" Click="SplitClick" ToolTip="Split (S)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_delete}" AutomationProperties.Name="Delete" Click="DeleteClick" ToolTip="Delete"/>
+          <Button x:Name="InsertMarkerButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_marker}" AutomationProperties.Name="Insert marker" AutomationProperties.AutomationId="InsertMarkerButton" Click="InsertMarkerClick" ToolTip="Insert marker (M)"/>
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
           <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="6,0"/>
           <CheckBox x:Name="RippleToggle" Content="Ripple" Foreground="{StaticResource TextColor}" Click="RippleClick" Margin="6,0"/>

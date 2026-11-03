@@ -123,6 +123,22 @@ public partial class MainWindow : Window
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.MotionTrackingRequested += id => OpenMotionTracking(id);
         Timeline.TextBasedEditingRequested += id => OpenTextBasedEditing(id);
+        Timeline.MarkerSelected += marker => Guard(() =>
+        {
+            Pause();
+            vm.Position = marker.Frame;
+            UpdatePosition();
+            RequestPreview();
+            vm.Status = $"Marker {marker.Index}: {marker.Label} ({TimelineView.FormatTimecode(marker.Frame, vm.Project.FrameRate)})";
+        });
+        Timeline.MarkerEditRequested += marker => OpenMarkerEdit(marker);
+        Timeline.MarkerDeleteRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.Editor.RemoveMarker(id);
+            Timeline.InvalidateVisual();
+            vm.Status = "Deleted marker.";
+        });
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
             Pause();
@@ -1052,6 +1068,48 @@ public partial class MainWindow : Window
         win.ShowDialog();
         RequestPreview();
     }
+    private void InsertMarkerClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        var existing = vm.Project.Markers.FirstOrDefault(m => Math.Abs(m.Frame - vm.Position) <= 2);
+        if (existing is not null)
+        {
+            OpenMarkerEdit(existing);
+            return;
+        }
+        var marker = vm.Editor.AddMarker(vm.Position);
+        Timeline.InvalidateVisual();
+        vm.Status = $"Added Marker {marker.Index} at {TimelineView.FormatTimecode(marker.Frame, vm.Project.FrameRate)}.";
+    });
+
+    private void OpenMarkerEdit(TimelineMarker marker) => Guard(() =>
+    {
+        Pause();
+        var dlg = new MarkerEditDialog(marker, vm.Project.FrameRate) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            vm.Editor.SetMarkerLabel(marker.Id, dlg.ResultLabel);
+            vm.Editor.Execute(p =>
+            {
+                var m = p.Markers.FirstOrDefault(x => x.Id == marker.Id);
+                if (m != null) m.ColorId = dlg.ResultColorId;
+            });
+            Timeline.InvalidateVisual();
+            vm.Status = $"Updated Marker {marker.Index}.";
+        }
+    });
+
+    private void ProjectNotesClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        new ProjectNotesWindow(vm, () =>
+        {
+            UpdatePosition();
+            RequestPreview();
+            Timeline.InvalidateVisual();
+        }) { Owner = this }.ShowDialog();
+    });
+
     private void SceneDetectionClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -1144,6 +1202,8 @@ public partial class MainWindow : Window
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
             Key.V when ctrl && shift => () => VideoTrackClick(this, e),
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
+            Key.N when ctrl && shift => () => ProjectNotesClick(this, e),
+            Key.M when !ctrl && !shift && !alt => () => InsertMarkerClick(this, e),
             Key.L when ctrl && shift => () => LockEventClick(this, e),
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),

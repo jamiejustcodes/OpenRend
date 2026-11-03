@@ -751,7 +751,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         {
             var window = app.GetMainWindow(automation, TimeSpan.FromSeconds(12));
             Assert.NotNull(window);
-            WaitFor(() => window.Title == "UI integration — OpenRend", "The command-line project was not opened.");
+            WaitFor(() => window.Title == "UI integration — OpenRend", $"The command-line project was not opened. Actual title: '{window.Title}'");
             return new RunningApplication(app, automation, window);
         }
         catch { app.Kill(); app.Dispose(); automation.Dispose(); throw; }
@@ -828,8 +828,12 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         return button!.AsButton();
     }
 
+    [DllImport("user32.dll")]
+    private static extern bool SetForegroundWindow(nint hwnd);
+
     private static void Chord(Window window, params VirtualKeyShort[] keys)
     {
+        SetForegroundWindow(window.Properties.NativeWindowHandle.Value);
         window.Focus();
         if (keys.Length > 1)
         {

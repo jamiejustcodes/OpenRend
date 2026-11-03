@@ -514,6 +514,7 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
         }
         DrawLoopRegion(dc);
+        DrawMarkers(dc);
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, RulerHeight, Math.Max(0, ActualWidth - HeaderWidth), Math.Max(0, ActualHeight - RulerHeight))));
         var insertionY = 0.0;
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
@@ -769,6 +770,14 @@ public sealed partial class TimelineView : FrameworkElement
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
         isDragging = false; alreadySelectedOnDown = false;
         if (BeginEventButton(origin)) { e.Handled = true; return; }
+        if (HitMarker(origin) is { } hitMarker)
+        {
+            SeekRequested?.Invoke(hitMarker.Frame);
+            MarkerSelected?.Invoke(hitMarker);
+            if (e.ClickCount == 2) MarkerEditRequested?.Invoke(hitMarker);
+            e.Handled = true;
+            return;
+        }
         if (origin.X < HeaderWidth)
         {
             var track = TrackAt(origin.Y);
@@ -895,7 +904,8 @@ public sealed partial class TimelineView : FrameworkElement
                     .Where(c => !ignoreIds.Contains(c.Id))
                     .SelectMany(c => new[] { c.StartFrame, c.EndFrame })
                     .Append(Position)
-                    .Append(0);
+                    .Append(0)
+                    .Concat(Project.Markers.Select(m => m.Frame));
                 var start = dragging.StartFrame + delta;
                 var end = start + dragging.DurationFrames;
                 var threshold = Math.Max(1, Project.FrameRate.Frames(10 / PixelsPerSecond));
@@ -1147,6 +1157,19 @@ public sealed partial class TimelineView : FrameworkElement
         var p = e.GetPosition(this);
         if (p.X >= HeaderWidth)
         {
+            if (HitMarker(p) is { } rightMarker)
+            {
+                var markerMenu = new ContextMenu();
+                var editItem = new MenuItem { Header = "Edit Marker…" };
+                editItem.Click += (_, _) => MarkerEditRequested?.Invoke(rightMarker);
+                markerMenu.Items.Add(editItem);
+                var delItem = new MenuItem { Header = "Delete Marker" };
+                delItem.Click += (_, _) => MarkerDeleteRequested?.Invoke(rightMarker.Id);
+                markerMenu.Items.Add(delItem);
+                markerMenu.IsOpen = true;
+                e.Handled = true;
+                return;
+            }
             var hit = HitClip(p);
             if (hit is not null && !Selection.Contains(hit.Value.Clip.Id))
             {

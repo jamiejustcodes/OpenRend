@@ -1,6 +1,10 @@
 param([string]$OutputDirectory)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path -Parent $PSScriptRoot
+$localDotnet = Join-Path $repo '.local/dotnet'
+if ((Test-Path $localDotnet) -and ($env:PATH -notlike "*$localDotnet*")) {
+    $env:PATH = "$localDotnet;$env:PATH"
+}
 if (!$OutputDirectory) { $OutputDirectory = Join-Path $repo 'dist/OpenRend' }
 $destination = [IO.Path]::GetFullPath($OutputDirectory)
 $workspace = [IO.Path]::GetFullPath($repo).TrimEnd('\') + '\'
