@@ -58,8 +58,10 @@
       <MenuItem Header="_View">
         <MenuItem Header="Window">
           <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
+          <MenuItem x:Name="MixingConsoleWindowMenu" Header="Mixing Console" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
           <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         </MenuItem>
+        <MenuItem x:Name="MixingConsoleMenu" Header="Mixing Consoleâ€¦" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
         <MenuItem x:Name="VideoScopesMenu" Header="Video Scopesâ€¦" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
         <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         <Separator/>

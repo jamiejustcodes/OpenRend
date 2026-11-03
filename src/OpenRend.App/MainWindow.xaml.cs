@@ -52,6 +52,7 @@ public partial class MainWindow : Window
     private byte[]? currentPreviewPixels;
     public (byte[]? Pixels, int Width, int Height) GetCurrentFrame() => (currentPreviewPixels, previewWidth, previewHeight);
     private VideoScopesWindow? videoScopesWindow;
+    private MixingConsoleWindow? mixingConsoleWindow;
     public MainWindow(EditorViewModel viewModel)
     {
         vm = viewModel;
@@ -1248,6 +1249,22 @@ public partial class MainWindow : Window
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
         vm.Status = "Saved " + Path.GetFileName(dialog.FileName) + ".";
     });
+    private void MixingConsoleClick(object sender, RoutedEventArgs e)
+    {
+        if (mixingConsoleWindow == null || !mixingConsoleWindow.IsLoaded)
+        {
+            mixingConsoleWindow = new MixingConsoleWindow(vm, () => { Refresh(); RequestPreview(); })
+            {
+                Owner = this
+            };
+            mixingConsoleWindow.Show();
+        }
+        else
+        {
+            mixingConsoleWindow.Activate();
+            mixingConsoleWindow.RefreshTracks();
+        }
+    }
     private void VideoScopesClick(object sender, RoutedEventArgs e)
     {
         if (videoScopesWindow == null || !videoScopesWindow.IsLoaded)
@@ -1300,6 +1317,8 @@ public partial class MainWindow : Window
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
             Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
+            Key.D5 when ctrl && alt => () => MixingConsoleClick(this, e),
+            Key.NumPad5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.U when ctrl && shift => () => { IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked; IgnoreGroupsClick(this, e); },
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
