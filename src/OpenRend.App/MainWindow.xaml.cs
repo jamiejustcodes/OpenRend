@@ -464,6 +464,37 @@ public partial class MainWindow : Window
             vm.Status = $"Exported Final Cut Pro 7 XML to {Path.GetFileName(dialog.FileName)}.";
         }
     });
+    private async void ImportEdlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import CMX 3600 EDL",
+            Filter = "EDL Text File (*.txt;*.edl)|*.txt;*.edl|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog(this) != true || !await ConfirmUnsavedAsync()) return;
+        Pause();
+        var edl = await File.ReadAllTextAsync(dialog.FileName);
+        var project = EdlInterchange.ImportFromEdl(edl, vm.Project.FrameRate);
+        vm.Replace(project, null);
+        await PopulateMediaVisualsAsync();
+        vm.Status = $"Imported CMX 3600 EDL ({project.Tracks.Count} tracks, {project.Tracks.SelectMany(t => t.Clips).Count()} clips).";
+    });
+    private async void ExportEdlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var defaultName = Path.GetFileNameWithoutExtension(vm.ProjectPath) ?? vm.Project.Name ?? "EDL_Sequence";
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export CMX 3600 EDL",
+            Filter = "EDL Text File (*.txt)|*.txt|All files (*.*)|*.*",
+            FileName = $"{defaultName}.txt"
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            var edl = EdlInterchange.ExportToEdl(vm.Project);
+            await File.WriteAllTextAsync(dialog.FileName, edl, System.Text.Encoding.UTF8);
+            vm.Status = $"Exported CMX 3600 EDL to {Path.GetFileName(dialog.FileName)}.";
+        }
+    });
     private async void RelinkClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         Pause(); var missing = ProjectStore.FindMissingMedia(vm.Project);
