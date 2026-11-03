@@ -10,24 +10,42 @@ namespace OpenRend.App;
 
 /// <summary>
 /// 1:1 Vegas Pro Project Properties window replicating the authentic multi-tab layout:
-/// Video, Audio, Ruler, Summary, and Advanced settings with preset templates.
+/// Video, Audio, Ruler, Summary, and Advanced settings with template presets.
+/// Provides live Apply support, deep parameter persistence, and validation.
 /// </summary>
 public sealed class ProjectSettingsWindow : Window
 {
-    private record TemplatePreset(string Name, int Width, int Height, Rational Rate, string FieldOrder, double AspectRatio);
+    private record TemplatePreset(
+        string Name,
+        int Width,
+        int Height,
+        Rational Rate,
+        VideoFieldOrder FieldOrder,
+        double PixelAspectRatio,
+        ProjectPixelFormat PixelFormat = ProjectPixelFormat.Int8Bit,
+        int AudioSampleRate = 48000,
+        int AudioBitDepth = 24);
 
     private static readonly TemplatePreset[] Presets =
     [
-        new("HD 1080-30p (1920x1080, 29.970 fps)", 1920, 1080, new Rational(30000, 1001), "None (progressive scan)", 1.0),
-        new("HD 1080-60p (1920x1080, 59.940 fps)", 1920, 1080, new Rational(60000, 1001), "None (progressive scan)", 1.0),
-        new("HD 1080-24p (1920x1080, 23.976 fps)", 1920, 1080, new Rational(24000, 1001), "None (progressive scan)", 1.0),
-        new("4K 2160-30p (3840x2160, 29.970 fps)", 3840, 2160, new Rational(30000, 1001), "None (progressive scan)", 1.0),
-        new("4K 2160-60p (3840x2160, 59.940 fps)", 3840, 2160, new Rational(60000, 1001), "None (progressive scan)", 1.0),
-        new("HD 720-30p (1280x720, 29.970 fps)", 1280, 720, new Rational(30000, 1001), "None (progressive scan)", 1.0),
-        new("HD 720-60p (1280x720, 59.940 fps)", 1280, 720, new Rational(60000, 1001), "None (progressive scan)", 1.0),
-        new("Portrait 9:16 (1080x1920, 30.000 fps)", 1080, 1920, new Rational(30, 1), "None (progressive scan)", 1.0),
-        new("Square 1:1 (1080x1080, 30.000 fps)", 1080, 1080, new Rational(30, 1), "None (progressive scan)", 1.0),
-        new("Custom", 1920, 1080, new Rational(30000, 1001), "None (progressive scan)", 1.0)
+        new("HD 1080-60p (1920x1080, 59.940 fps)", 1920, 1080, new Rational(60000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 1080-50p (1920x1080, 50.000 fps)", 1920, 1080, new Rational(50, 1), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 1080-30p (1920x1080, 29.970 fps)", 1920, 1080, new Rational(30000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 1080-25p (1920x1080, 25.000 fps)", 1920, 1080, new Rational(25, 1), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 1080-24p (1920x1080, 23.976 fps)", 1920, 1080, new Rational(24000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 1080-60i (1920x1080, 29.970 fps)", 1920, 1080, new Rational(30000, 1001), VideoFieldOrder.UpperFieldFirst, 1.0),
+        new("HD 1080-50i (1920x1080, 25.000 fps)", 1920, 1080, new Rational(25, 1), VideoFieldOrder.UpperFieldFirst, 1.0),
+        new("4K UHD 2160-60p (3840x2160, 59.940 fps)", 3840, 2160, new Rational(60000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("4K UHD 2160-30p (3840x2160, 29.970 fps)", 3840, 2160, new Rational(30000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("4K UHD 2160-24p (3840x2160, 23.976 fps)", 3840, 2160, new Rational(24000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 720-60p (1280x720, 59.940 fps)", 1280, 720, new Rational(60000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("HD 720-30p (1280x720, 29.970 fps)", 1280, 720, new Rational(30000, 1001), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("Vertical HD (1080x1920, 30.000 fps)", 1080, 1920, new Rational(30, 1), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("Vertical HD (1080x1920, 60.000 fps)", 1080, 1920, new Rational(60, 1), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("Square (1080x1080, 30.000 fps)", 1080, 1080, new Rational(30, 1), VideoFieldOrder.ProgressiveScan, 1.0),
+        new("NTSC DV (720x480, 29.970 fps)", 720, 480, new Rational(30000, 1001), VideoFieldOrder.LowerFieldFirst, 0.9091),
+        new("PAL DV (720x576, 25.000 fps)", 720, 576, new Rational(25, 1), VideoFieldOrder.LowerFieldFirst, 1.0926),
+        new("Custom", 1920, 1080, new Rational(30000, 1001), VideoFieldOrder.ProgressiveScan, 1.0)
     ];
 
     private readonly ComboBox templateCombo;
@@ -36,6 +54,7 @@ public sealed class ProjectSettingsWindow : Window
     private readonly ComboBox fieldOrderCombo;
     private readonly ComboBox pixelAspectCombo;
     private readonly ComboBox frameRateCombo;
+    private readonly ComboBox pixelFormatCombo;
     private readonly ComboBox fullResQualityCombo;
     private readonly ComboBox motionBlurCombo;
     private readonly ComboBox deinterlaceCombo;
@@ -54,15 +73,30 @@ public sealed class ProjectSettingsWindow : Window
     public int ProjectHeight { get; private set; }
     public Rational Rate { get; private set; }
     public string ProjectName { get; private set; } = "";
+    public VideoFieldOrder FieldOrder { get; private set; }
+    public double PixelAspectRatio { get; private set; }
+    public VideoRenderQuality RenderQuality { get; private set; }
+    public MotionBlurType MotionBlur { get; private set; }
+    public VideoDeinterlaceMethod DeinterlaceMethod { get; private set; }
+    public ProjectPixelFormat PixelFormat { get; private set; }
+    public int AudioSampleRate { get; private set; }
+    public int AudioBitDepth { get; private set; }
+    public string? PrerenderFolder { get; private set; }
+    public string? RulerTimeFormat { get; private set; }
+    public string? Author { get; private set; }
+    public string? Copyright { get; private set; }
+    public string? Comments { get; private set; }
+
+    public event Action<ProjectSettingsWindow>? Applied;
 
     public ProjectSettingsWindow(ProjectDocument project)
     {
         Style = (Style)FindResource(typeof(Window));
         Title = "Project Properties";
-        Width = 530;
-        Height = 620;
+        Width = 540;
+        Height = 640;
         MinWidth = 500;
-        MinHeight = 550;
+        MinHeight = 560;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         Background = (Brush)FindResource("ColorBG");
         Foreground = (Brush)FindResource("TextColor");
@@ -71,6 +105,19 @@ public sealed class ProjectSettingsWindow : Window
         ProjectHeight = project.Height;
         Rate = project.FrameRate;
         ProjectName = project.Name;
+        FieldOrder = project.FieldOrder;
+        PixelAspectRatio = project.PixelAspectRatio;
+        RenderQuality = project.RenderQuality;
+        MotionBlur = project.MotionBlur;
+        DeinterlaceMethod = project.DeinterlaceMethod;
+        PixelFormat = project.PixelFormat;
+        AudioSampleRate = project.AudioSampleRate;
+        AudioBitDepth = project.AudioBitDepth;
+        PrerenderFolder = project.PrerenderFolder;
+        RulerTimeFormat = project.RulerTimeFormat;
+        Author = project.Author;
+        Copyright = project.Copyright;
+        Comments = project.Comments;
 
         var rootGrid = new Grid { Margin = new Thickness(8) };
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -110,29 +157,35 @@ public sealed class ProjectSettingsWindow : Window
         AddFormRow(videoGrid, row++, "Height:", heightBox);
 
         // Field order
-        fieldOrderCombo = CreateComboBox(["None (progressive scan)", "Upper field first", "Lower field first"], 0);
+        fieldOrderCombo = CreateComboBox(["None (progressive scan)", "Upper field first", "Lower field first"], (int)project.FieldOrder);
         AddFormRow(videoGrid, row++, "Field order:", fieldOrderCombo);
 
         // Pixel aspect ratio
-        pixelAspectCombo = CreateComboBox(["1.0000 (Square)", "1.3333 (HDV)", "0.9091 (NTSC DV)"], 0);
+        var parItems = new[] { "1.0000 (Square)", "1.3333 (HDV 1080)", "0.9091 (NTSC DV)", "1.0926 (PAL DV)", "1.2121 (NTSC Widescreen)", "1.4568 (PAL Widescreen)" };
+        int parIndex = MatchPixelAspectIndex(project.PixelAspectRatio);
+        pixelAspectCombo = CreateComboBox(parItems, parIndex);
         AddFormRow(videoGrid, row++, "Pixel aspect ratio:", pixelAspectCombo);
 
         // Frame rate
-        frameRateCombo = CreateComboBox(["29.970 (NTSC)", "59.940", "23.976", "24.000", "25.000 (PAL)", "30.000", "50.000", "60.000"], 0);
+        frameRateCombo = CreateComboBox(["59.940 (Double NTSC)", "50.000 (Double PAL)", "29.970 (NTSC)", "25.000 (PAL)", "24.000", "23.976 (IVTC Film)", "30.000", "60.000", "120.000"], 2);
         MatchFrameRateToCombo(project.FrameRate);
         frameRateCombo.SelectionChanged += (_, _) => CheckCustomPreset();
         AddFormRow(videoGrid, row++, "Frame rate:", frameRateCombo);
 
+        // Pixel format (Vegas Pro 1:1)
+        pixelFormatCombo = CreateComboBox(["8-bit", "8-bit (full range)", "32-bit floating point (video levels)", "32-bit floating point (full range)"], (int)project.PixelFormat);
+        AddFormRow(videoGrid, row++, "Pixel format:", pixelFormatCombo);
+
         // Full-resolution rendering quality
-        fullResQualityCombo = CreateComboBox(["Good", "Best", "Preview", "Draft"], 0);
+        fullResQualityCombo = CreateComboBox(["Draft", "Preview", "Good", "Best"], Math.Clamp((int)project.RenderQuality - 1, 0, 3));
         AddFormRow(videoGrid, row++, "Full-resolution rendering quality:", fullResQualityCombo);
 
         // Motion blur type
-        motionBlurCombo = CreateComboBox(["Gaussian", "Box", "Pyramid"], 0);
+        motionBlurCombo = CreateComboBox(["Gaussian", "Pyramid", "Box"], Math.Clamp((int)project.MotionBlur, 0, 2));
         AddFormRow(videoGrid, row++, "Motion blur type:", motionBlurCombo);
 
         // Deinterlace method
-        deinterlaceCombo = CreateComboBox(["Blend fields", "Interpolate fields", "None"], 0);
+        deinterlaceCombo = CreateComboBox(["None", "Blend fields", "Interpolate fields"], Math.Clamp((int)project.DeinterlaceMethod, 0, 2));
         AddFormRow(videoGrid, row++, "Deinterlace method:", deinterlaceCombo);
 
         // Resample mode
@@ -148,7 +201,9 @@ public sealed class ProjectSettingsWindow : Window
             Margin = new Thickness(4, 0, 0, 0)
         };
         DockPanel.SetDock(browseBtn, Dock.Right);
-        var defaultFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend", "Prerenders");
+        var defaultFolder = !string.IsNullOrWhiteSpace(project.PrerenderFolder)
+            ? project.PrerenderFolder
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend", "Prerenders");
         prerenderFolderBox = CreateTextBox(defaultFolder);
         browseBtn.Click += (_, _) =>
         {
@@ -182,13 +237,30 @@ public sealed class ProjectSettingsWindow : Window
         var audioGrid = CreateFormGrid();
         int aRow = 0;
 
-        sampleRateCombo = CreateComboBox(["48,000 Hz", "44,100 Hz", "96,000 Hz", "192,000 Hz"], 0);
+        var sampleRates = new[] { "44,100 Hz", "48,000 Hz", "88,200 Hz", "96,000 Hz", "192,000 Hz" };
+        int sampleRateIndex = project.AudioSampleRate switch
+        {
+            44100 => 0,
+            48000 => 1,
+            88200 => 2,
+            96000 => 3,
+            192000 => 4,
+            _ => 1
+        };
+        sampleRateCombo = CreateComboBox(sampleRates, sampleRateIndex);
         AddFormRow(audioGrid, aRow++, "Sample rate (Hz):", sampleRateCombo);
 
-        bitDepthCombo = CreateComboBox(["16-bit", "24-bit", "32-bit float"], 1);
+        int bitDepthIndex = project.AudioBitDepth switch
+        {
+            16 => 0,
+            24 => 1,
+            32 => 2,
+            _ => 1
+        };
+        bitDepthCombo = CreateComboBox(["16-bit", "24-bit", "32-bit float"], bitDepthIndex);
         AddFormRow(audioGrid, aRow++, "Bit depth:", bitDepthCombo);
 
-        var resampleAudioCombo = CreateComboBox(["Best", "Good"], 0);
+        var resampleAudioCombo = CreateComboBox(["Best", "Good", "Preview"], 0);
         AddFormRow(audioGrid, aRow++, "Resample and stretch quality:", resampleAudioCombo);
 
         audioTab.Content = audioGrid;
@@ -199,7 +271,15 @@ public sealed class ProjectSettingsWindow : Window
         var rulerGrid = CreateFormGrid();
         int rRow = 0;
 
-        rulerTimeFormatCombo = CreateComboBox(["Timecode (29.97 fps, Video)", "Time & Frames", "Seconds", "Samples"], 0);
+        var rulerFormats = new[] { "Timecode (SMPTE)", "Time & Frames", "Seconds", "Samples" };
+        int rulerIndex = project.RulerTimeFormat switch
+        {
+            "Time & Frames" => 1,
+            "Seconds" => 2,
+            "Samples" => 3,
+            _ => 0
+        };
+        rulerTimeFormatCombo = CreateComboBox(rulerFormats, rulerIndex);
         AddFormRow(rulerGrid, rRow++, "Ruler time format:", rulerTimeFormatCombo);
 
         var rulerStartBox = CreateTextBox("00:00:00:00");
@@ -216,16 +296,17 @@ public sealed class ProjectSettingsWindow : Window
         summaryTitleBox = CreateTextBox(project.Name);
         AddFormRow(summaryGrid, sRow++, "Title:", summaryTitleBox);
 
-        summaryArtistBox = CreateTextBox("");
+        summaryArtistBox = CreateTextBox(project.Author ?? "");
         AddFormRow(summaryGrid, sRow++, "Artist:", summaryArtistBox);
 
-        summaryCopyrightBox = CreateTextBox("© OpenRend");
+        summaryCopyrightBox = CreateTextBox(project.Copyright ?? "© OpenRend");
         AddFormRow(summaryGrid, sRow++, "Copyright:", summaryCopyrightBox);
 
         summaryCommentsBox = new TextBox
         {
             AcceptsReturn = true,
             Height = 80,
+            Text = project.Comments ?? "",
             Background = (Brush)FindResource("ColorBG"),
             Foreground = (Brush)FindResource("TextColor"),
             BorderBrush = (Brush)FindResource("ColorM"),
@@ -273,7 +354,13 @@ public sealed class ProjectSettingsWindow : Window
             Height = 24,
             Margin = new Thickness(4, 0, 0, 0)
         };
-        applyBtn.Click += (_, _) => CommitSettings();
+        applyBtn.Click += (_, _) =>
+        {
+            if (CommitSettings())
+            {
+                Applied?.Invoke(this);
+            }
+        };
 
         bottomBar.Children.Add(okBtn);
         bottomBar.Children.Add(cancelBtn);
@@ -287,6 +374,28 @@ public sealed class ProjectSettingsWindow : Window
         // Select initial matching template
         SelectMatchingPreset(project.Width, project.Height, project.FrameRate);
     }
+
+    private static int MatchPixelAspectIndex(double par) => par switch
+    {
+        _ when Math.Abs(par - 1.0) < 0.001 => 0,
+        _ when Math.Abs(par - 1.3333) < 0.01 => 1,
+        _ when Math.Abs(par - 0.9091) < 0.01 => 2,
+        _ when Math.Abs(par - 1.0926) < 0.01 => 3,
+        _ when Math.Abs(par - 1.2121) < 0.01 => 4,
+        _ when Math.Abs(par - 1.4568) < 0.01 => 5,
+        _ => 0
+    };
+
+    private static double ParsePixelAspectFromIndex(int index) => index switch
+    {
+        0 => 1.0,
+        1 => 1.3333,
+        2 => 0.9091,
+        3 => 1.0926,
+        4 => 1.2121,
+        5 => 1.4568,
+        _ => 1.0
+    };
 
     private void UpdateFreeSpace()
     {
@@ -310,6 +419,8 @@ public sealed class ProjectSettingsWindow : Window
         var p = Presets[templateCombo.SelectedIndex];
         widthBox.Text = p.Width.ToString();
         heightBox.Text = p.Height.ToString();
+        fieldOrderCombo.SelectedIndex = (int)p.FieldOrder;
+        pixelAspectCombo.SelectedIndex = MatchPixelAspectIndex(p.PixelAspectRatio);
         MatchFrameRateToCombo(p.Rate);
     }
 
@@ -352,20 +463,21 @@ public sealed class ProjectSettingsWindow : Window
                 return;
             }
         }
-        frameRateCombo.SelectedIndex = 0;
+        frameRateCombo.SelectedIndex = 2; // Default 29.970
     }
 
     private Rational ParseRateFromCombo()
     {
         var text = frameRateCombo.SelectedItem?.ToString() ?? "";
-        if (text.StartsWith("29.970")) return new Rational(30000, 1001);
         if (text.StartsWith("59.940")) return new Rational(60000, 1001);
-        if (text.StartsWith("23.976")) return new Rational(24000, 1001);
-        if (text.StartsWith("24.000")) return new Rational(24, 1);
-        if (text.StartsWith("25.000")) return new Rational(25, 1);
-        if (text.StartsWith("30.000")) return new Rational(30, 1);
         if (text.StartsWith("50.000")) return new Rational(50, 1);
+        if (text.StartsWith("29.970")) return new Rational(30000, 1001);
+        if (text.StartsWith("25.000")) return new Rational(25, 1);
+        if (text.StartsWith("24.000")) return new Rational(24, 1);
+        if (text.StartsWith("23.976")) return new Rational(24000, 1001);
+        if (text.StartsWith("30.000")) return new Rational(30, 1);
         if (text.StartsWith("60.000")) return new Rational(60, 1);
+        if (text.StartsWith("120.000")) return new Rational(120, 1);
         return new Rational(30000, 1001);
     }
 
@@ -390,6 +502,37 @@ public sealed class ProjectSettingsWindow : Window
         ProjectHeight = h;
         Rate = ParseRateFromCombo();
         ProjectName = name;
+        FieldOrder = (VideoFieldOrder)Math.Clamp(fieldOrderCombo.SelectedIndex, 0, 2);
+        PixelAspectRatio = ParsePixelAspectFromIndex(pixelAspectCombo.SelectedIndex);
+        PixelFormat = (ProjectPixelFormat)Math.Clamp(pixelFormatCombo.SelectedIndex, 0, 3);
+        RenderQuality = (VideoRenderQuality)Math.Clamp(fullResQualityCombo.SelectedIndex + 1, 1, 4);
+        MotionBlur = (MotionBlurType)Math.Clamp(motionBlurCombo.SelectedIndex, 0, 2);
+        DeinterlaceMethod = (VideoDeinterlaceMethod)Math.Clamp(deinterlaceCombo.SelectedIndex, 0, 2);
+
+        AudioSampleRate = sampleRateCombo.SelectedIndex switch
+        {
+            0 => 44100,
+            1 => 48000,
+            2 => 88200,
+            3 => 96000,
+            4 => 192000,
+            _ => 48000
+        };
+
+        AudioBitDepth = bitDepthCombo.SelectedIndex switch
+        {
+            0 => 16,
+            1 => 24,
+            2 => 32,
+            _ => 24
+        };
+
+        PrerenderFolder = prerenderFolderBox.Text.Trim();
+        RulerTimeFormat = rulerTimeFormatCombo.SelectedItem?.ToString();
+        Author = string.IsNullOrWhiteSpace(summaryArtistBox.Text) ? null : summaryArtistBox.Text.Trim();
+        Copyright = string.IsNullOrWhiteSpace(summaryCopyrightBox.Text) ? null : summaryCopyrightBox.Text.Trim();
+        Comments = string.IsNullOrWhiteSpace(summaryCommentsBox.Text) ? null : summaryCommentsBox.Text.Trim();
+
         return true;
     }
 

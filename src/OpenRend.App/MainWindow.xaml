@@ -24,7 +24,7 @@
         <MenuItem Header="Import CMX 3600 EDLâ€¦" Click="ImportEdlClick"/>
         <MenuItem Header="Export CMX 3600 EDLâ€¦" Click="ExportEdlClick"/>
         <MenuItem Header="Relink missing media…" Click="RelinkClick"/>
-        <MenuItem Header="Project settings…" InputGestureText="Alt+Enter" Click="SettingsClick"/>
+        <MenuItem Header="Properties…" InputGestureText="Alt+Enter" Click="SettingsClick"/>
         <Separator/>
         <MenuItem Header="_Render as…" InputGestureText="Ctrl+Shift+E" Click="ExportClick"/>
         <Separator/><MenuItem Header="E_xit" Click="ExitClick"/>

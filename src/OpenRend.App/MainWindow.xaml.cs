@@ -1802,10 +1802,39 @@ public partial class MainWindow : Window
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         var dialog = new ProjectSettingsWindow(vm.Project) { Owner = this };
-        if (dialog.ShowDialog() != true) return;
-        Pause(); vm.Editor.Execute(p => { p.Width = dialog.ProjectWidth; p.Height = dialog.ProjectHeight; p.FrameRate = dialog.Rate; p.Name = dialog.ProjectName; });
-        vm.Status = "Project settings updated.";
+        dialog.Applied += ApplyProjectSettings;
+        if (dialog.ShowDialog() == true)
+        {
+            ApplyProjectSettings(dialog);
+            vm.Status = "Project settings updated.";
+        }
     });
+
+    private void ApplyProjectSettings(ProjectSettingsWindow dialog)
+    {
+        Pause();
+        vm.Editor.Execute(p =>
+        {
+            p.Width = dialog.ProjectWidth;
+            p.Height = dialog.ProjectHeight;
+            p.FrameRate = dialog.Rate;
+            p.Name = dialog.ProjectName;
+            p.FieldOrder = dialog.FieldOrder;
+            p.PixelAspectRatio = dialog.PixelAspectRatio;
+            p.RenderQuality = dialog.RenderQuality;
+            p.MotionBlur = dialog.MotionBlur;
+            p.DeinterlaceMethod = dialog.DeinterlaceMethod;
+            p.PixelFormat = dialog.PixelFormat;
+            p.AudioSampleRate = dialog.AudioSampleRate;
+            p.AudioBitDepth = dialog.AudioBitDepth;
+            p.PrerenderFolder = dialog.PrerenderFolder;
+            p.RulerTimeFormat = dialog.RulerTimeFormat;
+            p.Author = dialog.Author;
+            p.Copyright = dialog.Copyright;
+            p.Comments = dialog.Comments;
+        });
+        Refresh();
+    }
     private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / pause\nEnter  Pause\nEsc  Stop\nAlt+Left / Alt+Right  Step one frame\nCtrl+Home / Ctrl+End  Timeline bounds\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
     private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "OpenRend 0.1\nWindows video and audio editor\nGPL-3.0-or-later\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
     private void ExitClick(object sender, RoutedEventArgs e) => Close();

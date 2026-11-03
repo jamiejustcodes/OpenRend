@@ -50,12 +50,90 @@ public enum TrackCompositeMode
     DifferenceSquared = 16
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<VideoFieldOrder>))]
+public enum VideoFieldOrder
+{
+    ProgressiveScan = 0,
+    UpperFieldFirst = 1,
+    LowerFieldFirst = 2
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<VideoRenderQuality>))]
+public enum VideoRenderQuality
+{
+    Draft = 1,
+    Preview = 2,
+    Good = 3,
+    Best = 4
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<VideoDeinterlaceMethod>))]
+public enum VideoDeinterlaceMethod
+{
+    None = 0,
+    BlendFields = 1,
+    InterpolateFields = 2
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<ProjectPixelFormat>))]
+public enum ProjectPixelFormat
+{
+    Int8Bit = 0,
+    Int8BitFullRange = 1,
+    Float32Bit = 2,
+    Float32BitFullRange = 3
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<HDRMode>))]
+public enum HDRMode
+{
+    Off = 2,
+    HDR10 = 0,
+    HLG = 1
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<MotionBlurType>))]
+public enum MotionBlurType
+{
+    Gaussian = 0,
+    Pyramid = 1,
+    Box = 2
+}
+
 public sealed class ProjectDocument
 {
     public string Name { get; set; } = "Untitled";
     public int Width { get; set; } = 1280;
     public int Height { get; set; } = 720;
     public Rational FrameRate { get; set; } = new(30, 1);
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public VideoFieldOrder FieldOrder { get; set; } = VideoFieldOrder.ProgressiveScan;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double PixelAspectRatio { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public VideoRenderQuality RenderQuality { get; set; } = VideoRenderQuality.Good;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public MotionBlurType MotionBlur { get; set; } = MotionBlurType.Gaussian;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public VideoDeinterlaceMethod DeinterlaceMethod { get; set; } = VideoDeinterlaceMethod.BlendFields;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ProjectPixelFormat PixelFormat { get; set; } = ProjectPixelFormat.Int8Bit;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public HDRMode HDRMode { get; set; } = HDRMode.Off;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AudioSampleRate { get; set; } = 48000;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AudioBitDepth { get; set; } = 24;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? PrerenderFolder { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RulerTimeFormat { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Author { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Copyright { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Comments { get; set; }
     public List<MediaAsset> Media { get; set; } = [];
     public List<TimelineTrack> Tracks { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -80,6 +158,20 @@ public sealed class ProjectDocument
         Width = Width,
         Height = Height,
         FrameRate = FrameRate,
+        FieldOrder = FieldOrder,
+        PixelAspectRatio = PixelAspectRatio,
+        RenderQuality = RenderQuality,
+        MotionBlur = MotionBlur,
+        DeinterlaceMethod = DeinterlaceMethod,
+        PixelFormat = PixelFormat,
+        HDRMode = HDRMode,
+        AudioSampleRate = AudioSampleRate,
+        AudioBitDepth = AudioBitDepth,
+        PrerenderFolder = PrerenderFolder,
+        RulerTimeFormat = RulerTimeFormat,
+        Author = Author,
+        Copyright = Copyright,
+        Comments = Comments,
         Media = Media.Select(m => m.DeepClone()).ToList(),
         Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
         VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),
@@ -95,6 +187,12 @@ public sealed class ProjectDocument
     {
         if (Width is <= 0 or > 32768 || Height is <= 0 or > 32768) throw new InvalidDataException("Project dimensions must be between 1 and 32768.");
         if (FrameRate.Numerator <= 0 || FrameRate.Denominator <= 0) throw new InvalidDataException("Project frame rate must be positive.");
+        if (!double.IsFinite(PixelAspectRatio) || PixelAspectRatio <= 0 || PixelAspectRatio > 4.0)
+            throw new InvalidDataException("Project pixel aspect ratio must be positive and not exceed 4.0.");
+        if (AudioSampleRate is < 8000 or > 192000)
+            throw new InvalidDataException("Project audio sample rate must be between 8000 and 192000 Hz.");
+        if (AudioBitDepth is not (16 or 24 or 32))
+            throw new InvalidDataException("Project audio bit depth must be 16, 24, or 32.");
         if (Media == null || Tracks == null) throw new InvalidDataException("Project collections are missing.");
         if (VideoOutputEffects != null)
         {

@@ -48,6 +48,12 @@ public partial class MainWindow
             if (advanced.ShowDialog() != true) return;
             project.Name = advanced.ProjectName;
             project.Width = advanced.ProjectWidth; project.Height = advanced.ProjectHeight; project.FrameRate = advanced.Rate;
+            project.FieldOrder = advanced.FieldOrder; project.PixelAspectRatio = advanced.PixelAspectRatio;
+            project.RenderQuality = advanced.RenderQuality; project.MotionBlur = advanced.MotionBlur;
+            project.DeinterlaceMethod = advanced.DeinterlaceMethod; project.PixelFormat = advanced.PixelFormat;
+            project.AudioSampleRate = advanced.AudioSampleRate; project.AudioBitDepth = advanced.AudioBitDepth;
+            project.PrerenderFolder = advanced.PrerenderFolder; project.RulerTimeFormat = advanced.RulerTimeFormat;
+            project.Author = advanced.Author; project.Copyright = advanced.Copyright; project.Comments = advanced.Comments;
             vm.Replace(project, null);
         }
     }
