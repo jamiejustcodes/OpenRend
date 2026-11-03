@@ -650,7 +650,7 @@ public partial class MainWindow : Window
     private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
-    private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ToolsTabs.SelectedIndex = 3; UpdateInspector(); }
+    private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ClipPropertiesTab.IsSelected = true; UpdateInspector(); }
     private async void PanCropClick(object sender, RoutedEventArgs e) => await OpenPanCropAsync();
     private async Task OpenPanCropAsync(Guid? requestedClip = null) => await GuardAsync(async () =>
     {

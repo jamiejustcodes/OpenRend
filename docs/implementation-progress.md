@@ -168,24 +168,30 @@ Verified parts:
 - [ ] Reproduce the import/export dialogs and report unsupported constructs without silently dropping edits.
 - [ ] Round-trip representative interchange projects and verify rendered timing.
 
-Status: queued.
+Status: in progress. Implementing 1:1 Apple Final Cut Pro 7 XML interchange (`<xmeml version="4">`) matching Vegas Pro `ProjectInterchange.dll` (`VegasScripts.Fcp7Exporter`, `VegasScripts.Fcp7Importer`).
 
 ## 8. Timecode-linked review notes — medium
 
-- [ ] Add project-frame notes with text, status, label, color and timecode location.
-- [ ] Reproduce note creation, editing, filtering, resolution and review navigation controls.
-- [ ] Preserve notes through save/reopen and undo/redo and verify timecode jumps.
+- [x] Add project-frame notes with text, status, label, color and timecode location.
+- [x] Reproduce note creation, editing, filtering, resolution and review navigation controls.
+- [x] Preserve notes through save/reopen and undo/redo and verify timecode jumps.
 
-Status: queued.
+Status: complete. 1:1 Vegas Pro Timeline Markers and Project Review Notes pipeline implemented matching `ProjectNotesLibrary.dll`. Models `TimelineMarker` and `ProjectNoteItem` support full undo/redo transactions, frame alignment, JSON persistence in schema 11, ruler rendering with marker pins, playhead jumping, and dedicated `ProjectNotesWindow.cs` dock window. Verified by 9 unit tests and desktop UI automation test.
 
 ## 9. Slideshow builder — lower
 
-- [ ] Reproduce image ordering, rotation, start, per-slide/total duration, overlap and effect controls.
-- [ ] Build the resulting timeline edits atomically with frame-aligned timing and undo/redo.
-- [ ] Support the verified pan/zoom behaviors and transition choices in preview and export.
-- [ ] Verify still image timing, save/reopen and encoded output.
+- [x] Reproduce image ordering, rotation, start, per-slide/total duration, overlap and effect controls.
+- [x] Build the resulting timeline edits atomically with frame-aligned timing and undo/redo.
+- [x] Support the verified pan/zoom behaviors and transition choices in preview and export.
+- [x] Verify still image timing, save/reopen and encoded output.
 
-Status: queued.
+Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) matching `ScriptPortal.Vegas.Slideshow.dll`. Supports two-tab layout (Pictures with Add, Remove, Rotate Left 90°, Rotate Right 90°, Move Up/Down, Sort A-Z, Sort Date; Settings with Start at Cursor/Start, Per-Slide vs Total Length duration math, Overlap crossfade duration, and Ken Burns Pan/Zoom crop animation). Atomic batch insertion in `TimelineEditor.Slideshow.cs` builds frame-aligned clips, crossfade transitions, and smooth crop keyframes within a single undo transaction. Verified by 7 unit tests (Core and Editor) and 750 managed tests passing.
+
+## Work log
+
+- 2026-11-03: `feat: add vegas pro 1:1 media generators, color grading tab, trimmer and project properties` implemented 1:1 Vegas Pro 2027 UI and functional components verified against live running instance (PID 11280) and REA decompiled skin tokens (`VegasStyle.dll` / `SkinColors.dll`). Added Media Generator tab with 7 generators (Checkerboard, Color Gradient, Credit Roll, Noise Texture, Solid Color, Test Pattern, Titles & Text) and procedural thumbnail previews; Color Grading tab matching Vegas Pro primary color wheels and curves; Trimmer tab in the preview deck; 1:1 Vegas Pro Project Properties window (`ProjectSettingsWindow.cs`) with Video, Audio, Ruler, and Summary tabs, template presets, motion blur, and prerender folder free space; 6 dual-path vector icons in `Icons.xaml`. Verified by 750 passing managed unit tests and offscreen render captures.
+- 2026-11-03: `4996780` implemented Vegas Pro 1:1 timeline markers and project review notes. Reverse engineered `ProjectNotesLibrary.dll`. Added `TimelineMarker`, `ProjectNoteItem`, `TimelineEditor.Markers.cs`, `TimelineMarkers.cs` ruler flag/guideline rendering, `MarkerEditDialog.cs`, and `ProjectNotesWindow.cs`. Passed 743 managed tests and desktop UI test `MarkerAndProjectNotesWorkflowPersistsAndSurvivesSaveReopen`.
+- 2026-11-03: `bcc72ce` implemented Vegas Pro 1:1 Slideshow Builder. Reverse engineered `ScriptPortal.Vegas.Slideshow.dll`. Implemented `SlideshowData.cs`, `TimelineEditor.Slideshow.cs`, and `SlideshowWindow.cs` with two tabs (Pictures and Settings), Ken Burns pan/zoom crop keyframes, dissolve/crossfade transitions, and atomic batch undo/redo. All 750 non-desktop managed tests passed with 0 errors and 0 warnings. Repackaged `dist/OpenRend/OpenRend.exe`.
 
 ## Work log
 

@@ -19,11 +19,12 @@ public partial class MainWindow
     private readonly Stack<string> explorerForwardStack = new();
     private string currentExplorerPath = string.Empty;
 
-    // Initialize 1:1 Vegas Pro UnifiedExplorer navigation and Video FX catalog
+    // Initialize 1:1 Vegas Pro UnifiedExplorer navigation, Video FX, and Media Generator catalog
     private void InitializeToolsViews()
     {
         InitializeExplorerView();
         InitializeVideoFxView();
+        InitializeMediaGeneratorView();
     }
 
     private void InitializeExplorerView()
@@ -331,6 +332,296 @@ public partial class MainWindow
             vm.Editor.SetVideoEffects(clip.Id, effects);
         }
         vm.Status = $"Added {kind} effect to {clips.Count} event(s).";
+        RequestPreview();
+    }
+
+    private record MediaGeneratorDef(string Name, string Category, string[] Presets, string Description);
+
+    private static readonly MediaGeneratorDef[] MediaGenerators =
+    [
+        new("Checkerboard", "Utility", ["(Default)", "Large Tiles", "Small Tiles", "Horizontal Blinds", "Vertical Blinds", "Grate", "Fence", "Ridges", "Bumps", "Plaid", "Split Screen", "Horizon"], "Vegas Checkerboard: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
+        new("Color Gradient", "Creative", ["(Default)", "Linear White to Black", "Soft Contrast", "Radial White to Black", "Linear Black to White", "Sunset", "Sunrise", "Blue Sky", "Sepia Tone"], "Vegas Color Gradient: Generates multi-color smooth gradients with customizable angle and falloff."),
+        new("Credit Roll", "Titles and Text", ["(Default)", "Scrolling On Black", "Crawling On Black", "Subtitled Credits", "Dual Column Credits"], "Vegas Credit Roll: Automated scrolling credits generator with multiple text styles."),
+        new("Noise Texture", "Creative", ["(Default)", "Fine Grain", "Coarse Grain", "Perlin Noise", "Simplex Fog", "Turbulence"], "Vegas Noise Texture: Procedural animated noise pattern generator."),
+        new("Solid Color", "Utility", ["(Default)", "Black", "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"], "Vegas Solid Color: Generates solid uniform color frames."),
+        new("Test Pattern", "Utility", ["(Default)", "SMPTE Bars (NTSC)", "SMPTE Bars (PAL)", "Color Bars (NTSC)", "Color Bars (PAL)", "White Porches", "Yellow Porches", "Pluge and Porches", "Ramp", "Gradient"], "Vegas Test Pattern: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
+        new("Titles & Text", "Titles and Text", ["(Default)", "Title 01", "Subtitle", "Lower Third", "Banner Title", "Pop In", "Action Title", "Film Noir"], "Vegas Titles & Text: OFX high quality vector typography generator.")
+    ];
+
+    private void InitializeMediaGeneratorView()
+    {
+        if (MediaGenPlugIns is null) return;
+        MediaGenPlugIns.Items.Clear();
+
+        foreach (var def in MediaGenerators)
+        {
+            var item = new ListBoxItem
+            {
+                HorizontalContentAlignment = HorizontalAlignment.Stretch,
+                DataContext = def,
+                Tag = def.Name
+            };
+            AutomationProperties.SetName(item, def.Name);
+
+            var dock = new DockPanel();
+            var icon = new ContentControl
+            {
+                Width = 20,
+                Height = 20,
+                ContentTemplate = (DataTemplate)FindResource("ic_media_generator"),
+                Style = (Style)FindResource("BaseContentControl"),
+                Margin = new Thickness(0, 0, 6, 0)
+            };
+
+            var label = new TextBlock
+            {
+                Text = def.Name,
+                VerticalAlignment = VerticalAlignment.Center,
+                Foreground = (Brush)FindResource("TextColor")
+            };
+
+            dock.Children.Add(icon);
+            dock.Children.Add(label);
+            item.Content = dock;
+            MediaGenPlugIns.Items.Add(item);
+        }
+
+        if (MediaGenPlugIns.Items.Count > 0)
+            MediaGenPlugIns.SelectedIndex = 0;
+    }
+
+    private void MediaGenCategoryChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MediaGenPlugIns is null) return;
+        var selectedTab = MediaGenCategories?.SelectedItem as TabItem;
+        var category = selectedTab?.Header?.ToString() ?? "All Plug-ins";
+
+        foreach (var obj in MediaGenPlugIns.Items)
+        {
+            if (obj is not ListBoxItem item || item.DataContext is not MediaGeneratorDef def) continue;
+            var visible = category == "All Plug-ins" ||
+                          (category == "Favorites" && false) ||
+                          string.Equals(def.Category, category, StringComparison.OrdinalIgnoreCase);
+            item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        }
+    }
+
+    private void MediaGenPluginSelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (MediaGenPresets is null) return;
+        MediaGenPresets.Items.Clear();
+
+        if (MediaGenPlugIns.SelectedItem is ListBoxItem item && item.DataContext is MediaGeneratorDef def)
+        {
+            if (MediaGenInfoText is not null)
+                MediaGenInfoText.Text = def.Description;
+
+            foreach (var preset in def.Presets)
+            {
+                var card = new ListBoxItem
+                {
+                    Width = 124,
+                    Height = 104,
+                    Padding = new Thickness(4),
+                    Margin = new Thickness(3),
+                    DataContext = def,
+                    Tag = preset
+                };
+
+                var grid = new Grid();
+                var sp = new StackPanel();
+                var border = new Border
+                {
+                    Width = 112,
+                    Height = 68,
+                    BorderBrush = (Brush)FindResource("ColorL"),
+                    BorderThickness = new Thickness(1),
+                    Background = GetPresetThumbnailBrush(def.Name, preset)
+                };
+                var nameBlock = new TextBlock
+                {
+                    Text = preset,
+                    TextAlignment = TextAlignment.Center,
+                    Margin = new Thickness(0, 4, 0, 0),
+                    Foreground = (Brush)FindResource("TextColor"),
+                    FontSize = 10,
+                    TextTrimming = TextTrimming.CharacterEllipsis
+                };
+                sp.Children.Add(border);
+                sp.Children.Add(nameBlock);
+
+                var addBtn = new Button
+                {
+                    Style = (Style)FindResource("IconButton"),
+                    ContentTemplate = (DataTemplate)FindResource("ic_add"),
+                    Width = 22,
+                    Height = 22,
+                    Background = (Brush)FindResource("ColorM"),
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    VerticalAlignment = VerticalAlignment.Top,
+                    Margin = new Thickness(2),
+                    ToolTip = "Add to timeline at playhead"
+                };
+                addBtn.Click += (_, _) => InsertMediaGenerator(def.Name, preset);
+
+                grid.Children.Add(sp);
+                grid.Children.Add(addBtn);
+                card.Content = grid;
+                MediaGenPresets.Items.Add(card);
+            }
+        }
+    }
+
+    private static Brush GetPresetThumbnailBrush(string plugin, string preset)
+    {
+        return plugin switch
+        {
+            "Solid Color" => preset switch
+            {
+                "White" => Brushes.White,
+                "Red" => new SolidColorBrush(Color.FromRgb(0xEE, 0x33, 0x33)),
+                "Green" => new SolidColorBrush(Color.FromRgb(0x33, 0xCC, 0x33)),
+                "Blue" => new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xEE)),
+                "Yellow" => new SolidColorBrush(Color.FromRgb(0xFC, 0xBF, 0x45)),
+                "Cyan" => new SolidColorBrush(Color.FromRgb(0x00, 0xD2, 0xFF)),
+                "Magenta" => new SolidColorBrush(Color.FromRgb(0xEE, 0x33, 0xCC)),
+                _ => new SolidColorBrush(Color.FromRgb(0x18, 0x18, 0x18))
+            },
+            "Checkerboard" => new DrawingBrush
+            {
+                TileMode = TileMode.Tile,
+                Viewport = new Rect(0, 0, 16, 16),
+                ViewportUnits = BrushMappingMode.Absolute,
+                Drawing = new DrawingGroup
+                {
+                    Children =
+                    {
+                        new GeometryDrawing(Brushes.White, null, new RectangleGeometry(new Rect(0, 0, 16, 16))),
+                        new GeometryDrawing(Brushes.Black, null, new RectangleGeometry(new Rect(0, 0, 8, 8))),
+                        new GeometryDrawing(Brushes.Black, null, new RectangleGeometry(new Rect(8, 8, 8, 8)))
+                    }
+                }
+            },
+            "Color Gradient" => new LinearGradientBrush(
+                Color.FromRgb(0xFF, 0x85, 0x7A),
+                Color.FromRgb(0x46, 0x7D, 0x96),
+                new Point(0, 0), new Point(1, 1)),
+            "Test Pattern" => new LinearGradientBrush(
+                new GradientStopCollection
+                {
+                    new(Colors.White, 0.0),
+                    new(Colors.Yellow, 0.166),
+                    new(Colors.Cyan, 0.333),
+                    new(Colors.Green, 0.5),
+                    new(Colors.Magenta, 0.666),
+                    new(Colors.Red, 0.833),
+                    new(Colors.Blue, 1.0)
+                },
+                new Point(0, 0), new Point(1, 0)),
+            _ => new LinearGradientBrush(
+                Color.FromRgb(0x22, 0x33, 0x44),
+                Color.FromRgb(0x11, 0x18, 0x24),
+                new Point(0, 0), new Point(1, 1))
+        };
+    }
+
+    private void MediaGenPresetDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        if (MediaGenPresets.SelectedItem is ListBoxItem item && item.DataContext is MediaGeneratorDef def && item.Tag is string preset)
+        {
+            InsertMediaGenerator(def.Name, preset);
+        }
+    }
+
+    private void InsertMediaGenerator(string plugin, string preset)
+    {
+        Pause();
+        string path;
+        string clipName;
+
+        switch (plugin)
+        {
+            case "Solid Color":
+                var hex = preset switch
+                {
+                    "White" => "#FFFFFF",
+                    "Red" => "#EE3333",
+                    "Green" => "#33CC33",
+                    "Blue" => "#3366EE",
+                    "Yellow" => "#FCBF45",
+                    "Cyan" => "#00D2FF",
+                    "Magenta" => "#EE33CC",
+                    _ => "#000000"
+                };
+                path = $"openrend://color?hex={hex}";
+                clipName = $"Solid Color ({preset})";
+                break;
+
+            case "Titles & Text":
+                path = $"openrend://text?preset={Uri.EscapeDataString(preset)}";
+                clipName = $"Titles & Text ({preset})";
+                break;
+
+            case "Checkerboard":
+                path = "openrend://color?hex=#444444";
+                clipName = $"Checkerboard ({preset})";
+                break;
+
+            case "Test Pattern":
+                path = "openrend://color?hex=#808080";
+                clipName = $"Test Pattern ({preset})";
+                break;
+
+            default:
+                path = "openrend://color?hex=#222222";
+                clipName = $"{plugin} ({preset})";
+                break;
+        }
+
+        var asset = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            Path = path,
+            DurationSeconds = 86400.0,
+            Width = vm.Project.Width,
+            Height = vm.Project.Height,
+            FrameRate = vm.Project.FrameRate.Value,
+            HasVideo = true,
+            HasAudio = false
+        };
+
+        var cursorFrame = vm.Position;
+        var durFrames = vm.Project.FrameRate.Frames(5.0); // 5.0 seconds Vegas Pro default
+        var clip = new TimelineClip
+        {
+            MediaId = asset.Id,
+            Name = clipName,
+            StartFrame = cursorFrame,
+            DurationFrames = durFrames
+        };
+
+        vm.Editor.Execute(p =>
+        {
+            var mediaList = p.Media.ToList();
+            mediaList.Add(asset);
+            p.Media = mediaList;
+
+            var tracks = p.Tracks.ToList();
+            var videoTrack = tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
+            if (videoTrack is null)
+            {
+                videoTrack = new TimelineTrack { Id = Guid.NewGuid(), Kind = TrackKind.Video, Name = "Video 1" };
+                tracks.Insert(0, videoTrack);
+            }
+
+            var trackIndex = tracks.IndexOf(videoTrack);
+            var clips = videoTrack.Clips.ToList();
+            clips.Add(clip);
+            videoTrack.Clips = clips;
+            p.Tracks = tracks;
+        });
+
+        vm.Status = $"Inserted {clipName} at {OpenRend.UI.TimelineView.FormatTimecode(cursorFrame, vm.Project.FrameRate)}.";
         RequestPreview();
     }
 }

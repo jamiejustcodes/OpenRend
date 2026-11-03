@@ -448,7 +448,126 @@
             </Border>
           </Grid>
         </TabItem>
-        <TabItem Header="Clip Properties">
+        <!-- 1:1 Vegas Pro Media Generator Tab -->
+        <TabItem x:Name="MediaGeneratorTab" Header="Media Generator">
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="30"/>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="26"/>
+            </Grid.RowDefinitions>
+
+            <TabControl x:Name="MediaGenCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="MediaGenCategoryChanged" AutomationProperties.Name="Media Generator categories">
+              <TabItem Header="All Plug-ins" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Favorites" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Titles and Text" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+            </TabControl>
+
+            <Grid Grid.Row="1">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="4"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+
+              <ListBox x:Name="MediaGenPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="MediaGenPluginSelectionChanged" AutomationProperties.Name="Media generator plug-ins"/>
+              <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
+              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
+                <ListBox x:Name="MediaGenPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="MediaGenPresetDoubleClick" AutomationProperties.Name="Media generator presets">
+                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
+                </ListBox>
+              </Grid>
+            </Grid>
+
+            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
+              <TextBlock x:Name="MediaGenInfoText" Text="Generate video events: Titles &amp; Text, Solid Colors, Color Gradients, Checkerboard, and Test Patterns." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <!-- 1:1 Vegas Pro Color Grading Tab -->
+        <TabItem x:Name="ColorGradingTab" Header="Color Grading">
+          <Grid Background="{StaticResource ColorBG}">
+            <Grid.RowDefinitions>
+              <RowDefinition Height="*"/>
+              <RowDefinition Height="32"/>
+            </Grid.RowDefinitions>
+
+            <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="12">
+              <StackPanel>
+                <TextBlock Text="Primary Color Grading Wheels &amp; Curves" FontWeight="SemiBold" FontSize="13" Foreground="{StaticResource TextColor}" Margin="0,0,0,12"/>
+
+                <UniformGrid Columns="3" Margin="0,0,0,12">
+                  <!-- Lift (Shadows) -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="4">
+                    <StackPanel HorizontalAlignment="Center">
+                      <TextBlock Text="Lift (Shadows)" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                      <Ellipse Width="70" Height="70" Stroke="{StaticResource ColorM}" StrokeThickness="2" Fill="{StaticResource ColorBG}"/>
+                      <TextBlock Text="R: 0.00  G: 0.00  B: 0.00" FontSize="10" Foreground="{StaticResource TextColorGrey}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Gamma (Midtones) -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="4">
+                    <StackPanel HorizontalAlignment="Center">
+                      <TextBlock Text="Gamma (Midtones)" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                      <Ellipse Width="70" Height="70" Stroke="{StaticResource ColorM}" StrokeThickness="2" Fill="{StaticResource ColorBG}"/>
+                      <TextBlock Text="R: 1.00  G: 1.00  B: 1.00" FontSize="10" Foreground="{StaticResource TextColorGrey}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Gain (Highlights) -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="3" Padding="8" Margin="4">
+                    <StackPanel HorizontalAlignment="Center">
+                      <TextBlock Text="Gain (Highlights)" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" HorizontalAlignment="Center" Margin="0,0,0,6"/>
+                      <Ellipse Width="70" Height="70" Stroke="{StaticResource ColorM}" StrokeThickness="2" Fill="{StaticResource ColorBG}"/>
+                      <TextBlock Text="R: 1.00  G: 1.00  B: 1.00" FontSize="10" Foreground="{StaticResource TextColorGrey}" HorizontalAlignment="Center" Margin="0,6,0,0"/>
+                    </StackPanel>
+                  </Border>
+                </UniformGrid>
+
+                <!-- Color Controls: Saturation, Temperature, Tint, Contrast -->
+                <Grid Margin="4,0">
+                  <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="120"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="50"/>
+                  </Grid.ColumnDefinitions>
+                  <Grid.RowDefinitions>
+                    <RowDefinition Height="28"/>
+                    <RowDefinition Height="28"/>
+                    <RowDefinition Height="28"/>
+                    <RowDefinition Height="28"/>
+                  </Grid.RowDefinitions>
+
+                  <TextBlock Grid.Row="0" Text="Saturation:" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  <Slider x:Name="GradeSaturation" Grid.Row="0" Grid.Column="1" Minimum="0" Maximum="200" Value="100" VerticalAlignment="Center" Margin="6,0"/>
+                  <TextBlock Grid.Row="0" Grid.Column="2" Text="{Binding Value, ElementName=GradeSaturation, StringFormat={}{0:F0}%}" VerticalAlignment="Center" Foreground="{StaticResource TextColorGrey}"/>
+
+                  <TextBlock Grid.Row="1" Text="Temperature:" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  <Slider x:Name="GradeTemperature" Grid.Row="1" Grid.Column="1" Minimum="-100" Maximum="100" Value="0" VerticalAlignment="Center" Margin="6,0"/>
+                  <TextBlock Grid.Row="1" Grid.Column="2" Text="{Binding Value, ElementName=GradeTemperature, StringFormat={}{0:F0}}" VerticalAlignment="Center" Foreground="{StaticResource TextColorGrey}"/>
+
+                  <TextBlock Grid.Row="2" Text="Tint:" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  <Slider x:Name="GradeTint" Grid.Row="2" Grid.Column="1" Minimum="-100" Maximum="100" Value="0" VerticalAlignment="Center" Margin="6,0"/>
+                  <TextBlock Grid.Row="2" Grid.Column="2" Text="{Binding Value, ElementName=GradeTint, StringFormat={}{0:F0}}" VerticalAlignment="Center" Foreground="{StaticResource TextColorGrey}"/>
+
+                  <TextBlock Grid.Row="3" Text="Contrast:" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                  <Slider x:Name="GradeContrast" Grid.Row="3" Grid.Column="1" Minimum="-100" Maximum="100" Value="0" VerticalAlignment="Center" Margin="6,0"/>
+                  <TextBlock Grid.Row="3" Grid.Column="2" Text="{Binding Value, ElementName=GradeContrast, StringFormat={}{0:F0}}" VerticalAlignment="Center" Foreground="{StaticResource TextColorGrey}"/>
+                </Grid>
+              </StackPanel>
+            </ScrollViewer>
+
+            <Border Grid.Row="1" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
+              <Button Content="Open Full Color Grading Panel…" HorizontalAlignment="Left" Padding="12,2" Click="ColorGradingClick"/>
+            </Border>
+          </Grid>
+        </TabItem>
+
+        <TabItem x:Name="ClipPropertiesTab" Header="Clip Properties">
           <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="12">
             <TextBlock x:Name="ClipName" Text="Select a timeline clip" FontWeight="SemiBold" Margin="0,0,0,10"/>
             <Grid x:Name="Inspector" IsEnabled="False"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>

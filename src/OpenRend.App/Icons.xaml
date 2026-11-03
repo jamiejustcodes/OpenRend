@@ -682,4 +682,59 @@
       <Path Data="M4,3 L12,3 L12,8 L6.5,8 L4,13 Z" Fill="{StaticResource IconYellow}" />
     </Grid>
   </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Normal Edit Arrow Tool -->
+  <DataTemplate x:Key="ic_normal_edit">
+    <Grid Width="16" Height="16">
+      <Path Data="M2,2 L2,14 L5.5,10.5 L8.5,15.5 L10.5,14.5 L7.5,9.5 L12,9.5 Z" Fill="{StaticResource IconOutline}" Stroke="{StaticResource IconOutline}" StrokeThickness="0.5"/>
+      <Path Data="M3,3 L3,12.5 L5.8,9.8 L8.5,14 L9.5,13.5 L6.8,9.2 L10.5,9.2 Z" Fill="{StaticResource IconBlue}"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Selection Edit Tool -->
+  <DataTemplate x:Key="ic_selection_edit">
+    <Grid Width="16" Height="16">
+      <Rectangle Width="13" Height="13" Stroke="{StaticResource IconBase}" StrokeThickness="1.2" StrokeDashArray="2,2"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Zoom Tool -->
+  <DataTemplate x:Key="ic_zoom_tool">
+    <Grid Width="16" Height="16">
+      <Path Data="M6.5,2 A4.5,4.5 0 1 0 11,6.5 A4.5,4.5 0 0 0 6.5,2 Z M6.5,9.5 A3,3 0 1 1 9.5,6.5 A3,3 0 0 1 6.5,9.5 Z M10,10 L14,14" Stroke="{StaticResource IconBase}" StrokeThickness="1.5" StrokeEndLineCap="Round"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Automatic Crossfades Toggle -->
+  <DataTemplate x:Key="ic_autocrossfade">
+    <Grid Width="16" Height="16">
+      <Path Data="M2,13 L8,3 L8,13 Z" Fill="{StaticResource IconBlue}" Opacity="0.9"/>
+      <Path Data="M6,13 L12,3 L12,13 Z" Fill="{StaticResource IconYellow}" Opacity="0.9"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Media Generator Tab Icon -->
+  <DataTemplate x:Key="ic_media_generator">
+    <Grid Width="16" Height="16">
+      <Rectangle Width="13" Height="13" Stroke="{StaticResource IconBase}" StrokeThickness="1"/>
+      <Rectangle Width="5.5" Height="5.5" Margin="1.5,1.5,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{StaticResource IconBase}"/>
+      <Rectangle Width="5.5" Height="5.5" Margin="0,0,1.5,1.5" HorizontalAlignment="Right" VerticalAlignment="Bottom" Fill="{StaticResource IconBase}"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Color Grading Tab Icon -->
+  <DataTemplate x:Key="ic_color_grading">
+    <Grid Width="16" Height="16">
+      <Ellipse Width="6" Height="6" Margin="5,1,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{StaticResource IconRed}"/>
+      <Ellipse Width="6" Height="6" Margin="1,8,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{StaticResource IconGreen}"/>
+      <Ellipse Width="6" Height="6" Margin="9,8,0,0" HorizontalAlignment="Left" VerticalAlignment="Top" Fill="{StaticResource IconBlue}"/>
+    </Grid>
+  </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Trimmer Tab Icon -->
+  <DataTemplate x:Key="ic_trimmer">
+    <Grid Width="16" Height="16">
+      <Path Data="M2,3 L5,3 L5,13 L2,13 Z M11,3 L14,3 L14,13 L11,13 Z M5,8 L11,8" Stroke="{StaticResource IconBase}" StrokeThickness="1.2"/>
+    </Grid>
+  </DataTemplate>
 </ResourceDictionary>
