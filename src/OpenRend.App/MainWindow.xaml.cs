@@ -1119,6 +1119,18 @@ public partial class MainWindow : Window
             RequestPreview();
         }
     });
+    private void CreateSlideshowClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        var dlg = new SlideshowWindow(vm, () =>
+        {
+            Refresh();
+            RequestPreview();
+            Timeline.InvalidateVisual();
+        }, this);
+        dlg.ShowDialog();
+    });
+
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }

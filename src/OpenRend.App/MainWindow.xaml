@@ -63,6 +63,7 @@
         <MenuItem x:Name="InsertMarkerMenu" Header="Marker" InputGestureText="M" Click="InsertMarkerClick" AutomationProperties.AutomationId="InsertMarkerMenu"/>
         <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" InputGestureText="Ctrl+Shift+N" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
         <Separator/>
+        <MenuItem Header="Slideshow…" Click="CreateSlideshowClick"/>
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
@@ -82,6 +83,7 @@
         <MenuItem Header="Clip properties" Click="ClipPropertiesClick"/>
         <Separator/>
         <MenuItem Header="Scene Detection…" Click="SceneDetectionClick"/>
+        <MenuItem x:Name="CreateSlideshowMenu" Header="Create Slideshow…" Click="CreateSlideshowClick" AutomationProperties.AutomationId="CreateSlideshowMenu"/>
         <Separator/>
         <MenuItem x:Name="AiTextToSpeechMenu" Header="AI Text to S_peech" InputGestureText="Ctrl+Shift+P" Click="AiTextToSpeechClick"/>
         <MenuItem x:Name="AiSpeechToTextMenu" Header="AI Speech to Tex_t" Click="AiSpeechToTextClick"/>
