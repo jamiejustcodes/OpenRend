@@ -1,4 +1,4 @@
-using OpenRend.Core;
+﻿using OpenRend.Core;
 using OpenRend.Media;
 using OpenRend.Timeline;
 using Xunit;
@@ -124,5 +124,39 @@ public sealed class TrackCompositeModeMediaTests
         Assert.Equal(0, pixels[1]);
         Assert.Equal(0, pixels[0]);
         Assert.Equal(0, pixels[3]);
+    }
+
+    [Fact]
+    public void BypassVideoEffects_SkipsClipAndTrackEffectsWhenRequested()
+    {
+        var project = new ProjectDocument { Width = 16, Height = 16 };
+        var asset = new MediaAsset { Path = "openrend://color?hex=#000000", DurationSeconds = 2, HasVideo = true };
+        project.Media.Add(asset);
+
+        var track = new TimelineTrack { Kind = TrackKind.Video };
+        var clip = new TimelineClip
+        {
+            MediaId = asset.Id,
+            DurationFrames = 30,
+            VideoEffects = [VideoEffect.Create(VideoEffectKind.Invert)]
+        };
+        track.Clips.Add(clip);
+        project.Tracks.Add(track);
+        project.Validate();
+
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, useGpuCompositing: false);
+
+        // When bypassVideoEffects is false (default): Invert turns black (0) into white (255)
+        var fxPixels = renderer.RenderFrame(project, 0, 16, 16, bypassVideoEffects: false);
+        Assert.Equal(255, fxPixels[0]); // B
+        Assert.Equal(255, fxPixels[1]); // G
+        Assert.Equal(255, fxPixels[2]); // R
+
+        // When bypassVideoEffects is true: Invert is bypassed and original black (0) is returned
+        var cleanPixels = renderer.RenderFrame(project, 0, 16, 16, bypassVideoEffects: true);
+        Assert.Equal(0, cleanPixels[0]); // B
+        Assert.Equal(0, cleanPixels[1]); // G
+        Assert.Equal(0, cleanPixels[2]); // R
     }
 }

@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -34,6 +34,13 @@ public partial class MainWindow : Window
     private bool masterMuted;
     private string mediaFilter = "All";
     private int previewWidth, previewHeight;
+    private bool splitScreenEnabled;
+    private SplitScreenSource splitScreenSource = SplitScreenSource.FxBypassed;
+    private SplitScreenDivision splitScreenDivision = SplitScreenDivision.LeftHalf;
+    private bool retainSplitScreenSetting = true;
+    private bool bypassAllFx;
+    private byte[]? clipboardSnapshotPixels;
+    private int clipboardSnapshotWidth, clipboardSnapshotHeight;
     private long playbackGeneration;
     private bool initialized;
     private bool allowClose;
@@ -542,7 +549,24 @@ public partial class MainWindow : Window
                     2 => (project.Width, project.Height),
                     _ => FitSize(project, 640)
                 };
-                var pixels = await Task.Run(() => PreviewDisplay.Apply(vm.Renderer.RenderFrame(project, frame, width, height), width, height, zoom, overlay));
+                byte[]? referencePixels = null;
+                if (splitScreenEnabled)
+                {
+                    if (splitScreenSource == SplitScreenSource.FxBypassed)
+                    {
+                        referencePixels = await Task.Run(() => vm.Renderer.RenderFrame(project, frame, width, height, bypassVideoEffects: true));
+                    }
+                    else if (splitScreenSource == SplitScreenSource.Clipboard && clipboardSnapshotPixels != null)
+                    {
+                        referencePixels = RescaleFrame(clipboardSnapshotPixels, clipboardSnapshotWidth, clipboardSnapshotHeight, width, height);
+                    }
+                }
+                var mainBypass = bypassAllFx;
+                var pixels = await Task.Run(() =>
+                {
+                    var baseRender = vm.Renderer.RenderFrame(project, frame, width, height, bypassVideoEffects: mainBypass);
+                    return PreviewDisplay.Apply(baseRender, width, height, zoom, overlay, referencePixels, splitScreenEnabled ? splitScreenDivision : null);
+                });
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
                 if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
@@ -1498,6 +1522,94 @@ public partial class MainWindow : Window
         revision++;
         RequestPreview();
     }
+    private void SplitScreenClick(object sender, RoutedEventArgs e)
+    {
+        splitScreenEnabled = !splitScreenEnabled;
+        UpdateSplitScreenButtonVisual();
+        vm.Status = splitScreenEnabled ? $"Split Screen View: {splitScreenDivision} ({splitScreenSource})" : "Split Screen View: Off";
+        revision++;
+        RequestPreview();
+    }
+
+    private void BypassFxClick(object sender, RoutedEventArgs e)
+    {
+        bypassAllFx = !bypassAllFx;
+        if (BypassFxButton is not null)
+        {
+            BypassFxButton.Background = bypassAllFx ? (Brush)new BrushConverter().ConvertFrom("#2B6CB0")! : Brushes.Transparent;
+        }
+        vm.Status = bypassAllFx ? "All Video FX: Bypassed" : "All Video FX: Enabled";
+        revision++;
+        RequestPreview();
+    }
+
+    private void UpdateSplitScreenButtonVisual()
+    {
+        if (SplitScreenButton is not null)
+        {
+            SplitScreenButton.Background = splitScreenEnabled ? (Brush)new BrushConverter().ConvertFrom("#2B6CB0")! : Brushes.Transparent;
+        }
+    }
+
+    private void SplitScreenMenuClick(object sender, RoutedEventArgs e) => OpenSplitScreenContextMenu(sender as FrameworkElement ?? SplitScreenButton);
+    private void SplitScreenRightClick(object sender, MouseButtonEventArgs e) => OpenSplitScreenContextMenu(sender as FrameworkElement ?? SplitScreenButton);
+
+    private void OpenSplitScreenContextMenu(FrameworkElement target)
+    {
+        var menu = new ContextMenu();
+        var fxItem = new MenuItem { Header = "FX Bypassed", IsCheckable = true, IsChecked = splitScreenSource == SplitScreenSource.FxBypassed };
+        fxItem.Click += (_, _) => { splitScreenSource = SplitScreenSource.FxBypassed; if (!splitScreenEnabled) splitScreenEnabled = true; UpdateSplitScreenButtonVisual(); revision++; RequestPreview(); };
+        menu.Items.Add(fxItem);
+
+        var clipItem = new MenuItem { Header = "Clipboard", IsCheckable = true, IsChecked = splitScreenSource == SplitScreenSource.Clipboard };
+        clipItem.Click += (_, _) => { splitScreenSource = SplitScreenSource.Clipboard; if (!splitScreenEnabled) splitScreenEnabled = true; UpdateSplitScreenButtonVisual(); revision++; RequestPreview(); };
+        menu.Items.Add(clipItem);
+
+        menu.Items.Add(new Separator());
+
+        var leftItem = new MenuItem { Header = "Select Left Half", IsCheckable = true, IsChecked = splitScreenDivision == SplitScreenDivision.LeftHalf };
+        leftItem.Click += (_, _) => { splitScreenDivision = SplitScreenDivision.LeftHalf; if (!splitScreenEnabled) splitScreenEnabled = true; UpdateSplitScreenButtonVisual(); revision++; RequestPreview(); };
+        menu.Items.Add(leftItem);
+
+        var rightItem = new MenuItem { Header = "Select Right Half", IsCheckable = true, IsChecked = splitScreenDivision == SplitScreenDivision.RightHalf };
+        rightItem.Click += (_, _) => { splitScreenDivision = SplitScreenDivision.RightHalf; if (!splitScreenEnabled) splitScreenEnabled = true; UpdateSplitScreenButtonVisual(); revision++; RequestPreview(); };
+        menu.Items.Add(rightItem);
+
+        var allItem = new MenuItem { Header = "Select All", IsCheckable = true, IsChecked = splitScreenDivision == SplitScreenDivision.All };
+        allItem.Click += (_, _) => { splitScreenDivision = SplitScreenDivision.All; if (!splitScreenEnabled) splitScreenEnabled = true; UpdateSplitScreenButtonVisual(); revision++; RequestPreview(); };
+        menu.Items.Add(allItem);
+
+        menu.Items.Add(new Separator());
+
+        var retainItem = new MenuItem { Header = "Retain Split Screen Setting", IsCheckable = true, IsChecked = retainSplitScreenSetting };
+        retainItem.Click += (_, _) => { retainSplitScreenSetting = !retainSplitScreenSetting; retainItem.IsChecked = retainSplitScreenSetting; };
+        menu.Items.Add(retainItem);
+
+        menu.PlacementTarget = target;
+        menu.IsOpen = true;
+    }
+
+    private static byte[] RescaleFrame(byte[] src, int srcW, int srcH, int dstW, int dstH)
+    {
+        if (srcW == dstW && srcH == dstH && src.Length == dstW * dstH * 4) return src;
+        if (srcW <= 0 || srcH <= 0 || dstW <= 0 || dstH <= 0) return new byte[dstW * dstH * 4];
+        var dst = new byte[checked(dstW * dstH * 4)];
+        for (var y = 0; y < dstH; y++)
+        {
+            var sy = Math.Clamp(y * srcH / dstH, 0, srcH - 1);
+            for (var x = 0; x < dstW; x++)
+            {
+                var sx = Math.Clamp(x * srcW / dstW, 0, srcW - 1);
+                var srcIdx = (sy * srcW + sx) * 4;
+                var dstIdx = (y * dstW + x) * 4;
+                if (srcIdx + 4 <= src.Length && dstIdx + 4 <= dst.Length)
+                {
+                    Buffer.BlockCopy(src, srcIdx, dst, dstIdx, 4);
+                }
+            }
+        }
+        return dst;
+    }
     private void PreviewOverlayRightClick(object sender, MouseButtonEventArgs e)
     {
         var menu = new ContextMenu();
@@ -1537,7 +1649,20 @@ public partial class MainWindow : Window
     }
     private async void CopySnapshotClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
-        Clipboard.SetImage(await CaptureFrameAsync()); vm.Status = "Copied the current frame.";
+        var frame = await CaptureFrameAsync();
+        Clipboard.SetImage(frame);
+        if (currentPreviewPixels != null)
+        {
+            clipboardSnapshotPixels = (byte[])currentPreviewPixels.Clone();
+            clipboardSnapshotWidth = previewWidth;
+            clipboardSnapshotHeight = previewHeight;
+        }
+        vm.Status = "Copied snapshot to clipboard.";
+        if (splitScreenEnabled && splitScreenSource == SplitScreenSource.Clipboard)
+        {
+            revision++;
+            RequestPreview();
+        }
     });
     private async void SaveSnapshotClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
@@ -1616,6 +1741,7 @@ public partial class MainWindow : Window
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         Action? action = key switch
         {
+            Key.B when shift && alt => () => SplitScreenClick(this, e),
             Key.I when ctrl => () => ImportClick(this, e),
             Key.O when ctrl => () => OpenClick(this, e),
             Key.S when ctrl => () => { if (shift) SaveAsClick(this, e); else SaveClick(this, e); }

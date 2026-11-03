@@ -30,7 +30,7 @@ public sealed partial class TimelineRenderService : IDisposable
         this.compositorCapacity = compositorCapacity;
     }
 
-    public byte[] RenderFrame(ProjectDocument project, long frame, int width, int height)
+    public byte[] RenderFrame(ProjectDocument project, long frame, int width, int height, bool bypassVideoEffects = false)
     {
         if (width <= 0 || height <= 0 || width > 16384 || height > 16384 || (long)width * height * 4 > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(width));
         lock (compositorGate)
@@ -49,7 +49,7 @@ public sealed partial class TimelineRenderService : IDisposable
             foreach (var trackGroup in trackGroups)
             {
                 var track = trackGroup.First().Track;
-                var hasTrackEffects = VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
+                var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
                 var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
                 var needsOwnBuffer = hasTrackEffects || customBlend;
                 var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
@@ -81,7 +81,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
                         var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
                         var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
-                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
                             subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, frame);
                         }
@@ -96,7 +96,7 @@ public sealed partial class TimelineRenderService : IDisposable
                     if (IsColorGeneratorLayer(layer))
                     {
                         var colorPixels = RenderColorGenerator(layer.Media.Path, width, height);
-                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
                             colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
                         }
@@ -113,18 +113,18 @@ public sealed partial class TimelineRenderService : IDisposable
                     crop.Validate();
                     var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
                         crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
-                    if (transformed || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                    if (transformed || (!bypassVideoEffects && (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))))
                     {
                         if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
                             throw new MediaException("Source dimensions exceed video processing limits.");
                         // Effects precede resampling, so preview size cannot change their source pixels.
                         // Decode honors display rotation before sampling.
                         var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
-                        if (VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
                         {
                             sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
                         }
-                        if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
                             sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
                         }

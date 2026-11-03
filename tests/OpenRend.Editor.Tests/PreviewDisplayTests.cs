@@ -1,4 +1,4 @@
-using OpenRend.Core;
+﻿using OpenRend.Core;
 using OpenRend.UI;
 using Xunit;
 
@@ -133,4 +133,91 @@ public sealed class PreviewDisplayTests
     [InlineData(108000, 30, 1, "01:00:00:00")]
     [InlineData(24, 24000, 1001, "00:00:01:00")]
     public void TimecodeRespectsDropFrameMinuteTenMinuteAndHourBoundaries(long frame, int numerator, int denominator, string expected) => Assert.Equal(expected, TimelineView.FormatTimecode(frame, new Rational(numerator, denominator)));
+
+    [Fact]
+    public void SplitScreen_LeftHalf_CompositesReferenceOnLeftAndCurrentOnRight()
+    {
+        var current = new byte[10 * 10 * 4];
+        for (var i = 0; i < current.Length; i += 4) { current[i] = 100; current[i + 1] = 100; current[i + 2] = 100; current[i + 3] = 255; }
+        var reference = new byte[10 * 10 * 4];
+        for (var i = 0; i < reference.Length; i += 4) { reference[i] = 50; reference[i + 1] = 50; reference[i + 2] = 50; reference[i + 3] = 255; }
+
+        var result = PreviewDisplay.ApplySplit(current, reference, 10, 10, SplitScreenDivision.LeftHalf);
+
+        // Left half (x = 0..4) should be from reference (50)
+        for (var x = 0; x < 5; x++)
+        {
+            var offset = (5 * 10 + x) * 4;
+            Assert.Equal(50, result[offset]);
+        }
+
+        // Divider line at x = 5 should be white (255)
+        var divOffset = (5 * 10 + 5) * 4;
+        Assert.Equal(255, result[divOffset]);
+        Assert.Equal(255, result[divOffset + 1]);
+        Assert.Equal(255, result[divOffset + 2]);
+
+        // Right half (x = 6..9) should be from current (100)
+        for (var x = 6; x < 10; x++)
+        {
+            var offset = (5 * 10 + x) * 4;
+            Assert.Equal(100, result[offset]);
+        }
+    }
+
+    [Fact]
+    public void SplitScreen_RightHalf_CompositesCurrentOnLeftAndReferenceOnRight()
+    {
+        var current = new byte[10 * 10 * 4];
+        for (var i = 0; i < current.Length; i += 4) { current[i] = 100; current[i + 1] = 100; current[i + 2] = 100; current[i + 3] = 255; }
+        var reference = new byte[10 * 10 * 4];
+        for (var i = 0; i < reference.Length; i += 4) { reference[i] = 50; reference[i + 1] = 50; reference[i + 2] = 50; reference[i + 3] = 255; }
+
+        var result = PreviewDisplay.ApplySplit(current, reference, 10, 10, SplitScreenDivision.RightHalf);
+
+        // Left half (x = 0..4) should be from current (100)
+        for (var x = 0; x < 5; x++)
+        {
+            var offset = (5 * 10 + x) * 4;
+            Assert.Equal(100, result[offset]);
+        }
+
+        // Divider line at x = 5 should be white (255)
+        var divOffset = (5 * 10 + 5) * 4;
+        Assert.Equal(255, result[divOffset]);
+
+        // Right half (x = 6..9) should be from reference (50)
+        for (var x = 6; x < 10; x++)
+        {
+            var offset = (5 * 10 + x) * 4;
+            Assert.Equal(50, result[offset]);
+        }
+    }
+
+    [Fact]
+    public void SplitScreen_All_ShowsFullReferenceFrame()
+    {
+        var current = new byte[10 * 10 * 4];
+        for (var i = 0; i < current.Length; i += 4) { current[i] = 100; current[i + 1] = 100; current[i + 2] = 100; current[i + 3] = 255; }
+        var reference = new byte[10 * 10 * 4];
+        for (var i = 0; i < reference.Length; i += 4) { reference[i] = 50; reference[i + 1] = 50; reference[i + 2] = 50; reference[i + 3] = 255; }
+
+        var result = PreviewDisplay.ApplySplit(current, reference, 10, 10, SplitScreenDivision.All);
+        for (var i = 0; i < result.Length; i += 4)
+        {
+            Assert.Equal(50, result[i]);
+        }
+    }
+
+    [Fact]
+    public void SplitScreen_NullOrMismatchedReference_ReturnsCurrentUnmodified()
+    {
+        var current = new byte[10 * 10 * 4];
+        var result1 = PreviewDisplay.ApplySplit(current, null, 10, 10, SplitScreenDivision.LeftHalf);
+        Assert.Same(current, result1);
+
+        var mismatched = new byte[5 * 5 * 4];
+        var result2 = PreviewDisplay.ApplySplit(current, mismatched, 10, 10, SplitScreenDivision.LeftHalf);
+        Assert.Same(current, result2);
+    }
 }
