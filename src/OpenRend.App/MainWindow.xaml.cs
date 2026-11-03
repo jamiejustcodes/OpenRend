@@ -213,6 +213,7 @@ public partial class MainWindow : Window
                 static double MeterPosition(double peak) => peak <= .001 ? 0 : Math.Clamp((20 * Math.Log10(peak) + 60) / 60, 0, 1);
                 LeftMeter.Height = meterHeight * MeterPosition(playback.PeakLeft);
                 RightMeter.Height = meterHeight * MeterPosition(playback.PeakRight);
+                if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(playback.PeakLeft, playback.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
                 if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames) Pause();
             }
@@ -696,6 +697,7 @@ public partial class MainWindow : Window
         if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         PlaybackRate.Text = "Rate: 0.00";
         LeftMeter.Height = RightMeter.Height = 0;
+        mixingConsoleWindow?.ResetMeters();
         RequestPreview();
     }
     private void PauseClick(object sender, RoutedEventArgs e) => Pause();

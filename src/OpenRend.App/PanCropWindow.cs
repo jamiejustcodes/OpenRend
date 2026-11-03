@@ -63,13 +63,44 @@ public sealed class PanCropWindow : Window
         var presetRow = new DockPanel { LastChildFill = true, Margin = new Thickness(3, 1, 3, 1) };
         Grid.SetRow(presetRow, 2); root.Children.Add(presetRow);
         presetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 72 });
-        presets = new ComboBox { ItemsSource = new[] { "Full frame", "Half size", "Square center" } };
+        presets = new ComboBox
+        {
+            ItemsSource = new[]
+            {
+                "Full frame",
+                "Half size",
+                "Square center",
+                "16:9 Widescreen TV (1.778)",
+                "4:3 Standard TV (1.333)",
+                "9:16 Vertical Video (0.5625)",
+                "2.39:1 CinemaScope (2.390)",
+                "Match Output Aspect"
+            }
+        };
         AutomationProperties.SetName(presets, "Crop preset");
         presets.SelectionChanged += (_, _) =>
         {
             if (refreshing || presets.SelectedIndex < 0) return;
             var identity = CropState.Identity(Source.Width, Source.Height);
-            var preset = presets.SelectedIndex switch { 1 => identity with { Width = identity.Width / 2, Height = identity.Height / 2 }, 2 => identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) }, _ => identity };
+            CropState CalculateAspectCrop(double targetAspect)
+            {
+                double sourceAspect = (double)Source.Width / Source.Height;
+                double w = sourceAspect > targetAspect ? Source.Height * targetAspect : Source.Width;
+                double h = sourceAspect > targetAspect ? Source.Height : Source.Width / targetAspect;
+                return identity with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 };
+            }
+
+            var preset = presets.SelectedIndex switch
+            {
+                1 => identity with { Width = identity.Width / 2, Height = identity.Height / 2 },
+                2 => identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) },
+                3 => CalculateAspectCrop(16.0 / 9.0),
+                4 => CalculateAspectCrop(4.0 / 3.0),
+                5 => CalculateAspectCrop(9.0 / 16.0),
+                6 => CalculateAspectCrop(2.39),
+                7 => CalculateAspectCrop((double)vm.Project.Width / vm.Project.Height),
+                _ => identity
+            };
             Edit(() => editor.SetCropKeyframe(clipId, localFrame, preset, CurrentInterpolation));
         };
         presetRow.Children.Add(presets);
@@ -110,6 +141,18 @@ public sealed class PanCropWindow : Window
         workspace.Committed += value => Edit(() => editor.SetCropKeyframe(clipId, localFrame, value, CurrentInterpolation));
         workspace.Cancelled += Refresh;
         workspace.LockAspect = () => lockAspect.IsChecked == true;
+        workspace.OnRestoreClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, CropState.Identity(Source.Width, Source.Height), CurrentInterpolation));
+        workspace.OnMatchOutputAspectClicked += () =>
+        {
+            double targetAspect = (double)vm.Project.Width / vm.Project.Height;
+            double sourceAspect = (double)Source.Width / Source.Height;
+            double w = sourceAspect > targetAspect ? Source.Height * targetAspect : Source.Width;
+            double h = sourceAspect > targetAspect ? Source.Height : Source.Width / targetAspect;
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation));
+        };
+        workspace.OnCenterClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation));
+        workspace.OnFlipHorizontalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (180.0 - state.RotationDegrees) % 360.0 }, CurrentInterpolation));
+        workspace.OnFlipVerticalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (-state.RotationDegrees) % 360.0 }, CurrentInterpolation));
         var bottom = new Grid(); bottom.RowDefinitions.Add(new() { Height = new GridLength(62) }); bottom.RowDefinitions.Add(new() { Height = new GridLength(42) });
         Grid.SetRow(bottom, 4); root.Children.Add(bottom);
         lane.Margin = new Thickness(145, 0, 8, 0); bottom.Children.Add(lane);
@@ -281,6 +324,7 @@ public sealed class PanCropWindow : Window
 
 internal sealed class CropWorkspace : FrameworkElement
 {
+    public const int RotationHandleIndex = 4;
     protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
     public ImageSource? Image { get; set; }
     public int SourceWidth { get; set; } = 1;
@@ -290,6 +334,11 @@ internal sealed class CropWorkspace : FrameworkElement
     public event Action<CropState>? PreviewChanged;
     public event Action<CropState>? Committed;
     public event Action? Cancelled;
+    public event Action? OnRestoreClicked;
+    public event Action? OnMatchOutputAspectClicked;
+    public event Action? OnFlipHorizontalClicked;
+    public event Action? OnFlipVerticalClicked;
+    public event Action? OnCenterClicked;
     private double zoom = 1;
     public double Zoom { get => zoom; set { zoom = value; InvalidateVisual(); } }
     private CropState? dragState;
@@ -301,7 +350,28 @@ internal sealed class CropWorkspace : FrameworkElement
     {
         Focusable = true; ClipToBounds = true;
         AutomationProperties.SetName(this, "Pan/Crop source workspace");
-        AutomationProperties.SetHelpText(this, "Drag the crop to pan. Drag any corner handle to resize. Arrow keys move one source pixel; Shift moves ten. Escape cancels a drag.");
+        AutomationProperties.SetHelpText(this, "Drag the crop to pan. Drag any corner handle to resize. Drag the circular handle above top center to rotate. Arrow keys move one source pixel; Shift moves ten. Escape cancels a drag.");
+
+        ContextMenu = new ContextMenu();
+        AutomationProperties.SetName(ContextMenu, "Crop workspace context menu");
+        var restoreItem = new MenuItem { Header = "Restore (Default)" };
+        restoreItem.Click += (_, _) => OnRestoreClicked?.Invoke();
+        var matchAspectItem = new MenuItem { Header = "Match Output Aspect" };
+        matchAspectItem.Click += (_, _) => OnMatchOutputAspectClicked?.Invoke();
+        var flipHItem = new MenuItem { Header = "Flip Horizontal" };
+        flipHItem.Click += (_, _) => OnFlipHorizontalClicked?.Invoke();
+        var flipVItem = new MenuItem { Header = "Flip Vertical" };
+        flipVItem.Click += (_, _) => OnFlipVerticalClicked?.Invoke();
+        var centerItem = new MenuItem { Header = "Center" };
+        centerItem.Click += (_, _) => OnCenterClicked?.Invoke();
+
+        ContextMenu.Items.Add(restoreItem);
+        ContextMenu.Items.Add(matchAspectItem);
+        ContextMenu.Items.Add(new Separator());
+        ContextMenu.Items.Add(flipHItem);
+        ContextMenu.Items.Add(flipVItem);
+        ContextMenu.Items.Add(new Separator());
+        ContextMenu.Items.Add(centerItem);
     }
     private Point ToDisplay(Point source) => new(SourceRect.X + source.X * Scale, SourceRect.Y + source.Y * Scale);
     private Point Rotate(Point source)
@@ -309,15 +379,19 @@ internal sealed class CropWorkspace : FrameworkElement
         var angle = State.RotationDegrees * Math.PI / 180; var x = source.X - State.PivotX; var y = source.Y - State.PivotY;
         return new(State.PivotX + Math.Cos(angle) * x - Math.Sin(angle) * y, State.PivotY + Math.Sin(angle) * x + Math.Cos(angle) * y);
     }
+    private Point RotationAnchor() => ToDisplay(Rotate(new Point(State.CenterX, State.CenterY - State.Height / 2 - 28 / Scale)));
     private Point[] Corners() => new[] { new Point(State.CenterX - State.Width / 2, State.CenterY - State.Height / 2), new Point(State.CenterX + State.Width / 2, State.CenterY - State.Height / 2), new Point(State.CenterX + State.Width / 2, State.CenterY + State.Height / 2), new Point(State.CenterX - State.Width / 2, State.CenterY + State.Height / 2) }.Select(point => ToDisplay(Rotate(point))).ToArray();
     private int CornerAt(Point point)
     {
+        var rot = RotationAnchor();
+        if ((rot - point).Length <= 10) return RotationHandleIndex;
         var corners = Corners(); var nearest = Enumerable.Range(0, corners.Length).OrderBy(i => (corners[i] - point).LengthSquared).First();
         return (corners[nearest] - point).Length <= 14 ? nearest : -1;
     }
     private void UpdateCursor(Point point)
     {
         var corner = dragState is not null ? resizeCorner : CornerAt(point);
+        if (corner == RotationHandleIndex) { Cursor = Cursors.Hand; return; }
         if (corner < 0) { Cursor = Cursors.SizeAll; return; }
         var angle = State.RotationDegrees + (corner is 0 or 2 ? 45 : -45);
         var direction = ((int)Math.Round(angle / 45) % 4 + 4) % 4;
@@ -329,6 +403,14 @@ internal sealed class CropWorkspace : FrameworkElement
         if (Image is not null) dc.DrawImage(Image, SourceRect);
         var points = Corners(); var pen = new Pen(Brushes.Black, 1) { DashStyle = DashStyles.Dash };
         for (var i = 0; i < points.Length; i++) { dc.DrawLine(new Pen(Brushes.White, 1), points[i], points[(i + 1) % 4]); dc.DrawLine(pen, points[i], points[(i + 1) % 4]); dc.DrawRectangle(Brushes.White, new Pen(Brushes.Black, 1), new Rect(points[i].X - 3, points[i].Y - 3, 6, 6)); }
+
+        // Draw interactive rotation handle stem and circular anchor
+        var topCenter = ToDisplay(Rotate(new Point(State.CenterX, State.CenterY - State.Height / 2)));
+        var rotAnchor = RotationAnchor();
+        dc.DrawLine(new Pen(Brushes.White, 1), topCenter, rotAnchor);
+        dc.DrawLine(new Pen(Brushes.Black, 1) { DashStyle = DashStyles.Dash }, topCenter, rotAnchor);
+        dc.DrawEllipse(new SolidColorBrush(Color.FromRgb(0x00, 0x7A, 0xCC)), new Pen(Brushes.White, 1.5), rotAnchor, 4.5, 4.5);
+
         var pivot = ToDisplay(new Point(State.PivotX, State.PivotY)); dc.DrawEllipse(Brushes.White, new Pen(Brushes.Black, 1), pivot, 4, 4);
         // An orientation mark distinguishes a rotated crop from an unchanged rectangle.
         var mark = new[] { new Point(-.20, .35), new Point(-.20, -.35), new Point(.25, -.35), new Point(.25, -.20), new Point(-.04, -.20), new Point(-.04, -.03), new Point(.17, -.03), new Point(.17, .12), new Point(-.04, .12), new Point(-.04, .35), new Point(-.20, .35) };
@@ -344,7 +426,21 @@ internal sealed class CropWorkspace : FrameworkElement
     {
         if (dragState is not { } before) { UpdateCursor(e.GetPosition(this)); return; }
         var delta = (e.GetPosition(this) - origin) / Scale;
-        if (resizeCorner >= 0)
+        if (resizeCorner == RotationHandleIndex)
+        {
+            var pivotDisplay = ToDisplay(new Point(before.PivotX, before.PivotY));
+            var mousePos = e.GetPosition(this);
+            var rad = Math.Atan2(mousePos.Y - pivotDisplay.Y, mousePos.X - pivotDisplay.X);
+            var deg = rad * 180.0 / Math.PI + 90.0;
+            while (deg > 180.0) deg -= 360.0;
+            while (deg <= -180.0) deg += 360.0;
+            if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                deg = Math.Round(deg / 15.0) * 15.0;
+            }
+            State = before with { RotationDegrees = deg };
+        }
+        else if (resizeCorner >= 0)
         {
             var angle = -before.RotationDegrees * Math.PI / 180;
             var widthDelta = (resizeCorner is 0 or 3 ? -2 : 2) * (Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y);

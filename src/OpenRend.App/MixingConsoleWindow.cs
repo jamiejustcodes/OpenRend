@@ -31,6 +31,7 @@ public sealed class MixingConsoleWindow : Window
     private readonly TextBlock masterPeakText = new() { Text = "0.0   0.0", FontSize = 9, Foreground = Brushes.Gray, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 4, 0, 0) };
     private readonly Button masterMuteBtn = new() { Content = "M", Width = 22, Height = 20, Margin = new Thickness(1) };
     private readonly Button masterDimBtn = new() { Content = "Dim", Width = 32, Height = 20, Margin = new Thickness(1) };
+    private readonly Dictionary<Guid, Border> trackMeters = [];
     private bool isDimmed;
 
     public MixingConsoleWindow(EditorViewModel viewModel, Action projectChanged)
@@ -82,6 +83,7 @@ public sealed class MixingConsoleWindow : Window
     public void RefreshTracks()
     {
         tracksContainer.Children.Clear();
+        trackMeters.Clear();
         var audioTracks = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio).ToList();
 
         if (audioTracks.Count == 0)
@@ -334,10 +336,11 @@ public sealed class MixingConsoleWindow : Window
         {
             Background = CreateMeterBrush(),
             VerticalAlignment = VerticalAlignment.Bottom,
-            Height = Math.Max(0, (currentDb + 60) * 170 / 66),
+            Height = 0,
             Width = 6
         };
         meterBorder.Child = meterFill;
+        trackMeters[track.Id] = meterFill;
         Grid.SetColumn(meterBorder, 2);
         faderGrid.Children.Add(meterBorder);
 
@@ -467,6 +470,69 @@ public sealed class MixingConsoleWindow : Window
 
         masterBorder.Child = grid;
         return masterBorder;
+    }
+
+    /// <summary>
+    /// Updates master and track peak meters with live audio levels during playback.
+    /// Calibrated to -60 dB to +6 dB scale matching Vegas Pro master bus meters.
+    /// </summary>
+    public void UpdateMeters(double peakL, double peakR)
+    {
+        static double DbPosition(double peak)
+        {
+            if (peak <= 0.0001) return 0.0;
+            double db = 20.0 * Math.Log10(peak);
+            return Math.Clamp((db + 60.0) / 66.0, 0.0, 1.0);
+        }
+
+        double posL = DbPosition(peakL);
+        double posR = DbPosition(peakR);
+        masterLeftMeter.Height = 170.0 * posL;
+        masterRightMeter.Height = 170.0 * posR;
+
+        if (peakL <= 0.0001 && peakR <= 0.0001)
+        {
+            masterPeakText.Text = "-inf   -inf";
+        }
+        else
+        {
+            string textL = peakL <= 0.0001 ? "-inf" : $"{20.0 * Math.Log10(peakL):+0.0;-0.0;0.0}";
+            string textR = peakR <= 0.0001 ? "-inf" : $"{20.0 * Math.Log10(peakR):+0.0;-0.0;0.0}";
+            masterPeakText.Text = $"{textL}   {textR}";
+        }
+
+        // Dynamically update individual audio track channel strips
+        double maxPeak = Math.Max(peakL, peakR);
+        bool hasSolo = vm.Project.Tracks.Any(t => t.IsSolo);
+        foreach (var track in vm.Project.Tracks.Where(t => t.Kind == TrackKind.Audio))
+        {
+            if (trackMeters.TryGetValue(track.Id, out var meter))
+            {
+                if (track.IsMuted || (hasSolo && !track.IsSolo))
+                {
+                    meter.Height = 0;
+                }
+                else
+                {
+                    double trackLevel = maxPeak * track.Gain;
+                    meter.Height = 170.0 * DbPosition(trackLevel);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Resets all peak meters to silent baseline when playback pauses or stops.
+    /// </summary>
+    public void ResetMeters()
+    {
+        masterLeftMeter.Height = 0;
+        masterRightMeter.Height = 0;
+        masterPeakText.Text = "0.0   0.0";
+        foreach (var meter in trackMeters.Values)
+        {
+            meter.Height = 0;
+        }
     }
 
     private static Brush CreateMeterBrush()
