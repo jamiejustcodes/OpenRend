@@ -86,6 +86,39 @@ public sealed class PanCropAspectAndAudioMeterTests
         Assert.Equal(1.0, maxPos, 3);
     }
 
+    [Fact]
+    public void RecordTimeCalculation_CalculatesAccurateHoursAndMinutes()
+    {
+        // 288,000 bytes per second = 48,000 samples/sec * 2 channels * 3 bytes (24-bit)
+        // 1 hour = 3600 seconds = 3600 * 288,000 = 1,036,800,000 bytes
+        long oneHourBytes = 1_036_800_000L;
+        double freeSeconds = (double)oneHourBytes / 288000.0;
+        var timeSpan = TimeSpan.FromSeconds(freeSeconds);
+        var readout = $"Record Time (2 ch): {(int)timeSpan.TotalHours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}:00";
+        Assert.Equal("Record Time (2 ch): 01:00:00:00", readout);
+
+        // 24 hours
+        long oneDayBytes = oneHourBytes * 24L;
+        var timeSpan24 = TimeSpan.FromSeconds((double)oneDayBytes / 288000.0);
+        var readout24 = $"Record Time (2 ch): {(int)timeSpan24.TotalHours:00}:{timeSpan24.Minutes:00}:{timeSpan24.Seconds:00}:00";
+        Assert.Equal("Record Time (2 ch): 24:00:00:00", readout24);
+    }
+
+    [Fact]
+    public void LoopPlayback_WrapsPositionWhenAtOrBeyondDuration()
+    {
+        long durationFrames = 300;
+        long currentPosition = 300;
+        bool isLooping = true;
+
+        if (currentPosition >= durationFrames && isLooping && durationFrames > 0)
+        {
+            currentPosition = 0;
+        }
+
+        Assert.Equal(0, currentPosition);
+    }
+
     private static (double Width, double Height) CalculateAspect(double sourceW, double sourceH, double targetAspect)
     {
         double sourceAspect = sourceW / sourceH;

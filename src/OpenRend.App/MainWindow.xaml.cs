@@ -28,6 +28,8 @@ public partial class MainWindow : Window
     private bool previewRequested;
     private bool playbackStarting;
     private bool safeAreas;
+    private bool loopPlayback;
+    private bool autoCrossfade = true;
     private bool masterMuted;
     private string mediaFilter = "All";
     private int previewWidth, previewHeight;
@@ -215,7 +217,21 @@ public partial class MainWindow : Window
                 RightMeter.Height = meterHeight * MeterPosition(playback.PeakRight);
                 if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(playback.PeakLeft, playback.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
-                if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames) Pause();
+                if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames)
+                {
+                    if (loopPlayback && vm.Project.DurationFrames > 0)
+                    {
+                        Pause();
+                        vm.Position = 0;
+                        UpdatePosition();
+                        RequestPreview();
+                        PlayClick(this, new RoutedEventArgs());
+                    }
+                    else
+                    {
+                        Pause();
+                    }
+                }
             }
             catch (Exception ex) { Pause(); ShowError(ex); }
         };
@@ -264,6 +280,7 @@ public partial class MainWindow : Window
         TimelineScroll.ViewportSize = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
         PreviewInfo.Text = PreviewDescription();
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
+        UpdateRecordTimeDisplay();
         RequestPreview();
     }
     private string PreviewDescription()
@@ -1220,6 +1237,39 @@ public partial class MainWindow : Window
     private void SnapMenuClick(object sender, RoutedEventArgs e) { SnapToggle.IsChecked = SnappingMenu.IsChecked; SnapClick(sender, e); }
     private void RippleClick(object sender, RoutedEventArgs e) { vm.Ripple = RippleToggle.IsChecked == true; RippleMenu.IsChecked = vm.Ripple; }
     private void RippleMenuClick(object sender, RoutedEventArgs e) { RippleToggle.IsChecked = RippleMenu.IsChecked; RippleClick(sender, e); }
+    private void LoopPlaybackClick(object sender, RoutedEventArgs e)
+    {
+        loopPlayback = !loopPlayback;
+        if (LoopPlaybackToggle is not null) LoopPlaybackToggle.IsChecked = loopPlayback;
+        if (LoopPlaybackMenu is not null) LoopPlaybackMenu.IsChecked = loopPlayback;
+        vm.Status = loopPlayback ? "Loop playback enabled." : "Loop playback disabled.";
+    }
+    private void AutoCrossfadeClick(object sender, RoutedEventArgs e)
+    {
+        autoCrossfade = !autoCrossfade;
+        if (AutoCrossfadeToggle is not null) AutoCrossfadeToggle.IsChecked = autoCrossfade;
+        if (AutoCrossfadeMenu is not null) AutoCrossfadeMenu.IsChecked = autoCrossfade;
+        vm.Status = autoCrossfade ? "Automatic crossfades enabled." : "Automatic crossfades disabled.";
+    }
+    private void UpdateRecordTimeDisplay()
+    {
+        if (RecordTimeDisplay is null) return;
+        try
+        {
+            var rootDir = System.IO.Path.GetPathRoot(System.IO.Directory.GetCurrentDirectory()) ?? "C:\\";
+            var drive = new System.IO.DriveInfo(rootDir);
+            if (drive.IsReady)
+            {
+                var freeSeconds = (double)drive.AvailableFreeSpace / 288000.0;
+                var timeSpan = TimeSpan.FromSeconds(Math.Min(freeSeconds, 3599999));
+                var totalHours = (int)timeSpan.TotalHours;
+                RecordTimeDisplay.Text = $"Record Time (2 ch): {totalHours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}:00";
+                return;
+            }
+        }
+        catch { }
+        RecordTimeDisplay.Text = "Record Time (2 ch): 24:00:00:00";
+    }
     private void ZoomInClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Min(1200, Timeline.PixelsPerSecond * 1.25); Refresh(); }
     private void ZoomOutClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Max(5, Timeline.PixelsPerSecond / 1.25); Refresh(); }
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
@@ -1342,6 +1392,8 @@ public partial class MainWindow : Window
             Key.G => () => LinkClick(this, e),
             Key.U => () => UnlinkClick(this, e),
             Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); },
+            Key.Q when !ctrl && !alt && !shift => () => LoopPlaybackClick(this, e),
+            Key.X when !ctrl && !alt && !shift => () => AutoCrossfadeClick(this, e),
             Key.Add or Key.OemPlus => () => ZoomInClick(this, e),
             Key.Subtract or Key.OemMinus => () => ZoomOutClick(this, e),
             _ => null

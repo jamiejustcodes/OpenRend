@@ -103,7 +103,14 @@
         <Separator/>
         <MenuItem Header="Render as…" Click="ExportClick"/>
       </MenuItem>
-      <MenuItem Header="_Options"><MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/><MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/><Separator/><MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/></MenuItem>
+      <MenuItem Header="_Options">
+        <MenuItem x:Name="LoopPlaybackMenu" Header="_Loop Playback" InputGestureText="Q" IsCheckable="True" Click="LoopPlaybackClick"/>
+        <MenuItem x:Name="AutoCrossfadeMenu" Header="Automatic _Crossfades" InputGestureText="X" IsCheckable="True" IsChecked="True" Click="AutoCrossfadeClick"/>
+        <MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/>
+        <MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/>
+        <Separator/>
+        <MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/>
+      </MenuItem>
       <MenuItem Header="_Help"><MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/><MenuItem Header="About OpenRend" Click="AboutClick"/></MenuItem>
     </Menu>
       </DockPanel>
@@ -562,8 +569,9 @@
     <!-- 1:1 Vegas Pro Transport Bar -->
     <Border Grid.Row="5" Background="{StaticResource ColorD}" Padding="4,2" BorderBrush="{StaticResource ColorBG}" BorderThickness="0,1,0,0">
       <DockPanel>
-        <!-- Right side: Timecode in sunken display + Zoom buttons -->
-        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+        <!-- Right side: Record Time readout, Timecode sunken display, Zoom buttons -->
+        <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
+          <TextBlock x:Name="RecordTimeDisplay" Text="Record Time (2 ch): 24:00:00:00" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource TextColorGrey}" Margin="6,0" IsHitTestVisible="False"/>
           <Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,2" Margin="4,0">
             <TextBlock x:Name="Timecode" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" Text="00:00:00:00"/>
           </Border>
@@ -574,7 +582,8 @@
 
         <!-- Left side: Transport Buttons & Rate -->
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-          <TextBlock x:Name="PlaybackRate" Text="Rate: 0.00" Width="180" FontSize="11" Foreground="{StaticResource TextColorGrey}" Margin="6,0"/>
+          <TextBlock x:Name="PlaybackRate" Text="Rate: 0.00" Width="100" FontSize="11" Foreground="{StaticResource TextColorGrey}" Margin="6,0"/>
+          <ToggleButton x:Name="LoopPlaybackToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_loop}" AutomationProperties.Name="Loop Playback" ToolTip="Loop Playback (Q)" Click="LoopPlaybackClick" Margin="1,0"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_first}" AutomationProperties.Name="Play from start" Click="PlayFromStartClick" ToolTip="Play from start (Shift+Space)"/>
           <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_play}" AutomationProperties.Name="Play" Click="PlayClick" ToolTip="Play / pause (Space)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_pause}" AutomationProperties.Name="Pause" Click="PauseClick" ToolTip="Pause (Enter)"/>
@@ -583,13 +592,14 @@
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_last}" AutomationProperties.Name="Go to end" Click="EndClick" ToolTip="Go to end (Ctrl+End)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_previous}" AutomationProperties.Name="Previous frame" Click="PreviousClick" ToolTip="Previous frame (Alt+Left)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_next}" AutomationProperties.Name="Next frame" Click="NextClick" ToolTip="Next frame (Alt+Right)"/>
-          <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
+          <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_split}" AutomationProperties.Name="Split" Click="SplitClick" ToolTip="Split (S)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_delete}" AutomationProperties.Name="Delete" Click="DeleteClick" ToolTip="Delete"/>
           <Button x:Name="InsertMarkerButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_marker}" AutomationProperties.Name="Insert marker" AutomationProperties.AutomationId="InsertMarkerButton" Click="InsertMarkerClick" ToolTip="Insert marker (M)"/>
-          <Separator Width="1" Background="{StaticResource ColorM}" Margin="6,2"/>
-          <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="6,0"/>
-          <CheckBox x:Name="RippleToggle" Content="Ripple" Foreground="{StaticResource TextColor}" Click="RippleClick" Margin="6,0"/>
+          <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
+          <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" Content="X" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
+          <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="4,0"/>
+          <CheckBox x:Name="RippleToggle" Content="Ripple" Foreground="{StaticResource TextColor}" Click="RippleClick" Margin="4,0"/>
         </StackPanel>
       </DockPanel>
     </Border>
