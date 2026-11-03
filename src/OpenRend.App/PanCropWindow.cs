@@ -159,6 +159,8 @@ public sealed class PanCropWindow : Window
         lane.Seek += SetFrame;
         lane.MoveKeyframe += MoveKeyframe;
         lane.InterpolationChanged += value => interpolation.SelectedItem = value;
+        lane.DeleteKeyframeRequested += f => Edit(() => editor.RemoveCropKeyframe(clipId, f));
+        lane.AddKeyframeRequested += f => Edit(() => editor.SetCropKeyframe(clipId, f, state, CurrentInterpolation));
         bottom.Children.Add(new TextBlock { Text = "Position", VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7, 24, 0, 0), Width = 130, HorizontalAlignment = HorizontalAlignment.Left });
         var transport = new DockPanel { LastChildFill = false }; Grid.SetRow(transport, 1); bottom.Children.Add(transport);
         frameField = new TextBox { Width = 105, TextAlignment = TextAlignment.Right, Margin = new Thickness(3, 5, 6, 5) };
@@ -494,7 +496,11 @@ internal sealed class CropKeyframeLane : FrameworkElement
     public event Action<long>? Seek;
     public event Action<long, long>? MoveKeyframe;
     public event Action<CropInterpolation>? InterpolationChanged;
+    public event Action<long>? DeleteKeyframeRequested;
+    public event Action<long>? AddKeyframeRequested;
     private readonly Dictionary<CropInterpolation, MenuItem> curveItems = [];
+    private readonly MenuItem deleteItem;
+    private long? activeMenuKey;
     private long? dragging;
     private long pendingFrame;
     // The ruler reaches the event end; editable frames stop one frame before it.
@@ -513,6 +519,13 @@ internal sealed class CropKeyframeLane : FrameworkElement
             item.Click += (_, _) => InterpolationChanged?.Invoke(curve);
             curveItems.Add(curve, item); ContextMenu.Items.Add(item);
         }
+        ContextMenu.Items.Add(new Separator());
+        deleteItem = new MenuItem { Header = "Delete" };
+        deleteItem.Click += (_, _) =>
+        {
+            if (activeMenuKey is > 0) DeleteKeyframeRequested?.Invoke(activeMenuKey.Value);
+        };
+        ContextMenu.Items.Add(deleteItem);
         ContextMenuOpening += (_, e) =>
         {
             var key = e.CursorLeft < 0 ? Keys.Contains(Position) ? Position : (long?)null : KeyAt(new Point(e.CursorLeft, e.CursorTop));
@@ -530,6 +543,8 @@ internal sealed class CropKeyframeLane : FrameworkElement
     }
     private void PrepareCurveMenu(long frame)
     {
+        activeMenuKey = frame;
+        deleteItem.IsEnabled = frame > 0;
         Seek?.Invoke(frame);
         foreach (var (curve, item) in curveItems) item.IsChecked = curve == Interpolation;
     }
@@ -556,13 +571,19 @@ internal sealed class CropKeyframeLane : FrameworkElement
     {
         Focus(); var point = e.GetPosition(this); var frame = FrameAt(point.X);
         var near = Keys.OrderBy(key => Math.Abs((double)key - frame)).FirstOrDefault();
-        if (Keys.Length > 0 && Math.Abs(FrameX(near) - e.GetPosition(this).X) < 7)
+        var isNearKey = Keys.Length > 0 && Math.Abs(FrameX(near) - point.X) < 7;
+        if (isNearKey)
         {
             frame = near;
             if (CanMove && Math.Abs(point.Y - 31) <= 10) { dragging = near; pendingFrame = near; CaptureMouse(); }
         }
+        else if (e.ClickCount == 2)
+        {
+            AddKeyframeRequested?.Invoke(frame);
+        }
         Seek?.Invoke(frame); e.Handled = true;
     }
+
     protected override void OnMouseMove(MouseEventArgs e)
     {
         if (dragging is null) return;
@@ -578,6 +599,12 @@ internal sealed class CropKeyframeLane : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e) { dragging = null; InvalidateVisual(); }
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (e.Key == Key.Delete && Position > 0 && Keys.Contains(Position))
+        {
+            DeleteKeyframeRequested?.Invoke(Position);
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Apps || e.Key == Key.F10 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
         {
             if (Keys.Contains(Position))

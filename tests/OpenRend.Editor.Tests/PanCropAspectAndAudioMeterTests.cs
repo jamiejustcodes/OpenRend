@@ -1,3 +1,4 @@
+using OpenRend.Timeline;
 using System;
 using OpenRend.Core;
 using Xunit;
@@ -155,5 +156,59 @@ public sealed class PanCropAspectAndAudioMeterTests
         if (peak <= 0.0001) return 0.0;
         double db = 20.0 * Math.Log10(peak);
         return Math.Clamp((db + 60.0) / 66.0, 0.0, 1.0);
+    }
+
+    [Fact]
+    public void PanCrop_KeyframeAddAndRemove_PersistsAndEvaluatesCorrectly()
+    {
+        var doc = new ProjectDocument { Width = 1920, Height = 1080, FrameRate = new Rational(30, 1) };
+        var media = new MediaAsset { Id = Guid.NewGuid(), Path = "test.mp4", HasVideo = true, DurationSeconds = 10 };
+        doc.Media.Add(media);
+
+        var track = new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1" };
+        doc.Tracks.Add(track);
+
+        var clip = new TimelineClip
+        {
+            MediaId = media.Id,
+            Name = "Clip 1",
+            StartFrame = 0,
+            DurationFrames = 300,
+            Crop = new CropAnimation
+            {
+                Keyframes =
+                [
+                    new CropKeyframe { Frame = 0, State = CropState.Identity(1920, 1080), Interpolation = CropInterpolation.Linear }
+                ]
+            }
+        };
+        track.Clips.Add(clip);
+
+        var editor = new TimelineEditor(doc);
+
+        // Add keyframe at frame 100 with zoom
+        var zoomState = new CropState(960, 540, 960, 540, 0, 960, 540);
+        editor.SetCropKeyframe(clip.Id, 100, zoomState, CropInterpolation.Linear);
+        var currentClip = editor.Project.Tracks[0].Clips[0];
+        Assert.NotNull(currentClip.Crop);
+        Assert.Equal(2, currentClip.Crop.Keyframes.Count);
+        Assert.Equal(100, currentClip.Crop.Keyframes[1].Frame);
+
+        // Evaluate at midpoint frame 50
+        var eval50 = currentClip.Crop.Evaluate(50);
+        Assert.Equal(1440, eval50.Width, 2); // Linear midpoint between 1920 and 960
+
+        // Delete keyframe at frame 100
+        editor.RemoveCropKeyframe(clip.Id, 100);
+        currentClip = editor.Project.Tracks[0].Clips[0];
+        Assert.NotNull(currentClip.Crop);
+        Assert.Single(currentClip.Crop.Keyframes);
+
+        // Undo restores keyframe
+        editor.Undo();
+        currentClip = editor.Project.Tracks[0].Clips[0];
+        Assert.NotNull(currentClip.Crop);
+        Assert.Equal(2, currentClip.Crop.Keyframes.Count);
+        Assert.Equal(100, currentClip.Crop.Keyframes[1].Frame);
     }
 }
