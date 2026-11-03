@@ -196,6 +196,34 @@ public partial class MainWindow : Window
         Timeline.DeleteTrackRequested += id => Guard(() => vm.Editor.DeleteTrack(id));
         Timeline.UnlinkRequested += () => UnlinkClick(this, new RoutedEventArgs());
         Timeline.LinkRequested += () => LinkClick(this, new RoutedEventArgs());
+        Timeline.ToggleEnvelopeRequested += (id, type) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleClipEnvelope(id, type);
+            vm.Status = $"{(vm.Editor.HasClipEnvelope(id, type) ? "Added" : "Removed")} {type} envelope.";
+            RequestPreview();
+        });
+        Timeline.SetEnvelopePointRequested += (id, type, frame, val, curve) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetEnvelopePoint(id, type, frame, val, curve);
+            vm.Status = $"Set {type} envelope point at frame {frame} ({Math.Round(val * 100)}%).";
+            RequestPreview();
+        });
+        Timeline.RemoveEnvelopePointRequested += (id, type, frame) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.RemoveEnvelopePoint(id, type, frame);
+            vm.Status = $"Removed {type} envelope point at frame {frame}.";
+            RequestPreview();
+        });
+        Timeline.SetEnvelopePointCurveRequested += (id, type, frame, curve) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetEnvelopePointCurve(id, type, frame, curve);
+            vm.Status = $"Set {type} envelope point curve to {curve} Fade.";
+            RequestPreview();
+        });
 
         Preview.CanvasMouseDown += OnPreviewMouseDown;
         Preview.CanvasMouseMove += OnPreviewMouseMove;

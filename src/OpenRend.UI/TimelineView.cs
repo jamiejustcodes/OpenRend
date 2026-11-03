@@ -89,6 +89,10 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? TrackColorGradingRequested;
     public event Action<Guid>? MotionTrackingRequested;
     public event Action<Guid>? TextBasedEditingRequested;
+    public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
+    public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
+    public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
+    public event Action<Guid, EnvelopeType, long, EnvelopeCurveType>? SetEnvelopePointCurveRequested;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -641,6 +645,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var fadePen = new Pen(Brush("#E4E4E4"), 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
+                DrawEnvelopes(dc, track, clip, rect);
                 var edgeMode = isDragging && dragging?.Id == clip.Id ? mode : hoverClipId == clip.Id ? hoverMode : "";
                 if (edgeMode is "TrimLeft" or "TrimRight")
                 {
@@ -770,6 +775,7 @@ public sealed partial class TimelineView : FrameworkElement
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
         isDragging = false; alreadySelectedOnDown = false;
         if (BeginEventButton(origin)) { e.Handled = true; return; }
+        if (HandleEnvelopeMouseDown(origin, e)) { e.Handled = true; return; }
         if (HitMarker(origin) is { } hitMarker)
         {
             SeekRequested?.Invoke(hitMarker.Frame);
@@ -842,6 +848,7 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnMouseMove(MouseEventArgs e)
     {
         base.OnMouseMove(e); var p = e.GetPosition(this);
+        if (HandleEnvelopeMouseMove(p)) return;
         if (selectingLoop) { UpdateLoopRegion(p); return; }
         if (pressedEventButton is not null) { UpdateHover(p); return; }
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
@@ -962,6 +969,8 @@ public sealed partial class TimelineView : FrameworkElement
         if (pressedEventButton is not null)
         {
             CompleteEventButton(e.GetPosition(this)); e.Handled = true; return;
+        }
+        if (HandleEnvelopeMouseUp(e.GetPosition(this))) { e.Handled = true; return;
         }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
@@ -1157,6 +1166,7 @@ public sealed partial class TimelineView : FrameworkElement
         var p = e.GetPosition(this);
         if (p.X >= HeaderWidth)
         {
+            if (HandleEnvelopeRightClick(p)) { e.Handled = true; return; }
             if (HitMarker(p) is { } rightMarker)
             {
                 var markerMenu = new ContextMenu();

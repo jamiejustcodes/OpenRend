@@ -72,7 +72,24 @@ public static class TimelineEvaluator
                 var (left, right) = BalanceStages(track, clip);
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
-                var item = new EvaluatedClip(track, clip, asset, clip.SourceInFrame + local, clip.Opacity * track.Opacity * fade, clip.Gain * track.Gain * fade * peak, pan);
+
+                var sourceFrame = clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velocityEnv
+                    ? velocityEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, local)
+                    : clip.SourceInFrame + local;
+
+                var opacity = clip.Opacity * track.Opacity * fade;
+                if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } compositeEnv)
+                {
+                    opacity *= compositeEnv.ValueAt(local);
+                }
+
+                var gain = clip.Gain * track.Gain * fade * peak;
+                if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } volumeEnv)
+                {
+                    gain *= volumeEnv.ValueAt(local);
+                }
+
+                var item = new EvaluatedClip(track, clip, asset, sourceFrame, opacity, gain, pan);
                 if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with
                     { Crop = CropAt(clip, asset, local), Dissolve = dissolves.GetValueOrDefault(clip.Id),
                         SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode) });

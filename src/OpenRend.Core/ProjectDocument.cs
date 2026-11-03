@@ -175,6 +175,15 @@ public sealed class ProjectDocument
                         mt.Validate();
                     }
                 }
+                if (clip.Envelopes != null)
+                {
+                    var envTypes = new HashSet<EnvelopeType>();
+                    foreach (var env in clip.Envelopes)
+                    {
+                        if (env == null || !envTypes.Add(env.Type)) throw new InvalidDataException("Envelope types must be unique within a clip.");
+                        env.Validate();
+                    }
+                }
                 clip.Transcript?.Validate();
             }
         }
@@ -267,6 +276,8 @@ public sealed class TimelineClip
     public List<MotionTrackData> MotionTracks { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ClipTranscript? Transcript { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ClipEnvelope>? Envelopes { get; set; }
     public TimelineClip DeepClone()
     {
         var clone = (TimelineClip)MemberwiseClone();
@@ -276,6 +287,7 @@ public sealed class TimelineClip
         clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
         clone.MotionTracks = MotionTracks.Select(track => track.DeepClone()).ToList();
         clone.Transcript = Transcript?.DeepClone();
+        if (Envelopes != null) clone.Envelopes = Envelopes.Select(env => env.DeepClone()).ToList();
         return clone;
     }
 }

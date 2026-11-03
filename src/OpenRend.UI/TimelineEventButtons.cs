@@ -258,6 +258,31 @@ public sealed partial class TimelineView
         menu.Items.Add(fadeInCurves);
         menu.Items.Add(fadeOutCurves);
         menu.Items.Add(fadeType);
+
+        var envelopeMenu = new MenuItem { Header = "Insert/Remove Envelope" };
+        AutomationProperties.SetAutomationId(envelopeMenu, "InsertRemoveEnvelopeMenu");
+        var velocityItem = new MenuItem { Header = "Velocity", IsCheckable = true };
+        AutomationProperties.SetAutomationId(velocityItem, "EnvelopeVelocity");
+        var compositeItem = new MenuItem { Header = "Composite Level", IsCheckable = true };
+        AutomationProperties.SetAutomationId(compositeItem, "EnvelopeComposite");
+        envelopeMenu.Items.Add(velocityItem);
+        envelopeMenu.Items.Add(compositeItem);
+        menu.Items.Add(envelopeMenu);
+
+        velocityItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ToggleEnvelopeRequested?.Invoke(events[0].Id, EnvelopeType.Velocity);
+        };
+        compositeItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ToggleEnvelopeRequested?.Invoke(events[0].Id, EnvelopeType.Composite);
+        };
         menu.Items.Add(new Separator());
         var groupMenu = new MenuItem { Header = "Group" };
         var unlink = new MenuItem { Header = "Unlink clip group", InputGestureText = "U" };
@@ -320,6 +345,13 @@ public sealed partial class TimelineView
                     btn.BorderBrush = isCurrent ? new SolidColorBrush(Color.FromRgb(200, 144, 0)) : new SolidColorBrush(Color.FromRgb(70, 70, 70));
                     btn.BorderThickness = isCurrent ? new Thickness(2) : new Thickness(1);
                 }
+            }
+            envelopeMenu.Visibility = video.Length == 1 ? Visibility.Visible : Visibility.Collapsed;
+            envelopeMenu.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            if (video.Length == 1)
+            {
+                velocityItem.IsChecked = video[0].Clip.Envelopes?.Any(e => e.Type == EnvelopeType.Velocity) == true;
+                compositeItem.IsChecked = video[0].Clip.Envelopes?.Any(e => e.Type == EnvelopeType.Composite) == true;
             }
             split.IsEnabled = delete.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(item => !item.Track.IsLocked && !item.Clip.IsLocked);
             headers.IsChecked = ShowEventHeaders; names.IsChecked = ShowEventNames; lengths.IsChecked = ShowEventLengths;
