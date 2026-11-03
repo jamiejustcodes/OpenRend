@@ -84,12 +84,14 @@ public sealed class ColorGradingWindow : Window
 
     // LUT Slots
     private readonly TextBlock cameraLutPathText;
+    private readonly ComboBox cameraLutPresetCombo;
     private readonly Slider cameraLutStrengthSlider;
     private readonly TextBlock cameraLutStrengthVal;
     private readonly ComboBox cameraLutInterpCombo;
     private readonly CheckBox cameraLutBypassCheck;
 
     private readonly TextBlock lookLutPathText;
+    private readonly ComboBox lookLutPresetCombo;
     private readonly Slider lookLutStrengthSlider;
     private readonly TextBlock lookLutStrengthVal;
     private readonly ComboBox lookLutInterpCombo;
@@ -231,9 +233,9 @@ public sealed class ColorGradingWindow : Window
 
         // Page 4: LUTs
         lutsPage = CreateLutsPage(
-            out cameraLutPathText, out cameraLutStrengthSlider, out cameraLutStrengthVal,
+            out cameraLutPathText, out cameraLutPresetCombo, out cameraLutStrengthSlider, out cameraLutStrengthVal,
             out cameraLutInterpCombo, out cameraLutBypassCheck,
-            out lookLutPathText, out lookLutStrengthSlider, out lookLutStrengthVal,
+            out lookLutPathText, out lookLutPresetCombo, out lookLutStrengthSlider, out lookLutStrengthVal,
             out lookLutInterpCombo, out lookLutBypassCheck);
 
         pageContainer.Children.Add(wheelsPage);
@@ -650,9 +652,9 @@ public sealed class ColorGradingWindow : Window
     }
 
     private Grid CreateLutsPage(
-        out TextBlock camPath, out Slider camStrength, out TextBlock camStrengthV,
+        out TextBlock camPath, out ComboBox camPreset, out Slider camStrength, out TextBlock camStrengthV,
         out ComboBox camInterp, out CheckBox camBypass,
-        out TextBlock lookPath, out Slider lookStrength, out TextBlock lookStrengthV,
+        out TextBlock lookPath, out ComboBox lookPreset, out Slider lookStrength, out TextBlock lookStrengthV,
         out ComboBox lookInterp, out CheckBox lookBypass)
     {
         var grid = new Grid();
@@ -681,6 +683,23 @@ public sealed class ColorGradingWindow : Window
 
         camPath = new TextBlock { Text = "(No LUT loaded)", Foreground = (Brush)FindResource("SubtleTextBrush"), Margin = new Thickness(0, 0, 0, 8), TextTrimming = TextTrimming.CharacterEllipsis };
         camPanel.Children.Add(camPath);
+
+        var camPresetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        camPresetRow.Children.Add(new TextBlock { Text = "Preset", Width = 90, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") });
+        var camPresetCtrl = new ComboBox { Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+        camPresetCtrl.Items.Add("(None / Custom)");
+        foreach (var name in BuiltinLutLibrary.CameraLutNames) camPresetCtrl.Items.Add(name);
+        camPresetCtrl.SelectedIndex = 0;
+        camPreset = camPresetCtrl;
+        AutomationProperties.SetAutomationId(camPreset, "CameraLut_Preset");
+        camPresetCtrl.SelectionChanged += (_, _) =>
+        {
+            if (updating || camPresetCtrl.SelectedIndex <= 0) return;
+            var preset = BuiltinLutLibrary.CreatePreset(camPresetCtrl.SelectedItem.ToString()!);
+            if (preset is not null) SetLutInternal(0, preset);
+        };
+        camPresetRow.Children.Add(camPreset);
+        camPanel.Children.Add(camPresetRow);
 
         var camBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
         var camBrowse = new Button { Content = "Browse…", Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 6, 0) };
@@ -736,6 +755,23 @@ public sealed class ColorGradingWindow : Window
 
         lookPath = new TextBlock { Text = "(No LUT loaded)", Foreground = (Brush)FindResource("SubtleTextBrush"), Margin = new Thickness(0, 0, 0, 8), TextTrimming = TextTrimming.CharacterEllipsis };
         lookPanel.Children.Add(lookPath);
+
+        var lookPresetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        lookPresetRow.Children.Add(new TextBlock { Text = "Preset", Width = 90, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") });
+        var lookPresetCtrl = new ComboBox { Width = 180, HorizontalAlignment = HorizontalAlignment.Left };
+        lookPresetCtrl.Items.Add("(None / Custom)");
+        foreach (var name in BuiltinLutLibrary.LookLutNames) lookPresetCtrl.Items.Add(name);
+        lookPresetCtrl.SelectedIndex = 0;
+        lookPreset = lookPresetCtrl;
+        AutomationProperties.SetAutomationId(lookPreset, "LookLut_Preset");
+        lookPresetCtrl.SelectionChanged += (_, _) =>
+        {
+            if (updating || lookPresetCtrl.SelectedIndex <= 0) return;
+            var preset = BuiltinLutLibrary.CreatePreset(lookPresetCtrl.SelectedItem.ToString()!);
+            if (preset is not null) SetLutInternal(1, preset);
+        };
+        lookPresetRow.Children.Add(lookPreset);
+        lookPanel.Children.Add(lookPresetRow);
 
         var lookBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 12) };
         var lookBrowse = new Button { Content = "Browse…", Padding = new Thickness(10, 3, 10, 3), Margin = new Thickness(0, 0, 6, 0) };
@@ -888,11 +924,41 @@ public sealed class ColorGradingWindow : Window
             cameraLutInterpCombo.SelectedIndex = (int)fx.GetParameter("LUTInterpolation_0");
             cameraLutBypassCheck.IsChecked = fx.GetParameter("LUTEnable_0") == 1;
 
+            var camTitle = fx.Lut?.Title;
+            var camIdx = 0;
+            if (!string.IsNullOrEmpty(camTitle))
+            {
+                for (var i = 1; i < cameraLutPresetCombo.Items.Count; i++)
+                {
+                    if (string.Equals(cameraLutPresetCombo.Items[i]?.ToString(), camTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        camIdx = i;
+                        break;
+                    }
+                }
+            }
+            cameraLutPresetCombo.SelectedIndex = camIdx;
+
             // Look LUT
             lookLutPathText.Text = fx.LookLut is not null ? (fx.LookLut.Title ?? "Embedded 3D LUT") : "(No LUT loaded)";
             lookLutStrengthSlider.Value = fx.GetParameter("LUTGain_1");
             lookLutInterpCombo.SelectedIndex = (int)fx.GetParameter("LUTInterpolation_1");
             lookLutBypassCheck.IsChecked = fx.GetParameter("LUTEnable_1") == 1;
+
+            var lookTitle = fx.LookLut?.Title;
+            var lookIdx = 0;
+            if (!string.IsNullOrEmpty(lookTitle))
+            {
+                for (var i = 1; i < lookLutPresetCombo.Items.Count; i++)
+                {
+                    if (string.Equals(lookLutPresetCombo.Items[i]?.ToString(), lookTitle, StringComparison.OrdinalIgnoreCase))
+                    {
+                        lookIdx = i;
+                        break;
+                    }
+                }
+            }
+            lookLutPresetCombo.SelectedIndex = lookIdx;
         }
         finally
         {
@@ -1159,6 +1225,21 @@ public sealed class ColorGradingWindow : Window
 
     // --- LUT File Handling ---
 
+    private void SetLutInternal(int slot, CubeLut? lut)
+    {
+        var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
+        if (effects is null) return;
+        var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
+        if (target is not null)
+        {
+            if (slot == 0) target.Lut = lut;
+            else target.LookLut = lut;
+            vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
+        }
+        UpdateControlsFromEffect();
+        RequestPreview();
+    }
+
     private void OnBrowseLut(int slot)
     {
         var dialog = new OpenFileDialog
@@ -1173,18 +1254,7 @@ public sealed class ColorGradingWindow : Window
             {
                 var lut = CubeLutParser.Parse(File.ReadAllText(dialog.FileName));
                 lut.Title = Path.GetFileName(dialog.FileName);
-
-                var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
-                if (effects is null) return;
-                var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
-                if (target is not null)
-                {
-                    if (slot == 0) target.Lut = lut;
-                    else target.LookLut = lut;
-                    vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
-                }
-                UpdateControlsFromEffect();
-                RequestPreview();
+                SetLutInternal(slot, lut);
             }
             catch (Exception ex)
             {
@@ -1195,16 +1265,6 @@ public sealed class ColorGradingWindow : Window
 
     private void OnClearLut(int slot)
     {
-        var effects = TargetEffects?.Select(e => e.DeepClone()).ToList();
-        if (effects is null) return;
-        var target = effects.FirstOrDefault(e => e.Id == targetEffectId);
-        if (target is not null)
-        {
-            if (slot == 0) target.Lut = null;
-            else target.LookLut = null;
-            vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
-        }
-        UpdateControlsFromEffect();
-        RequestPreview();
+        SetLutInternal(slot, null);
     }
 }

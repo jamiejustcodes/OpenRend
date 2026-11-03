@@ -200,6 +200,7 @@ public partial class MainWindow : Window
         Preview.CanvasMouseUp += OnPreviewMouseUp;
         Preview.CanvasMouseDoubleClick += OnPreviewMouseDoubleClick;
         Preview.Ready += () => { PreviewInfo.Text = PreviewDescription(); RequestPreview(); };
+        DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
         vm.Changed += Refresh;
         timer.Tick += async (_, _) =>
         {
@@ -595,6 +596,7 @@ public partial class MainWindow : Window
     private void UpdateInspector()
     {
         var clip = SelectedClip; Inspector.IsEnabled = clip is not null; ClipName.Text = clip?.Name ?? "Select a timeline clip";
+        DockColorGrading.BindToClip(clip);
         if (clip is null)
         {
             EditTextMediaButton.Visibility = Visibility.Collapsed;
