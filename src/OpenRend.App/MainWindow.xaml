@@ -56,6 +56,11 @@
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_View">
+        <MenuItem Header="Window">
+          <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
+          <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
+        </MenuItem>
+        <MenuItem x:Name="VideoScopesMenu" Header="Video Scopesâ€¦" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
         <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         <Separator/>
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>

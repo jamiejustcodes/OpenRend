@@ -48,6 +48,10 @@ public partial class MainWindow : Window
     private readonly string recoveryPath = Path.Combine(Environment.GetEnvironmentVariable("OPENREND_DATA_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend"), "recovery.openrend");
     private readonly Dictionary<Guid, string> cachedMediaPaths = [];
+    public event Action<byte[], int, int>? FrameRendered;
+    private byte[]? currentPreviewPixels;
+    public (byte[]? Pixels, int Width, int Height) GetCurrentFrame() => (currentPreviewPixels, previewWidth, previewHeight);
+    private VideoScopesWindow? videoScopesWindow;
     public MainWindow(EditorViewModel viewModel)
     {
         vm = viewModel;
@@ -324,7 +328,7 @@ public partial class MainWindow : Window
                 // then catch up to its latest position instead of discarding every late frame.
                 if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
-                    Preview.Present(pixels, width, height); previewWidth = width; previewHeight = height; lastPreview = frame; PreviewInfo.Text = PreviewDescription();
+                    Preview.Present(pixels, width, height); currentPreviewPixels = pixels; previewWidth = width; previewHeight = height; lastPreview = frame; PreviewInfo.Text = PreviewDescription(); FrameRendered?.Invoke(pixels, width, height);
                 }
                 else previewRequested = true;
             }
@@ -1244,6 +1248,18 @@ public partial class MainWindow : Window
         finally { if (File.Exists(temporary)) File.Delete(temporary); }
         vm.Status = "Saved " + Path.GetFileName(dialog.FileName) + ".";
     });
+    private void VideoScopesClick(object sender, RoutedEventArgs e)
+    {
+        if (videoScopesWindow == null || !videoScopesWindow.IsLoaded)
+        {
+            videoScopesWindow = new VideoScopesWindow(this) { Owner = this };
+            videoScopesWindow.Show();
+        }
+        else
+        {
+            videoScopesWindow.Activate();
+        }
+    }
     private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(Math.Min(600, Math.Max(230, ActualHeight - 260))); MediaWidth.Width = new GridLength(1, GridUnitType.Star); PreviewWidth.Width = new GridLength(Math.Min(844, Math.Max(320, ActualWidth - 420))); ToolsTabs.SelectedIndex = 1; Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -1282,6 +1298,8 @@ public partial class MainWindow : Window
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
+            Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
+            Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.U when ctrl && shift => () => { IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked; IgnoreGroupsClick(this, e); },
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
