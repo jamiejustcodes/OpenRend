@@ -19,6 +19,8 @@
         <MenuItem Header="Open recovery project…" Click="RecoveryClick"/>
         <Separator/>
         <MenuItem Header="_Import media…" InputGestureText="Ctrl+I" Click="ImportClick"/>
+        <MenuItem Header="Import Final Cut Pro 7 XML…" Click="ImportFcp7XmlClick"/>
+        <MenuItem Header="Export Final Cut Pro 7 XML…" Click="ExportFcp7XmlClick"/>
         <MenuItem Header="Relink missing media…" Click="RelinkClick"/>
         <MenuItem Header="Project settings…" InputGestureText="Alt+Enter" Click="SettingsClick"/>
         <Separator/>

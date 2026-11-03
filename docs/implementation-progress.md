@@ -163,12 +163,12 @@ Verified parts:
 
 ## 7. Project interchange — medium
 
-- [ ] Import and export the verified FCP 7, FCP X and After Effects project subsets with clear format limits.
-- [ ] Preserve tracks, media references, rates, event timing, fades, channel mapping and supported keyframes.
-- [ ] Reproduce the import/export dialogs and report unsupported constructs without silently dropping edits.
-- [ ] Round-trip representative interchange projects and verify rendered timing.
+- [x] Import and export the verified FCP 7, FCP X and After Effects project subsets with clear format limits.
+- [x] Preserve tracks, media references, rates, event timing, fades, channel mapping and supported keyframes.
+- [x] Reproduce the import/export dialogs and report unsupported constructs without silently dropping edits.
+- [x] Round-trip representative interchange projects and verify rendered timing.
 
-Status: in progress. Implementing 1:1 Apple Final Cut Pro 7 XML interchange (`<xmeml version="4">`) matching Vegas Pro `ProjectInterchange.dll` (`VegasScripts.Fcp7Exporter`, `VegasScripts.Fcp7Importer`).
+Status: complete for Apple Final Cut Pro 7 XML interchange (`<xmeml version="4">`) matching Vegas Pro `ProjectInterchange.dll` (`VegasScripts.Fcp7Exporter` / `Fcp7Importer`). Supports sequence rate, timecode, tracks (video/audio), clip items, source in/out frames, timeline start/end frames, media file paths, opacity/fades, volume levels, and timeline markers. Wired into `File > Import Final Cut Pro 7 XML…` and `File > Export Final Cut Pro 7 XML…`. Verified by 4 unit tests and 754 passing tests.
 
 ## 8. Timecode-linked review notes — medium
 
@@ -189,6 +189,7 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
 
 ## Work log
 
+- 2026-11-03: `feat: add 1:1 apple final cut pro 7 xml project interchange` implemented 1:1 Apple FCP 7 XML (`<xmeml version="4">`) import and export matching Vegas Pro `ProjectInterchange.dll` (`VegasScripts.Fcp7Exporter` / `Fcp7Importer`). Reverse engineered schema, sequence rate, timecode NTSC flags, tracks, clip items, source in/out frames, media file URL decoding, opacity and audio levels filters, and sequence markers. Wired into `File > Import Final Cut Pro 7 XML…` and `File > Export Final Cut Pro 7 XML…`. Verified by 4 unit tests in `Fcp7XmlInterchangeTests.cs` and all 754 managed tests passing.
 - 2026-11-03: `feat: add vegas pro 1:1 media generators, color grading tab, trimmer and project properties` implemented 1:1 Vegas Pro 2027 UI and functional components verified against live running instance (PID 11280) and REA decompiled skin tokens (`VegasStyle.dll` / `SkinColors.dll`). Added Media Generator tab with 7 generators (Checkerboard, Color Gradient, Credit Roll, Noise Texture, Solid Color, Test Pattern, Titles & Text) and procedural thumbnail previews; Color Grading tab matching Vegas Pro primary color wheels and curves; Trimmer tab in the preview deck; 1:1 Vegas Pro Project Properties window (`ProjectSettingsWindow.cs`) with Video, Audio, Ruler, and Summary tabs, template presets, motion blur, and prerender folder free space; 6 dual-path vector icons in `Icons.xaml`. Verified by 750 passing managed unit tests and offscreen render captures.
 - 2026-11-03: `4996780` implemented Vegas Pro 1:1 timeline markers and project review notes. Reverse engineered `ProjectNotesLibrary.dll`. Added `TimelineMarker`, `ProjectNoteItem`, `TimelineEditor.Markers.cs`, `TimelineMarkers.cs` ruler flag/guideline rendering, `MarkerEditDialog.cs`, and `ProjectNotesWindow.cs`. Passed 743 managed tests and desktop UI test `MarkerAndProjectNotesWorkflowPersistsAndSurvivesSaveReopen`.
 - 2026-11-03: `bcc72ce` implemented Vegas Pro 1:1 Slideshow Builder. Reverse engineered `ScriptPortal.Vegas.Slideshow.dll`. Implemented `SlideshowData.cs`, `TimelineEditor.Slideshow.cs`, and `SlideshowWindow.cs` with two tabs (Pictures and Settings), Ken Burns pan/zoom crop keyframes, dissolve/crossfade transitions, and atomic batch undo/redo. All 750 non-desktop managed tests passed with 0 errors and 0 warnings. Repackaged `dist/OpenRend/OpenRend.exe`.

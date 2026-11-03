@@ -433,6 +433,37 @@ public partial class MainWindow : Window
         Pause(); vm.Replace(result.Project, null); await PopulateMediaVisualsAsync();
         vm.Status = result.Warnings.Count == 0 ? "Imported project. Save to the OpenRend project format." : string.Join(" ", result.Warnings);
     });
+    private async void ImportFcp7XmlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import Final Cut Pro 7 XML",
+            Filter = "Final Cut Pro 7 XML (*.xml)|*.xml|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog(this) != true || !await ConfirmUnsavedAsync()) return;
+        Pause();
+        var xml = await File.ReadAllTextAsync(dialog.FileName);
+        var project = Fcp7XmlInterchange.ImportFromXml(xml);
+        vm.Replace(project, null);
+        await PopulateMediaVisualsAsync();
+        vm.Status = $"Imported Final Cut Pro 7 XML ({project.Tracks.Count} tracks, {project.Tracks.SelectMany(t => t.Clips).Count()} clips).";
+    });
+    private async void ExportFcp7XmlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var defaultName = Path.GetFileNameWithoutExtension(vm.ProjectPath) ?? vm.Project.Name ?? "Sequence";
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Final Cut Pro 7 XML",
+            Filter = "Final Cut Pro 7 XML (*.xml)|*.xml",
+            FileName = $"{defaultName}.xml"
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            var xml = Fcp7XmlInterchange.ExportToXml(vm.Project);
+            await File.WriteAllTextAsync(dialog.FileName, xml, System.Text.Encoding.UTF8);
+            vm.Status = $"Exported Final Cut Pro 7 XML to {Path.GetFileName(dialog.FileName)}.";
+        }
+    });
     private async void RelinkClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         Pause(); var missing = ProjectStore.FindMissingMedia(vm.Project);
