@@ -225,6 +225,34 @@ public partial class MainWindow : Window
             vm.Status = $"Set {type} envelope point curve to {curve} Fade.";
             RequestPreview();
         });
+        Timeline.ToggleTrackEnvelopeRequested += (id, type) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleTrackEnvelope(id, type);
+            vm.Status = $"{(vm.Editor.HasTrackEnvelope(id, type) ? "Added" : "Removed")} Track {type} envelope.";
+            RequestPreview();
+        });
+        Timeline.SetTrackEnvelopePointRequested += (id, type, frame, val, curve) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackEnvelopePoint(id, type, frame, val, curve);
+            vm.Status = $"Set Track {type} envelope point at frame {frame} ({Math.Round(val * 100)}%).";
+            RequestPreview();
+        });
+        Timeline.RemoveTrackEnvelopePointRequested += (id, type, frame) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.RemoveTrackEnvelopePoint(id, type, frame);
+            vm.Status = $"Removed Track {type} envelope point at frame {frame}.";
+            RequestPreview();
+        });
+        Timeline.SetTrackEnvelopePointCurveRequested += (id, type, frame, curve) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackEnvelopePointCurve(id, type, frame, curve);
+            vm.Status = $"Set Track {type} envelope point curve to {curve} Fade.";
+            RequestPreview();
+        });
 
         Preview.CanvasMouseDown += OnPreviewMouseDown;
         Preview.CanvasMouseMove += OnPreviewMouseMove;

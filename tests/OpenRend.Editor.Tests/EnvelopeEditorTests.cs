@@ -135,5 +135,43 @@ public sealed class EnvelopeEditorTests
         Assert.Equal(200, evalMod.Video[0].SourceFrame);
         Assert.Equal(0.5, evalMod.Video[0].Opacity, 3);
     }
-}
 
+    [Fact]
+    public void TrackEnvelope_EditorAddsRemovesAndEvaluatesTrackEnvelopes()
+    {
+        var (doc, editor, clip) = CreateTestProject();
+        var track = doc.Tracks[0];
+
+        Assert.False(editor.HasTrackEnvelope(track.Id, EnvelopeType.Composite));
+
+        // Add track composite envelope
+        editor.AddTrackEnvelope(track.Id, EnvelopeType.Composite);
+        Assert.True(editor.HasTrackEnvelope(track.Id, EnvelopeType.Composite));
+
+        var env = editor.GetTrackEnvelope(track.Id, EnvelopeType.Composite);
+        Assert.NotNull(env);
+        Assert.Equal(2, env.Points.Count);
+
+        // Insert keyframe point at frame 50 with value 0.4
+        editor.SetTrackEnvelopePoint(track.Id, EnvelopeType.Composite, 50, 0.4, EnvelopeCurveType.Linear);
+        env = editor.GetTrackEnvelope(track.Id, EnvelopeType.Composite);
+        Assert.NotNull(env);
+        Assert.Equal(3, env.Points.Count);
+
+        // Evaluate timeline at frame 50: clip opacity should be modulated by track composite level (0.4)
+        var evaluated = TimelineEvaluator.Evaluate(doc, 50);
+        Assert.Single(evaluated.Video);
+        Assert.Equal(0.4, evaluated.Video[0].Opacity, 3);
+
+        // Add track mute envelope and set to 1.0 at frame 50
+        editor.AddTrackEnvelope(track.Id, EnvelopeType.Mute);
+        editor.SetTrackEnvelopePoint(track.Id, EnvelopeType.Mute, 50, 1.0, EnvelopeCurveType.Hold);
+        var evalMuted = TimelineEvaluator.Evaluate(doc, 50);
+        Assert.Empty(evalMuted.Video); // Track is muted at frame 50
+
+        // Undo restores unmuted state
+        editor.Undo();
+        var evalUnmuted = TimelineEvaluator.Evaluate(doc, 50);
+        Assert.Single(evalUnmuted.Video);
+    }
+}

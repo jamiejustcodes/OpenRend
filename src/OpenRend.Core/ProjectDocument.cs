@@ -128,6 +128,19 @@ public sealed class ProjectDocument
                     effect.Validate();
                 }
             }
+            if (track.Envelopes != null)
+            {
+                var trackEnvTypes = new HashSet<EnvelopeType>();
+                foreach (var env in track.Envelopes)
+                {
+                    if (env == null || !trackEnvTypes.Add(env.Type)) throw new InvalidDataException("Track envelope types must be unique within a track.");
+                    env.Validate();
+                    if (track.Kind == TrackKind.Video && env.Type is not (EnvelopeType.Composite or EnvelopeType.FadeToColor or EnvelopeType.Mute))
+                        throw new InvalidDataException("Video tracks only support Composite, FadeToColor, and Mute envelopes.");
+                    if (track.Kind == TrackKind.Audio && env.Type is not (EnvelopeType.Volume or EnvelopeType.Pan or EnvelopeType.Mute))
+                        throw new InvalidDataException("Audio tracks only support Volume, Pan, and Mute envelopes.");
+                }
+            }
             foreach (var clip in track.Clips)
             {
                 if (clip == null || clip.Id == Guid.Empty || !clipIds.Add(clip.Id)) throw new InvalidDataException("Clip IDs must be unique and non-empty.");
@@ -226,6 +239,8 @@ public sealed class TimelineTrack
     public List<TimelineClip> Clips { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<ClipEnvelope>? Envelopes { get; set; }
     public TimelineTrack DeepClone() => new()
     {
         Id = Id,
@@ -239,7 +254,8 @@ public sealed class TimelineTrack
         Opacity = Opacity,
         Pan = Pan,
         Clips = Clips.Select(c => c.DeepClone()).ToList(),
-        VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList()
+        VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
+        Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()
     };
 }
 

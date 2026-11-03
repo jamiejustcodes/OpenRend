@@ -133,5 +133,35 @@ public sealed class EnvelopeTests
         Assert.Equal(original.Points.Count, deserialized.Points.Count);
         Assert.Equal(original.Points[1].Curve, deserialized.Points[1].Curve);
     }
-}
 
+    [Fact]
+    public void TrackEnvelope_ValidatesTrackAllowedEnvelopeTypes()
+    {
+        var doc = new ProjectDocument { Width = 1920, Height = 1080, FrameRate = new Rational(30, 1) };
+        var media = new MediaAsset { Id = Guid.NewGuid(), Path = "test.mp4", HasVideo = true, HasAudio = true, DurationSeconds = 10 };
+        doc.Media.Add(media);
+
+        var videoTrack = new TimelineTrack { Kind = TrackKind.Video, Name = "Video 1" };
+        doc.Tracks.Add(videoTrack);
+
+        // Valid video track envelope: Composite
+        videoTrack.Envelopes = [new ClipEnvelope { Type = EnvelopeType.Composite, Points = [new EnvelopePoint(0, 1.0)] }];
+        doc.Validate();
+
+        // Invalid video track envelope: Volume (only for audio)
+        videoTrack.Envelopes.Add(new ClipEnvelope { Type = EnvelopeType.Volume, Points = [new EnvelopePoint(0, 1.0)] });
+        Assert.Throws<InvalidDataException>(() => doc.Validate());
+
+        // Audio track validation
+        videoTrack.Envelopes.Clear();
+        var audioTrack = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio 1" };
+        doc.Tracks.Add(audioTrack);
+
+        audioTrack.Envelopes = [new ClipEnvelope { Type = EnvelopeType.Volume, Points = [new EnvelopePoint(0, 1.0)] }];
+        doc.Validate();
+
+        // Invalid audio track envelope: Velocity (only for clips)
+        audioTrack.Envelopes.Add(new ClipEnvelope { Type = EnvelopeType.Velocity, Points = [new EnvelopePoint(0, 1.0)] });
+        Assert.Throws<InvalidDataException>(() => doc.Validate());
+    }
+}

@@ -141,5 +141,133 @@ public sealed partial class TimelineEditor
             }
         });
     }
-}
 
+    public ClipEnvelope? GetTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+        return track?.Envelopes?.FirstOrDefault(e => e.Type == type);
+    }
+
+    public bool HasTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        return GetTrackEnvelope(trackId, type) != null;
+    }
+
+    public void ToggleTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+        if (track == null) return;
+
+        if (HasTrackEnvelope(trackId, type))
+        {
+            RemoveTrackEnvelope(trackId, type);
+        }
+        else
+        {
+            AddTrackEnvelope(trackId, type);
+        }
+    }
+
+    public void AddTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        Execute(p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (track == null) return;
+
+            track.Envelopes ??= [];
+            if (track.Envelopes.Any(e => e.Type == type)) return;
+
+            var env = new ClipEnvelope
+            {
+                Type = type,
+                IsEnabled = true
+            };
+
+            var defaultValue = env.DefaultValue;
+            var duration = Math.Max(p.DurationFrames, 300);
+            env.Points.Add(new EnvelopePoint(0, defaultValue, EnvelopeCurveType.Linear));
+            env.Points.Add(new EnvelopePoint(duration, defaultValue, EnvelopeCurveType.Linear));
+
+            track.Envelopes.Add(env);
+        });
+    }
+
+    public void RemoveTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        Execute(p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (track?.Envelopes == null) return;
+
+            track.Envelopes.RemoveAll(e => e.Type == type);
+            if (track.Envelopes.Count == 0) track.Envelopes = null;
+        });
+    }
+
+    public void SetTrackEnvelopePoint(Guid trackId, EnvelopeType type, long frame, double value, EnvelopeCurveType curve = EnvelopeCurveType.Linear)
+    {
+        Execute(p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (track == null) return;
+
+            track.Envelopes ??= [];
+            var env = track.Envelopes.FirstOrDefault(e => e.Type == type);
+            if (env == null)
+            {
+                env = new ClipEnvelope { Type = type, IsEnabled = true };
+                track.Envelopes.Add(env);
+            }
+
+            var clampedFrame = Math.Max(0, frame);
+            var clampedValue = Math.Clamp(value, env.MinValue, env.MaxValue);
+
+            var existing = env.Points.FirstOrDefault(pt => Math.Abs(pt.Frame - clampedFrame) <= 1);
+            if (existing != null)
+            {
+                existing.Frame = clampedFrame;
+                existing.Value = clampedValue;
+                existing.Curve = curve;
+            }
+            else
+            {
+                env.Points.Add(new EnvelopePoint(clampedFrame, clampedValue, curve));
+            }
+
+            env.Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+        });
+    }
+
+    public void RemoveTrackEnvelopePoint(Guid trackId, EnvelopeType type, long frame)
+    {
+        Execute(p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            var env = track?.Envelopes?.FirstOrDefault(e => e.Type == type);
+            if (env == null || env.Points.Count <= 1) return;
+
+            var nearest = env.Points.OrderBy(pt => Math.Abs(pt.Frame - frame)).FirstOrDefault();
+            if (nearest != null)
+            {
+                env.Points.Remove(nearest);
+            }
+        });
+    }
+
+    public void SetTrackEnvelopePointCurve(Guid trackId, EnvelopeType type, long frame, EnvelopeCurveType curve)
+    {
+        Execute(p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            var env = track?.Envelopes?.FirstOrDefault(e => e.Type == type);
+            if (env == null) return;
+
+            var nearest = env.Points.OrderBy(pt => Math.Abs(pt.Frame - frame)).FirstOrDefault();
+            if (nearest != null)
+            {
+                nearest.Curve = curve;
+            }
+        });
+    }
+}

@@ -93,6 +93,12 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long, EnvelopeCurveType>? SetEnvelopePointCurveRequested;
+    public event Action<Guid, EnvelopeType>? ToggleTrackEnvelopeRequested;
+    public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetTrackEnvelopePointRequested;
+    public event Action<Guid, EnvelopeType, long>? RemoveTrackEnvelopePointRequested;
+    public event Action<Guid, EnvelopeType, long, EnvelopeCurveType>? SetTrackEnvelopePointCurveRequested;
+    public bool HasTrackEnvelope(Guid trackId, EnvelopeType type) =>
+        Project.Tracks.FirstOrDefault(t => t.Id == trackId)?.Envelopes?.Any(e => e.Type == type && e.IsEnabled) ?? false;
     private TimelineClip? dragging;
     private TimelineTrack? dragTrack;
     private string mode = "";
@@ -656,6 +662,7 @@ public sealed partial class TimelineView : FrameworkElement
                 if (dragging is null) DrawEventButtons(dc, track, clip, rect);
                 dc.Pop();
             }
+            DrawTrackEnvelopes(dc, track, new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
         }
         dc.Pop();
         dc.DrawRectangle(Brush("#262626"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
@@ -1222,6 +1229,33 @@ public sealed partial class TimelineView : FrameworkElement
                     menu.Items.Add(trackColorGrading);
                 }
 
+
+                var envMenu = new MenuItem { Header = "Insert/Remove Envelope" };
+                if (track.Kind == TrackKind.Video)
+                {
+                    var comp = new MenuItem { Header = "Composite Level", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Composite) };
+                    comp.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Composite);
+                    envMenu.Items.Add(comp);
+
+                    var envMute = new MenuItem { Header = "Mute", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Mute) };
+                    envMute.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Mute);
+                    envMenu.Items.Add(envMute);
+                }
+                else if (track.Kind == TrackKind.Audio)
+                {
+                    var vol = new MenuItem { Header = "Volume", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Volume) };
+                    vol.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Volume);
+                    envMenu.Items.Add(vol);
+
+                    var pan = new MenuItem { Header = "Pan", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Pan) };
+                    pan.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Pan);
+                    envMenu.Items.Add(pan);
+
+                    var envMute = new MenuItem { Header = "Mute", IsCheckable = true, IsChecked = HasTrackEnvelope(track.Id, EnvelopeType.Mute) };
+                    envMute.Click += (_, _) => ToggleTrackEnvelopeRequested?.Invoke(track.Id, EnvelopeType.Mute);
+                    envMenu.Items.Add(envMute);
+                }
+                menu.Items.Add(envMenu);
                 menu.Items.Add(new Separator());
 
                 var mute = new MenuItem { Header = "Mute", IsCheckable = true, IsChecked = track.IsMuted };

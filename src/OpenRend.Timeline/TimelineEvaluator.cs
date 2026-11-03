@@ -27,6 +27,7 @@ public static class TimelineEvaluator
         foreach (var track in project.Tracks.AsEnumerable().Reverse())
         {
             if (track.IsMuted || (track.Kind == TrackKind.Video && !track.IsVisible)) continue;
+            if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } trackMute && trackMute.ValueAt(frame) >= 0.5) continue;
             if ((track.Kind == TrackKind.Video ? soloVideo : soloAudio) && !track.IsSolo) continue;
             var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null || c.FadeInFrames > 0)
                 ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
@@ -78,15 +79,28 @@ public static class TimelineEvaluator
                     : clip.SourceInFrame + local;
 
                 var opacity = clip.Opacity * track.Opacity * fade;
+                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } trackComp)
+                {
+                    opacity *= trackComp.ValueAt(frame);
+                }
                 if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } compositeEnv)
                 {
                     opacity *= compositeEnv.ValueAt(local);
                 }
 
                 var gain = clip.Gain * track.Gain * fade * peak;
+                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } trackVol)
+                {
+                    gain *= trackVol.ValueAt(frame);
+                }
                 if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } volumeEnv)
                 {
                     gain *= volumeEnv.ValueAt(local);
+                }
+
+                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Pan && e.IsEnabled) is { } trackPan)
+                {
+                    pan = Math.Clamp(pan + trackPan.ValueAt(frame), -1.0, 1.0);
                 }
 
                 var item = new EvaluatedClip(track, clip, asset, sourceFrame, opacity, gain, pan);
