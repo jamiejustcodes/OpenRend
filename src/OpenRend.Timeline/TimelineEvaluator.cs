@@ -1,4 +1,4 @@
-using OpenRend.Core;
+﻿using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -8,6 +8,7 @@ public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, Media
     public double? SourceTimeSeconds { get; init; }
     // Dissolve participants form one composite group; scalar opacity alone cannot describe source coverage.
     public EvaluatedDissolve? Dissolve { get; init; }
+    public TrackMotionKeyframe? TrackMotion { get; init; }
 }
 public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress, double? OutgoingWeight = null, double? IncomingWeight = null, VideoTransition? Transition = null);
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
@@ -104,9 +105,11 @@ public static class TimelineEvaluator
                 }
 
                 var item = new EvaluatedClip(track, clip, asset, sourceFrame, opacity, gain, pan);
+                var trackMotion = track.Motion?.Evaluate(frame, project.Width, project.Height);
                 if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with
                     { Crop = CropAt(clip, asset, local), Dissolve = dissolves.GetValueOrDefault(clip.Id),
-                        SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode) });
+                        SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode),
+                        TrackMotion = trackMotion });
                 if (track.Kind == TrackKind.Audio && asset.HasAudio) audio.Add(item);
             }
         }

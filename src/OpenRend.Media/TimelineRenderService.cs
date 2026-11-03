@@ -49,9 +49,11 @@ public sealed partial class TimelineRenderService : IDisposable
             foreach (var trackGroup in trackGroups)
             {
                 var track = trackGroup.First().Track;
+                var trackMotion = trackGroup.First().TrackMotion;
+                var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
                 var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
                 var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
-                var needsOwnBuffer = hasTrackEffects || customBlend;
+                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion;
                 var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
                 var currentCompositor = needsOwnBuffer ? null : compositor;
 
@@ -155,7 +157,32 @@ public sealed partial class TimelineRenderService : IDisposable
                     {
                         trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
                     }
-                    if (compositor != null && !customBlend)
+                    if (hasMotion && trackMotion != null)
+                    {
+                        var motionCrop = new CropState(
+                            Width: Math.Max(0.001, trackMotion.Width * width / project.Width),
+                            Height: Math.Max(0.001, trackMotion.Height * height / project.Height),
+                            CenterX: width / 2.0 - trackMotion.PositionX * width / project.Width,
+                            CenterY: height / 2.0 - trackMotion.PositionY * height / project.Height,
+                            RotationDegrees: trackMotion.RotationZ,
+                            PivotX: width / 2.0,
+                            PivotY: height / 2.0
+                        );
+                        motionCrop.Validate();
+                        var transform = SamplingTransform(motionCrop, width, height, width, height);
+                        if (compositor != null && !customBlend)
+                        {
+                            if (NativeMethods.CompositorLayerTransform(compositor, trackBuffer, width, height, checked(width * 4), track.Opacity, in transform) < 0)
+                                throw NativeMethods.Error("Could not composite track motion layer");
+                        }
+                        else
+                        {
+                            var transformedTrack = new byte[trackBuffer.Length];
+                            CompositeTransformed(transformedTrack, width, height, trackBuffer, width, height, 1.0, transform);
+                            Composite(output, width, height, transformedTrack, width, height, track.Opacity, track.CompositeMode);
+                        }
+                    }
+                    else if (compositor != null && !customBlend)
                     {
                         if (NativeMethods.CompositorLayer(compositor, trackBuffer, width, height, width * 4, track.Opacity) < 0)
                             throw NativeMethods.Error("Could not composite track FX layer");

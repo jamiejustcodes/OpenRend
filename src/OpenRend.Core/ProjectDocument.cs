@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
@@ -258,7 +258,10 @@ public sealed class TimelineTrack
     public double Gain { get; set; } = 1;
     public double Opacity { get; set; } = 1;
     public double Pan { get; set; }
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public TrackCompositeMode CompositeMode { get; set; } = TrackCompositeMode.SourceAlpha;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public TrackCompositeMode CompositeMode { get; set; } = TrackCompositeMode.SourceAlpha;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public TrackMotion? Motion { get; set; }
     public List<TimelineClip> Clips { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
@@ -277,6 +280,7 @@ public sealed class TimelineTrack
         Opacity = Opacity,
         Pan = Pan,
         CompositeMode = CompositeMode,
+        Motion = Motion?.DeepClone(),
         Clips = Clips.Select(c => c.DeepClone()).ToList(),
         VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
         Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()

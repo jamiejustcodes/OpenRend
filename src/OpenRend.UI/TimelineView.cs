@@ -86,6 +86,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
+    public event Action<Guid>? TrackMotionRequested;
     public event Action<Guid>? TrackColorGradingRequested;
     public event Action<Guid, TrackCompositeMode>? TrackCompositeModeRequested;
     public event Action<Guid>? MotionTrackingRequested;
@@ -320,7 +321,7 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, _ => 230 };
+        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, "Motion" => 138, _ => 230 };
         return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 47 : 4), 21, action == "Visible" ? 18 : 20);
     }
 
@@ -707,6 +708,7 @@ public sealed partial class TimelineView : FrameworkElement
                 string panText = Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}";
                 Text(dc, panText, 31, y + 48, Brush("#B8B8B8"), 11, 75);
             }
+            if (t.Kind == TrackKind.Audio) Text(dc, Math.Abs(pan) < .005 ? "Center" : $"{Math.Abs(pan) * 100:0} % {(pan < 0 ? "L" : "R")}", 137, y + 28, Brush("#B8B8B8"), 11, 50);
             foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
             {
                 var bounds = TrackLevelBounds(t.Id, level); var center = bounds.Y + bounds.Height / 2;
@@ -719,6 +721,18 @@ public sealed partial class TimelineView : FrameworkElement
             }
             if (t.Kind == TrackKind.Video)
             {
+                var motionBounds = TrackButtonBounds(t.Id, "Motion");
+                var hasMotion = t.Motion is not null && t.Motion.MotionKeyframes.Count > 0;
+                if (hasMotion)
+                {
+                    dc.DrawRectangle(Brush("#2B6CB0"), null, motionBounds);
+                }
+                var mPen = new Pen(hasMotion ? Brush("#FFFFFF") : Brush("#C4C4C4"), 1.2);
+                var mx = motionBounds.X + 4.5;
+                var my = motionBounds.Y + 4.5;
+                dc.DrawRectangle(null, mPen, new Rect(mx, my, 11, 10));
+                dc.DrawLine(mPen, new Point(mx + 3, my + 3), new Point(mx + 8, my + 3));
+                dc.DrawLine(mPen, new Point(mx + 3, my + 7), new Point(mx + 8, my + 7));
                 var fxBounds = TrackButtonBounds(t.Id, "FX");
                 var hasFx = t.VideoEffects.Count > 0;
                 if (hasFx)
@@ -816,13 +830,21 @@ public sealed partial class TimelineView : FrameworkElement
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
                     adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
-                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX" })
+                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion" })
                 {
                     if (action == "FX")
                     {
                         if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "FX").Contains(origin))
                         {
                             TrackFxRequested?.Invoke(track.Id);
+                            break;
+                        }
+                    }
+                    else if (action == "Motion")
+                    {
+                        if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "Motion").Contains(origin))
+                        {
+                            TrackMotionRequested?.Invoke(track.Id);
                             break;
                         }
                     }
@@ -1234,6 +1256,9 @@ public sealed partial class TimelineView : FrameworkElement
                     var trackFx = new MenuItem { Header = "Track FX…" };
                     trackFx.Click += (_, _) => TrackFxRequested?.Invoke(track.Id);
                     menu.Items.Add(trackFx);
+                    var trackMotion = new MenuItem { Header = "Track Motion…" };
+                    trackMotion.Click += (_, _) => TrackMotionRequested?.Invoke(track.Id);
+                    menu.Items.Add(trackMotion);
 
                     var trackColorGrading = new MenuItem { Header = "Track Color Grading…" };
                     trackColorGrading.Click += (_, _) => TrackColorGradingRequested?.Invoke(track.Id);

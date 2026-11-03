@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -134,6 +134,7 @@ public partial class MainWindow : Window
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
+        Timeline.TrackMotionRequested += id => OpenTrackMotion(id);
         Timeline.TrackColorGradingRequested += id => OpenTrackColorGrading(id);
         Timeline.TrackCompositeModeRequested += (id, mode) => Guard(() =>
         {
@@ -1008,6 +1009,29 @@ public partial class MainWindow : Window
         if (track.IsLocked) { vm.Status = "Unlock the video track before editing its effects."; return; }
         Pause(); RequestPreview();
         new VideoEffectsWindow(vm, EffectScope.Track, track.Id) { Owner = this }.ShowDialog();
+    });
+    private void TrackMotionClick(object sender, RoutedEventArgs e) => OpenTrackMotion();
+    private void OpenTrackMotion(Guid? requestedTrack = null) => Guard(() =>
+    {
+        var tracks = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video).ToArray();
+        if (tracks.Length == 0) { vm.Status = "Project has no video tracks."; return; }
+        var track = requestedTrack is { } id
+            ? tracks.FirstOrDefault(t => t.Id == id)
+            : (Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count && vm.Project.Tracks[Timeline.ActiveTrackIndex].Kind == TrackKind.Video
+                ? vm.Project.Tracks[Timeline.ActiveTrackIndex]
+                : tracks.FirstOrDefault());
+        if (track is null) { vm.Status = "Select a video track to edit its track motion."; return; }
+        if (track.IsLocked) { vm.Status = "Unlock the video track before editing its track motion."; return; }
+        Pause();
+        var dialog = new TrackMotionWindow(vm, track.Id, frame =>
+        {
+            vm.Position = frame;
+            UpdatePosition();
+            RequestPreview();
+        }) { Owner = this };
+        dialog.ShowDialog();
+        Timeline.InvalidateVisual();
+        RequestPreview();
     });
     private void MediaEffectsClick(object sender, RoutedEventArgs e) => OpenMediaEffects();
     private void OpenMediaEffects(Guid? requestedMedia = null) => Guard(() =>
