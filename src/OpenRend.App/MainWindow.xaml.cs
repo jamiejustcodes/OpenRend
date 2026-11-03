@@ -28,6 +28,7 @@ public partial class MainWindow : Window
     private bool previewRequested;
     private bool playbackStarting;
     private bool safeAreas;
+    private PreviewOverlayMode previewOverlay = PreviewOverlayMode.None;
     private bool loopPlayback;
     private bool autoCrossfade = true;
     private bool masterMuted;
@@ -364,14 +365,14 @@ public partial class MainWindow : Window
                     vm.Renderer.ActiveSubtitleClipId = null;
                 }
                 var request = new PreviewFrameRequest(revision, playbackGeneration, frame);
-                var zoom = PreviewZoom.SelectedIndex switch { 1 => 2.0, 2 => .5, _ => 1.0 }; var guides = safeAreas;
+                var zoom = PreviewZoom.SelectedIndex switch { 1 => 2.0, 2 => .5, _ => 1.0 }; var overlay = previewOverlay;
                 var (width, height) = PreviewQuality.SelectedIndex switch
                 {
                     0 => FitSize(project, 320),
                     2 => (project.Width, project.Height),
                     _ => FitSize(project, 640)
                 };
-                var pixels = await Task.Run(() => PreviewDisplay.Apply(vm.Renderer.RenderFrame(project, frame, width, height), width, height, zoom, guides));
+                var pixels = await Task.Run(() => PreviewDisplay.Apply(vm.Renderer.RenderFrame(project, frame, width, height), width, height, zoom, overlay));
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
                 if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
@@ -1303,7 +1304,60 @@ public partial class MainWindow : Window
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
     private void TimelineScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (Timeline is null) return; Timeline.Offset = e.NewValue; Timeline.InvalidateVisual(); }
     private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) { revision++; RequestPreview(); } }
-    private void GuidesClick(object sender, RoutedEventArgs e) { safeAreas = !safeAreas; revision++; RequestPreview(); }
+    private void GuidesClick(object sender, RoutedEventArgs e)
+    {
+        previewOverlay = previewOverlay switch
+        {
+            PreviewOverlayMode.None => PreviewOverlayMode.SafeAreas,
+            PreviewOverlayMode.SafeAreas => PreviewOverlayMode.RuleOfThirds,
+            PreviewOverlayMode.RuleOfThirds => PreviewOverlayMode.Grid4x4,
+            PreviewOverlayMode.Grid4x4 => PreviewOverlayMode.GoldenRatio,
+            _ => PreviewOverlayMode.None
+        };
+        safeAreas = previewOverlay != PreviewOverlayMode.None;
+        var label = previewOverlay switch
+        {
+            PreviewOverlayMode.SafeAreas => "Safe Areas (Action 90% / Title 80%)",
+            PreviewOverlayMode.RuleOfThirds => "Rule of Thirds (3×3)",
+            PreviewOverlayMode.Grid4x4 => "Grid (4×4)",
+            PreviewOverlayMode.GoldenRatio => "Golden Ratio",
+            _ => "Off"
+        };
+        vm.Status = $"Preview overlay: {label}.";
+        if (PreviewOverlayButton is not null) PreviewOverlayButton.ToolTip = $"Preview overlay: {label}";
+        revision++;
+        RequestPreview();
+    }
+    private void PreviewOverlayRightClick(object sender, MouseButtonEventArgs e)
+    {
+        var menu = new ContextMenu();
+        var modes = new[]
+        {
+            (PreviewOverlayMode.None, "Off"),
+            (PreviewOverlayMode.SafeAreas, "Safe Areas (Action 90% / Title 80%)"),
+            (PreviewOverlayMode.RuleOfThirds, "Rule of Thirds (3×3)"),
+            (PreviewOverlayMode.Grid4x4, "Grid (4×4)"),
+            (PreviewOverlayMode.GoldenRatio, "Golden Ratio")
+        };
+        foreach (var (m, label) in modes)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = previewOverlay == m };
+            var targetMode = m;
+            item.Click += (_, _) =>
+            {
+                previewOverlay = targetMode;
+                safeAreas = previewOverlay != PreviewOverlayMode.None;
+                vm.Status = $"Preview overlay: {label}.";
+                if (PreviewOverlayButton is not null) PreviewOverlayButton.ToolTip = $"Preview overlay: {label}";
+                revision++;
+                RequestPreview();
+            };
+            menu.Items.Add(item);
+        }
+        menu.PlacementTarget = sender as UIElement;
+        menu.IsOpen = true;
+        e.Handled = true;
+    }
     private async Task<BitmapSource> CaptureFrameAsync()
     {
         var project = vm.Project.DeepClone(); var frame = vm.Position;

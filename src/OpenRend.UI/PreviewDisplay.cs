@@ -1,8 +1,22 @@
+using System;
+
 namespace OpenRend.UI;
+
+public enum PreviewOverlayMode
+{
+    None,
+    SafeAreas,
+    RuleOfThirds,
+    Grid4x4,
+    GoldenRatio
+}
 
 public static class PreviewDisplay
 {
-    public static byte[] Apply(byte[] bgra, int width, int height, double zoom, bool safeAreas)
+    public static byte[] Apply(byte[] bgra, int width, int height, double zoom, bool safeAreas) =>
+        Apply(bgra, width, height, zoom, safeAreas ? PreviewOverlayMode.SafeAreas : PreviewOverlayMode.None);
+
+    public static byte[] Apply(byte[] bgra, int width, int height, double zoom, PreviewOverlayMode overlay)
     {
         if (width <= 0 || height <= 0 || bgra.Length != checked(width * height * 4) || zoom is not (.5 or 1 or 2))
             throw new ArgumentException("Invalid preview display dimensions or zoom.");
@@ -20,20 +34,64 @@ public static class PreviewDisplay
                 Buffer.BlockCopy(bgra, (sy * width + sx) * 4, result, target, 4);
             }
         }
-        if (!safeAreas) return result;
+        if (overlay == PreviewOverlayMode.None) return result;
         if (ReferenceEquals(result, bgra)) result = (byte[])bgra.Clone();
+
         void Pixel(int x, int y)
         {
+            if (x < 0 || x >= width || y < 0 || y >= height) return;
             var offset = (y * width + x) * 4;
-            for (var channel = 0; channel < 3; channel++) result[offset + channel] = (byte)((result[offset + channel] + 255) / 2);
+            for (var channel = 0; channel < 3; channel++)
+                result[offset + channel] = (byte)((result[offset + channel] + 255) / 2);
         }
-        foreach (var inset in new[] { .05, .1 })
+
+        switch (overlay)
         {
-            var left = Math.Clamp((int)Math.Round(width * inset), 0, width - 1); var right = width - left - 1;
-            var top = Math.Clamp((int)Math.Round(height * inset), 0, height - 1); var bottom = height - top - 1;
-            for (var x = left; x <= right; x++) { Pixel(x, top); Pixel(x, bottom); }
-            for (var y = top + 1; y < bottom; y++) { Pixel(left, y); Pixel(right, y); }
+            case PreviewOverlayMode.SafeAreas:
+                // SMPTE 90% Action Safe (5% inset) and 80% Title Safe (10% inset)
+                foreach (var inset in new[] { .05, .1 })
+                {
+                    var left = Math.Clamp((int)Math.Round(width * inset), 0, width - 1); var right = width - left - 1;
+                    var top = Math.Clamp((int)Math.Round(height * inset), 0, height - 1); var bottom = height - top - 1;
+                    for (var x = left; x <= right; x++) { Pixel(x, top); Pixel(x, bottom); }
+                    for (var y = top + 1; y < bottom; y++) { Pixel(left, y); Pixel(right, y); }
+                }
+                break;
+
+            case PreviewOverlayMode.RuleOfThirds:
+                // Rule of Thirds (3x3 grid)
+                for (var i = 1; i <= 2; i++)
+                {
+                    var gx = Math.Clamp((int)Math.Round(width * (i / 3.0)), 0, width - 1);
+                    var gy = Math.Clamp((int)Math.Round(height * (i / 3.0)), 0, height - 1);
+                    for (var y = 0; y < height; y++) Pixel(gx, y);
+                    for (var x = 0; x < width; x++) Pixel(x, gy);
+                }
+                break;
+
+            case PreviewOverlayMode.Grid4x4:
+                // 4x4 uniform grid
+                for (var i = 1; i <= 3; i++)
+                {
+                    var gx = Math.Clamp((int)Math.Round(width * (i / 4.0)), 0, width - 1);
+                    var gy = Math.Clamp((int)Math.Round(height * (i / 4.0)), 0, height - 1);
+                    for (var y = 0; y < height; y++) Pixel(gx, y);
+                    for (var x = 0; x < width; x++) Pixel(x, gy);
+                }
+                break;
+
+            case PreviewOverlayMode.GoldenRatio:
+                // Golden Ratio (phi grid at 0.382 and 0.618)
+                foreach (var ratio in new[] { 0.382, 0.618 })
+                {
+                    var gx = Math.Clamp((int)Math.Round(width * ratio), 0, width - 1);
+                    var gy = Math.Clamp((int)Math.Round(height * ratio), 0, height - 1);
+                    for (var y = 0; y < height; y++) Pixel(gx, y);
+                    for (var x = 0; x < width; x++) Pixel(x, gy);
+                }
+                break;
         }
+
         return result;
     }
 }

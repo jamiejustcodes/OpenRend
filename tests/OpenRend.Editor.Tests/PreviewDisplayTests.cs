@@ -69,6 +69,49 @@ public sealed class PreviewDisplayTests
     public void InvalidDisplayDimensionsAndZoomAreRejected(int width, int height, double zoom) => Assert.Throws<ArgumentException>(() => PreviewDisplay.Apply(new byte[64], width, height, zoom, false));
 
     [Fact]
+    public void RuleOfThirdsOverlay_BlendsGuideLinesAtThirdsIntersections()
+    {
+        var source = new byte[100 * 100 * 4];
+        for (var i = 0; i < source.Length; i += 4) { source[i] = 10; source[i + 1] = 20; source[i + 2] = 30; source[i + 3] = 255; }
+        var result = PreviewDisplay.Apply(source, 100, 100, 1, PreviewOverlayMode.RuleOfThirds);
+        Assert.NotSame(source, result);
+        // At x = 33 (1/3) and x = 67 (2/3), line is drawn
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((50 * 100 + 33) * 4).Take(4));
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((50 * 100 + 67) * 4).Take(4));
+        // Empty pixel remains unblended
+        Assert.Equal(new byte[] { 10, 20, 30, 255 }, result.Skip((50 * 100 + 50) * 4).Take(4));
+    }
+
+    [Fact]
+    public void Grid4x4Overlay_BlendsQuarterLines()
+    {
+        var source = new byte[100 * 100 * 4];
+        for (var i = 0; i < source.Length; i += 4) { source[i] = 10; source[i + 1] = 20; source[i + 2] = 30; source[i + 3] = 255; }
+        var result = PreviewDisplay.Apply(source, 100, 100, 1, PreviewOverlayMode.Grid4x4);
+        Assert.NotSame(source, result);
+        // Quarter lines at x = 25, 50, 75 along non-intersection row y = 40
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((40 * 100 + 25) * 4).Take(4));
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((40 * 100 + 50) * 4).Take(4));
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((40 * 100 + 75) * 4).Take(4));
+        // Intersection point at x = 50, y = 50 is blended twice
+        Assert.Equal(new byte[] { 193, 196, 198, 255 }, result.Skip((50 * 100 + 50) * 4).Take(4));
+        // Non-line pixel remains unmodified
+        Assert.Equal(new byte[] { 10, 20, 30, 255 }, result.Skip((40 * 100 + 40) * 4).Take(4));
+    }
+
+    [Fact]
+    public void GoldenRatioOverlay_BlendsPhiLines()
+    {
+        var source = new byte[100 * 100 * 4];
+        for (var i = 0; i < source.Length; i += 4) { source[i] = 10; source[i + 1] = 20; source[i + 2] = 30; source[i + 3] = 255; }
+        var result = PreviewDisplay.Apply(source, 100, 100, 1, PreviewOverlayMode.GoldenRatio);
+        Assert.NotSame(source, result);
+        // Phi at 38% and 62%
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((50 * 100 + 38) * 4).Take(4));
+        Assert.Equal(new byte[] { 132, 137, 142, 255 }, result.Skip((50 * 100 + 62) * 4).Take(4));
+    }
+
+    [Fact]
     public void InvalidBufferLengthIsRejected() => Assert.Throws<ArgumentException>(() => PreviewDisplay.Apply(new byte[63], 4, 4, 1, false));
 
     [Theory]
