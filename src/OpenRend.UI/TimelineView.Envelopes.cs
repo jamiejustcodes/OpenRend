@@ -47,9 +47,26 @@ public partial class TimelineView
             baselinePen.Freeze();
             dc.DrawLine(baselinePen, new Point(rect.Left, baselineY), new Point(rect.Right, baselineY));
 
-            if (isVelocity && rect.Width > 60)
+            if (isVelocity)
             {
-                Text(dc, "100%", rect.Left + 4, baselineY - 11, Brush("#77AA77"), 8);
+                if (rect.Width > 60)
+                {
+                    Text(dc, "100%", rect.Left + 4, baselineY - 11, Brush("#77AA77"), 8);
+                }
+
+                // Draw 0% freeze-frame baseline
+                var uZero = Math.Clamp((0.0 - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
+                var zeroY = bottom - uZero * height;
+                var zeroPen = new Pen(new SolidColorBrush(Color.FromArgb(70, 200, 200, 200)), 1.0)
+                {
+                    DashStyle = new DashStyle(new double[] { 2, 4 }, 0)
+                };
+                zeroPen.Freeze();
+                dc.DrawLine(zeroPen, new Point(rect.Left, zeroY), new Point(rect.Right, zeroY));
+                if (rect.Width > 80)
+                {
+                    Text(dc, "0% (Freeze)", rect.Left + 4, zeroY - 10, Brush("#888888"), 8);
+                }
             }
 
             // 2. Draw envelope curve across event
@@ -106,7 +123,7 @@ public partial class TimelineView
                 if (isPointActive)
                 {
                     var label = isVelocity
-                        ? $"Velocity: {Math.Round(pt.Value * 100)}%"
+                        ? (Math.Abs(pt.Value) < 0.005 ? "Velocity: 0% (Freeze Frame)" : $"Velocity: {Math.Round(pt.Value * 100)}% ({pt.Value:0.00}x)")
                         : $"Composite: {Math.Round(pt.Value * 100)}%";
                     Text(dc, label, ptX + 6, ptY - 14, Brush("#FFAA00"), 9);
                 }
@@ -502,6 +519,15 @@ public partial class TimelineView
             var mouseNorm = Math.Clamp((bottom - p.Y) / height, 0.0, 1.0);
             var newVal = draggingEnv.MinValue + mouseNorm * (draggingEnv.MaxValue - draggingEnv.MinValue);
 
+            if (draggingEnv.Type == EnvelopeType.Velocity)
+            {
+                if (Math.Abs(newVal) < 0.04) newVal = 0.0;
+                else if (Math.Abs(newVal - 1.0) < 0.04) newVal = 1.0;
+                else if (Math.Abs(newVal - (-1.0)) < 0.04) newVal = -1.0;
+                else if (Math.Abs(newVal - 2.0) < 0.04) newVal = 2.0;
+                else if (Math.Abs(newVal - 3.0) < 0.04) newVal = 3.0;
+            }
+
             if (draggingEnvPt.Frame == 0 && progress < 0.1) newFrame = 0;
             else if (draggingEnvPt.Frame == draggingEnvClip.DurationFrames && progress > 0.9) newFrame = draggingEnvClip.DurationFrames;
 
@@ -524,6 +550,15 @@ public partial class TimelineView
             var newFrame = Math.Max(0, FrameAt(p.X));
             var mouseNorm = Math.Clamp((bottom - p.Y) / height, 0.0, 1.0);
             var newVal = draggingEnv.MinValue + mouseNorm * (draggingEnv.MaxValue - draggingEnv.MinValue);
+
+            if (draggingEnv.Type == EnvelopeType.Velocity)
+            {
+                if (Math.Abs(newVal) < 0.04) newVal = 0.0;
+                else if (Math.Abs(newVal - 1.0) < 0.04) newVal = 1.0;
+                else if (Math.Abs(newVal - (-1.0)) < 0.04) newVal = -1.0;
+                else if (Math.Abs(newVal - 2.0) < 0.04) newVal = 2.0;
+                else if (Math.Abs(newVal - 3.0) < 0.04) newVal = 3.0;
+            }
 
             draggingEnvPt.Frame = newFrame;
             draggingEnvPt.Value = newVal;

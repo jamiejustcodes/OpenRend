@@ -53,7 +53,11 @@
           <MenuItem x:Name="MuteAudioClipMenu" Header="Mute audio" InputGestureText="Ctrl+Shift+M" Click="MuteAudioClipClick"/>
           <MenuItem Header="Normalize audio" Click="NormalizeAudioClipClick"/>
           <MenuItem Header="Invert phase" Click="InvertPhaseClipClick"/>
+          <Separator/>
+          <MenuItem Header="Maintain aspect ratio" Click="MaintainAspectRatioClick"/>
+          <MenuItem Header="Reduce interlace flicker" Click="ReduceInterlaceClick"/>
         </MenuItem>
+        <MenuItem Header="Reverse" Click="ReverseEventClick"/>
         <MenuItem Header="Take">
           <MenuItem Header="Next Take" InputGestureText="T" Click="NextTakeClick"/>
           <MenuItem Header="Previous Take" InputGestureText="Shift+T" Click="PreviousTakeClick"/>

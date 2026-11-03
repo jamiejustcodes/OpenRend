@@ -311,6 +311,9 @@ public sealed class ProjectDocument
                 var available = FrameRate.Frames(source.DurationSeconds);
                 if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
+                if (!double.IsFinite(clip.PlaybackRate) || Math.Abs(clip.PlaybackRate) < 0.05 || Math.Abs(clip.PlaybackRate) > 10.0) throw new InvalidDataException("Clip playback rate must be between 0.05 and 10.0.");
+                if (!double.IsFinite(clip.UnderSampleRate) || clip.UnderSampleRate < 0.001 || clip.UnderSampleRate > 1.0) throw new InvalidDataException("Clip undersample rate must be between 0.001 and 1.0.");
+                if (!Enum.IsDefined(clip.ResampleMode)) throw new InvalidDataException("Clip resample mode is invalid.");
                 var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
                 if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null))
@@ -448,6 +451,13 @@ public sealed class TimelineTrack
     };
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<VideoResampleMode>))]
+public enum VideoResampleMode
+{
+    Smart = 0,
+    Force = 1,
+    Disable = 2
+}
 public sealed class TimelineTake
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -455,6 +465,14 @@ public sealed class TimelineTake
     public string Name { get; set; } = "Take";
     public long SourceInFrame { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsReversed { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PlaybackRate { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double UnderSampleRate { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoResampleMode ResampleMode { get; set; } = VideoResampleMode.Smart;
+    public bool MaintainAspectRatio { get; set; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool ReduceInterlace { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Normalize { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
 
     public TimelineTake DeepClone() => new()
     {
@@ -462,7 +480,9 @@ public sealed class TimelineTake
         MediaId = MediaId,
         Name = Name,
         SourceInFrame = SourceInFrame,
-        VideoSourceMode = VideoSourceMode
+        VideoSourceMode = VideoSourceMode,
+        IsReversed = IsReversed,
+        PlaybackRate = PlaybackRate
     };
 
     public void Validate()
@@ -482,6 +502,14 @@ public sealed class TimelineClip
     public long SourceInFrame { get; set; }
     public long DurationFrames { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsReversed { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PlaybackRate { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double UnderSampleRate { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoResampleMode ResampleMode { get; set; } = VideoResampleMode.Smart;
+    public bool MaintainAspectRatio { get; set; } = true;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool ReduceInterlace { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Normalize { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsLocked { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsMuted { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);

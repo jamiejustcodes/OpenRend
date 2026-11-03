@@ -163,7 +163,99 @@ public sealed partial class TimelineView
         var lockItem = new MenuItem { Header = "Lock", IsCheckable = true };
         AutomationProperties.SetAutomationId(lockItem, "EventLock");
         switches.Items.Add(lockItem);
+        var aspectItem = new MenuItem { Header = "Maintain Aspect Ratio", IsCheckable = true };
+        AutomationProperties.SetAutomationId(aspectItem, "EventMaintainAspectRatio");
+        switches.Items.Add(aspectItem);
+        var interlaceItem = new MenuItem { Header = "Reduce Interlace Flicker", IsCheckable = true };
+        AutomationProperties.SetAutomationId(interlaceItem, "EventReduceInterlace");
+        switches.Items.Add(interlaceItem);
+        var normalizeItem = new MenuItem { Header = "Normalize", IsCheckable = true };
+        AutomationProperties.SetAutomationId(normalizeItem, "EventNormalize");
+        switches.Items.Add(normalizeItem);
+        var invertPhaseItem = new MenuItem { Header = "Invert Phase", IsCheckable = true };
+        AutomationProperties.SetAutomationId(invertPhaseItem, "EventInvertPhase");
+        switches.Items.Add(invertPhaseItem);
         menu.Items.Add(switches);
+
+        var reverseItem = new MenuItem { Header = "Reverse", IsCheckable = true };
+        AutomationProperties.SetAutomationId(reverseItem, "EventReverse");
+        menu.Items.Add(reverseItem);
+
+        var playbackRateMenu = new MenuItem { Header = "Playback Rate" };
+        AutomationProperties.SetAutomationId(playbackRateMenu, "EventPlaybackRateMenu");
+        var rates = new (string Label, double Rate)[]
+        {
+            ("0.25x (Quarter Speed)", 0.25),
+            ("0.5x (Half Speed)", 0.5),
+            ("0.75x", 0.75),
+            ("1.0x (Normal Speed)", 1.0),
+            ("1.25x", 1.25),
+            ("1.5x", 1.5),
+            ("2.0x (Double Speed)", 2.0),
+            ("3.0x (Triple Speed)", 3.0),
+            ("4.0x (Quad Speed)", 4.0)
+        };
+        foreach (var (label, rate) in rates)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            var r = rate;
+            item.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    ClipPlaybackRateRequested?.Invoke(events[0].Id, r);
+            };
+            playbackRateMenu.Items.Add(item);
+        }
+        menu.Items.Add(playbackRateMenu);
+
+        var resampleMenu = new MenuItem { Header = "Resample Mode" };
+        AutomationProperties.SetAutomationId(resampleMenu, "EventResampleModeMenu");
+        var modes = new (string Label, VideoResampleMode Mode)[]
+        {
+            ("Smart Resample", VideoResampleMode.Smart),
+            ("Force Resample", VideoResampleMode.Force),
+            ("Disable Resample", VideoResampleMode.Disable)
+        };
+        foreach (var (label, mode) in modes)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            var m = mode;
+            item.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    ClipResampleModeRequested?.Invoke(events[0].Id, m);
+            };
+            resampleMenu.Items.Add(item);
+        }
+        menu.Items.Add(resampleMenu);
+
+        var undersampleMenu = new MenuItem { Header = "Undersample Rate" };
+        AutomationProperties.SetAutomationId(undersampleMenu, "EventUndersampleMenu");
+        var underRates = new (string Label, double Rate)[]
+        {
+            ("1.000 (Full Rate)", 1.0),
+            ("0.500 (Half Rate)", 0.5),
+            ("0.250 (Quarter Rate)", 0.25),
+            ("0.100 (Stop-Motion / Strobe)", 0.1)
+        };
+        foreach (var (label, rate) in underRates)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            var ur = rate;
+            item.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    ClipUnderSampleRateRequested?.Invoke(events[0].Id, ur);
+            };
+            undersampleMenu.Items.Add(item);
+        }
+        menu.Items.Add(undersampleMenu);
 
         var takesMenu = new MenuItem { Header = "Take" };
         AutomationProperties.SetAutomationId(takesMenu, "EventTakesMenu");
@@ -221,6 +313,41 @@ public sealed partial class TimelineView
                 .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
             if (IsEnabled && events.Length == 1)
                 VideoSourceModeRequested?.Invoke(events[0].Id, loop.IsChecked ? VideoSourceMode.Loop : VideoSourceMode.HoldLastFrame);
+        };
+        reverseItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipReverseRequested?.Invoke(events[0].Id, reverseItem.IsChecked);
+        };
+        aspectItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipMaintainAspectRatioRequested?.Invoke(events[0].Id, aspectItem.IsChecked);
+        };
+        interlaceItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipReduceInterlaceRequested?.Invoke(events[0].Id, interlaceItem.IsChecked);
+        };
+        normalizeItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Audio && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipNormalizeRequested?.Invoke(events[0].Id, normalizeItem.IsChecked);
+        };
+        invertPhaseItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Audio && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                ClipInvertPhaseRequested?.Invoke(events[0].Id, invertPhaseItem.IsChecked);
         };
         var fadeInCurves = new MenuItem { Header = "Fade In Curve" };
         AutomationProperties.SetAutomationId(fadeInCurves, "FadeInCurveMenu");
@@ -354,10 +481,44 @@ public sealed partial class TimelineView
             switches.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
             loop.IsEnabled = switches.IsEnabled && !isLocked;
             loop.IsChecked = video.Length == 1 && video[0].Clip.VideoSourceMode == VideoSourceMode.Loop;
-            muteItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            muteItem.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked && !isLocked;
             muteItem.IsChecked = singleTarget.Clip?.IsMuted ?? false;
-            lockItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
+            lockItem.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked;
             lockItem.IsChecked = isLocked;
+            reverseItem.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked && !isLocked;
+            reverseItem.IsChecked = singleTarget.Clip?.IsReversed ?? false;
+            playbackRateMenu.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked && !isLocked;
+            foreach (MenuItem item in playbackRateMenu.Items)
+            {
+                if (item.Header is string h && double.TryParse(h.Split('x')[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rate))
+                    item.IsChecked = singleTarget.Clip != null && Math.Abs(singleTarget.Clip.PlaybackRate - rate) < 0.01;
+            }
+            resampleMenu.IsEnabled = IsEnabled && video.Length == 1 && !isLocked;
+            resampleMenu.Visibility = singleTarget.Track?.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in resampleMenu.Items)
+            {
+                if (item.Header is string h && Enum.TryParse<VideoResampleMode>(h.Replace(" Resample", ""), out var mode))
+                    item.IsChecked = singleTarget.Clip != null && singleTarget.Clip.ResampleMode == mode;
+            }
+            undersampleMenu.IsEnabled = IsEnabled && video.Length == 1 && !isLocked;
+            undersampleMenu.Visibility = singleTarget.Track?.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in undersampleMenu.Items)
+            {
+                if (item.Header is string h && double.TryParse(h.Split(' ')[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var rate))
+                    item.IsChecked = singleTarget.Clip != null && Math.Abs(singleTarget.Clip.UnderSampleRate - rate) < 0.01;
+            }
+            aspectItem.IsEnabled = IsEnabled && video.Length == 1 && !isLocked;
+            aspectItem.IsChecked = singleTarget.Clip?.MaintainAspectRatio ?? true;
+            aspectItem.Visibility = singleTarget.Track?.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;
+            interlaceItem.IsEnabled = IsEnabled && video.Length == 1 && !isLocked;
+            interlaceItem.IsChecked = singleTarget.Clip?.ReduceInterlace ?? false;
+            interlaceItem.Visibility = singleTarget.Track?.Kind == TrackKind.Video ? Visibility.Visible : Visibility.Collapsed;
+            normalizeItem.IsEnabled = IsEnabled && singleTarget.Track?.Kind == TrackKind.Audio && !isLocked;
+            normalizeItem.IsChecked = singleTarget.Clip?.Normalize ?? false;
+            normalizeItem.Visibility = singleTarget.Track?.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
+            invertPhaseItem.IsEnabled = IsEnabled && singleTarget.Track?.Kind == TrackKind.Audio && !isLocked;
+            invertPhaseItem.IsChecked = singleTarget.Clip?.InvertPhase ?? false;
+            invertPhaseItem.Visibility = singleTarget.Track?.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
             var singleClip = singleTarget.Clip;
             var hasTakes = singleClip?.Takes is { Count: > 1 };
             takesMenu.Visibility = hasTakes ? Visibility.Visible : Visibility.Collapsed;

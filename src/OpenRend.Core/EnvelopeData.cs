@@ -147,23 +147,44 @@ public sealed class ClipEnvelope : IEquatable<ClipEnvelope>
     }
 
     /// <summary>
-    /// Computes the accumulated source frame position given velocity envelope integration.
-    /// Supports forward playback, slow motion, freeze frame, and reverse playback.
+    /// Computes the accumulated source frame position given velocity envelope integration,
+    /// event playback rate, and reverse playback switch.
+    /// Supports forward playback, slow motion, freeze frame (0%), reverse speeds (-100%),
+    /// and accelerated speeds (+300%).
     /// </summary>
-    public long CalculateAccumulatedSourceFrame(long startSourceFrame, long targetClipFrame)
+    public long CalculateAccumulatedSourceFrame(long startSourceFrame, long targetClipFrame, double playbackRate = 1.0, bool isReversed = false, long durationFrames = 0)
     {
-        if (targetClipFrame <= 0) return startSourceFrame;
-        if (!IsEnabled || Points.Count == 0) return startSourceFrame + targetClipFrame;
+        var effRate = double.IsFinite(playbackRate) && playbackRate != 0 ? Math.Abs(playbackRate) : 1.0;
+        if (targetClipFrame <= 0 && !isReversed) return startSourceFrame;
 
-        // Fast analytical piecewise integration
+        if (!IsEnabled || Points.Count == 0)
+        {
+            if (isReversed)
+            {
+                var revFrames = Math.Max(0, durationFrames - 1 - targetClipFrame);
+                return Math.Max(0, startSourceFrame + (long)Math.Round(revFrames * effRate));
+            }
+            return Math.Max(0, startSourceFrame + (long)Math.Round(targetClipFrame * effRate));
+        }
+
+        // Fast numerical integration of velocity envelope curve * playback rate
         double accumulatedDelta = 0.0;
         for (long f = 0; f < targetClipFrame; f++)
         {
-            accumulatedDelta += ValueAt(f);
+            accumulatedDelta += ValueAt(f) * effRate;
         }
 
-        long result = startSourceFrame + (long)Math.Round(accumulatedDelta);
-        return Math.Max(0, result);
+        if (isReversed)
+        {
+            long baseEnd = startSourceFrame + (long)Math.Round(Math.Max(0, durationFrames - 1) * effRate);
+            long result = baseEnd - (long)Math.Round(accumulatedDelta);
+            return Math.Max(0, result);
+        }
+        else
+        {
+            long result = startSourceFrame + (long)Math.Round(accumulatedDelta);
+            return Math.Max(0, result);
+        }
     }
 
     public ClipEnvelope DeepClone() => new()

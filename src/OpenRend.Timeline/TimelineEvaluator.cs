@@ -1,4 +1,4 @@
-﻿using OpenRend.Core;
+using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -75,9 +75,22 @@ public static class TimelineEvaluator
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
 
+                // Vegas Pro Undersample Rate (stop-motion / strobe effect)
+                if (clip.UnderSampleRate > 0.001 && clip.UnderSampleRate < 0.999)
+                {
+                    var underStep = Math.Max(1, (int)Math.Round(1.0 / clip.UnderSampleRate));
+                    if (underStep > 1)
+                    {
+                        local = (local / underStep) * underStep;
+                    }
+                }
+
+                var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
                 var sourceFrame = clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velocityEnv
-                    ? velocityEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, local)
-                    : clip.SourceInFrame + local;
+                    ? velocityEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, local, effPlaybackRate, clip.IsReversed, clip.DurationFrames)
+                    : clip.IsReversed
+                        ? clip.SourceInFrame + (long)Math.Round(Math.Max(0, clip.DurationFrames - 1 - local) * Math.Abs(effPlaybackRate))
+                        : clip.SourceInFrame + (long)Math.Round(local * effPlaybackRate);
 
                 var opacity = clip.Opacity * track.Opacity * fade;
                 if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } trackComp)
@@ -110,7 +123,11 @@ public static class TimelineEvaluator
                     { Crop = CropAt(clip, asset, local), Dissolve = dissolves.GetValueOrDefault(clip.Id),
                         SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode),
                         TrackMotion = trackMotion });
-                if (track.Kind == TrackKind.Audio && asset.HasAudio) audio.Add(item);
+                if (track.Kind == TrackKind.Audio && asset.HasAudio)
+                {
+                    var audioItem = clip.InvertPhase ? item with { Gain = -item.Gain } : item;
+                    audio.Add(audioItem);
+                }
             }
         }
         return new(video, audio);
@@ -165,6 +182,7 @@ public static class TimelineEvaluator
     public static (double Left, double Right) AudioGains(TimelineTrack track, TimelineClip clip, double localFrame)
     {
         var gain = track.Gain * clip.Gain * FadeAt(clip, localFrame);
+        if (clip.InvertPhase) gain = -gain;
         var (left, right) = BalanceStages(track, clip);
         return (gain * left, gain * right);
     }

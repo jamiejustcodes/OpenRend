@@ -97,6 +97,14 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? PreviousTakeRequested;
     public event Action<Guid, int>? SelectTakeRequested;
     public event Action<Guid>? DeleteTakeRequested;
+    public event Action<Guid, bool>? ClipReverseRequested;
+    public event Action<Guid, double>? ClipPlaybackRateRequested;
+    public event Action<Guid, double>? ClipUnderSampleRateRequested;
+    public event Action<Guid, VideoResampleMode>? ClipResampleModeRequested;
+    public event Action<Guid, bool>? ClipMaintainAspectRatioRequested;
+    public event Action<Guid, bool>? ClipReduceInterlaceRequested;
+    public event Action<Guid, bool>? ClipNormalizeRequested;
+    public event Action<Guid, bool>? ClipInvertPhaseRequested;
     public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
@@ -624,7 +632,11 @@ public sealed partial class TimelineView : FrameworkElement
                     headerOffset = 13.0;
                 }
                 var takePrefix = clip.Takes is { Count: > 1 } ? $"[Take {clip.ActiveTakeIndex + 1}/{clip.Takes.Count}] " : "";
-                var displayName = clip.IsMuted ? $"{takePrefix}{clip.Name} [Muted]" : $"{takePrefix}{clip.Name}";
+                var reversePrefix = clip.IsReversed ? "[Reverse] " : "";
+                var rateSuffix = Math.Abs(clip.PlaybackRate - 1.0) > 0.001 ? $" [{clip.PlaybackRate:0.##}x]" : "";
+                var mutedSuffix = clip.IsMuted ? " [Muted]" : "";
+                var phaseSuffix = clip.InvertPhase ? " [Phase Ã˜]" : "";
+                var displayName = $"{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {

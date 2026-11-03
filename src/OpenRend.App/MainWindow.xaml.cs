@@ -221,6 +221,78 @@ public partial class MainWindow : Window
         Timeline.PreviousTakeRequested += id => Guard(() => { Pause(); vm.Editor.PreviousTake(id); UpdateInspector(); RequestPreview(); Refresh(); });
         Timeline.SelectTakeRequested += (id, idx) => Guard(() => { Pause(); vm.Editor.SetActiveTake(id, idx); UpdateInspector(); RequestPreview(); Refresh(); });
         Timeline.DeleteTakeRequested += id => Guard(() => { Pause(); vm.Editor.DeleteActiveTake(id); UpdateInspector(); RequestPreview(); Refresh(); });
+        Timeline.ClipReverseRequested += (id, rev) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipReverse(id, rev);
+            vm.Status = rev ? "Reversed event playback." : "Restored normal event playback.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipPlaybackRateRequested += (id, rate) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipPlaybackRate(id, rate);
+            vm.Status = $"Set event playback rate to {rate:0.##}x.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipUnderSampleRateRequested += (id, rate) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipUnderSampleRate(id, rate);
+            vm.Status = $"Set event undersample rate to {rate:0.###}.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipResampleModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipResampleMode(id, mode);
+            vm.Status = $"Set event resample mode to {mode}.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipMaintainAspectRatioRequested += (id, maintain) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipMaintainAspectRatio(id, maintain);
+            vm.Status = maintain ? "Enabled maintain aspect ratio." : "Disabled maintain aspect ratio.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipReduceInterlaceRequested += (id, red) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipReduceInterlace(id, red);
+            vm.Status = red ? "Enabled reduce interlace flicker." : "Disabled reduce interlace flicker.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipNormalizeRequested += (id, norm) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipNormalize(id, norm);
+            vm.Status = norm ? "Normalized audio event." : "Removed audio normalization.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipInvertPhaseRequested += (id, inv) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipInvertPhase(id, inv);
+            vm.Status = inv ? "Inverted audio event phase." : "Restored audio event phase.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
@@ -1383,6 +1455,45 @@ public partial class MainWindow : Window
         UpdateInspector();
         RequestPreview();
         vm.Status = allMuted ? "Unmuted audio event(s)." : "Muted audio event(s).";
+    });
+    private void ReverseEventClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id))).ToArray();
+        if (selected.Length == 0 && SelectedClip is { } single) selected = [single];
+        if (selected.Length == 0) { vm.Status = "Select an event to toggle reverse playback."; return; }
+        Pause();
+        var targetState = !selected.All(c => c.IsReversed);
+        foreach (var c in selected) vm.Editor.SetClipReverse(c.Id, targetState);
+        UpdateInspector();
+        RequestPreview();
+        Refresh();
+        vm.Status = targetState ? "Reversed selected event(s)." : "Restored normal playback on selected event(s).";
+    });
+    private void MaintainAspectRatioClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video).SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id))).ToArray();
+        if (selected.Length == 0 && SelectedClip is { } single && vm.Project.Tracks.Any(t => t.Kind == TrackKind.Video && t.Clips.Contains(single))) selected = [single];
+        if (selected.Length == 0) { vm.Status = "Select a video event to toggle maintain aspect ratio."; return; }
+        Pause();
+        var targetState = !selected.All(c => c.MaintainAspectRatio);
+        foreach (var c in selected) vm.Editor.SetClipMaintainAspectRatio(c.Id, targetState);
+        UpdateInspector();
+        RequestPreview();
+        Refresh();
+        vm.Status = targetState ? "Enabled maintain aspect ratio." : "Disabled maintain aspect ratio.";
+    });
+    private void ReduceInterlaceClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selected = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video).SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id))).ToArray();
+        if (selected.Length == 0 && SelectedClip is { } single && vm.Project.Tracks.Any(t => t.Kind == TrackKind.Video && t.Clips.Contains(single))) selected = [single];
+        if (selected.Length == 0) { vm.Status = "Select a video event to toggle reduce interlace flicker."; return; }
+        Pause();
+        var targetState = !selected.All(c => c.ReduceInterlace);
+        foreach (var c in selected) vm.Editor.SetClipReduceInterlace(c.Id, targetState);
+        UpdateInspector();
+        RequestPreview();
+        Refresh();
+        vm.Status = targetState ? "Enabled reduce interlace flicker." : "Disabled reduce interlace flicker.";
     });
     private void InvertPhaseClipClick(object sender, RoutedEventArgs e) => Guard(() =>
     {

@@ -35,7 +35,9 @@ public sealed partial class TimelineEditor
                     MediaId = clip.MediaId,
                     Name = clip.Name,
                     SourceInFrame = clip.SourceInFrame,
-                    VideoSourceMode = clip.VideoSourceMode
+                    VideoSourceMode = clip.VideoSourceMode,
+                    IsReversed = clip.IsReversed,
+                    PlaybackRate = clip.PlaybackRate
                 };
                 clip.Takes = [initialTake];
                 clip.ActiveTakeIndex = 0;
@@ -179,5 +181,7 @@ public sealed partial class TimelineEditor
         clip.SourceInFrame = take.SourceInFrame;
         clip.VideoSourceMode = take.VideoSourceMode;
         clip.Name = take.Name;
+        clip.IsReversed = take.IsReversed;
+        clip.PlaybackRate = take.PlaybackRate;
     }
 }
