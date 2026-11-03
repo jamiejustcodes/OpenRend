@@ -13,6 +13,10 @@ public sealed class MediaItem(MediaAsset asset) : ObservableObject
     public MediaAsset Asset { get; private set; } = asset;
     public string Name => Asset.Name;
     public string Details => $"{(Asset.HasVideo ? $"{Asset.Width} × {Asset.Height}  •  {Asset.FrameRate:0.###} fps" : "Audio")}  •  {Asset.DurationSeconds:0.00} s";
+    public bool HasEffects => Asset.VideoEffects.Count > 0;
+    public System.Windows.Media.Brush FxBadgeBrush => HasEffects
+        ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2E, 0x7D, 0x32))
+        : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x80, 0x33, 0x33, 0x33));
     private System.Windows.Media.ImageSource? thumbnail;
     public System.Windows.Media.ImageSource? Thumbnail { get => thumbnail; set => SetProperty(ref thumbnail, value); }
     public void Rebind(MediaAsset current)
@@ -20,6 +24,7 @@ public sealed class MediaItem(MediaAsset asset) : ObservableObject
         if (!string.Equals(Asset.Path, current.Path, StringComparison.OrdinalIgnoreCase)) Thumbnail = null;
         Asset = current;
         OnPropertyChanged(nameof(Asset)); OnPropertyChanged(nameof(Name)); OnPropertyChanged(nameof(Details));
+        OnPropertyChanged(nameof(HasEffects)); OnPropertyChanged(nameof(FxBadgeBrush));
     }
 }
 

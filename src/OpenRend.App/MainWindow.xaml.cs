@@ -1090,6 +1090,15 @@ public partial class MainWindow : Window
         RequestPreview();
     });
     private void MediaEffectsClick(object sender, RoutedEventArgs e) => OpenMediaEffects();
+    private void MediaFxButtonClick(object sender, RoutedEventArgs e)
+    {
+        e.Handled = true;
+        if (sender is FrameworkElement { Tag: MediaItem item })
+        {
+            MediaList.SelectedItem = item;
+            OpenMediaEffects(item.Asset.Id);
+        }
+    }
     private void OpenMediaEffects(Guid? requestedMedia = null) => Guard(() =>
     {
         MediaAsset? asset = null;
@@ -1104,6 +1113,8 @@ public partial class MainWindow : Window
         if (asset is null || !asset.HasVideo) { vm.Status = "Select a video media asset in Project Media to edit its effects."; return; }
         Pause(); RequestPreview();
         new VideoEffectsWindow(vm, EffectScope.Media, asset.Id) { Owner = this }.ShowDialog();
+        vm.Library.FirstOrDefault(m => m.Asset.Id == asset.Id)?.Rebind(asset);
+        RequestPreview();
     });
     private void VideoOutputEffectsClick(object sender, RoutedEventArgs e) => OpenVideoOutputEffects();
     private void OpenVideoOutputEffects() => Guard(() =>

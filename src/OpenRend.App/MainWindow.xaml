@@ -303,9 +303,19 @@
                   <ListBox.ItemTemplate>
                     <DataTemplate>
                       <StackPanel>
-                        <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Width="116" Height="66">
-                          <Image Source="{Binding Thumbnail}" Stretch="Uniform"/>
-                        </Border>
+                        <Grid Width="116" Height="66">
+                          <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1">
+                            <Image Source="{Binding Thumbnail}" Stretch="Uniform"/>
+                          </Border>
+                          <Button HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2" Width="20" Height="16"
+                                  Tag="{Binding}" Click="MediaFxButtonClick"
+                                  ToolTip="Media FX... (apply effects directly to source media)"
+                                  Style="{StaticResource ToolbarButton}">
+                            <Border CornerRadius="2" Padding="2,0,2,0" Background="{Binding FxBadgeBrush}">
+                              <TextBlock Text="fx" FontSize="9" FontWeight="Bold" Foreground="White" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                            </Border>
+                          </Button>
+                        </Grid>
                         <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{StaticResource TextColor}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" Height="28" Margin="0,2,0,0"/>
                       </StackPanel>
                     </DataTemplate>
