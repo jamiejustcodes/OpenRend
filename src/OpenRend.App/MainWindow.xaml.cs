@@ -438,6 +438,7 @@ public partial class MainWindow : Window
             initialized = true;
             LoadWorkspace();
             LoadGeneralPreferences();
+            InitializeLayoutManager();
             InitializeTransitionBrowser();
             InitializeToolsViews();
             Refresh();
@@ -2276,7 +2277,7 @@ public partial class MainWindow : Window
             RequestPreview();
         });
     }
-    private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(Math.Min(600, Math.Max(230, ActualHeight - 260))); MediaWidth.Width = new GridLength(1, GridUnitType.Star); PreviewWidth.Width = new GridLength(Math.Min(844, Math.Max(320, ActualWidth - 420))); ToolsTabs.SelectedIndex = 1; Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
+    private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { DefaultLayoutClick(sender, e); Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         var dialog = new ProjectSettingsWindow(vm.Project) { Owner = this };
@@ -2322,11 +2323,36 @@ public partial class MainWindow : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
+        if (HandleLayoutChordKey(e)) return;
+        if (alt && !ctrl && !shift && key == Key.D)
+        {
+            isAltDChordPending = true;
+            layoutChordTimer?.Stop();
+            layoutChordTimer?.Start();
+            vm.Status = "Alt+D pressed. Press D (Default), A (Audio), C (Color), S (Source), T (Timeline Top), R (Reload), W (Save), or 0–9...";
+            e.Handled = true;
+            return;
+        }
         Action? action = key switch
         {
             Key.B when shift && alt => () => SplitScreenClick(this, e),
             Key.I when ctrl => () => ImportClick(this, e),
             Key.O when ctrl => () => OpenClick(this, e),
+            Key.S when ctrl && alt => () => SaveLayoutClick(this, e),
+            Key.D0 when ctrl && alt => () => ActivateLayoutSlot(0),
+            Key.NumPad0 when ctrl && alt => () => ActivateLayoutSlot(0),
+            Key.D1 when ctrl && alt => () => ActivateLayoutSlot(1),
+            Key.NumPad1 when ctrl && alt => () => ActivateLayoutSlot(1),
+            Key.D3 when ctrl && alt => () => ActivateLayoutSlot(3),
+            Key.NumPad3 when ctrl && alt => () => ActivateLayoutSlot(3),
+            Key.D6 when ctrl && alt => () => ActivateLayoutSlot(6),
+            Key.NumPad6 when ctrl && alt => () => ActivateLayoutSlot(6),
+            Key.D7 when ctrl && alt => () => ActivateLayoutSlot(7),
+            Key.NumPad7 when ctrl && alt => () => ActivateLayoutSlot(7),
+            Key.D8 when ctrl && alt => () => ActivateLayoutSlot(8),
+            Key.NumPad8 when ctrl && alt => () => ActivateLayoutSlot(8),
+            Key.D9 when ctrl && alt => () => ActivateLayoutSlot(9),
+            Key.NumPad9 when ctrl && alt => () => ActivateLayoutSlot(9),
             Key.S when ctrl => () => { if (shift) SaveAsClick(this, e); else SaveClick(this, e); }
             ,
             Key.N when ctrl && shift => () => NewEmptyClick(this, e),

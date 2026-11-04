@@ -17,5 +17,7 @@
     <Compile Include="../../src/OpenRend.App/EditingPreferencesWindow.cs" Link="EditingPreferencesWindow.cs" />
     <Compile Include="../../src/OpenRend.App/PreviewFrameRequest.cs" Link="PreviewFrameRequest.cs" />
     <Compile Include="../../src/OpenRend.App/VideoEffectChooserModel.cs" Link="VideoEffectChooserModel.cs" />
+    <Compile Include="../../src/OpenRend.App/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
+    <Compile Include="../../src/OpenRend.App/WorkspaceLayoutManager.cs" Link="WorkspaceLayoutManager.cs" />
   </ItemGroup>
 </Project>

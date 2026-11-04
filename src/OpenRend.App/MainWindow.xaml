@@ -2,7 +2,7 @@
   <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="5" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
   <Window.Icon><BitmapImage UriSource="OpenRend.ico"/></Window.Icon>
   <Grid>
-    <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="34"/><RowDefinition x:Name="WorkspaceHeight" Height="600" MinHeight="230"/><RowDefinition Height="1"/><RowDefinition Height="*" MinHeight="140"/><RowDefinition Height="34"/><RowDefinition Height="20"/></Grid.RowDefinitions>
+    <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="34"/><RowDefinition x:Name="WorkspaceHeight" Height="600" MinHeight="230"/><RowDefinition Height="1"/><RowDefinition x:Name="TimelineRowHeight" Height="*" MinHeight="140"/><RowDefinition Height="34"/><RowDefinition Height="20"/></Grid.RowDefinitions>
     <Grid Background="#141414">
       <DockPanel LastChildFill="False">
         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" shell:WindowChrome.IsHitTestVisibleInChrome="True"><Button Style="{StaticResource CaptionButton}" AutomationProperties.Name="Minimise" Click="MinimizeClick"><Image Source="{StaticResource Icon.Minimize}" Width="12" Height="12"/></Button><Button Style="{StaticResource CaptionButton}" AutomationProperties.Name="Maximise" Click="MaximizeClick"><Image Source="{StaticResource Icon.Restore}" Width="12" Height="12"/></Button><Button Style="{StaticResource CaptionCloseButton}" AutomationProperties.Name="Close" Click="ExitClick"><Image Source="{StaticResource Icon.Close}" Width="12" Height="12"/></Button></StackPanel>
@@ -68,6 +68,29 @@
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_View">
+        <MenuItem x:Name="WindowLayoutsMenu" Header="Window La_youts">
+          <MenuItem Header="_Organize Layouts…" Click="OrganizeLayoutsClick"/>
+          <MenuItem Header="_Save Layout" InputGestureText="Ctrl+Alt+S" Click="SaveLayoutClick"/>
+          <MenuItem Header="Save Layout _As…" Click="SaveLayoutAsClick"/>
+          <MenuItem Header="_Reload Selected Layout" InputGestureText="Alt+D, R" Click="ReloadLayoutClick"/>
+          <Separator/>
+          <MenuItem Header="_Default Layout" InputGestureText="Alt+D, D" Click="DefaultLayoutClick"/>
+          <MenuItem Header="_Audio Mixing" InputGestureText="Alt+D, A" Click="AudioMixingLayoutClick"/>
+          <MenuItem Header="_Color Correction" InputGestureText="Alt+D, C" Click="ColorCorrectionLayoutClick"/>
+          <MenuItem Header="_Source Window Layout" InputGestureText="Alt+D, S" Click="SourceWindowLayoutClick"/>
+          <MenuItem Header="_Timeline Top Layout" InputGestureText="Alt+D, T" Click="TimelineTopLayoutClick"/>
+          <Separator/>
+          <MenuItem x:Name="LayoutSlot0Menu" Header="Layout &amp;0 &lt;EMPTY&gt;" InputGestureText="Alt+D, 0" Click="LayoutSlotClick" Tag="0"/>
+          <MenuItem x:Name="LayoutSlot1Menu" Header="Layout &amp;1 &lt;EMPTY&gt;" InputGestureText="Alt+D, 1" Click="LayoutSlotClick" Tag="1"/>
+          <MenuItem x:Name="LayoutSlot2Menu" Header="Layout &amp;2 &lt;EMPTY&gt;" InputGestureText="Alt+D, 2" Click="LayoutSlotClick" Tag="2"/>
+          <MenuItem x:Name="LayoutSlot3Menu" Header="Layout &amp;3 &lt;EMPTY&gt;" InputGestureText="Alt+D, 3" Click="LayoutSlotClick" Tag="3"/>
+          <MenuItem x:Name="LayoutSlot4Menu" Header="Layout &amp;4 &lt;EMPTY&gt;" InputGestureText="Alt+D, 4" Click="LayoutSlotClick" Tag="4"/>
+          <MenuItem x:Name="LayoutSlot5Menu" Header="Layout &amp;5 &lt;EMPTY&gt;" InputGestureText="Alt+D, 5" Click="LayoutSlotClick" Tag="5"/>
+          <MenuItem x:Name="LayoutSlot6Menu" Header="Layout &amp;6 &lt;EMPTY&gt;" InputGestureText="Alt+D, 6" Click="LayoutSlotClick" Tag="6"/>
+          <MenuItem x:Name="LayoutSlot7Menu" Header="Layout &amp;7 &lt;EMPTY&gt;" InputGestureText="Alt+D, 7" Click="LayoutSlotClick" Tag="7"/>
+          <MenuItem x:Name="LayoutSlot8Menu" Header="Layout &amp;8 &lt;EMPTY&gt;" InputGestureText="Alt+D, 8" Click="LayoutSlotClick" Tag="8"/>
+          <MenuItem x:Name="LayoutSlot9Menu" Header="Layout &amp;9 &lt;EMPTY&gt;" InputGestureText="Alt+D, 9" Click="LayoutSlotClick" Tag="9"/>
+        </MenuItem>
         <MenuItem Header="Window">
           <MenuItem x:Name="TrimmerWindowMenu" Header="Trimmer" InputGestureText="Alt+2" Click="TrimmerClick"/>
           <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
@@ -739,7 +762,7 @@
       </Grid></TabItem></TabControl>
     </Grid>
     <GridSplitter Grid.Row="3" Height="1" HorizontalAlignment="Stretch"/>
-    <Grid Grid.Row="4" Margin="4,0"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="18"/></Grid.RowDefinitions>
+    <Grid x:Name="TimelineAreaGrid" Grid.Row="4" Margin="4,0"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="18"/></Grid.RowDefinitions>
       <ui:TimelineView x:Name="Timeline"/>
       <Grid Grid.Row="1" Background="#262626"><Grid.ColumnDefinitions><ColumnDefinition Width="256"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ScrollBar x:Name="TimelineScroll" Grid.Column="1" Orientation="Horizontal" Minimum="0" ViewportSize="100" SmallChange="20" LargeChange="100" ValueChanged="TimelineScrollChanged" ToolTip="Timeline horizontal scroll"/></Grid>
     </Grid>
