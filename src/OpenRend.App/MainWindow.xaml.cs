@@ -441,6 +441,7 @@ public partial class MainWindow : Window
             InitializeLayoutManager();
             InitializeTransitionBrowser();
             InitializeToolsViews();
+            InitializeRulerEvents();
             Refresh();
             autosave.Start();
             await CheckCrashRecoveryAsync();
@@ -471,7 +472,7 @@ public partial class MainWindow : Window
         Timeline.IgnoreGroups = vm.IgnoreGroups;
         Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection);
         vm.ActiveTrackIndex = Timeline.ActiveTrackIndex;
-        Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector();
+        Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector(); SyncRulerFormatMenuChecks();
         UndoMenu.IsEnabled = UndoButton.IsEnabled = vm.Editor.CanUndo;
         RedoMenu.IsEnabled = RedoButton.IsEnabled = vm.Editor.CanRedo;
         CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0;
@@ -739,7 +740,7 @@ public partial class MainWindow : Window
     private void UpdatePosition()
     {
         Timeline.Position = vm.Position; Timeline.InvalidateVisual();
-        Timecode.Text = TimelineView.FormatTimecode(vm.Position, vm.Project.FrameRate);
+        Timecode.Text = TimecodeFormatter.Format(vm.Position, vm.Project.FrameRate, vm.Project.RulerFormat, vm.Project.AudioSampleRate, vm.Project.BeatsPerMinute, vm.Project.BeatsPerMeasure, vm.Project.RulerStartTimeFrames);
     }
     private async void RequestPreview()
     {
@@ -2310,7 +2311,11 @@ public partial class MainWindow : Window
             p.AudioSampleRate = dialog.AudioSampleRate;
             p.AudioBitDepth = dialog.AudioBitDepth;
             p.PrerenderFolder = dialog.PrerenderFolder;
+            p.RulerFormat = dialog.RulerFormat;
             p.RulerTimeFormat = dialog.RulerTimeFormat;
+            p.RulerStartTimeFrames = dialog.RulerStartTimeFrames;
+            p.BeatsPerMinute = dialog.BeatsPerMinute;
+            p.BeatsPerMeasure = dialog.BeatsPerMeasure;
             p.Author = dialog.Author;
             p.Copyright = dialog.Copyright;
             p.Comments = dialog.Comments;

@@ -161,6 +161,23 @@
           <MenuItem x:Name="RippleAffectedTracksMarkersMenu" Header="Affected Tracks, Bus Tracks, _Markers" InputGestureText="Ctrl+Shift+F" IsCheckable="True" Click="RippleAffectedTracksMarkersClick"/>
           <MenuItem x:Name="RippleAllTracksMarkersMenu" Header="All _Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" IsCheckable="True" Click="RippleAllTracksMarkersClick"/>
         </MenuItem>
+        <MenuItem x:Name="RulerFormatMenu" Header="Ruler &amp;Format">
+          <MenuItem x:Name="RulerFormatSamples" Header="&amp;Samples" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Samples"/>
+          <MenuItem x:Name="RulerFormatTime" Header="&amp;Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Time"/>
+          <MenuItem x:Name="RulerFormatSeconds" Header="Se&amp;conds" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Seconds"/>
+          <MenuItem x:Name="RulerFormatTimeAndFrames" Header="Time &amp;&amp; Fra&amp;mes" IsCheckable="True" Click="RulerFormatMenuClick" Tag="TimeAndFrames"/>
+          <MenuItem x:Name="RulerFormatAbsoluteFrames" Header="Absol&amp;ute Frames" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AbsoluteFrames"/>
+          <MenuItem x:Name="RulerFormatMeasuresAndBeats" Header="Measures &amp;&amp; &amp;Beats" IsCheckable="True" Click="RulerFormatMenuClick" Tag="MeasuresAndBeats"/>
+          <MenuItem x:Name="RulerFormatFeet16mm" Header="Feet and Frames &amp;16mm (40 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames16mm"/>
+          <MenuItem x:Name="RulerFormatFeet35mm" Header="Feet and Frames &amp;35mm (16 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames35mm"/>
+          <MenuItem x:Name="RulerFormatFilmSyncIVTC" Header="SMPTE Fi&amp;lm Sync IVTC (23.976 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSyncIVTC"/>
+          <MenuItem x:Name="RulerFormatFilmSync" Header="SMPTE &amp;Film Sync (24 fps, Film)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSync"/>
+          <MenuItem x:Name="RulerFormatEBU" Header="SMPTE &amp;EBU (25 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteEBU"/>
+          <MenuItem x:Name="RulerFormatNonDrop" Header="SMPTE &amp;Non-Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteNonDrop"/>
+          <MenuItem x:Name="RulerFormatDrop" Header="SMPTE &amp;Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteDrop"/>
+          <MenuItem x:Name="RulerFormat30" Header="SM&amp;PTE 30 (30 fps, Audio)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Smpte30"/>
+          <MenuItem x:Name="RulerFormatAudioCD" Header="&amp;Audio CD Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AudioCDTime"/>
+        </MenuItem>
         <Separator/>
         <MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/>
       </MenuItem>
@@ -772,7 +789,7 @@
         <!-- Right side: Record Time readout, Timecode sunken display, Zoom buttons -->
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
           <TextBlock x:Name="RecordTimeDisplay" Text="Record Time (2 ch): 24:00:00:00" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource TextColorGrey}" Margin="6,0" IsHitTestVisible="False"/>
-          <Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,2" Margin="4,0">
+          <Border x:Name="TimecodeBorder" Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,2" Margin="4,0" Cursor="Hand" ToolTip="Time at Cursor (Right-click for Ruler Format, Double-click to set time)" MouseRightButtonUp="Timecode_MouseRightButtonUp" MouseLeftButtonDown="Timecode_MouseLeftButtonDown">
             <TextBlock x:Name="Timecode" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" Text="00:00:00:00"/>
           </Border>
           <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>

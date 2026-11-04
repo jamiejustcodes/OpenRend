@@ -68,6 +68,13 @@ public sealed class ProjectSettingsWindow : Window
     private readonly ComboBox sampleRateCombo;
     private readonly ComboBox bitDepthCombo;
     private readonly ComboBox rulerTimeFormatCombo;
+    private readonly TextBox rulerStartBox;
+    private readonly TextBox bpmBox;
+    private readonly TextBox beatsPerMeasureBox;
+    public RulerFormat RulerFormat { get; private set; }
+    public long RulerStartTimeFrames { get; private set; }
+    public double BeatsPerMinute { get; private set; }
+    public int BeatsPerMeasure { get; private set; }
 
     public int ProjectWidth { get; private set; }
     public int ProjectHeight { get; private set; }
@@ -114,7 +121,11 @@ public sealed class ProjectSettingsWindow : Window
         AudioSampleRate = project.AudioSampleRate;
         AudioBitDepth = project.AudioBitDepth;
         PrerenderFolder = project.PrerenderFolder;
+        RulerFormat = project.RulerFormat;
         RulerTimeFormat = project.RulerTimeFormat;
+        RulerStartTimeFrames = project.RulerStartTimeFrames;
+        BeatsPerMinute = project.BeatsPerMinute;
+        BeatsPerMeasure = project.BeatsPerMeasure;
         Author = project.Author;
         Copyright = project.Copyright;
         Comments = project.Comments;
@@ -271,19 +282,23 @@ public sealed class ProjectSettingsWindow : Window
         var rulerGrid = CreateFormGrid();
         int rRow = 0;
 
-        var rulerFormats = new[] { "Timecode (SMPTE)", "Time & Frames", "Seconds", "Samples" };
-        int rulerIndex = project.RulerTimeFormat switch
-        {
-            "Time & Frames" => 1,
-            "Seconds" => 2,
-            "Samples" => 3,
-            _ => 0
-        };
+        var rulerFormats = RulerFormatExtensions.AllStandardFormats
+            .Select(f => f.ToDisplayName())
+            .ToArray();
+        int rulerIndex = Array.IndexOf(RulerFormatExtensions.AllStandardFormats, project.RulerFormat);
+        if (rulerIndex < 0) rulerIndex = 3;
         rulerTimeFormatCombo = CreateComboBox(rulerFormats, rulerIndex);
         AddFormRow(rulerGrid, rRow++, "Ruler time format:", rulerTimeFormatCombo);
 
-        var rulerStartBox = CreateTextBox("00:00:00:00");
+        var startFormatted = TimecodeFormatter.Format(project.RulerStartTimeFrames, project.FrameRate, project.RulerFormat);
+        rulerStartBox = CreateTextBox(startFormatted);
         AddFormRow(rulerGrid, rRow++, "Ruler start time:", rulerStartBox);
+
+        bpmBox = CreateTextBox(project.BeatsPerMinute.ToString("0.###", System.Globalization.CultureInfo.InvariantCulture));
+        AddFormRow(rulerGrid, rRow++, "Beats per minute:", bpmBox);
+
+        beatsPerMeasureBox = CreateTextBox(project.BeatsPerMeasure.ToString());
+        AddFormRow(rulerGrid, rRow++, "Beats per measure:", beatsPerMeasureBox);
 
         rulerTab.Content = rulerGrid;
         tabs.Items.Add(rulerTab);
@@ -528,7 +543,23 @@ public sealed class ProjectSettingsWindow : Window
         };
 
         PrerenderFolder = prerenderFolderBox.Text.Trim();
-        RulerTimeFormat = rulerTimeFormatCombo.SelectedItem?.ToString();
+        if (rulerTimeFormatCombo.SelectedIndex >= 0 && rulerTimeFormatCombo.SelectedIndex < RulerFormatExtensions.AllStandardFormats.Length)
+        {
+            RulerFormat = RulerFormatExtensions.AllStandardFormats[rulerTimeFormatCombo.SelectedIndex];
+            RulerTimeFormat = RulerFormat.ToDisplayName();
+        }
+        if (TimecodeFormatter.TryParse(rulerStartBox.Text, Rate, RulerFormat, out var startFrames))
+        {
+            RulerStartTimeFrames = startFrames;
+        }
+        if (double.TryParse(bpmBox.Text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var bpmVal) && bpmVal > 0)
+        {
+            BeatsPerMinute = bpmVal;
+        }
+        if (int.TryParse(beatsPerMeasureBox.Text, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out var beatsVal) && beatsVal > 0)
+        {
+            BeatsPerMeasure = beatsVal;
+        }
         Author = string.IsNullOrWhiteSpace(summaryArtistBox.Text) ? null : summaryArtistBox.Text.Trim();
         Copyright = string.IsNullOrWhiteSpace(summaryCopyrightBox.Text) ? null : summaryCopyrightBox.Text.Trim();
         Comments = string.IsNullOrWhiteSpace(summaryCommentsBox.Text) ? null : summaryCommentsBox.Text.Trim();

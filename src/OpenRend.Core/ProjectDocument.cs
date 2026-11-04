@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
@@ -126,8 +126,25 @@ public sealed class ProjectDocument
     public int AudioBitDepth { get; set; } = 24;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? PrerenderFolder { get; set; }
+    public RulerFormat RulerFormat { get; set; } = RulerFormat.TimeAndFrames;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? RulerTimeFormat { get; set; }
+    public string? RulerTimeFormat
+    {
+        get => RulerFormat.ToDisplayName();
+        set
+        {
+            if (value is not null && RulerFormatExtensions.TryParseDisplayName(value, out var parsed))
+                RulerFormat = parsed;
+        }
+    }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public long RulerStartTimeFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public double BeatsPerMinute { get; set; } = 120.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int BeatsPerMeasure { get; set; } = 4;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int BeatValue { get; set; } = 4;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Author { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
@@ -168,7 +185,12 @@ public sealed class ProjectDocument
         AudioSampleRate = AudioSampleRate,
         AudioBitDepth = AudioBitDepth,
         PrerenderFolder = PrerenderFolder,
+        RulerFormat = RulerFormat,
         RulerTimeFormat = RulerTimeFormat,
+        RulerStartTimeFrames = RulerStartTimeFrames,
+        BeatsPerMinute = BeatsPerMinute,
+        BeatsPerMeasure = BeatsPerMeasure,
+        BeatValue = BeatValue,
         Author = Author,
         Copyright = Copyright,
         Comments = Comments,

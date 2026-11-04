@@ -120,6 +120,19 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? TrackArmRequested;
     public event Action<Guid, string?>? TrackColorRequested;
     public event Action<Guid, TrackAutomationMode>? TrackAutomationModeRequested;
+    public RulerFormat RulerFormat
+    {
+        get => Project.RulerFormat;
+        set
+        {
+            if (Project.RulerFormat == value) return;
+            Project.RulerFormat = value;
+            InvalidateVisual();
+            RulerFormatChanged?.Invoke(value);
+        }
+    }
+    public event Action<RulerFormat>? RulerFormatChanged;
+    public event Action? SetTimeAtCursorRequested;
     public bool HasTrackEnvelope(Guid trackId, EnvelopeType type) =>
         Project.Tracks.FirstOrDefault(t => t.Id == trackId)?.Envelopes?.Any(e => e.Type == type && e.IsEnabled) ?? false;
     private TimelineClip? dragging;
@@ -597,7 +610,7 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var x = HeaderWidth + n * step * PixelsPerSecond - Offset;
             dc.DrawLine(new Pen(Brush("#444444"), 1) { DashStyle = new DashStyle([2, 3], 0) }, new Point(x, RulerHeight), new Point(x, ActualHeight));
-            Text(dc, FormatTimecode(Project.FrameRate.Frames(n * step), Project.FrameRate), x + 3, 30, Brush("#B8B8B8"), 9);
+            var tickFrame = Project.FrameRate.Frames(n * step); Text(dc, TimecodeFormatter.Format(tickFrame, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames, rulerTick: true), x + 3, 30, Brush("#B8B8B8"), 9);
             for (var minor = 1; minor < 5; minor++)
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
         }
@@ -703,9 +716,10 @@ public sealed partial class TimelineView : FrameworkElement
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {
+                    var formattedStart = TimecodeFormatter.Format(start, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames);
                     var badgeText = destinationIsNewTrack
-                        ? $"[+ New {destinationNewTrackKind} Layer {destinationNewTrackIndex + 1}]  Start: {FormatTimecode(start, Project.FrameRate)}"
-                        : $"Start: {FormatTimecode(start, Project.FrameRate)}  ({(delta >= 0 ? "+" : "")}{delta})";
+                        ? $"[+ New {destinationNewTrackKind} Layer {destinationNewTrackIndex + 1}]  Start: {formattedStart}"
+                        : $"Start: {formattedStart}  ({(delta >= 0 ? "+" : "")}{delta})";
                     Text(dc, badgeText, rect.X + headerOffset, rect.Y + 20, Brush("#00E5FF"), 10, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 }
                 if (rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
@@ -750,7 +764,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
         dc.Pop();
         dc.DrawRectangle(Brush("#262626"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
-        Text(dc, FormatTimecode(Position, Project.FrameRate), 126, 12, size: 20, maxWidth: 130);
+        Text(dc, TimecodeFormatter.Format(Position, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames), 126, 12, size: 20, maxWidth: 130);
         dc.PushClip(new RectangleGeometry(new Rect(0, RulerHeight, HeaderWidth, Math.Max(0, ActualHeight - RulerHeight))));
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
@@ -922,20 +936,8 @@ public sealed partial class TimelineView : FrameworkElement
         if (Project.Tracks.Count == 0) Text(dc, "Import media, then add it to the timeline", HeaderWidth + 30, RulerHeight + 35, Brush("#B8B8B8"));
     }
 
-    public static string FormatTimecode(long frame, Rational rate)
-    {
-        var fps = Math.Max(1, (int)Math.Round(rate.Numerator / (double)rate.Denominator));
-        var drop = rate.Denominator == 1001 && rate.Numerator is 30000 or 60000 ? fps / 15 : 0;
-        if (drop > 0)
-        {
-            var tenMinutes = fps * 600 - drop * 9;
-            var remainder = frame % tenMinutes;
-            // Every tenth minute keeps its frame numbers; the other nine skip 2 or 4.
-            frame += drop * 9 * (frame / tenMinutes) + (remainder >= drop ? drop * ((remainder - drop) / (fps * 60 - drop)) : 0);
-        }
-        var total = frame / fps;
-        return $"{total / 3600:00}:{total / 60 % 60:00}:{total % 60:00}{(drop > 0 ? ';' : ':')}{frame % fps:00}";
-    }
+    public static string FormatTimecode(long frame, Rational rate) => TimecodeFormatter.FormatStandard(frame, rate);
+    public static string FormatTimecode(long frame, Rational rate, RulerFormat format) => TimecodeFormatter.Format(frame, rate, format);
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
@@ -1442,6 +1444,31 @@ public sealed partial class TimelineView : FrameworkElement
         else VerticalOffset = Math.Clamp(VerticalOffset - e.Delta / 2, 0, Math.Max(0, Project.Tracks.Count * TrackHeight - ActualHeight + RulerHeight));
         InvalidateVisual(); e.Handled = true;
     }
+    public void OpenRulerContextMenu()
+    {
+        var menu = new ContextMenu();
+        foreach (var fmt in RulerFormatExtensions.AllStandardFormats)
+        {
+            var item = new MenuItem
+            {
+                Header = fmt.ToMenuHeader(),
+                IsCheckable = true,
+                IsChecked = RulerFormat == fmt
+            };
+            var chosen = fmt;
+            item.Click += (_, _) => RulerFormat = chosen;
+            menu.Items.Add(item);
+        }
+
+        menu.Items.Add(new Separator());
+
+        var setTimeItem = new MenuItem { Header = "Set T&ime at Cursor…" };
+        setTimeItem.Click += (_, _) => SetTimeAtCursorRequested?.Invoke();
+        menu.Items.Add(setTimeItem);
+
+        menu.IsOpen = true;
+    }
+
     protected override void OnMouseRightButtonUp(MouseButtonEventArgs e)
     {
         base.OnMouseRightButtonUp(e);
@@ -1459,6 +1486,12 @@ public sealed partial class TimelineView : FrameworkElement
                 delItem.Click += (_, _) => MarkerDeleteRequested?.Invoke(rightMarker.Id);
                 markerMenu.Items.Add(delItem);
                 markerMenu.IsOpen = true;
+                e.Handled = true;
+                return;
+            }
+            if (p.Y < RulerHeight)
+            {
+                OpenRulerContextMenu();
                 e.Handled = true;
                 return;
             }

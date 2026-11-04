@@ -70,6 +70,22 @@ public sealed class EditorViewModel : ObservableObject
     public AutoRippleMode RippleMode { get => rippleMode; set => SetProperty(ref rippleMode, value); }
     public bool IgnoreGroups { get; set; }
     public int ActiveTrackIndex { get; set; }
+    public RulerFormat RulerFormat => Project.RulerFormat;
+    public void SetRulerFormat(RulerFormat format)
+    {
+        if (Project.RulerFormat == format) return;
+        Project.RulerFormat = format;
+        Project.RulerTimeFormat = format.ToDisplayName();
+        OnPropertyChanged(nameof(RulerFormat));
+        Changed?.Invoke();
+        Status = $"Ruler format set to {format.ToDisplayName()}.";
+    }
+    public void SetTimeAtCursor(long frame)
+    {
+        Position = frame;
+        Changed?.Invoke();
+        Status = $"Moved cursor to {TimecodeFormatter.Format(frame, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)}.";
+    }
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];
