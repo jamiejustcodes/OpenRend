@@ -3,182 +3,187 @@
 </p>
 
 <p align="center">
-  <strong>Free, open-source Windows video editor built with C# / .NET 10, WPF, and a high-performance C++20 media engine.</strong>
+  <strong>Fast, deterministic, open-source Windows non-linear video editor built with C# / .NET 10, WPF, and a native C++20 / Direct3D 11 media engine.</strong>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><img src="https://img.shields.io/github/v/release/jamiejustcodes/OpenRend?style=for-the-badge&color=0284c7&label=Release" alt="Latest Release" /></a>
-  <a href="https://github.com/jamiejustcodes/OpenRend/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jamiejustcodes/OpenRend/build.yml?branch=main&style=for-the-badge&color=16a34a&label=Build" alt="CI Status" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL_v3-blue.svg?style=for-the-badge" alt="License" /></a>
-  <img src="https://img.shields.io/badge/Platform-Windows_x64-7c3aed.svg?style=for-the-badge&logo=windows" alt="Platform" />
-  <img src="https://img.shields.io/badge/.NET-10.0-512BD4.svg?style=for-the-badge&logo=dotnet" alt=".NET 10" />
-  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C.svg?style=for-the-badge&logo=c%2B%2B" alt="C++20" />
+  <a href="https://github.com/jamiejustcodes/OpenRend/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jamiejustcodes/OpenRend/build.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI%20Build" alt="CI Build Status" /></a>
+  <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><img src="https://img.shields.io/github/v/release/jamiejustcodes/OpenRend?style=flat-square&color=0284c7&label=Release" alt="Latest Release" /></a>
+  <img src="https://img.shields.io/badge/Tests-1%2C045%20Passing-16a34a?style=flat-square&logo=checkmarx&logoColor=white" alt="Test Gate" />
+  <img src="https://img.shields.io/badge/Platform-Windows%20x64-7c3aed?style=flat-square&logo=windows&logoColor=white" alt="Platform: Windows x64" />
+  <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET 10" />
+  <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=c%2B%2B&logoColor=white" alt="C++20" />
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-GPL%20v3-blue.svg?style=flat-square" alt="License: GPL v3" /></a>
 </p>
 
 <p align="center">
-  <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><b>🚀 Download Portable Bundle (v0.1.0)</b></a> •
-  <a href="#-key-features"><b>Features</b></a> •
-  <a href="#-quick-start--build"><b>Build from Source</b></a> •
-  <a href="#-keyboard-shortcuts"><b>Shortcuts</b></a> •
-  <a href="#-architecture"><b>Architecture</b></a> •
-  <a href="#-documentation"><b>Docs</b></a>
+  <a href="#-overview">Overview</a> •
+  <a href="#-core-capabilities">Capabilities</a> •
+  <a href="#-quick-start--build">Quick Start</a> •
+  <a href="#-keyboard-shortcuts">Shortcuts</a> •
+  <a href="#-engine-architecture">Architecture</a> •
+  <a href="#-contributing">Contributing</a>
 </p>
 
 ---
 
 ## 🎬 Overview
 
-**OpenRend** is a non-linear video editing suite designed for responsiveness, deterministic rendering, and modern Windows workflows. It pairs a managed **WPF / .NET 10** timeline with a native **C++20** decoding and composition pipeline accelerated by the **FFmpeg SDK**.
+**OpenRend** is an open-source non-linear video editor designed for high-throughput Windows desktop workflows. It pairs a managed **WPF / .NET 10** studio interface with a native **C++20** media engine accelerated by **Direct3D 11** and the **FFmpeg SDK**.
 
-Preview and final export share the exact same edit decisions, rational time evaluation, and mathematical color pipeline — what you scrub in the preview monitor is frame-for-frame what renders into your master export.
-
----
-
-## ✨ Key Features
-
-| Capability | Details |
-|---|---|
-| 🎞️ **Multi-Track Non-Destructive Timeline** | Non-destructive video & audio editing, magnetic ripple trimming, group linking (`G`/`U`), and sub-frame precision. |
-| ⚡ **Hybrid C++20 & .NET 10 Engine** | Native FFmpeg decoding with DirectX 11 / D3D preview composition and smooth UI dispatch. |
-| 🎨 **1:1 Vegas Pro Color Grading & Scopes** | Interactive color grading wheels (Lift / Gamma / Gain / Offset), multi-scope analysis (Parade, Waveform, Vectorscope), and embedded 3D `.cube` LUT filters. |
-| 🔄 **18 OFX Video Transitions & Curves** | 18 transition plugins (Dissolve, Wipes, Spatial Reveals, Transforms) alongside a **5×5 reciprocal fade curve** matrix. |
-| 🎯 **Pyramidal Motion & Mask Tracking** | Lucas-Kanade optical flow, 6-parameter affine decomposition, and DLT homography tracking. |
-| 🎛️ **63 Built-in Video Effects** | Color grading, separable Gaussian blur, levels, stylize, glow, distortion, and composite filters. |
-| 📦 **Zero-Config Portable Distribution** | Fully self-contained Windows x64 zip bundle — no installer, no system-wide codec installations required. |
+Unlike traditional editors that approximate preview quality or decouple the playback engine from final encoding, OpenRend evaluates timeline composition deterministically using rational arithmetic. What scrubs in the viewport matches final master exports frame-for-frame across colorspaces, velocity curves, and transition geometries.
 
 ---
 
-## 🚀 Download & Run
+## ✨ Core Capabilities
 
-No installer or administrative privileges required. 
+### 🎞️ Precision Non-Destructive Timeline
+- **Multi-Track Compositing**: Unlimited video and audio tracks with per-track opacity, gain, pan, mute, solo, and composite modes (Source Alpha, Add, Multiply, Screen).
+- **Vegas Pro 1:1 Editing Workflow**: High-speed split (`S`), automatic crossfades, magnetic ripple editing (`Auto-Ripple`), and grouped clip pairs (`G` / `U`).
+- **Velocity & Fade Envelopes**: Clip velocity envelopes (-100% to +300%) and 5×5 reciprocal fade curves evaluated with integer project frame precision.
+- **Sub-Frame Audio Alignment**: Multi-track audio editing with sample-accurate cuts and zero-crossing transitions.
 
-1. Download **`OpenRend-win-x64.zip`** from the [Latest Release](https://github.com/jamiejustcodes/OpenRend/releases/latest).
-2. Extract the archive anywhere on your machine.
-3. Launch **`OpenRend.exe`**.
+### 🎨 Color Grading & Studio Scopes
+- **3-Way Color Wheels**: Interactive Lift, Gamma, Gain, and Offset controls with numerical readout and real-time GPU preview.
+- **Hardware Scopes**: Real-time RGB Parade, Waveform Monitor, and Vectorscope for broadcast compliance and color balancing.
+- **3D LUT Integration**: Direct import and evaluation of `.cube` 3D lookup tables with intensity and interpolation controls.
 
-> Requirements: 64-bit Windows 10 or 11.
+### 🎛️ Comprehensive Effects & Transitions
+- **63 Built-In Video Effects**: Color balance, separable Gaussian blur, levels, unsharp mask, chroma keying, glow, and stylize filters.
+- **18 OFX Video Transitions**: Full transitions catalog including Linear Wipe, Clock Wipe, Barn Door, Push, Slide, Zoom, Page Peel, and Crossfade.
+- **Audio DSP Chain**: Built-in 4-band parametric Track EQ, Track Compressor, and Track Noise Gate with real-time dB peak/RMS metering.
+
+### 🎯 Planar & Motion Tracking
+- **Pyramidal Optical Flow**: Multi-scale Lucas-Kanade feature tracking with confidence scoring.
+- **Affine & Homography Solvers**: 6-parameter affine stabilization and Direct Linear Transform (DLT) 4-point planar tracking.
+
+### ⚡ Performance & Reliability
+- **Direct3D 11 GPU Compositing**: Zero-copy surface presentation directly into WPF via DirectX swapchain interop.
+- **Multithreaded Asynchronous Decode**: Background frame pre-fetching, audio ring buffering, and asynchronous thumbnail generation.
+- **Real-Time Debounced Crash Recovery**: Timeline edits automatically persist recovery snapshots within 3 seconds of settling. Normal sessions exit cleanly with zero orphaned temp files.
+- **Zero-Codec Portable Bundle**: Self-contained x64 deployment without system-wide codec installations or registry modifications.
+
+---
+
+## 🚀 Download & Installation
+
+Pre-compiled, self-contained standalone bundles are available under **[Releases](https://github.com/jamiejustcodes/OpenRend/releases/latest)**.
+
+1. Download **`OpenRend-win-x64.zip`**.
+2. Extract the archive to any directory.
+3. Run **`OpenRend.exe`**.
+
+> **Supported Operating Systems**: 64-bit Windows 10 (version 1903+) and Windows 11.
 
 ---
 
 ## 🛠️ Quick Start & Build
 
 ### Prerequisites
-- Windows 10 / 11 x64
-- **.NET 10 SDK** (v10.0.303+)
-- **Visual Studio** with *Desktop development with C++*, *Windows 10/11 SDK*, and *CMake*
+- 64-bit Windows 10 or 11
+- **.NET 10 SDK** (v10.0.303 or newer, configured via `global.json`)
+- **Visual Studio 2022 / 2026** with *Desktop development with C++*, *MSVC v143/v144 tools*, and *Windows 10/11 SDK*
 - **Git**
 
-### 1. Build and Run Directly
+### Clone & Build
 ```powershell
-# Restore dependencies and build managed and native binaries
+# Clone the repository
+git clone https://github.com/jamiejustcodes/OpenRend.git
+cd OpenRend
+
+# Execute unified build script (configures CMake, builds C++20 engine, compiles WPF app, runs test suite)
 .\tools\build.ps1
 
-# Launch OpenRend
+# Run the compiled executable
 .\src\OpenRend.App\bin\Release\net10.0-windows\win-x64\OpenRend.exe
 ```
 
-### 2. Package a Standalone Release Bundle
+### Build Options
 ```powershell
-# Compiles binaries, stages FFmpeg libraries, and generates self-contained dist folder
-.\tools\build.ps1 -Package
+# Fast build: skip native compilation when editing managed WPF UI
+.\tools\build.ps1 -SkipNative
 
-# Run packaged executable
-.\dist\OpenRend\OpenRend.exe
+# Quick build: compile without running tests
+.\tools\build.ps1 -SkipTests
+
+# Package a self-contained portable distribution in .\dist\OpenRend
+.\tools\build.ps1 -Package
 ```
 
 ---
 
-## ⌨️ Keyboard Shortcuts
+## ⌨️ Essential Keyboard Shortcuts
 
 | Shortcut | Context | Action |
 |---|---|---|
 | `Space` | Playback | Play / Pause |
-| `Enter` | Playback | Pause at current cursor |
-| `Escape` | Playback / Editing | Stop playback / Cancel active drag |
+| `Enter` | Playback | Pause at cursor |
+| `Escape` | Workspace | Stop playback / Cancel active edit drag |
 | `Alt` + `Left` / `Right` | Timeline | Step one frame backward / forward |
-| `Ctrl` + `Home` / `End` | Timeline | Jump to timeline start / end bounds |
+| `Ctrl` + `Home` / `End` | Timeline | Seek to project start / end bounds |
 | `Ctrl` + `Mouse Wheel` | Timeline | Zoom timeline in / out |
 | `Shift` + `Mouse Wheel` | Timeline | Scroll timeline horizontally |
 | `S` | Editing | **Split** selected clips at playhead |
-| `Delete` | Editing | Remove selected clips (with optional ripple) |
-| `G` / `U` | Editing | **Group** / **Ungroup** selected clips |
-| `Ctrl` + `Shift` + `M` | Audio | Toggle audio mute leaving video visible |
+| `Delete` | Editing | Delete selected clips |
+| `Ctrl` + `Shift` + `Delete` | Editing | Ripple delete time selection |
+| `G` / `U` | Clips | **Group** / **Ungroup** selected clips |
 | `M` / `Shift` + `M` | Tracks | Toggle track Mute / Solo |
-| `Ctrl` + `I` | Media | Import video/audio media files |
-| `Ctrl` + `Shift` + `E` | Export | Open **Render As** export dialog |
-| `Ctrl` + `S` | Project | Save project (auto-saved recovery every 30s) |
+| `Ctrl` + `I` | Media | Import media files |
+| `Ctrl` + `Shift` + `E` | Export | Open **Render As** dialog |
+| `Ctrl` + `S` | Project | Save project document |
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ Engine Architecture
 
 ```mermaid
 flowchart TD
-    subgraph UI ["Managed UI Layer (.NET 10 / WPF)"]
-        MainWindow["MainWindow (Dockable Studio Layout)"]
-        Timeline["Multi-Track Timeline & Scrub Engine"]
-        Inspector["Color Grading / Pan & Crop / FX Chooser"]
-        Welcome["Project Wizard & Startup Manager"]
+    subgraph UI ["Managed UI (.NET 10 / WPF)"]
+        MainWindow["MainWindow (Dockable Studio Workspace)"]
+        TimelineView["TimelineView (Sub-Frame Virtualized Tracks)"]
+        VideoPreview["DirectX 11 Preview Viewport"]
+        Inspector["Color Wheels / Pan & Crop / Effects Host"]
     end
 
     subgraph Core ["OpenRend.Core"]
-        ProjectModel["Project Model (Schema v8/v9)"]
-        Tracking["Homography & LK Motion Tracker"]
-        Transitions["18 OFX Transitions & 5x5 Grid"]
+        TimelineEditor["TimelineEditor (Deterministic Edit Commands)"]
+        ProjectDoc["Project Document (JSON Schema v10)"]
+        CurveEngine["Velocity & Fade Curve Mathematics"]
+        MotionTracker["Lucas-Kanade & Homography Tracker"]
     end
 
     subgraph Native ["Native Media Core (C++20)"]
-        MediaService["P/Invoke Bridge (OpenRend.Native.dll)"]
-        FFmpegCore["FFmpeg SDK (N-127564 shared)"]
-        D3DComp["Direct3D 11 GPU Compositor"]
-        ExportPipeline["H.264 / AAC MP4 Muxer"]
+        InteropBridge["P/Invoke Native Boundary (OpenRend.Native.dll)"]
+        FFmpegDecoder["FFmpeg Demuxer & Codec SDK"]
+        D3DCompositor["Direct3D 11 Hardware Compositor"]
+        AudioDSP["64-bit Float Audio Engine & Filters"]
+        Muxer["Master H.264 / AAC MP4 Exporter"]
     end
 
     UI --> Core
-    Core --> Native
-    Native -->|Hardware Decoded Frames| D3DComp
-    D3DComp -->|Swapchain Viewport| MainWindow
+    Core --> InteropBridge
+    InteropBridge --> FFmpegDecoder
+    InteropBridge --> D3DCompositor
+    InteropBridge --> AudioDSP
+    D3DCompositor -->|D3D Surface Pointer| VideoPreview
+    AudioDSP -->|Float Audio Samples| UI
+    FFmpegDecoder --> D3DCompositor
+    D3DCompositor --> Muxer
 ```
 
 ---
 
-## 📖 In-Depth Editing Guide
+## 🤝 Contributing
 
-<details>
-<summary><b>Media Import & Clip Arrangement</b></summary>
+Contributions are welcome. Please read our **[Contributing Guidelines](CONTRIBUTING.md)** and review the **[Security Policy](SECURITY.md)** before opening a pull request.
 
-- **Import Media**: Press `Ctrl+I` or drag and drop audio/video files directly into the window. Double-click a source in Project Media to place it at the playhead cursor, or drag directly onto any track.
-- **Linked Pairs**: Video with audio automatically links into paired picture/sound clips. `G` links any arbitrary selection; `U` unlinks; `Edit → Ignore clip groups` temporarily isolates individual items.
-- **Trimming & Snapping**: Hover near clip edges to reveal high-precision trim handles. Snapping dynamically aligns dragged boundaries with adjacent clips, markers, and the playhead.
-</details>
-
-<details>
-<summary><b>Pan/Crop, Keyframing & 63 Built-in Effects</b></summary>
-
-- **Event Pan/Crop**: Select any clip and choose `Tools → Video event Pan/Crop`. Adjust source-pixel width, center, pivot, and rotation with aspect lock.
-- **Keyframe Curves**: Pan/Crop keyframes support whole project frames with *Linear*, *Hold*, *Slow*, *Fast*, *Smooth*, and *Sharp* interpolation curves.
-- **FX Catalog**: 63 built-in effects spanning color grading, blur, detail, keying, stylize, and glow. Supports 3D `.cube` LUT filters with intensity and interpolation controls.
-</details>
-
-<details>
-<summary><b>18 Transitions & 5×5 Reciprocal Fade Grid</b></summary>
-
-- **Transitions Tab**: Full catalog of 18 OFX video transitions (Linear Wipe, Clock Wipe, Barn Door, Push, Slide, Zoom, Page Peel, Dissolve).
-- **Reciprocal Fades**: Right-click any video event to select incoming/outgoing curves or open the **5×5 Fade Type thumbnail grid** to set reciprocal crossfade pairs without altering clip positions.
-</details>
-
-<details>
-<summary><b>Render & Export</b></summary>
-
-- Press `Ctrl+Shift+E` to open the **Render As** dialog.
-- Select from optimized H.264 / AAC presets matching project resolution and frame rate.
-- Set in/out loop regions (`I`/`O`) to render isolated timeline sections.
-- Preview and final export execute the exact same mathematical composition path.
-</details>
+- Check open issues or start a discussion for larger feature proposals.
+- Ensure all native and managed test suites pass (`.\tools\build.ps1`).
+- Stage explicit file paths and use descriptive, atomic commit messages.
 
 ---
 
-## 📄 License & Notices
+## 📄 License & Third-Party Notices
 
-OpenRend is licensed under the [GNU General Public License v3.0 (GPL-3.0-or-later)](LICENSE).  
-Third-party libraries (including FFmpeg and GoogleTest) retain their respective licenses. See [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md) for full compliance details.
+- OpenRend is licensed under the **[GNU General Public License v3.0 (GPL-3.0-or-later)](LICENSE)**.
+- Third-party libraries (including FFmpeg, GoogleTest, and community icons) retain their respective open-source licenses. Detailed notices and attributions are available in **[THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md)**.

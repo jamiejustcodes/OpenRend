@@ -5,31 +5,44 @@ on:
     tags:
       - 'v*'
 
+permissions:
+  contents: write
+
 jobs:
   release:
+    name: Build & Publish Release
     runs-on: windows-latest
-    permissions:
-      contents: write
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Cache native FFmpeg SDK
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: ${{ runner.os }}-ffmpeg-${{ hashFiles('src/OpenRend.Native/ffmpeg.lock.json') }}
+
+      - name: Setup .NET 10 SDK
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.303'
 
-      - name: Build and package
+      - name: Build and package standalone bundle
         shell: pwsh
         run: ./tools/build.ps1 -Package
 
-      - name: Archive release bundle
+      - name: Create release zip & checksums
         shell: pwsh
-        run: Compress-Archive -Path dist/OpenRend/* -DestinationPath dist/OpenRend-win-x64.zip
+        run: |
+          Compress-Archive -Path dist/OpenRend/* -DestinationPath dist/OpenRend-win-x64.zip
+          $hash = (Get-FileHash -Path dist/OpenRend-win-x64.zip -Algorithm SHA256).Hash
+          Set-Content -Path dist/SHA256SUMS.txt -Value "$hash *OpenRend-win-x64.zip"
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: OpenRend ${{ github.ref_name }}
-          files: dist/OpenRend-win-x64.zip
+          files: |
+            dist/OpenRend-win-x64.zip
+            dist/SHA256SUMS.txt
           generate_release_notes: true

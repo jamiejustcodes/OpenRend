@@ -1,0 +1,35 @@
+name: Feature Request
+description: Suggest an idea or enhancement for OpenRend
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Feature proposals should align with OpenRend's focus: responsive, deterministic non-linear video editing on Windows with professional NLE ergonomics.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Is your feature request related to a problem?
+      description: A clear and concise description of the problem or workflow friction.
+      placeholder: I am frustrated when trying to edit multicam footage because...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed Solution
+      description: Describe the solution or workflow you would like to see implemented.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives Considered
+      description: Any alternative workflows or solutions you have evaluated (e.g. Vegas Pro, Premiere, DaVinci Resolve).
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional Context
+      description: Add any relevant mockups, reference video clips, or documentation.
+

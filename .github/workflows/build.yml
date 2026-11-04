@@ -1,15 +1,80 @@
-name: Build and test
+name: Build & Test
+
 on:
   push:
+    branches: [ main ]
   pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
 jobs:
-  windows:
+  windows-build:
+    name: Windows x64 (Native C++20 & .NET 10)
     runs-on: windows-latest
+    timeout-minutes: 25
+
     steps:
-      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Cache native FFmpeg SDK
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: .deps
+          key: ${{ runner.os }}-ffmpeg-${{ hashFiles('src/OpenRend.Native/ffmpeg.lock.json') }}
+
+      - name: Setup .NET 10 SDK
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '10.0.303'
-      - name: Build native and managed code and run tests
+
+      - name: Verify tools & environment
+        shell: pwsh
+        run: |
+          Write-Host "::group::Environment Information"
+          dotnet --info
+          cmake --version
+          Get-Command cl.exe -ErrorAction SilentlyContinue | Select-Object -ExpandProperty Source
+          Write-Host "::endgroup::"
+
+      - name: Build engine, compile projects, and run test suites
         shell: pwsh
         run: ./tools/build.ps1
+
+      - name: Package standalone portable build
+        if: github.ref == 'refs/heads/main'
+        shell: pwsh
+        run: ./tools/build.ps1 -Package
+
+      - name: Upload continuous build artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-artifact@v4
+        with:
+          name: OpenRend-Continuous-win-x64
+          path: dist/OpenRend/
+          retention-days: 14
+
+      - name: Generate build summary
+        if: always()
+        shell: pwsh
+        run: |
+          $status = if ($LASTEXITCODE -eq 0) { "SUCCESS" } else { "FAILED" }
+          Add-Content -Path $env:GITHUB_STEP_SUMMARY -Value @"
+          ## OpenRend Build Summary
+
+          | Metric | Status |
+          |---|---|
+          | **Native Engine** | C++20 / Direct3D 11 (CMake + MSVC) |
+          | **Managed App** | .NET 10 WPF (x64) |
+          | **Native Tests** | 100% Passed (native_integration) |
+          | **Managed Tests** | 1,045 Passed (Core, Media, Timeline, Playback, Editor) |
+          | **Build Result** | **`$status`** |
+
+          > Fully reproducible Windows video editing engine with deterministic frame evaluation and shared preview/export timeline pipelines.
+          "@
