@@ -712,6 +712,102 @@ public partial class TimelineView
             return true;
         }
 
+        // 3. Clip envelope line right-click
+        if (HitEnvelopeLine(p, out var lineClip, out var lineEnv, out var lineFrame, out var lineVal))
+        {
+            var menu = new ContextMenu();
+            var addItem = new MenuItem { Header = $"Add {lineEnv!.Type} Point" };
+            addItem.Click += (_, _) =>
+            {
+                SetEnvelopePointRequested?.Invoke(lineClip!.Id, lineEnv.Type, lineFrame, lineVal, EnvelopeCurveType.Linear);
+            };
+            menu.Items.Add(addItem);
+            menu.Items.Add(new Separator());
+
+            var prevPoint = lineEnv.Points.LastOrDefault(pt => pt.Frame <= lineFrame);
+            var curves = new[]
+            {
+                EnvelopeCurveType.Linear,
+                EnvelopeCurveType.Fast,
+                EnvelopeCurveType.Slow,
+                EnvelopeCurveType.Smooth,
+                EnvelopeCurveType.Sharp,
+                EnvelopeCurveType.Hold
+            };
+
+            var curvesMenu = new MenuItem { Header = "Fade Curve" };
+            foreach (var curve in curves)
+            {
+                var curveItem = new MenuItem
+                {
+                    Header = $"{curve} Fade",
+                    IsCheckable = true,
+                    IsChecked = prevPoint?.Curve == curve
+                };
+                var targetCurve = curve;
+                curveItem.Click += (_, _) =>
+                {
+                    if (prevPoint != null)
+                        SetEnvelopePointCurveRequested?.Invoke(lineClip!.Id, lineEnv.Type, prevPoint.Frame, targetCurve);
+                };
+                curvesMenu.Items.Add(curveItem);
+            }
+            menu.Items.Add(curvesMenu);
+
+            menu.PlacementTarget = this;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+            return true;
+        }
+
+        // 4. Track envelope line right-click
+        if (HitTrackEnvelopeLine(p, out var lineTrack, out var lineTrackEnv, out var lineTrackFrame, out var lineTrackVal))
+        {
+            var menu = new ContextMenu();
+            var addItem = new MenuItem { Header = $"Add Track {lineTrackEnv!.Type} Point" };
+            addItem.Click += (_, _) =>
+            {
+                SetTrackEnvelopePointRequested?.Invoke(lineTrack!.Id, lineTrackEnv.Type, lineTrackFrame, lineTrackVal, EnvelopeCurveType.Linear);
+            };
+            menu.Items.Add(addItem);
+            menu.Items.Add(new Separator());
+
+            var prevPoint = lineTrackEnv.Points.LastOrDefault(pt => pt.Frame <= lineTrackFrame);
+            var curves = new[]
+            {
+                EnvelopeCurveType.Linear,
+                EnvelopeCurveType.Fast,
+                EnvelopeCurveType.Slow,
+                EnvelopeCurveType.Smooth,
+                EnvelopeCurveType.Sharp,
+                EnvelopeCurveType.Hold
+            };
+
+            var curvesMenu = new MenuItem { Header = "Fade Curve" };
+            foreach (var curve in curves)
+            {
+                var curveItem = new MenuItem
+                {
+                    Header = $"{curve} Fade",
+                    IsCheckable = true,
+                    IsChecked = prevPoint?.Curve == curve
+                };
+                var targetCurve = curve;
+                curveItem.Click += (_, _) =>
+                {
+                    if (prevPoint != null)
+                        SetTrackEnvelopePointCurveRequested?.Invoke(lineTrack!.Id, lineTrackEnv.Type, prevPoint.Frame, targetCurve);
+                };
+                curvesMenu.Items.Add(curveItem);
+            }
+            menu.Items.Add(curvesMenu);
+
+            menu.PlacementTarget = this;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+            return true;
+        }
+
         return false;
     }
 }

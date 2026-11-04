@@ -23,6 +23,7 @@ public sealed class EnvelopeEditorTests
             Id = Guid.NewGuid(),
             Path = "test.mp4",
             HasVideo = true,
+            HasAudio = true,
             DurationSeconds = 30.0,
             FrameRate = 30.0,
             Width = 1920,
@@ -173,5 +174,94 @@ public sealed class EnvelopeEditorTests
         editor.Undo();
         var evalUnmuted = TimelineEvaluator.Evaluate(doc, 50);
         Assert.Single(evalUnmuted.Video);
+    }
+
+    [Fact]
+    public void TrackEnvelope_AudioVolumeAndPan_EvaluatesGainAndStereoPan()
+    {
+        var (doc, editor, _) = CreateTestProject();
+
+        var audioMedia = new MediaAsset
+        {
+            Id = Guid.NewGuid(),
+            Path = "audio.wav",
+            HasAudio = true,
+            DurationSeconds = 10.0
+        };
+        doc.Media.Add(audioMedia);
+
+        var audioTrack = new TimelineTrack
+        {
+            Kind = TrackKind.Audio,
+            Name = "Audio Track 1"
+        };
+        doc.Tracks.Add(audioTrack);
+
+        var audioClip = new TimelineClip
+        {
+            MediaId = audioMedia.Id,
+            Name = "Voiceover",
+            StartFrame = 0,
+            DurationFrames = 120,
+            Gain = 1.0,
+            Pan = 0.0
+        };
+        audioTrack.Clips.Add(audioClip);
+
+        // Add Volume Envelope on audio track
+        editor.AddTrackEnvelope(audioTrack.Id, EnvelopeType.Volume);
+        editor.SetTrackEnvelopePoint(audioTrack.Id, EnvelopeType.Volume, 60, 1.5, EnvelopeCurveType.Linear);
+
+        // Add Pan Envelope on audio track
+        editor.AddTrackEnvelope(audioTrack.Id, EnvelopeType.Pan);
+        editor.SetTrackEnvelopePoint(audioTrack.Id, EnvelopeType.Pan, 60, -0.75, EnvelopeCurveType.Linear);
+
+        // Evaluate at frame 60
+        var eval = TimelineEvaluator.Evaluate(doc, 60);
+        Assert.Single(eval.Audio);
+        Assert.Equal(1.5, eval.Audio[0].Gain, 3);
+        Assert.Equal(-0.75, eval.Audio[0].Pan, 3);
+
+        // Undo Pan envelope
+        editor.Undo();
+        var evalAfterUndo = TimelineEvaluator.Evaluate(doc, 60);
+        Assert.Single(evalAfterUndo.Audio);
+        Assert.Equal(0.0, evalAfterUndo.Audio[0].Pan, 3); // Restored to default center pan
+    }
+
+    [Fact]
+    public void EnvelopeCurve_AllSixVegasCurves_InterpolatesWithExpectedWeight()
+    {
+        var testCurves = new (EnvelopeCurveType Curve, double ExpectedMidpoint)[]
+        {
+            (EnvelopeCurveType.Linear, 0.5),
+            (EnvelopeCurveType.Fast, 0.75),
+            (EnvelopeCurveType.Slow, 0.25),
+            (EnvelopeCurveType.Smooth, 0.5),
+            (EnvelopeCurveType.Sharp, 0.125),
+            (EnvelopeCurveType.Hold, 0.0)
+        };
+
+        foreach (var (curve, expectedMid) in testCurves)
+        {
+            var env = new ClipEnvelope
+            {
+                Type = EnvelopeType.Volume,
+                Points =
+                [
+                    new EnvelopePoint(0, 0.0, curve),
+                    new EnvelopePoint(100, 1.0, EnvelopeCurveType.Linear)
+                ]
+            };
+
+            var midVal = env.ValueAt(50);
+            Assert.Equal(expectedMid, midVal, 3);
+
+            // Boundary checks
+            Assert.Equal(0.0, env.ValueAt(0), 3);
+            Assert.Equal(1.0, env.ValueAt(100), 3);
+            Assert.Equal(0.0, env.ValueAt(-10), 3);
+            Assert.Equal(1.0, env.ValueAt(150), 3);
+        }
     }
 }

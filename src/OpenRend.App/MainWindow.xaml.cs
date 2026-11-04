@@ -2240,6 +2240,42 @@ public partial class MainWindow : Window
             editDetailsWindow.RefreshGrid();
         }
     }
+
+    private void ToggleTrackVolumeEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        if (trackIdx < 0 || trackIdx >= vm.Project.Tracks.Count) return;
+        var track = vm.Project.Tracks[trackIdx];
+        var type = track.Kind == TrackKind.Video ? EnvelopeType.Composite : EnvelopeType.Volume;
+        Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleTrackEnvelope(track.Id, type);
+            vm.Status = $"{(vm.Editor.HasTrackEnvelope(track.Id, type) ? "Added" : "Removed")} Track {type} envelope.";
+            Refresh();
+            RequestPreview();
+        });
+    }
+
+    private void ToggleTrackPanEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        if (trackIdx < 0 || trackIdx >= vm.Project.Tracks.Count) return;
+        var track = vm.Project.Tracks[trackIdx];
+        if (track.Kind != TrackKind.Audio)
+        {
+            vm.Status = "Pan envelope is only available on audio tracks.";
+            return;
+        }
+        Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.Pan);
+            vm.Status = $"{(vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.Pan) ? "Added" : "Removed")} Track Pan envelope.";
+            Refresh();
+            RequestPreview();
+        });
+    }
     private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(Math.Min(600, Math.Max(230, ActualHeight - 260))); MediaWidth.Width = new GridLength(1, GridUnitType.Star); PreviewWidth.Width = new GridLength(Math.Min(844, Math.Max(320, ActualWidth - 420))); ToolsTabs.SelectedIndex = 1; Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -2318,6 +2354,8 @@ public partial class MainWindow : Window
             Key.NumPad4 when ctrl && alt => () => EditDetailsClick(this, e),
             Key.D4 when !ctrl && alt && !shift => () => EditDetailsClick(this, e),
             Key.NumPad4 when !ctrl && alt && !shift => () => EditDetailsClick(this, e),
+            Key.V when !ctrl && !alt && shift => () => ToggleTrackVolumeEnvelopeClick(this, e),
+            Key.P when !ctrl && !alt && shift => () => ToggleTrackPanEnvelopeClick(this, e),
             Key.D5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.NumPad5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.L when ctrl && !shift && !alt => () => { RippleToggle.IsChecked = RippleToggle.IsChecked != true; RippleClick(this, e); },

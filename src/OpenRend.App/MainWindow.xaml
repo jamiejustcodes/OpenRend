@@ -95,6 +95,14 @@
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
         <MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/>
+        <Separator/>
+        <MenuItem Header="Audio Envelopes">
+          <MenuItem x:Name="AudioVolumeEnvelopeMenu" Header="Volume" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
+          <MenuItem x:Name="AudioPanEnvelopeMenu" Header="Pan" InputGestureText="Shift+P" Click="ToggleTrackPanEnvelopeClick"/>
+        </MenuItem>
+        <MenuItem Header="Video Envelopes">
+          <MenuItem x:Name="VideoCompositeEnvelopeMenu" Header="Track Composite Level" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
+        </MenuItem>
       </MenuItem>
       <MenuItem Header="_Tools">
         <MenuItem x:Name="PanCropMenu" Header="Video event Pan/Crop…" Click="PanCropClick"/>
