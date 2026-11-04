@@ -233,7 +233,7 @@ public sealed class EditorViewModel : ObservableObject
         Editor = new TimelineEditor(project);
         editRevision++;
         Editor.Changed += OnEdit;
-        ProjectPath = path; Position = 0; Selection.Clear(); Dirty = path is null && project.Media.Count > 0;
+        ProjectPath = path; Position = 0; Selection.Clear(); Dirty = path is null && (project.Media.Count > 0 || project.Tracks.Any(t => t.Clips.Count > 0));
         RefreshLibrary(); OnPropertyChanged(nameof(Title)); Changed?.Invoke();
     }
     public void RefreshLibrary()
@@ -530,6 +530,7 @@ public sealed class EditorViewModel : ObservableObject
         finally { saveGate.Release(); }
     }
     public void MarkSaved() => Dirty = false;
+    public void MarkDirty() => Dirty = true;
 
     public void Copy()
     {

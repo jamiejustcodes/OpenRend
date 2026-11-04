@@ -57,6 +57,124 @@ public sealed class AutoSaveAndRecoveryEditorTests
     }
 
     [Fact]
+    public void SessionRecoveryManager_CheckCrashRecovery_ReturnsNullWhenSessionFileMissing()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "OpenRendSessionTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var recoverySnapshot = SessionRecoveryManager.GetDefaultRecoveryPath(tempDir);
+            File.WriteAllText(recoverySnapshot, "stale_unmanaged_snapshot");
+
+            // Session file does not exist (e.g. after normal exit)
+            var candidate = SessionRecoveryManager.CheckCrashRecovery(tempDir);
+            Assert.Null(candidate);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SessionRecoveryManager_CheckCrashRecovery_ReturnsNullWhenCleanExitOrNotDirty()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "OpenRendSessionTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var recoverySnapshot = SessionRecoveryManager.GetDefaultRecoveryPath(tempDir);
+            File.WriteAllText(recoverySnapshot, "mock_snapshot");
+            var sessionFile = SessionRecoveryManager.GetSessionFilePath(tempDir);
+
+            // Case A: CleanExit is true
+            var metaClean = new SessionMetadata
+            {
+                ProcessId = 99999999,
+                IsDirty = true,
+                CleanExit = true,
+                RecoverySnapshotPath = recoverySnapshot
+            };
+            File.WriteAllText(sessionFile, JsonSerializer.Serialize(metaClean));
+            Assert.Null(SessionRecoveryManager.CheckCrashRecovery(tempDir));
+
+            // Case B: IsDirty is false
+            var metaNotDirty = new SessionMetadata
+            {
+                ProcessId = 99999999,
+                IsDirty = false,
+                CleanExit = false,
+                RecoverySnapshotPath = recoverySnapshot
+            };
+            File.WriteAllText(sessionFile, JsonSerializer.Serialize(metaNotDirty));
+            Assert.Null(SessionRecoveryManager.CheckCrashRecovery(tempDir));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public void SessionRecoveryManager_RecordCleanExit_RemovesRecoverySnapshotAndSession()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "OpenRendSessionTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            SessionRecoveryManager.StartSession(tempDir, @"C:\Projects\my_edit.openrend");
+            var recoverySnapshot = SessionRecoveryManager.GetDefaultRecoveryPath(tempDir);
+            File.WriteAllText(recoverySnapshot, "mock_snapshot");
+            var sessionFile = SessionRecoveryManager.GetSessionFilePath(tempDir);
+
+            Assert.True(File.Exists(sessionFile));
+            Assert.True(File.Exists(recoverySnapshot));
+
+            // Record clean exit must discard recovery snapshot and clean up session
+            SessionRecoveryManager.RecordCleanExit(tempDir);
+
+            Assert.False(File.Exists(sessionFile));
+            Assert.False(File.Exists(recoverySnapshot));
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task ProjectStore_Save_Synchronous_WritesManifestAtomically()
+    {
+        var tempDir = Path.Combine(Path.GetTempPath(), "OpenRendSessionTests", Guid.NewGuid().ToString("N"));
+        try
+        {
+            Directory.CreateDirectory(tempDir);
+            var tempFile = Path.Combine(tempDir, "project.openrend");
+            var media = new MediaAsset { Id = Guid.NewGuid(), Path = Path.Combine(tempDir, "media.mp4"), Width = 1920, Height = 1080, HasVideo = true };
+            var project = new ProjectDocument
+            {
+                Name = "SyncSaveTest",
+                Media = [media],
+                Tracks = [new() { Name = "V1", Kind = TrackKind.Video, Clips = [new() { MediaId = media.Id, Name = "Clip1", DurationFrames = 100 }] }]
+            };
+
+            ProjectStore.Save(project, tempFile);
+            Assert.True(File.Exists(tempFile));
+
+            var loaded = await ProjectStore.LoadAsync(tempFile);
+            Assert.Equal("SyncSaveTest", loaded.Name);
+            Assert.Single(loaded.Media);
+            Assert.Single(loaded.Tracks);
+            Assert.Single(loaded.Tracks[0].Clips);
+            Assert.Equal("Clip1", loaded.Tracks[0].Clips[0].Name);
+        }
+        finally
+        {
+            if (Directory.Exists(tempDir)) Directory.Delete(tempDir, recursive: true);
+        }
+    }
+
+    [Fact]
     public void SessionRecoveryManager_CheckCrashRecovery_DetectsUncleanDeadSession()
     {
         var tempDir = Path.Combine(Path.GetTempPath(), "OpenRendSessionTests", Guid.NewGuid().ToString("N"));

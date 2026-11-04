@@ -40,12 +40,6 @@ public static class SessionRecoveryManager
         var sessionFile = GetSessionFilePath(dataDir);
         if (!File.Exists(sessionFile))
         {
-            // If session.json is missing but recovery.openrend exists with content, candidate exists
-            var fallback = GetDefaultRecoveryPath(dataDir);
-            if (File.Exists(fallback) && new FileInfo(fallback).Length > 0)
-            {
-                return new CrashRecoveryCandidate(fallback, null, File.GetLastWriteTimeUtc(fallback));
-            }
             return null;
         }
 
@@ -118,13 +112,8 @@ public static class SessionRecoveryManager
             SaveSessionMetadata(dataDir, meta);
         }
 
-        // Clean up session file on normal exit
-        try
-        {
-            var sessionFile = GetSessionFilePath(dataDir);
-            if (File.Exists(sessionFile)) File.Delete(sessionFile);
-        }
-        catch { }
+        // Clean up recovery snapshot and session file on normal exit
+        DiscardRecovery(dataDir);
     }
 
     public static void DiscardRecovery(string dataDir)

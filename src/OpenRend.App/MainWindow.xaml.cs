@@ -21,6 +21,7 @@ public partial class MainWindow : Window
     private readonly EditorViewModel vm;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(15) };
     private readonly DispatcherTimer autosave = new() { Interval = TimeSpan.FromMinutes(5) };
+    private readonly DispatcherTimer recoverySaveTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private GeneralPreferences generalPreferences = new();
     private PlaybackSession? playback;
     private CancellationTokenSource? exportCancellation;
@@ -428,6 +429,20 @@ public partial class MainWindow : Window
         Timeline.LoopRegionChanged += range => vm.LoopRegion = range;
         TrimmerDeck.Initialize(vm);
         vm.Changed += Refresh;
+        vm.Changed += () =>
+        {
+            if (vm.Dirty && generalPreferences.EnableAutoSave)
+            {
+                recoverySaveTimer.Stop();
+                recoverySaveTimer.Start();
+            }
+        };
+        recoverySaveTimer.Tick += async (_, _) =>
+        {
+            recoverySaveTimer.Stop();
+            if (!vm.Dirty || vm.Busy || !generalPreferences.EnableAutoSave) return;
+            await SaveRecoverySnapshotAsync();
+        };
         timer.Tick += async (_, _) =>
         {
             if (playback is null) return;
@@ -466,14 +481,14 @@ public partial class MainWindow : Window
             if (!vm.Dirty || vm.Busy || !generalPreferences.EnableAutoSave) return;
             try
             {
-                var clone = vm.Project.DeepClone();
-                await ProjectStore.SaveAsync(clone, recoveryPath);
+                await SaveRecoverySnapshotAsync();
                 if (generalPreferences.UseProjectDirectoryForAutoSave && !string.IsNullOrEmpty(vm.ProjectPath))
                 {
+                    var clone = vm.Project.DeepClone();
                     await ProjectStore.SaveAutosaveAsync(clone, vm.ProjectPath);
                 }
             }
-            catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
+            catch (Exception ex) { vm.Status = "AutoSave could not be saved: " + ex.Message; }
         };
         Loaded += async (_, _) =>
         {
@@ -766,26 +781,87 @@ public partial class MainWindow : Window
         autosave.Interval = TimeSpan.FromMinutes(Math.Clamp(prefs.AutoSaveIntervalMinutes, 1, 120));
     }
 
+    public async Task SaveRecoverySnapshotAsync()
+    {
+        if (vm.Busy) return;
+        var dataDir = Path.GetDirectoryName(recoveryPath)!;
+        SessionRecoveryManager.RecordHeartbeat(dataDir, vm.Dirty, vm.ProjectPath);
+        if (!vm.Dirty) return;
+
+        var hasContent = vm.Project.Tracks.Any(t => t.Clips.Count > 0)
+            || vm.Project.Media.Count > 0
+            || !string.IsNullOrEmpty(vm.ProjectPath);
+        if (!hasContent) return;
+
+        try
+        {
+            var clone = vm.Project.DeepClone();
+            await ProjectStore.SaveAsync(clone, recoveryPath);
+        }
+        catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
+    }
+
+    public void SaveEmergencyRecoverySnapshot()
+    {
+        try
+        {
+            if (!vm.Dirty || vm.Busy) return;
+            var hasContent = vm.Project.Tracks.Any(t => t.Clips.Count > 0)
+                || vm.Project.Media.Count > 0
+                || !string.IsNullOrEmpty(vm.ProjectPath);
+            if (!hasContent) return;
+
+            var clone = vm.Project.DeepClone();
+            var dataDir = Path.GetDirectoryName(recoveryPath)!;
+            Directory.CreateDirectory(dataDir);
+            ProjectStore.Save(clone, recoveryPath);
+            SessionRecoveryManager.RecordHeartbeat(dataDir, true, vm.ProjectPath);
+        }
+        catch { }
+    }
+
     private async Task CheckCrashRecoveryAsync()
     {
         var dataDir = Path.GetDirectoryName(recoveryPath)!;
         var candidate = SessionRecoveryManager.CheckCrashRecovery(dataDir);
         if (candidate is not null && File.Exists(candidate.SnapshotPath))
         {
-            var dialog = new CrashRecoveryWindow(candidate, this);
-            if (dialog.ShowDialog() == true)
+            var hasRecoverableContent = false;
+            ProjectDocument? recovered = null;
+            try
             {
-                try
+                recovered = await ProjectStore.LoadAsync(candidate.SnapshotPath);
+                hasRecoverableContent = recovered.Tracks.Any(t => t.Clips.Count > 0)
+                    || recovered.Media.Count > 0
+                    || !string.IsNullOrEmpty(candidate.OriginalProjectPath);
+            }
+            catch
+            {
+                hasRecoverableContent = false;
+            }
+
+            if (hasRecoverableContent && recovered is not null)
+            {
+                var dialog = new CrashRecoveryWindow(candidate, this);
+                if (dialog.ShowDialog() == true)
                 {
-                    Pause();
-                    var recovered = await ProjectStore.LoadAsync(candidate.SnapshotPath);
-                    vm.Replace(recovered, null);
-                    await PopulateMediaVisualsAsync();
-                    vm.Status = "Restored autosaved project from previous session. Save as a project to keep these edits.";
+                    try
+                    {
+                        Pause();
+                        vm.Replace(recovered, null);
+                        vm.MarkDirty();
+                        await PopulateMediaVisualsAsync();
+                        SessionRecoveryManager.DiscardRecovery(dataDir);
+                        vm.Status = "Restored autosaved project from previous session. Save as a project to keep these edits.";
+                    }
+                    catch (Exception ex)
+                    {
+                        vm.Status = "Could not restore autosaved project: " + ex.Message;
+                    }
                 }
-                catch (Exception ex)
+                else
                 {
-                    vm.Status = "Could not restore autosaved project: " + ex.Message;
+                    SessionRecoveryManager.DiscardRecovery(dataDir);
                 }
             }
             else
@@ -932,7 +1008,12 @@ public partial class MainWindow : Window
         if (!vm.Dirty) return true;
         var answer = MessageBox.Show(this, "Save changes to the current project?", "OpenRend", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
         if (answer == MessageBoxResult.Cancel) return false;
-        if (answer == MessageBoxResult.No) return true;
+        if (answer == MessageBoxResult.No)
+        {
+            var dataDir = Path.GetDirectoryName(recoveryPath)!;
+            SessionRecoveryManager.DiscardRecovery(dataDir);
+            return true;
+        }
         return await SaveProjectAsync(false);
     }
     private async Task<bool> SaveProjectAsync(bool saveAs)
@@ -944,7 +1025,12 @@ public partial class MainWindow : Window
             if (dialog.ShowDialog(this) != true) return false;
             path = dialog.FileName;
         }
-        await vm.SaveAsync(path); RecordRecentProject(path); return true;
+        await vm.SaveAsync(path);
+        RecordRecentProject(path);
+        var dataDir = Path.GetDirectoryName(recoveryPath)!;
+        SessionRecoveryManager.RecordHeartbeat(dataDir, false, vm.ProjectPath);
+        try { if (File.Exists(recoveryPath)) File.Delete(recoveryPath); } catch { }
+        return true;
     }
     private async void NewClick(object sender, RoutedEventArgs e) => await GuardAsync(ShowWelcomeAsync);
     private async void OpenClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
@@ -2705,7 +2791,7 @@ public partial class MainWindow : Window
         try
         {
             if (!await ConfirmUnsavedAsync()) return;
-            Pause(); autosave.Stop(); SaveWorkspace();
+            Pause(); autosave.Stop(); recoverySaveTimer.Stop(); SaveWorkspace();
             SessionRecoveryManager.RecordCleanExit(Path.GetDirectoryName(recoveryPath)!);
             allowClose = true;
             // Complete the cancelled Closing event before requesting the final close.

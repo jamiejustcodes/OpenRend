@@ -13,6 +13,11 @@ public partial class App : Application
         base.OnStartup(e);
         DispatcherUnhandledException += (_, args) =>
         {
+            try
+            {
+                (MainWindow as MainWindow)?.SaveEmergencyRecoverySnapshot();
+            }
+            catch { }
             MessageBox.Show(args.Exception.Message, "OpenRend", MessageBoxButton.OK, MessageBoxImage.Error);
             args.Handled = true;
         };

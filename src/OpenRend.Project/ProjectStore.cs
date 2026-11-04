@@ -20,6 +20,41 @@ public static class ProjectStore
     public static Task SaveAsync(ProjectDocument project, string path, CancellationToken cancellationToken = default)
         => SaveAsync(project, path, createBackup: false, cancellationToken);
 
+    public static void Save(ProjectDocument project, string path, bool createBackup = false)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        project.Validate();
+        var fullPath = System.IO.Path.GetFullPath(path);
+        if (project.Media.Any(media => string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
+            throw new InvalidOperationException("A project file cannot overwrite source media.");
+        var directory = System.IO.Path.GetDirectoryName(fullPath)!;
+        Directory.CreateDirectory(directory);
+        var saved = project.DeepClone();
+        foreach (var media in saved.Media)
+            media.Path = System.IO.Path.GetRelativePath(directory, System.IO.Path.GetFullPath(media.Path));
+        var manifest = new ProjectManifest { Version = CurrentVersion, SavedUtc = DateTimeOffset.UtcNow, Project = saved };
+        var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
+        {
+            using (var stream = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.WriteThrough))
+            {
+                JsonSerializer.Serialize(stream, manifest, Options);
+                if (stream.Position > MaximumManifestBytes) throw new InvalidDataException("Project manifest exceeds 64 MiB.");
+                stream.Flush(flushToDisk: true);
+            }
+            if (File.Exists(fullPath))
+            {
+                var backupFile = createBackup ? GetBackupPath(fullPath) : null;
+                File.Replace(temporary, fullPath, destinationBackupFileName: backupFile);
+            }
+            else File.Move(temporary, fullPath);
+        }
+        finally
+        {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
     public static async Task SaveAsync(ProjectDocument project, string path, bool createBackup, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
