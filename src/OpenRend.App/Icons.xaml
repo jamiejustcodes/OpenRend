@@ -705,6 +705,15 @@
     </Grid>
   </DataTemplate>
 
+  <!-- 1:1 Vegas Pro Envelope Edit Tool -->
+  <DataTemplate x:Key="ic_envelope_tool">
+    <Grid Width="16" Height="16">
+      <Path Data="M 1.5,12.5 C 4.5,12.5 5.5,4.5 9.5,4.5 C 11.5,4.5 12.5,8.5 14.5,8.5" Stroke="{StaticResource IconBase}" StrokeThickness="1.5" Fill="Transparent"/>
+      <Rectangle HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4,7,0,0" Width="3.5" Height="3.5" Fill="{StaticResource IconBlue}"/>
+      <Rectangle HorizontalAlignment="Left" VerticalAlignment="Top" Margin="8,3,0,0" Width="3.5" Height="3.5" Fill="{StaticResource IconBlue}"/>
+    </Grid>
+  </DataTemplate>
+
   <!-- 1:1 Vegas Pro Automatic Crossfades Toggle -->
   <DataTemplate x:Key="ic_autocrossfade">
     <Grid Width="16" Height="16">

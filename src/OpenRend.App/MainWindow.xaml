@@ -41,6 +41,16 @@
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
         <MenuItem Header="Select all clips" InputGestureText="Ctrl+A" Click="SelectAllClick"/>
         <Separator/>
+        <MenuItem Header="&amp;Editing Tool">
+          <MenuItem x:Name="EditToolNormalMenu" Header="&amp;Normal Edit Tool" InputGestureText="Ctrl+D" Click="EditToolNormalClick" IsCheckable="True" IsChecked="True"/>
+          <MenuItem x:Name="EditToolEnvelopeMenu" Header="&amp;Envelope Edit Tool" Click="EditToolEnvelopeClick" IsCheckable="True"/>
+          <MenuItem x:Name="EditToolSelectionMenu" Header="&amp;Selection Edit Tool" InputGestureText="D" Click="EditToolSelectionClick" IsCheckable="True"/>
+          <MenuItem x:Name="EditToolZoomMenu" Header="&amp;Zoom Tool" Click="EditToolZoomClick" IsCheckable="True"/>
+          <Separator/>
+          <MenuItem Header="Ne&amp;xt Tool" InputGestureText="D" Click="EditToolNextClick"/>
+          <MenuItem Header="Pre&amp;vious Tool" InputGestureText="Shift+D" Click="EditToolPreviousClick"/>
+        </MenuItem>
+        <Separator/>
         <MenuItem Header="_Group">
           <MenuItem x:Name="GroupCreateMenu" Header="_Create New" InputGestureText="G" Click="GroupCreateClick"/>
           <MenuItem x:Name="GroupRemoveMenu" Header="_Remove From" InputGestureText="U" Click="GroupRemoveClick"/>
@@ -200,6 +210,11 @@
         <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
         <Button x:Name="UndoButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_undo}" AutomationProperties.Name="Undo" ToolTip="Undo (Ctrl+Z)" Click="UndoClick"/>
         <Button x:Name="RedoButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_redo}" AutomationProperties.Name="Redo" ToolTip="Redo (Ctrl+Y)" Click="RedoClick"/>
+        <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
+        <RadioButton x:Name="ToolNormalRadio" Style="{StaticResource IconRadioButton}" GroupName="MainEditTools" ContentTemplate="{StaticResource ic_normal_edit}" ToolTip="Normal Edit Tool (Ctrl+D)" IsChecked="True" Click="EditToolNormalClick"/>
+        <RadioButton x:Name="ToolEnvelopeRadio" Style="{StaticResource IconRadioButton}" GroupName="MainEditTools" ContentTemplate="{StaticResource ic_envelope_tool}" ToolTip="Envelope Edit Tool" Click="EditToolEnvelopeClick"/>
+        <RadioButton x:Name="ToolSelectionRadio" Style="{StaticResource IconRadioButton}" GroupName="MainEditTools" ContentTemplate="{StaticResource ic_selection_edit}" ToolTip="Selection Edit Tool (D)" Click="EditToolSelectionClick"/>
+        <RadioButton x:Name="ToolZoomRadio" Style="{StaticResource IconRadioButton}" GroupName="MainEditTools" ContentTemplate="{StaticResource ic_zoom_tool}" ToolTip="Zoom Tool" Click="EditToolZoomClick"/>
       </StackPanel>
     </Border>
     <Grid Grid.Row="2" x:Name="Workspace" Margin="4,0">

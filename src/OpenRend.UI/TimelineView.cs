@@ -133,6 +133,32 @@ public sealed partial class TimelineView : FrameworkElement
     }
     public event Action<RulerFormat>? RulerFormatChanged;
     public event Action? SetTimeAtCursorRequested;
+    public EditToolMode EditTool
+    {
+        get => editTool;
+        set
+        {
+            if (editTool == value) return;
+            editTool = value;
+            Cursor = CursorAt(Mouse.GetPosition(this));
+            EditToolChanged?.Invoke(editTool);
+            InvalidateVisual();
+        }
+    }
+    private EditToolMode editTool = EditToolMode.Normal;
+    public event Action<EditToolMode>? EditToolChanged;
+    public event Action<double>? ZoomChanged;
+    public void CycleNextEditTool() => EditTool = EditTool.NextTool();
+    public void CyclePreviousEditTool() => EditTool = EditTool.PreviousTool();
+
+    private bool isMarqueeSelecting;
+    private Point marqueeStart;
+    private Rect marqueeRect;
+    private ModifierKeys marqueeModifiers;
+
+    private bool isZooming;
+    private Point zoomStart;
+    private Rect zoomRect;
     public bool HasTrackEnvelope(Guid trackId, EnvelopeType type) =>
         Project.Tracks.FirstOrDefault(t => t.Id == trackId)?.Envelopes?.Any(e => e.Type == type && e.IsEnabled) ?? false;
     private TimelineClip? dragging;
@@ -174,6 +200,8 @@ public sealed partial class TimelineView : FrameworkElement
         isDragging = false; alreadySelectedOnDown = false;
         dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
         destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
+        isMarqueeSelecting = false; marqueeRect = Rect.Empty;
+        isZooming = false; zoomRect = Rect.Empty;
         CancelTrackLevelInput();
         ReleaseMouseCapture(); ClearHover(); InvalidateVisual();
     }
@@ -229,6 +257,24 @@ public sealed partial class TimelineView : FrameworkElement
         {
             RequestOverlapToCut();
             return true;
+        }
+        if (key == Key.D)
+        {
+            if (modifiers == ModifierKeys.Control)
+            {
+                EditTool = EditToolMode.Normal;
+                return true;
+            }
+            if (modifiers == ModifierKeys.None)
+            {
+                CycleNextEditTool();
+                return true;
+            }
+            if (modifiers == ModifierKeys.Shift)
+            {
+                CyclePreviousEditTool();
+                return true;
+            }
         }
         if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) return false;
         if (Project.Tracks.Count == 0) return false;
@@ -563,6 +609,15 @@ public sealed partial class TimelineView : FrameworkElement
     }
     internal Cursor CursorAt(Point point)
     {
+        if (EditTool == EditToolMode.Zoom) return Cursors.SizeAll;
+        if (EditTool == EditToolMode.Selection) return Cursors.Cross;
+        if (EditTool == EditToolMode.Envelope)
+        {
+            if (HitEnvelopePoint(point, out _, out _, out _) || HitTrackEnvelopePoint(point, out _, out _, out _))
+                return Cursors.Hand;
+            return Cursors.Arrow;
+        }
+
         if (HitEventButton(point) is { } button) return button.Track.IsLocked || (button.Clip.IsLocked && button.Action != "More") ? Cursors.No : Cursors.Hand;
         var hit = HitClip(point);
         if (hit is null) return Cursors.Arrow;
@@ -933,6 +988,22 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawLine(new Pen(Brush("#00E5FF"), 1.5) { DashStyle = new DashStyle([4, 2], 0) }, new Point(snapX, RulerHeight), new Point(snapX, ActualHeight));
             }
         }
+        if (isMarqueeSelecting && marqueeRect.Width > 0 && marqueeRect.Height > 0)
+        {
+            var marqueePen = new Pen(new SolidColorBrush(Color.FromArgb(220, 255, 224, 130)), 1)
+            {
+                DashStyle = new DashStyle([3, 3], 0)
+            };
+            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(45, 228, 223, 143)), marqueePen, marqueeRect);
+        }
+        if (isZooming && zoomRect.Width > 0 && zoomRect.Height > 0)
+        {
+            var zoomPen = new Pen(new SolidColorBrush(Color.FromRgb(0, 210, 255)), 1.2)
+            {
+                DashStyle = new DashStyle([4, 4], 0)
+            };
+            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(35, 0, 210, 255)), zoomPen, zoomRect);
+        }
         if (Project.Tracks.Count == 0) Text(dc, "Import media, then add it to the timeline", HeaderWidth + 30, RulerHeight + 35, Brush("#B8B8B8"));
     }
 
@@ -1026,6 +1097,33 @@ public sealed partial class TimelineView : FrameworkElement
             return;
         }
         if (BeginLoopRegion(origin)) { e.Handled = true; return; }
+        if (EditTool == EditToolMode.Zoom)
+        {
+            isZooming = true;
+            zoomStart = origin;
+            zoomRect = new Rect(origin, origin);
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+        if (EditTool == EditToolMode.Selection)
+        {
+            isMarqueeSelecting = true;
+            marqueeStart = origin;
+            marqueeRect = new Rect(origin, origin);
+            marqueeModifiers = Keyboard.Modifiers;
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
+        if (EditTool == EditToolMode.Envelope)
+        {
+            seeking = true;
+            SeekRequested?.Invoke(FrameAt(origin.X));
+            CaptureMouse();
+            e.Handled = true;
+            return;
+        }
         var hit = HitClip(origin);
         dragTrack = hit?.Track; dragging = hit?.Clip;
         if (dragging is null)
@@ -1057,6 +1155,26 @@ public sealed partial class TimelineView : FrameworkElement
     {
         base.OnMouseMove(e); var p = e.GetPosition(this);
         if (HandleEnvelopeMouseMove(p)) return;
+        if (isZooming)
+        {
+            var minX = Math.Max(HeaderWidth, Math.Min(zoomStart.X, p.X));
+            var maxX = Math.Min(ActualWidth, Math.Max(zoomStart.X, p.X));
+            var minY = Math.Max(RulerHeight, Math.Min(zoomStart.Y, p.Y));
+            var maxY = Math.Min(ActualHeight, Math.Max(zoomStart.Y, p.Y));
+            zoomRect = new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
+            InvalidateVisual();
+            return;
+        }
+        if (isMarqueeSelecting)
+        {
+            var minX = Math.Max(HeaderWidth, Math.Min(marqueeStart.X, p.X));
+            var maxX = Math.Min(ActualWidth, Math.Max(marqueeStart.X, p.X));
+            var minY = Math.Max(RulerHeight, Math.Min(marqueeStart.Y, p.Y));
+            var maxY = Math.Min(ActualHeight, Math.Max(marqueeStart.Y, p.Y));
+            marqueeRect = new Rect(minX, minY, Math.Max(0, maxX - minX), Math.Max(0, maxY - minY));
+            InvalidateVisual();
+            return;
+        }
         if (selectingLoop) { UpdateLoopRegion(p); return; }
         if (pressedEventButton is not null) { UpdateHover(p); return; }
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
@@ -1191,6 +1309,132 @@ public sealed partial class TimelineView : FrameworkElement
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
+        var p = e.GetPosition(this);
+        if (isZooming)
+        {
+            isZooming = false;
+            ReleaseMouseCapture();
+            var box = zoomRect;
+            zoomRect = Rect.Empty;
+            if ((p - zoomStart).Length >= DragDistanceThreshold && box.Width > 10)
+            {
+                var startFrame = FrameAt(box.Left);
+                var endFrame = FrameAt(box.Right);
+                if (endFrame > startFrame)
+                {
+                    var durSec = Project.FrameRate.Seconds(endFrame - startFrame);
+                    var viewWidth = Math.Max(100, ActualWidth - HeaderWidth);
+                    var targetPps = Math.Clamp(viewWidth / durSec, 5, 2000);
+                    PixelsPerSecond = targetPps;
+                    Offset = Math.Max(0, Project.FrameRate.Seconds(startFrame) * PixelsPerSecond);
+                    ZoomChanged?.Invoke(PixelsPerSecond);
+                }
+            }
+            else
+            {
+                var clickFrame = FrameAt(p.X);
+                var newPps = Math.Min(2000, PixelsPerSecond * 1.5);
+                var clickSec = Project.FrameRate.Seconds(clickFrame);
+                var newOffset = Math.Max(0, HeaderWidth + clickSec * newPps - p.X);
+                PixelsPerSecond = newPps;
+                Offset = newOffset;
+                ZoomChanged?.Invoke(PixelsPerSecond);
+            }
+            InvalidateVisual();
+            e.Handled = true;
+            return;
+        }
+        if (isMarqueeSelecting)
+        {
+            isMarqueeSelecting = false;
+            ReleaseMouseCapture();
+            var box = marqueeRect;
+            marqueeRect = Rect.Empty;
+            if ((p - marqueeStart).Length >= DragDistanceThreshold && box.Width > 2 && box.Height > 2)
+            {
+                var hitClips = new HashSet<Guid>();
+                for (int tIdx = 0; tIdx < Project.Tracks.Count; tIdx++)
+                {
+                    var track = Project.Tracks[tIdx];
+                    var trackY = RulerHeight + tIdx * TrackHeight - VerticalOffset;
+                    var trackRect = new Rect(HeaderWidth, trackY, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight);
+                    if (!box.IntersectsWith(trackRect)) continue;
+
+                    foreach (var clip in track.Clips)
+                    {
+                        var clipX = X(clip.StartFrame);
+                        var clipW = Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond);
+                        var clipRect = new Rect(clipX, trackY + 1, clipW, TrackHeight - 2);
+                        if (box.IntersectsWith(clipRect))
+                        {
+                            hitClips.Add(clip.Id);
+                        }
+                    }
+                }
+
+                var finalHitClips = new HashSet<Guid>();
+                foreach (var id in hitClips)
+                {
+                    var clip = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == id);
+                    if (clip != null && !ShouldIgnoreGroups && clip.GroupId.HasValue)
+                    {
+                        var groupClips = Project.Tracks.SelectMany(t => t.Clips).Where(c => c.GroupId == clip.GroupId.Value).Select(c => c.Id);
+                        foreach (var gId in groupClips) finalHitClips.Add(gId);
+                    }
+                    else
+                    {
+                        finalHitClips.Add(id);
+                    }
+                }
+
+                if (marqueeModifiers.HasFlag(ModifierKeys.Control))
+                {
+                    foreach (var id in finalHitClips)
+                    {
+                        if (Selection.Contains(id)) Selection.Remove(id);
+                        else Selection.Add(id);
+                    }
+                    activeClipId = Selection.Count > 0 ? finalHitClips.FirstOrDefault(id => Selection.Contains(id)) : null;
+                }
+                else if (marqueeModifiers.HasFlag(ModifierKeys.Shift))
+                {
+                    foreach (var id in finalHitClips) Selection.Add(id);
+                    if (finalHitClips.Count > 0) activeClipId = finalHitClips.First();
+                }
+                else
+                {
+                    Selection.Clear();
+                    foreach (var id in finalHitClips) Selection.Add(id);
+                    activeClipId = finalHitClips.FirstOrDefault();
+                }
+
+                SelectionChanged?.Invoke();
+                InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
+            else
+            {
+                var hit = HitClip(p);
+                if (hit is not null)
+                {
+                    SelectClip(hit.Value.Clip.Id, marqueeModifiers.HasFlag(ModifierKeys.Control), ensureVisible: false);
+                }
+                else
+                {
+                    if (!marqueeModifiers.HasFlag(ModifierKeys.Control) && !marqueeModifiers.HasFlag(ModifierKeys.Shift))
+                    {
+                        Selection.Clear();
+                        activeClipId = null;
+                        SelectionChanged?.Invoke();
+                    }
+                    SeekRequested?.Invoke(FrameAt(p.X));
+                }
+                InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
+        }
         if (selectingLoop)
         {
             UpdateLoopRegion(e.GetPosition(this)); selectingLoop = false;
@@ -1204,7 +1448,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
-        var p = e.GetPosition(this);
+        p = e.GetPosition(this);
         base.OnMouseLeftButtonUp(e);
         seeking = false;
 
@@ -1420,6 +1664,10 @@ public sealed partial class TimelineView : FrameworkElement
             dragging = null; dragTrack = null; mode = ""; delta = 0;
             destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
         }
+        isMarqueeSelecting = false;
+        marqueeRect = Rect.Empty;
+        isZooming = false;
+        zoomRect = Rect.Empty;
         if (selectingLoop) loopRegion = loopBeforeDrag;
         selectingLoop = false;
         pressedEventButton = null;
@@ -1475,6 +1723,19 @@ public sealed partial class TimelineView : FrameworkElement
         var p = e.GetPosition(this);
         if (p.X >= HeaderWidth)
         {
+            if (EditTool == EditToolMode.Zoom && p.Y >= RulerHeight)
+            {
+                var clickFrame = FrameAt(p.X);
+                var newPps = Math.Max(5, PixelsPerSecond / 1.5);
+                var clickSec = Project.FrameRate.Seconds(clickFrame);
+                var newOffset = Math.Max(0, HeaderWidth + clickSec * newPps - p.X);
+                PixelsPerSecond = newPps;
+                Offset = newOffset;
+                ZoomChanged?.Invoke(PixelsPerSecond);
+                InvalidateVisual();
+                e.Handled = true;
+                return;
+            }
             if (HandleEnvelopeRightClick(p)) { e.Handled = true; return; }
             if (HitMarker(p) is { } rightMarker)
             {

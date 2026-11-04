@@ -442,6 +442,7 @@ public partial class MainWindow : Window
             InitializeTransitionBrowser();
             InitializeToolsViews();
             InitializeRulerEvents();
+            InitializeEditToolsEvents();
             Refresh();
             autosave.Start();
             await CheckCrashRecoveryAsync();
@@ -2340,6 +2341,27 @@ public partial class MainWindow : Window
             vm.Status = "Alt+D pressed. Press D (Default), A (Audio), C (Color), S (Source), T (Timeline Top), R (Reload), W (Save), or 0–9...";
             e.Handled = true;
             return;
+        }
+        if (key == Key.D && !alt)
+        {
+            if (ctrl && !shift)
+            {
+                SetEditTool(EditToolMode.Normal);
+                e.Handled = true;
+                return;
+            }
+            if (!ctrl && shift)
+            {
+                CyclePreviousEditTool();
+                e.Handled = true;
+                return;
+            }
+            if (!ctrl && !shift)
+            {
+                CycleNextEditTool();
+                e.Handled = true;
+                return;
+            }
         }
         Action? action = key switch
         {

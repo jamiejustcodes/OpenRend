@@ -70,6 +70,23 @@ public sealed class EditorViewModel : ObservableObject
     public AutoRippleMode RippleMode { get => rippleMode; set => SetProperty(ref rippleMode, value); }
     public bool IgnoreGroups { get; set; }
     public int ActiveTrackIndex { get; set; }
+    private EditToolMode editTool = EditToolMode.Normal;
+    public EditToolMode EditTool
+    {
+        get => editTool;
+        set
+        {
+            if (SetProperty(ref editTool, value))
+            {
+                Status = editTool.ToStatusHint();
+                EditToolChanged?.Invoke(editTool);
+                Changed?.Invoke();
+            }
+        }
+    }
+    public event Action<EditToolMode>? EditToolChanged;
+    public void CycleNextEditTool() => EditTool = EditTool.NextTool();
+    public void CyclePreviousEditTool() => EditTool = EditTool.PreviousTool();
     public RulerFormat RulerFormat => Project.RulerFormat;
     public void SetRulerFormat(RulerFormat format)
     {
