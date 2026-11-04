@@ -131,15 +131,18 @@
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
         <MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/>
         <Separator/>
-        <MenuItem Header="Audio Envelopes">
+        <MenuItem Header="Audio Envelopes" SubmenuOpened="AudioEnvelopesMenu_SubmenuOpened">
           <MenuItem x:Name="AudioVolumeEnvelopeMenu" Header="Volume" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
           <MenuItem x:Name="AudioPanEnvelopeMenu" Header="Pan" InputGestureText="Shift+P" Click="ToggleTrackPanEnvelopeClick"/>
           <MenuItem x:Name="AudioMuteEnvelopeMenu" Header="Mute" Click="ToggleTrackMuteEnvelopeClick"/>
         </MenuItem>
-        <MenuItem Header="Video Envelopes">
+        <MenuItem Header="Video Envelopes" SubmenuOpened="VideoEnvelopesMenu_SubmenuOpened">
           <MenuItem x:Name="VideoCompositeEnvelopeMenu" Header="Track Composite Level" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
           <MenuItem x:Name="VideoFadeToColorEnvelopeMenu" Header="Fade to Color" Click="ToggleTrackFadeToColorEnvelopeClick"/>
           <MenuItem x:Name="VideoMuteEnvelopeMenu" Header="Mute" Click="ToggleTrackMuteEnvelopeClick"/>
+          <Separator/>
+          <MenuItem x:Name="VideoEventVelocityEnvelopeMenu" Header="Event Velocity" Click="ToggleEventVelocityEnvelopeClick" AutomationProperties.AutomationId="VideoEventVelocityEnvelopeMenu"/>
+          <MenuItem x:Name="VideoEventCompositeEnvelopeMenu" Header="Event Composite Level" Click="ToggleEventCompositeEnvelopeClick" AutomationProperties.AutomationId="VideoEventCompositeEnvelopeMenu"/>
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_Tools">

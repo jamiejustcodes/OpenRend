@@ -121,6 +121,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetTrackEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveTrackEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long, EnvelopeCurveType>? SetTrackEnvelopePointCurveRequested;
+    public event Action<Guid, EnvelopeType>? ResetEnvelopeRequested;
+    public event Action<Guid, EnvelopeType>? ResetTrackEnvelopeRequested;
     public event Action<Guid, bool>? TrackArmRequested;
     public event Action<Guid, string?>? TrackColorRequested;
     public event Action<Guid, TrackAutomationMode>? TrackAutomationModeRequested;

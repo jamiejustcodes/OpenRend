@@ -472,6 +472,46 @@ public sealed class EditorViewModel : ObservableObject
         Editor.DeleteTime(start, duration, mode);
         Status = $"Deleted {TimecodeFormatter.Format(duration, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} from {TimecodeFormatter.Format(start, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} ({mode}).";
     }
+
+    /// <summary>
+    /// Resets all envelope points on a clip to neutral/default values, matching Vegas Pro "Reset All Points".
+    /// </summary>
+    public void ResetClipEnvelope(Guid clipId, EnvelopeType type)
+    {
+        Editor.ResetClipEnvelope(clipId, type);
+        Status = $"Reset {type} envelope points.";
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Sets all points of a clip envelope to a constant value, matching Vegas Pro "Set to...".
+    /// </summary>
+    public void SetAllClipEnvelopePoints(Guid clipId, EnvelopeType type, double value)
+    {
+        Editor.SetAllClipEnvelopePoints(clipId, type, value);
+        Status = $"Set all {type} envelope points to {Math.Round(value * 100)}%.";
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Resets all envelope points on a track to neutral/default values, matching Vegas Pro "Reset All Points".
+    /// </summary>
+    public void ResetTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        Editor.ResetTrackEnvelope(trackId, type);
+        Status = $"Reset Track {type} envelope points.";
+        Changed?.Invoke();
+    }
+
+    /// <summary>
+    /// Sets all points of a track envelope to a constant value, matching Vegas Pro "Set to...".
+    /// </summary>
+    public void SetAllTrackEnvelopePoints(Guid trackId, EnvelopeType type, double value)
+    {
+        Editor.SetAllTrackEnvelopePoints(trackId, type, value);
+        Status = $"Set all Track {type} envelope points to {Math.Round(value * 100)}%.";
+        Changed?.Invoke();
+    }
     public async Task SaveAsync(string path)
     {
         var editor = Editor;

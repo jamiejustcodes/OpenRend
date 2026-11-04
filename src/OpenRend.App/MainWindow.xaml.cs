@@ -403,6 +403,20 @@ public partial class MainWindow : Window
             vm.Status = $"Set Track {type} envelope point curve to {curve} Fade.";
             RequestPreview();
         });
+        Timeline.ResetEnvelopeRequested += (id, type) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.ResetClipEnvelope(id, type);
+            vm.Status = $"Reset {type} envelope points.";
+            RequestPreview();
+        });
+        Timeline.ResetTrackEnvelopeRequested += (id, type) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.ResetTrackEnvelope(id, type);
+            vm.Status = $"Reset Track {type} envelope points.";
+            RequestPreview();
+        });
 
         Preview.CanvasMouseDown += OnPreviewMouseDown;
         Preview.CanvasMouseMove += OnPreviewMouseMove;
@@ -2397,6 +2411,117 @@ public partial class MainWindow : Window
             Pause();
             vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.FadeToColor);
             vm.Status = $"{(vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.FadeToColor) ? "Added" : "Removed")} Track Fade to Color envelope.";
+            Refresh();
+            RequestPreview();
+        });
+    }
+
+    private void AudioEnvelopesMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        var track = (trackIdx >= 0 && trackIdx < vm.Project.Tracks.Count) ? vm.Project.Tracks[trackIdx] : null;
+        var isAudio = track?.Kind == TrackKind.Audio;
+
+        AudioVolumeEnvelopeMenu.IsChecked = isAudio && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.Volume);
+        AudioPanEnvelopeMenu.IsChecked = isAudio && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.Pan);
+        AudioMuteEnvelopeMenu.IsChecked = isAudio && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.Mute);
+    }
+
+    private void VideoEnvelopesMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        var track = (trackIdx >= 0 && trackIdx < vm.Project.Tracks.Count) ? vm.Project.Tracks[trackIdx] : null;
+        var isVideo = track?.Kind == TrackKind.Video;
+
+        VideoCompositeEnvelopeMenu.IsChecked = isVideo && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.Composite);
+        VideoFadeToColorEnvelopeMenu.IsChecked = isVideo && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.FadeToColor);
+        VideoMuteEnvelopeMenu.IsChecked = isVideo && vm.Editor.HasTrackEnvelope(track!.Id, EnvelopeType.Mute);
+
+        var targetClips = GetTargetVideoClipsForEnvelopes();
+        VideoEventVelocityEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Velocity));
+        VideoEventCompositeEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Composite));
+    }
+
+    private List<TimelineClip> GetTargetVideoClipsForEnvelopes()
+    {
+        var clips = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video && !t.IsLocked)
+            .SelectMany(t => t.Clips.Where(c => vm.Selection.Contains(c.Id))).ToList();
+
+        if (clips.Count == 0 && Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count)
+        {
+            var track = vm.Project.Tracks[Timeline.ActiveTrackIndex];
+            if (track.Kind == TrackKind.Video && !track.IsLocked)
+            {
+                var underCursor = track.Clips.FirstOrDefault(c => c.StartFrame <= vm.Position && c.EndFrame > vm.Position);
+                if (underCursor != null)
+                {
+                    clips.Add(underCursor);
+                }
+            }
+        }
+
+        return clips;
+    }
+
+    private void ToggleEventVelocityEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var targetClips = GetTargetVideoClipsForEnvelopes();
+        if (targetClips.Count == 0)
+        {
+            vm.Status = "Select a video event or place cursor on active video track to toggle velocity envelope.";
+            return;
+        }
+
+        Guard(() =>
+        {
+            Pause();
+            var anyHadEnvelope = targetClips.Any(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Velocity));
+            foreach (var clip in targetClips)
+            {
+                if (anyHadEnvelope)
+                {
+                    if (vm.Editor.HasClipEnvelope(clip.Id, EnvelopeType.Velocity))
+                        vm.Editor.ToggleClipEnvelope(clip.Id, EnvelopeType.Velocity);
+                }
+                else
+                {
+                    if (!vm.Editor.HasClipEnvelope(clip.Id, EnvelopeType.Velocity))
+                        vm.Editor.ToggleClipEnvelope(clip.Id, EnvelopeType.Velocity);
+                }
+            }
+            vm.Status = $"{(anyHadEnvelope ? "Removed" : "Added")} Velocity envelope on {(targetClips.Count == 1 ? "event" : $"{targetClips.Count} events")}.";
+            Refresh();
+            RequestPreview();
+        });
+    }
+
+    private void ToggleEventCompositeEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var targetClips = GetTargetVideoClipsForEnvelopes();
+        if (targetClips.Count == 0)
+        {
+            vm.Status = "Select a video event or place cursor on active video track to toggle composite level envelope.";
+            return;
+        }
+
+        Guard(() =>
+        {
+            Pause();
+            var anyHadEnvelope = targetClips.Any(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Composite));
+            foreach (var clip in targetClips)
+            {
+                if (anyHadEnvelope)
+                {
+                    if (vm.Editor.HasClipEnvelope(clip.Id, EnvelopeType.Composite))
+                        vm.Editor.ToggleClipEnvelope(clip.Id, EnvelopeType.Composite);
+                }
+                else
+                {
+                    if (!vm.Editor.HasClipEnvelope(clip.Id, EnvelopeType.Composite))
+                        vm.Editor.ToggleClipEnvelope(clip.Id, EnvelopeType.Composite);
+                }
+            }
+            vm.Status = $"{(anyHadEnvelope ? "Removed" : "Added")} Composite envelope on {(targetClips.Count == 1 ? "event" : $"{targetClips.Count} events")}.";
             Refresh();
             RequestPreview();
         });

@@ -122,9 +122,24 @@ public partial class TimelineView
 
                 if (isPointActive)
                 {
-                    var label = isVelocity
-                        ? (Math.Abs(pt.Value) < 0.005 ? "Velocity: 0% (Freeze Frame)" : $"Velocity: {Math.Round(pt.Value * 100)}% ({pt.Value:0.00}x)")
-                        : $"Composite: {Math.Round(pt.Value * 100)}%";
+                    string label;
+                    if (isVelocity)
+                    {
+                        if (Math.Abs(pt.Value) < 0.005)
+                            label = "Velocity: 0% (Freeze Frame)";
+                        else if (Math.Abs(pt.Value - 1.0) < 0.005)
+                            label = "Velocity: 100% (Normal Velocity)";
+                        else if (Math.Abs(pt.Value - (-1.0)) < 0.005)
+                            label = "Velocity: -100% (Reverse Velocity)";
+                        else if (pt.Value > 0)
+                            label = $"Velocity: {Math.Round(pt.Value * 100)}% ({pt.Value:0.00}x)";
+                        else
+                            label = $"Velocity: {Math.Round(pt.Value * 100)}% ({Math.Abs(pt.Value):0.00}x Reverse)";
+                    }
+                    else
+                    {
+                        label = $"Composite: {Math.Round(pt.Value * 100)}%";
+                    }
                     Text(dc, label, ptX + 6, ptY - 14, Brush("#FFAA00"), 9);
                 }
             }
@@ -605,11 +620,18 @@ public partial class TimelineView
 
             var title = new MenuItem
             {
-                Header = $"{env!.Type} Point ({Math.Round(pt!.Value * 100)}% at {pt.Frame}f)",
+                Header = $"{env!.Type} Point ({FormatEnvelopePointValue(env.Type, pt!.Value)} at {pt.Frame}f)",
                 IsEnabled = false,
                 FontWeight = FontWeights.Bold
             };
             menu.Items.Add(title);
+            menu.Items.Add(new Separator());
+
+            var presetSubmenu = CreatePresetSubmenu(env.Type, val =>
+            {
+                SetEnvelopePointRequested?.Invoke(clip!.Id, env.Type, pt.Frame, val, pt.Curve);
+            });
+            menu.Items.Add(presetSubmenu);
             menu.Items.Add(new Separator());
 
             var curves = new[]
@@ -649,6 +671,14 @@ public partial class TimelineView
                 menu.Items.Add(deleteItem);
             }
 
+            menu.Items.Add(new Separator());
+            var resetAllItem = new MenuItem { Header = "Reset All Points" };
+            resetAllItem.Click += (_, _) =>
+            {
+                ResetEnvelopeRequested?.Invoke(clip!.Id, env.Type);
+            };
+            menu.Items.Add(resetAllItem);
+
             menu.PlacementTarget = this;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             menu.IsOpen = true;
@@ -662,11 +692,18 @@ public partial class TimelineView
 
             var title = new MenuItem
             {
-                Header = $"Track {trackEnv!.Type} Point ({Math.Round(trackPt!.Value * 100)}% at {trackPt.Frame}f)",
+                Header = $"Track {trackEnv!.Type} Point ({FormatEnvelopePointValue(trackEnv.Type, trackPt!.Value)} at {trackPt.Frame}f)",
                 IsEnabled = false,
                 FontWeight = FontWeights.Bold
             };
             menu.Items.Add(title);
+            menu.Items.Add(new Separator());
+
+            var presetSubmenu = CreatePresetSubmenu(trackEnv.Type, val =>
+            {
+                SetTrackEnvelopePointRequested?.Invoke(track!.Id, trackEnv.Type, trackPt.Frame, val, trackPt.Curve);
+            });
+            menu.Items.Add(presetSubmenu);
             menu.Items.Add(new Separator());
 
             var curves = new[]
@@ -706,6 +743,14 @@ public partial class TimelineView
                 menu.Items.Add(deleteItem);
             }
 
+            menu.Items.Add(new Separator());
+            var resetAllItem = new MenuItem { Header = "Reset All Points" };
+            resetAllItem.Click += (_, _) =>
+            {
+                ResetTrackEnvelopeRequested?.Invoke(track!.Id, trackEnv.Type);
+            };
+            menu.Items.Add(resetAllItem);
+
             menu.PlacementTarget = this;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             menu.IsOpen = true;
@@ -722,6 +767,12 @@ public partial class TimelineView
                 SetEnvelopePointRequested?.Invoke(lineClip!.Id, lineEnv.Type, lineFrame, lineVal, EnvelopeCurveType.Linear);
             };
             menu.Items.Add(addItem);
+
+            var presetSubmenu = CreatePresetSubmenu(lineEnv.Type, val =>
+            {
+                SetEnvelopePointRequested?.Invoke(lineClip!.Id, lineEnv.Type, lineFrame, val, EnvelopeCurveType.Linear);
+            });
+            menu.Items.Add(presetSubmenu);
             menu.Items.Add(new Separator());
 
             var prevPoint = lineEnv.Points.LastOrDefault(pt => pt.Frame <= lineFrame);
@@ -753,6 +804,14 @@ public partial class TimelineView
                 curvesMenu.Items.Add(curveItem);
             }
             menu.Items.Add(curvesMenu);
+            menu.Items.Add(new Separator());
+
+            var resetAllItem = new MenuItem { Header = "Reset All Points" };
+            resetAllItem.Click += (_, _) =>
+            {
+                ResetEnvelopeRequested?.Invoke(lineClip!.Id, lineEnv.Type);
+            };
+            menu.Items.Add(resetAllItem);
 
             menu.PlacementTarget = this;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
@@ -770,6 +829,12 @@ public partial class TimelineView
                 SetTrackEnvelopePointRequested?.Invoke(lineTrack!.Id, lineTrackEnv.Type, lineTrackFrame, lineTrackVal, EnvelopeCurveType.Linear);
             };
             menu.Items.Add(addItem);
+
+            var presetSubmenu = CreatePresetSubmenu(lineTrackEnv.Type, val =>
+            {
+                SetTrackEnvelopePointRequested?.Invoke(lineTrack!.Id, lineTrackEnv.Type, lineTrackFrame, val, EnvelopeCurveType.Linear);
+            });
+            menu.Items.Add(presetSubmenu);
             menu.Items.Add(new Separator());
 
             var prevPoint = lineTrackEnv.Points.LastOrDefault(pt => pt.Frame <= lineTrackFrame);
@@ -801,6 +866,14 @@ public partial class TimelineView
                 curvesMenu.Items.Add(curveItem);
             }
             menu.Items.Add(curvesMenu);
+            menu.Items.Add(new Separator());
+
+            var resetAllItem = new MenuItem { Header = "Reset All Points" };
+            resetAllItem.Click += (_, _) =>
+            {
+                ResetTrackEnvelopeRequested?.Invoke(lineTrack!.Id, lineTrackEnv.Type);
+            };
+            menu.Items.Add(resetAllItem);
 
             menu.PlacementTarget = this;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
@@ -810,4 +883,73 @@ public partial class TimelineView
 
         return false;
     }
+
+    private static MenuItem CreatePresetSubmenu(EnvelopeType type, Action<double> onSelect)
+    {
+        var menu = new MenuItem { Header = "Set to" };
+        var presets = GetEnvelopePresets(type);
+        foreach (var (label, val) in presets)
+        {
+            var item = new MenuItem { Header = label };
+            var v = val;
+            item.Click += (_, _) => onSelect(v);
+            menu.Items.Add(item);
+        }
+        return menu;
+    }
+
+    private static (string Label, double Value)[] GetEnvelopePresets(EnvelopeType type) => type switch
+    {
+        EnvelopeType.Velocity =>
+        [
+            ("300% Velocity", 3.0),
+            ("200% Velocity", 2.0),
+            ("100% Normal Velocity", 1.0),
+            ("50% Velocity", 0.5),
+            ("0% Velocity (Freeze Frame)", 0.0),
+            ("-50% Velocity", -0.5),
+            ("-100% Reverse Velocity", -1.0)
+        ],
+        EnvelopeType.Composite or EnvelopeType.FadeToColor =>
+        [
+            ("100% Level", 1.0),
+            ("80% Level", 0.8),
+            ("50% Level", 0.5),
+            ("20% Level", 0.2),
+            ("0% Level", 0.0)
+        ],
+        EnvelopeType.Volume =>
+        [
+            ("+6.0 dB", Math.Pow(10.0, 6.0 / 20.0)),
+            ("+3.0 dB", Math.Pow(10.0, 3.0 / 20.0)),
+            ("0.0 dB (Unity Gain)", 1.0),
+            ("-3.0 dB", Math.Pow(10.0, -3.0 / 20.0)),
+            ("-6.0 dB", Math.Pow(10.0, -6.0 / 20.0)),
+            ("-12.0 dB", Math.Pow(10.0, -12.0 / 20.0)),
+            ("-inf dB (Silence)", 0.0)
+        ],
+        EnvelopeType.Pan =>
+        [
+            ("Center", 0.0),
+            ("100% Left", -1.0),
+            ("100% Right", 1.0)
+        ],
+        EnvelopeType.Mute =>
+        [
+            ("Muted", 1.0),
+            ("Active", 0.0)
+        ],
+        _ =>
+        [
+            ("Default", 1.0)
+        ]
+    };
+
+    private static string FormatEnvelopePointValue(EnvelopeType type, double value) => type switch
+    {
+        EnvelopeType.Velocity => Math.Abs(value) < 0.005 ? "0% Freeze" : $"{Math.Round(value * 100)}% ({value:0.00}x)",
+        EnvelopeType.Volume => value > 0 ? $"{20 * Math.Log10(value):0.0} dB" : "-inf dB",
+        EnvelopeType.Pan => Math.Abs(value) < 0.01 ? "Center" : $"{Math.Abs(value) * 100:0}% {(value < 0 ? "L" : "R")}",
+        _ => $"{Math.Round(value * 100)}%"
+    };
 }
