@@ -179,49 +179,92 @@ public sealed class ProjectDocument
     public List<MediaBin> MediaBins { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<AudioBusTrack> AudioBuses { get; set; } = [];
-    [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
-
-    public ProjectDocument DeepClone() => new()
+    [JsonIgnore]
+    public long DurationFrames
     {
-        Name = Name,
-        Width = Width,
-        Height = Height,
-        FrameRate = FrameRate,
-        FieldOrder = FieldOrder,
-        PixelAspectRatio = PixelAspectRatio,
-        RenderQuality = RenderQuality,
-        MotionBlur = MotionBlur,
-        DeinterlaceMethod = DeinterlaceMethod,
-        PixelFormat = PixelFormat,
-        HDRMode = HDRMode,
-        AudioSampleRate = AudioSampleRate,
-        AudioBitDepth = AudioBitDepth,
-        PrerenderFolder = PrerenderFolder,
-        RulerFormat = RulerFormat,
-        RulerTimeFormat = RulerTimeFormat,
-        RulerStartTimeFrames = RulerStartTimeFrames,
-        BeatsPerMinute = BeatsPerMinute,
-        BeatsPerMeasure = BeatsPerMeasure,
-        BeatValue = BeatValue,
-        Author = Author,
-        Copyright = Copyright,
-        Comments = Comments,
-        Engineer = Engineer,
-        UniversalAlbumId = UniversalAlbumId,
-        RecordedFilesFolder = RecordedFilesFolder,
-        Media = Media.Select(m => m.DeepClone()).ToList(),
-        Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
-        VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),
-        MasterAudioEffects = MasterAudioEffects.Select(e => e.DeepClone()).ToList(),
-        MasterAudioEnvelopes = MasterAudioEnvelopes?.Select(e => e.DeepClone()).ToList(),
-        MasterAudioGain = MasterAudioGain,
-        MasterAudioMute = MasterAudioMute,
-        MasterAudioDim = MasterAudioDim,
-        Markers = Markers.Select(m => m.DeepClone()).ToList(),
-        Notes = Notes.Select(n => n.DeepClone()).ToList(),
-        MediaBins = MediaBins.Select(b => b.DeepClone()).ToList(),
-        AudioBuses = AudioBuses.Select(b => b.DeepClone()).ToList()
-    };
+        get
+        {
+            long max = 0;
+            for (var t = 0; t < Tracks.Count; t++)
+            {
+                var clips = Tracks[t].Clips;
+                for (var c = 0; c < clips.Count; c++)
+                {
+                    var end = clips[c].EndFrame;
+                    if (end > max) max = end;
+                }
+            }
+            return max;
+        }
+    }
+
+    public ProjectDocument DeepClone()
+    {
+        var clone = new ProjectDocument
+        {
+            Name = Name,
+            Width = Width,
+            Height = Height,
+            FrameRate = FrameRate,
+            FieldOrder = FieldOrder,
+            PixelAspectRatio = PixelAspectRatio,
+            RenderQuality = RenderQuality,
+            MotionBlur = MotionBlur,
+            DeinterlaceMethod = DeinterlaceMethod,
+            PixelFormat = PixelFormat,
+            HDRMode = HDRMode,
+            AudioSampleRate = AudioSampleRate,
+            AudioBitDepth = AudioBitDepth,
+            PrerenderFolder = PrerenderFolder,
+            RulerFormat = RulerFormat,
+            RulerTimeFormat = RulerTimeFormat,
+            RulerStartTimeFrames = RulerStartTimeFrames,
+            BeatsPerMinute = BeatsPerMinute,
+            BeatsPerMeasure = BeatsPerMeasure,
+            BeatValue = BeatValue,
+            Author = Author,
+            Copyright = Copyright,
+            Comments = Comments,
+            Engineer = Engineer,
+            UniversalAlbumId = UniversalAlbumId,
+            RecordedFilesFolder = RecordedFilesFolder,
+            MasterAudioGain = MasterAudioGain,
+            MasterAudioMute = MasterAudioMute,
+            MasterAudioDim = MasterAudioDim
+        };
+
+        clone.Media = new List<MediaAsset>(Media.Count);
+        for (var i = 0; i < Media.Count; i++) clone.Media.Add(Media[i].DeepClone());
+
+        clone.Tracks = new List<TimelineTrack>(Tracks.Count);
+        for (var i = 0; i < Tracks.Count; i++) clone.Tracks.Add(Tracks[i].DeepClone());
+
+        clone.VideoOutputEffects = new List<VideoEffect>(VideoOutputEffects.Count);
+        for (var i = 0; i < VideoOutputEffects.Count; i++) clone.VideoOutputEffects.Add(VideoOutputEffects[i].DeepClone());
+
+        clone.MasterAudioEffects = new List<AudioEffect>(MasterAudioEffects.Count);
+        for (var i = 0; i < MasterAudioEffects.Count; i++) clone.MasterAudioEffects.Add(MasterAudioEffects[i].DeepClone());
+
+        if (MasterAudioEnvelopes != null)
+        {
+            clone.MasterAudioEnvelopes = new List<ClipEnvelope>(MasterAudioEnvelopes.Count);
+            for (var i = 0; i < MasterAudioEnvelopes.Count; i++) clone.MasterAudioEnvelopes.Add(MasterAudioEnvelopes[i].DeepClone());
+        }
+
+        clone.Markers = new List<TimelineMarker>(Markers.Count);
+        for (var i = 0; i < Markers.Count; i++) clone.Markers.Add(Markers[i].DeepClone());
+
+        clone.Notes = new List<ProjectNoteItem>(Notes.Count);
+        for (var i = 0; i < Notes.Count; i++) clone.Notes.Add(Notes[i].DeepClone());
+
+        clone.MediaBins = new List<MediaBin>(MediaBins.Count);
+        for (var i = 0; i < MediaBins.Count; i++) clone.MediaBins.Add(MediaBins[i].DeepClone());
+
+        clone.AudioBuses = new List<AudioBusTrack>(AudioBuses.Count);
+        for (var i = 0; i < AudioBuses.Count; i++) clone.AudioBuses.Add(AudioBuses[i].DeepClone());
+
+        return clone;
+    }
 
     public void Validate()
     {
@@ -590,32 +633,48 @@ public sealed class TimelineTrack
     public string? TrackColor { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public TrackAutomationMode AutomationMode { get; set; } = TrackAutomationMode.AutomationRead;
-    public TimelineTrack DeepClone() => new()
+    public TimelineTrack DeepClone()
     {
-        Id = Id,
-        Name = Name,
-        Kind = Kind,
-        IsMuted = IsMuted,
-        IsSolo = IsSolo,
-        IsLocked = IsLocked,
-        IsVisible = IsVisible,
-        Gain = Gain,
-        Opacity = Opacity,
-        Pan = Pan,
-        CompositeMode = CompositeMode,
-        CompositeNestingLevel = CompositeNestingLevel,
-        IsAdjustmentTrack = IsAdjustmentTrack,
-        BusTrackId = BusTrackId,
-        Motion = Motion?.DeepClone(),
-        Clips = Clips.Select(c => c.DeepClone()).ToList(),
-        VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
-        AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList(),
-        InvertPhase = InvertPhase,
-        Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList(),
-        ArmRecord = ArmRecord,
-        TrackColor = TrackColor,
-        AutomationMode = AutomationMode
-    };
+        var clone = new TimelineTrack
+        {
+            Id = Id,
+            Name = Name,
+            Kind = Kind,
+            IsMuted = IsMuted,
+            IsSolo = IsSolo,
+            IsLocked = IsLocked,
+            IsVisible = IsVisible,
+            Gain = Gain,
+            Opacity = Opacity,
+            Pan = Pan,
+            CompositeMode = CompositeMode,
+            CompositeNestingLevel = CompositeNestingLevel,
+            IsAdjustmentTrack = IsAdjustmentTrack,
+            BusTrackId = BusTrackId,
+            Motion = Motion?.DeepClone(),
+            InvertPhase = InvertPhase,
+            ArmRecord = ArmRecord,
+            TrackColor = TrackColor,
+            AutomationMode = AutomationMode
+        };
+
+        clone.Clips = new List<TimelineClip>(Clips.Count);
+        for (var i = 0; i < Clips.Count; i++) clone.Clips.Add(Clips[i].DeepClone());
+
+        clone.VideoEffects = new List<VideoEffect>(VideoEffects.Count);
+        for (var i = 0; i < VideoEffects.Count; i++) clone.VideoEffects.Add(VideoEffects[i].DeepClone());
+
+        clone.AudioEffects = new List<AudioEffect>(AudioEffects.Count);
+        for (var i = 0; i < AudioEffects.Count; i++) clone.AudioEffects.Add(AudioEffects[i].DeepClone());
+
+        if (Envelopes != null)
+        {
+            clone.Envelopes = new List<ClipEnvelope>(Envelopes.Count);
+            for (var i = 0; i < Envelopes.Count; i++) clone.Envelopes.Add(Envelopes[i].DeepClone());
+        }
+
+        return clone;
+    }
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<VideoResampleMode>))]
@@ -714,11 +773,27 @@ public sealed class TimelineClip
         clone.Mask = Mask?.DeepClone();
         clone.FadeInTransition = FadeInTransition?.DeepClone();
         clone.FadeOutTransition = FadeOutTransition?.DeepClone();
-        clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();
-        clone.MotionTracks = MotionTracks.Select(track => track.DeepClone()).ToList();
+
+        clone.VideoEffects = new List<VideoEffect>(VideoEffects.Count);
+        for (var i = 0; i < VideoEffects.Count; i++) clone.VideoEffects.Add(VideoEffects[i].DeepClone());
+
+        clone.MotionTracks = new List<MotionTrackData>(MotionTracks.Count);
+        for (var i = 0; i < MotionTracks.Count; i++) clone.MotionTracks.Add(MotionTracks[i].DeepClone());
+
         clone.Transcript = Transcript?.DeepClone();
-        if (Envelopes != null) clone.Envelopes = Envelopes.Select(env => env.DeepClone()).ToList();
-        if (Takes != null) clone.Takes = Takes.Select(t => t.DeepClone()).ToList();
+
+        if (Envelopes != null)
+        {
+            clone.Envelopes = new List<ClipEnvelope>(Envelopes.Count);
+            for (var i = 0; i < Envelopes.Count; i++) clone.Envelopes.Add(Envelopes[i].DeepClone());
+        }
+
+        if (Takes != null)
+        {
+            clone.Takes = new List<TimelineTake>(Takes.Count);
+            for (var i = 0; i < Takes.Count; i++) clone.Takes.Add(Takes[i].DeepClone());
+        }
+
         return clone;
     }
 }

@@ -4,8 +4,17 @@ namespace OpenRend.Media;
 
 internal static partial class VideoEffectProcessor
 {
-    internal static bool HasActiveEffects(IReadOnlyList<VideoEffect> effects) =>
-        effects.Any(effect => effect.IsEnabled && (!IsIdentity(effect) || effect.Animation is { IsEnabled: true, Keyframes.Count: > 0 }));
+    internal static bool HasActiveEffects(IReadOnlyList<VideoEffect>? effects)
+    {
+        if (effects is null || effects.Count == 0) return false;
+        for (var i = 0; i < effects.Count; i++)
+        {
+            var effect = effects[i];
+            if (effect.IsEnabled && (!IsIdentity(effect) || effect.Animation is { IsEnabled: true, Keyframes.Count: > 0 }))
+                return true;
+        }
+        return false;
+    }
 
     private static bool IsIdentity(VideoEffect effect) => effect.Kind switch
     {

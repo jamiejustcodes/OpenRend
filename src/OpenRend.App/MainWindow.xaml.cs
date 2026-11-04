@@ -26,6 +26,8 @@ public partial class MainWindow : Window
     private PlaybackSession? playback;
     private CancellationTokenSource? exportCancellation;
     private long revision;
+    private ProjectDocument? cachedPreviewProject;
+    private long cachedPreviewRevision = -1;
     private bool previewRunning;
     private bool previewRequested;
     private bool playbackStarting;
@@ -924,12 +926,27 @@ public partial class MainWindow : Window
             while (previewRequested && IsLoaded)
             {
                 previewRequested = false;
-                var project = vm.Project.DeepClone(); var frame = vm.Position;
-                var activeClip = SelectedClip;
-                if (activeClip != null && frame >= activeClip.StartFrame && frame < activeClip.EndFrame &&
-                    vm.Project.Media.Any(m => m.Id == activeClip.MediaId && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) || m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase))))
+                if (cachedPreviewProject is null || cachedPreviewRevision != revision)
                 {
-                    vm.Renderer.ActiveSubtitleClipId = activeClip.Id;
+                    cachedPreviewProject = vm.Project.DeepClone();
+                    cachedPreviewRevision = revision;
+                }
+                var project = cachedPreviewProject;
+                var frame = vm.Position;
+                var activeClip = SelectedClip;
+                if (activeClip != null && frame >= activeClip.StartFrame && frame < activeClip.EndFrame)
+                {
+                    var isSubtitleOrText = false;
+                    for (var mIdx = 0; mIdx < vm.Project.Media.Count; mIdx++)
+                    {
+                        var m = vm.Project.Media[mIdx];
+                        if (m.Id == activeClip.MediaId && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) || m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase)))
+                        {
+                            isSubtitleOrText = true;
+                            break;
+                        }
+                    }
+                    vm.Renderer.ActiveSubtitleClipId = isSubtitleOrText ? activeClip.Id : null;
                 }
                 else
                 {

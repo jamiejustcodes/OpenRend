@@ -44,17 +44,18 @@ public sealed partial class TimelineRenderService : IDisposable
             }
             else for (var i = 3; i < output.Length; i += 4) output[i] = 255;
             var layers = TimelineEvaluator.Evaluate(project, frame).Video;
-            var trackGroups = layers.GroupBy(l => l.Track.Id).ToList();
+            var trackGroups = GroupLayersByTrack(layers);
             byte[]? branchBuffer = null;
 
             foreach (var trackGroup in trackGroups)
             {
-                var track = trackGroup.First().Track;
+                var track = trackGroup[0].Track;
                 if (track.IsAdjustmentTrack)
                 {
                     var adjustedBuffer = (byte[])output.Clone();
-                    foreach (var layer in trackGroup)
+                    for (var lIdx = 0; lIdx < trackGroup.Count; lIdx++)
                     {
+                        var layer = trackGroup[lIdx];
                         if (layer.Opacity <= 0) continue;
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
@@ -71,15 +72,12 @@ public sealed partial class TimelineRenderService : IDisposable
                     }
                     else
                     {
-                        var blended = new byte[output.Length];
-                        Array.Copy(output, blended, output.Length);
-                        Composite(blended, width, height, adjustedBuffer, width, height, track.Opacity, track.CompositeMode);
-                        Array.Copy(blended, output, output.Length);
+                        Composite(output, width, height, adjustedBuffer, width, height, track.Opacity, track.CompositeMode);
                     }
                     continue;
                 }
 
-                var trackMotion = trackGroup.First().TrackMotion;
+                var trackMotion = trackGroup[0].TrackMotion;
                 var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
                 var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
                 var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
@@ -206,10 +204,8 @@ public sealed partial class TimelineRenderService : IDisposable
 
                     if (branchBuffer != null)
                     {
-                        var merged = new byte[trackBuffer.Length];
-                        Composite(merged, width, height, branchBuffer, width, height, 1.0);
-                        Composite(merged, width, height, trackBuffer, width, height, 1.0);
-                        trackBuffer = merged;
+                        Composite(branchBuffer, width, height, trackBuffer, width, height, 1.0);
+                        trackBuffer = branchBuffer;
                         branchBuffer = null;
                     }
 
@@ -720,5 +716,25 @@ public sealed partial class TimelineRenderService : IDisposable
         uint pixelValue = (uint)((color.A << 24) | (color.R << 16) | (color.G << 8) | color.B);
         System.Runtime.InteropServices.MemoryMarshal.Cast<byte, uint>(pixels.AsSpan()).Fill(pixelValue);
         return pixels;
+    }
+
+    private static List<List<EvaluatedClip>> GroupLayersByTrack(IReadOnlyList<EvaluatedClip> layers)
+    {
+        var groups = new List<List<EvaluatedClip>>();
+        if (layers.Count == 0) return groups;
+        List<EvaluatedClip>? currentGroup = null;
+        Guid currentTrackId = Guid.Empty;
+        for (var i = 0; i < layers.Count; i++)
+        {
+            var layer = layers[i];
+            if (currentGroup == null || layer.Track.Id != currentTrackId)
+            {
+                currentGroup = new List<EvaluatedClip>();
+                groups.Add(currentGroup);
+                currentTrackId = layer.Track.Id;
+            }
+            currentGroup.Add(layer);
+        }
+        return groups;
     }
 }

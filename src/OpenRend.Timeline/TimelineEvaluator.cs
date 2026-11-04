@@ -15,64 +15,154 @@ public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnl
 
 public static class TimelineEvaluator
 {
+    private static ClipEnvelope? FindEnabledEnvelope(IReadOnlyList<ClipEnvelope>? envelopes, EnvelopeType type)
+    {
+        if (envelopes is null) return null;
+        for (var i = 0; i < envelopes.Count; i++)
+        {
+            var e = envelopes[i];
+            if (e.Type == type && e.IsEnabled) return e;
+        }
+        return null;
+    }
+
+    private static MediaAsset? FindMedia(IReadOnlyList<MediaAsset> mediaList, Dictionary<Guid, MediaAsset>? map, Guid id)
+    {
+        if (map is not null) return map.GetValueOrDefault(id);
+        for (var i = 0; i < mediaList.Count; i++)
+        {
+            if (mediaList[i].Id == id) return mediaList[i];
+        }
+        return null;
+    }
+
     public static EvaluatedFrame Evaluate(ProjectDocument project, long frame)
     {
         ArgumentNullException.ThrowIfNull(project);
         if (frame < 0) return new EvaluatedFrame([], []);
         var video = new List<EvaluatedClip>();
         var audio = new List<EvaluatedClip>();
-        var media = project.Media.ToDictionary(m => m.Id);
-        var soloVideo = project.Tracks.Any(t => t.Kind == TrackKind.Video && t.IsSolo);
-        var soloAudio = project.Tracks.Any(t => t.Kind == TrackKind.Audio && t.IsSolo);
-        // Return back-to-front layers so callers can composite in enumeration order.
+        var mediaList = project.Media;
+        var mediaMap = mediaList.Count > 16 ? mediaList.ToDictionary(m => m.Id) : null;
+
+        var soloVideo = false;
+        var soloAudio = false;
         var tracks = project.Tracks;
+        for (var i = 0; i < tracks.Count; i++)
+        {
+            var t = tracks[i];
+            if (t.IsSolo)
+            {
+                if (t.Kind == TrackKind.Video) soloVideo = true;
+                else if (t.Kind == TrackKind.Audio) soloAudio = true;
+            }
+        }
+
+        // Return back-to-front layers so callers can composite in enumeration order.
         for (var i = tracks.Count - 1; i >= 0; i--)
         {
             var track = tracks[i];
             if (IsTrackEffectivelyMuted(project, track, i)) continue;
-            if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } trackMute && trackMute.ValueAt(frame) >= 0.5) continue;
+            if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Mute) is { } trackMute && trackMute.ValueAt(frame) >= 0.5) continue;
             if (track.Kind == TrackKind.Video ? (soloVideo && !IsTrackEffectivelySolo(project, track, i)) : (soloAudio && !track.IsSolo)) continue;
-            var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null || c.FadeInFrames > 0)
-                ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
-                : track.Clips.ToArray();
-            var transitionOpacity = new Dictionary<Guid, double>();
-            var dissolves = new Dictionary<Guid, EvaluatedDissolve>();
-            if (track.Kind == TrackKind.Video)
+
+            IReadOnlyList<TimelineClip> ordered = track.Clips;
+            Dictionary<Guid, double>? transitionOpacity = null;
+            Dictionary<Guid, EvaluatedDissolve>? dissolves = null;
+
+            if (track.Kind == TrackKind.Video && track.Clips.Count > 0)
             {
-                foreach (var incoming in ordered.Where(c => !c.IsMuted && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame))
+                var hasActiveFadeIn = false;
+                for (var cIdx = 0; cIdx < track.Clips.Count; cIdx++)
                 {
-                    var incomingPosition = frame - incoming.StartFrame + incoming.FadeOffsetFrames;
-                    if (incomingPosition >= incoming.FadeInFrames) continue;
-                    var outgoing = ordered.Where(c => !c.IsMuted && c.Id != incoming.Id && c.FadeOutFrames > 0 &&
-                        c.StartFrame <= frame && frame < c.EndFrame &&
-                        c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
-                        frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
-                        .OrderByDescending(c => c.StartFrame).FirstOrDefault();
-                    if (outgoing is null || (incoming.FadeInTransition is null && !IsCanonicalCrossfade(outgoing, incoming, ordered)) ||
-                        !media.TryGetValue(outgoing.MediaId, out var outgoingAsset) || !outgoingAsset.HasVideo ||
-                        !media.TryGetValue(incoming.MediaId, out var incomingAsset) || !incomingAsset.HasVideo ||
-                        ordered.Any(c => c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)) continue;
-                    var progress = (double)incomingPosition / incoming.FadeInFrames;
-                    var inWeight = incoming.FadeInTransition is null
-                        ? VideoFadeInterpolation.Evaluate(incoming.FadeInCurve, progress)
-                        : progress;
-                    var outWeight = incoming.FadeInTransition is null
-                        ? 1 - VideoFadeInterpolation.Evaluate(incoming.FadeInReciprocalCurve, progress)
-                        : 1 - progress;
-                    var incomingAlpha = track.Opacity * incoming.Opacity * inWeight;
-                    // Compensate for the incoming alpha-over pass so lower tracks remain visible at the blend weight.
-                    transitionOpacity[outgoing.Id] = incomingAlpha >= 1 ? 0 : outWeight / (1 - incomingAlpha);
-                    transitionOpacity[incoming.Id] = inWeight;
-                    var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress, outWeight, inWeight, incoming.FadeInTransition);
-                    dissolves[outgoing.Id] = dissolve;
-                    dissolves[incoming.Id] = dissolve;
+                    var c = track.Clips[cIdx];
+                    if (!c.IsMuted && c.FadeInFrames > 0 && c.StartFrame <= frame && frame < c.EndFrame)
+                    {
+                        hasActiveFadeIn = true;
+                        break;
+                    }
+                }
+
+                if (hasActiveFadeIn)
+                {
+                    ordered = track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray();
+                    for (var cIdx = 0; cIdx < ordered.Count; cIdx++)
+                    {
+                        var incoming = ordered[cIdx];
+                        if (incoming.IsMuted || incoming.FadeInFrames <= 0 || incoming.StartFrame > frame || frame >= incoming.EndFrame) continue;
+
+                        var incomingPosition = frame - incoming.StartFrame + incoming.FadeOffsetFrames;
+                        if (incomingPosition >= incoming.FadeInFrames) continue;
+
+                        TimelineClip? outgoing = null;
+                        for (var oIdx = 0; oIdx < ordered.Count; oIdx++)
+                        {
+                            var c = ordered[oIdx];
+                            if (c.IsMuted || c.Id == incoming.Id || c.FadeOutFrames <= 0) continue;
+                            if (c.StartFrame <= frame && frame < c.EndFrame &&
+                                c.StartFrame - c.FadeOffsetFrames < incoming.StartFrame - incoming.FadeOffsetFrames &&
+                                frame - c.StartFrame + c.FadeOffsetFrames >= (c.FadeDurationFrames ?? c.DurationFrames) - c.FadeOutFrames)
+                            {
+                                if (outgoing is null || c.StartFrame > outgoing.StartFrame)
+                                {
+                                    outgoing = c;
+                                }
+                            }
+                        }
+
+                        if (outgoing is null || (incoming.FadeInTransition is null && !IsCanonicalCrossfade(outgoing, incoming, ordered))) continue;
+
+                        var outgoingAsset = FindMedia(mediaList, mediaMap, outgoing.MediaId);
+                        if (outgoingAsset is null || !outgoingAsset.HasVideo) continue;
+
+                        var incomingAsset = FindMedia(mediaList, mediaMap, incoming.MediaId);
+                        if (incomingAsset is null || !incomingAsset.HasVideo) continue;
+
+                        var hasInterfering = false;
+                        for (var checkIdx = 0; checkIdx < ordered.Count; checkIdx++)
+                        {
+                            var c = ordered[checkIdx];
+                            if (c.Id != outgoing.Id && c.Id != incoming.Id && c.StartFrame <= frame && frame < c.EndFrame)
+                            {
+                                hasInterfering = true;
+                                break;
+                            }
+                        }
+                        if (hasInterfering) continue;
+
+                        var progress = (double)incomingPosition / incoming.FadeInFrames;
+                        var inWeight = incoming.FadeInTransition is null
+                            ? VideoFadeInterpolation.Evaluate(incoming.FadeInCurve, progress)
+                            : progress;
+                        var outWeight = incoming.FadeInTransition is null
+                            ? 1 - VideoFadeInterpolation.Evaluate(incoming.FadeInReciprocalCurve, progress)
+                            : 1 - progress;
+                        var incomingAlpha = track.Opacity * incoming.Opacity * inWeight;
+
+                        transitionOpacity ??= [];
+                        dissolves ??= [];
+
+                        // Compensate for the incoming alpha-over pass so lower tracks remain visible at the blend weight.
+                        transitionOpacity[outgoing.Id] = incomingAlpha >= 1 ? 0 : outWeight / (1 - incomingAlpha);
+                        transitionOpacity[incoming.Id] = inWeight;
+                        var dissolve = new EvaluatedDissolve(outgoing.Id, incoming.Id, progress, outWeight, inWeight, incoming.FadeInTransition);
+                        dissolves[outgoing.Id] = dissolve;
+                        dissolves[incoming.Id] = dissolve;
+                    }
                 }
             }
-            foreach (var clip in ordered)
+
+            for (var cIdx = 0; cIdx < ordered.Count; cIdx++)
             {
-                if (clip.IsMuted || frame < clip.StartFrame || frame >= clip.EndFrame || !media.TryGetValue(clip.MediaId, out var asset)) continue;
+                var clip = ordered[cIdx];
+                if (clip.IsMuted || frame < clip.StartFrame || frame >= clip.EndFrame) continue;
+                var asset = FindMedia(mediaList, mediaMap, clip.MediaId);
+                if (asset is null) continue;
+
                 var local = frame - clip.StartFrame;
-                var fade = transitionOpacity.TryGetValue(clip.Id, out var blend) ? blend : track.Kind == TrackKind.Video ? VideoFadeAt(clip, local) : FadeAt(clip, local);
+                var fade = (transitionOpacity is not null && transitionOpacity.TryGetValue(clip.Id, out var blend))
+                    ? blend
+                    : track.Kind == TrackKind.Video ? VideoFadeAt(clip, local) : FadeAt(clip, local);
                 var (left, right) = BalanceStages(track, clip);
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
@@ -88,33 +178,33 @@ public static class TimelineEvaluator
                 }
 
                 var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
-                var sourceFrame = clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velocityEnv
+                var sourceFrame = FindEnabledEnvelope(clip.Envelopes, EnvelopeType.Velocity) is { } velocityEnv
                     ? velocityEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, local, effPlaybackRate, clip.IsReversed, clip.DurationFrames)
                     : clip.IsReversed
                         ? clip.SourceInFrame + (long)Math.Round(Math.Max(0, clip.DurationFrames - 1 - local) * Math.Abs(effPlaybackRate))
                         : clip.SourceInFrame + (long)Math.Round(local * effPlaybackRate);
 
                 var opacity = clip.Opacity * track.Opacity * fade;
-                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } trackComp)
+                if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Composite) is { } trackComp)
                 {
                     opacity *= trackComp.ValueAt(frame);
                 }
-                if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Composite && e.IsEnabled) is { } compositeEnv)
+                if (FindEnabledEnvelope(clip.Envelopes, EnvelopeType.Composite) is { } compositeEnv)
                 {
                     opacity *= compositeEnv.ValueAt(local);
                 }
 
                 var gain = clip.Gain * track.Gain * fade * peak;
-                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } trackVol)
+                if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Volume) is { } trackVol)
                 {
                     gain *= trackVol.ValueAt(frame);
                 }
-                if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } volumeEnv)
+                if (FindEnabledEnvelope(clip.Envelopes, EnvelopeType.Volume) is { } volumeEnv)
                 {
                     gain *= volumeEnv.ValueAt(local);
                 }
 
-                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Pan && e.IsEnabled) is { } trackPan)
+                if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Pan) is { } trackPan)
                 {
                     pan = Math.Clamp(pan + trackPan.ValueAt(frame), -1.0, 1.0);
                 }
@@ -122,7 +212,7 @@ public static class TimelineEvaluator
                 var item = new EvaluatedClip(track, clip, asset, sourceFrame, opacity, gain, pan);
                 var trackMotion = track.Motion?.Evaluate(frame, project.Width, project.Height);
                 if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with
-                    { Crop = CropAt(clip, asset, local), Dissolve = dissolves.GetValueOrDefault(clip.Id),
+                    { Crop = CropAt(clip, asset, local), Dissolve = dissolves?.GetValueOrDefault(clip.Id),
                         SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode),
                         TrackMotion = trackMotion });
                 if (track.Kind == TrackKind.Audio && asset.HasAudio)
@@ -142,10 +232,30 @@ public static class TimelineEvaluator
         var end = (decimal)outgoing.StartFrame - outgoing.FadeOffsetFrames + (outgoing.FadeDurationFrames ?? outgoing.DurationFrames);
         var incomingEnd = start + (incoming.FadeDurationFrames ?? incoming.DurationFrames);
         if (end - start != incoming.FadeInFrames || incomingEnd < end) return false;
+
         // Split pieces share an envelope. Check every start boundary in it, including parts outside this frame.
-        var overlap = clips.Where(clip => clip.StartFrame < end && clip.EndFrame > start).ToArray();
-        return !overlap.Select(clip => Math.Max(start, clip.StartFrame)).Any(position =>
-            overlap.Count(clip => clip.StartFrame <= position && position < clip.EndFrame) > 2);
+        var overlap = new List<TimelineClip>(4);
+        for (var i = 0; i < clips.Count; i++)
+        {
+            var clip = clips[i];
+            if (clip.StartFrame < end && clip.EndFrame > start)
+                overlap.Add(clip);
+        }
+
+        for (var i = 0; i < overlap.Count; i++)
+        {
+            var position = Math.Max(start, overlap[i].StartFrame);
+            var count = 0;
+            for (var j = 0; j < overlap.Count; j++)
+            {
+                if (overlap[j].StartFrame <= position && position < overlap[j].EndFrame)
+                {
+                    count++;
+                    if (count > 2) return false;
+                }
+            }
+        }
+        return true;
     }
 
     public static double VideoFadeAt(TimelineClip clip, double localFrame)

@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
@@ -213,6 +214,9 @@ public sealed partial class TimelineView : FrameworkElement
         CancelTrackLevelInput();
         ReleaseMouseCapture(); ClearHover(); InvalidateVisual();
     }
+    private static readonly ConcurrentDictionary<string, SolidColorBrush> BrushMap = new(StringComparer.OrdinalIgnoreCase);
+    private static readonly ConcurrentDictionary<(string Hex, double Thickness), Pen> PenMap = new();
+    private static readonly ConcurrentDictionary<(string Hex, double Thickness, string Dash), Pen> DashedPenMap = new();
     private static readonly Brush BackgroundBrush = Brush("#1E1E1E");
     private static readonly Typeface Face = new("Segoe UI");
 
@@ -496,11 +500,44 @@ public sealed partial class TimelineView : FrameworkElement
         return bounds.IsEmpty || bounds.Width <= 0 || bounds.Height <= 0 ? Rect.Empty : new Rect(PointToScreen(bounds.TopLeft), PointToScreen(bounds.BottomRight));
     }
 
-    private static SolidColorBrush Brush(string hex)
+    private static SolidColorBrush Brush(string hex) =>
+        BrushMap.GetOrAdd(hex, static h =>
+        {
+            var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(h));
+            brush.Freeze();
+            return brush;
+        });
+
+    private static Pen FrozenPen(string hex, double thickness = 1.0) =>
+        PenMap.GetOrAdd((hex, thickness), static key =>
+        {
+            var pen = new Pen(Brush(key.Hex), key.Thickness);
+            pen.Freeze();
+            return pen;
+        });
+
+    private static Pen FrozenPen(Brush brush, double thickness = 1.0)
     {
-        var brush = new SolidColorBrush((Color)ColorConverter.ConvertFromString(hex));
-        brush.Freeze();
-        return brush;
+        if (brush is SolidColorBrush scb)
+        {
+            return FrozenPen(scb.Color.ToString(), thickness);
+        }
+        var pen = new Pen(brush, thickness);
+        pen.Freeze();
+        return pen;
+    }
+
+    private static Pen FrozenDashedPen(string hex, double thickness, double[] dashes, double offset = 0)
+    {
+        var dashKey = string.Join(",", dashes) + ":" + offset;
+        return DashedPenMap.GetOrAdd((hex, thickness, dashKey), _ =>
+        {
+            var style = new DashStyle(dashes, offset);
+            style.Freeze();
+            var pen = new Pen(Brush(hex), thickness) { DashStyle = style };
+            pen.Freeze();
+            return pen;
+        });
     }
     private double X(long frame) => HeaderWidth + Project.FrameRate.Seconds(frame) * PixelsPerSecond - Offset;
     private long FrameAt(double x) => Math.Max(0, Project.FrameRate.Frames((x - HeaderWidth + Offset) / PixelsPerSecond));
@@ -667,13 +704,13 @@ public sealed partial class TimelineView : FrameworkElement
     {
         base.OnRender(dc);
         dc.DrawRectangle(BackgroundBrush, null, new Rect(RenderSize));
-        var pen = new Pen(Brush("#383838"), 1);
+        var pen = FrozenPen("#383838", 1);
         var step = PixelsPerSecond >= 130 ? 1 : PixelsPerSecond >= 50 ? 2 : PixelsPerSecond >= 25 ? 5 : PixelsPerSecond >= 10 ? 10 : 20;
         var first = Math.Max(0, (int)(Offset / PixelsPerSecond / step));
         for (var n = first; n * step * PixelsPerSecond - Offset < ActualWidth - HeaderWidth; n++)
         {
             var x = HeaderWidth + n * step * PixelsPerSecond - Offset;
-            dc.DrawLine(new Pen(Brush("#444444"), 1) { DashStyle = new DashStyle([2, 3], 0) }, new Point(x, RulerHeight), new Point(x, ActualHeight));
+            dc.DrawLine(FrozenDashedPen("#444444", 1, [2, 3]), new Point(x, RulerHeight), new Point(x, ActualHeight));
             var tickFrame = Project.FrameRate.Frames(n * step); Text(dc, TimecodeFormatter.Format(tickFrame, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames, rulerTick: true), x + 3, 30, Brush("#B8B8B8"), 9);
             for (var minor = 1; minor < 5; minor++)
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
@@ -691,13 +728,13 @@ public sealed partial class TimelineView : FrameworkElement
             {
                 var phantomBodyRect = new Rect(HeaderWidth, insertionY + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2);
                 dc.DrawRectangle(Brush(destinationNewTrackKind == TrackKind.Video ? "#152433" : "#132E2B"),
-                    new Pen(Brush("#00D2FF"), 1.5) { DashStyle = new DashStyle([4, 4], 0) }, phantomBodyRect);
+                    FrozenDashedPen("#00D2FF", 1.5, [4, 4]), phantomBodyRect);
                 Text(dc, $"[Drop to place event on new {destinationNewTrackKind.ToString().ToLowerInvariant()} layer]",
                     HeaderWidth + 20, insertionY + TrackHeight / 2 - 6, Brush("#4D7790"), 11);
             }
 
             var guideY = pSlot == 0 ? Math.Max(RulerHeight + 1.5, insertionY) : insertionY;
-            dc.DrawLine(new Pen(Brush("#00D2FF"), 3), new Point(HeaderWidth, guideY), new Point(ActualWidth, guideY));
+            dc.DrawLine(FrozenPen("#00D2FF", 3), new Point(HeaderWidth, guideY), new Point(ActualWidth, guideY));
 
             var arrowGeo = new StreamGeometry();
             using (var ctx = arrowGeo.Open())
@@ -715,11 +752,11 @@ public sealed partial class TimelineView : FrameworkElement
             var track = Project.Tracks[i];
             var y = RulerHeight + i * TrackHeight - VerticalOffset;
             if (y + TrackHeight < RulerHeight || y > ActualHeight) continue;
-            dc.DrawLine(new Pen(Brush("#111111"), 3), new Point(HeaderWidth, y + TrackHeight), new Point(ActualWidth, y + TrackHeight));
+            dc.DrawLine(FrozenPen("#111111", 3), new Point(HeaderWidth, y + TrackHeight), new Point(ActualWidth, y + TrackHeight));
 
             if (!destinationIsNewTrack && destination == i && isDragging && dragging is not null && mode == "Move" && track.Kind == dragTrack?.Kind)
             {
-                dc.DrawRectangle(null, new Pen(Brush("#00D2FF"), 1.5), new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
+                dc.DrawRectangle(null, FrozenPen("#00D2FF", 1.5), new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
             }
 
             foreach (var clip in track.Clips)
@@ -750,7 +787,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var isMuted = clip.IsMuted || track.IsMuted;
                 var selected = Selection.Contains(clip.Id);
                 dc.DrawRectangle(Brush(isMuted ? "#2D2D2D" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
-                    new Pen(isPrimaryDragged ? Brush("#00E5FF") : selected ? Brush("#E4DF8F") : Brush("#5E737C"), isPrimaryDragged ? 1.5 : 1), rect);
+                    FrozenPen(isPrimaryDragged ? "#00E5FF" : selected ? "#E4DF8F" : "#5E737C", isPrimaryDragged ? 1.5 : 1), rect);
                 dc.PushClip(new RectangleGeometry(rect));
                 if (ShowEventHeaders) dc.DrawRectangle(Brush(selected ? "#4D5356" : isMuted ? "#383838" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
                 var headerOffset = 3.0;
@@ -758,7 +795,7 @@ public sealed partial class TimelineView : FrameworkElement
                 {
                     var lockX = rect.X + 3;
                     var lockY = rect.Y + 3;
-                    var lockPen = new Pen(Brush("#D0D0D0"), 1.2);
+                    var lockPen = FrozenPen("#D0D0D0", 1.2);
                     var shackleGeo = new StreamGeometry();
                     using (var sgc = shackleGeo.Open())
                     {
@@ -796,12 +833,18 @@ public sealed partial class TimelineView : FrameworkElement
                 }
                 if (track.Kind == TrackKind.Audio && Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
                 {
-                    var media = Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
-                    if (media is not null)
+                    MediaAsset? media = null;
+                    for (var mIdx = 0; mIdx < Project.Media.Count; mIdx++)
+                    {
+                        if (Project.Media[mIdx].Id == clip.MediaId) { media = Project.Media[mIdx]; break; }
+                    }
+                    if (media is not null && media.DurationSeconds > 0)
                     {
                         var mid = rect.Y + 42;
-                        var wp = new Pen(Brush("#A5D3B5"), 1);
-                        for (var px = 0.0; px < Math.Min(rect.Width, ActualWidth); px += 2)
+                        var wp = FrozenPen("#A5D3B5", 1);
+                        var startPx = Math.Max(0.0, HeaderWidth - rect.X);
+                        var endPx = Math.Min(rect.Width, ActualWidth - rect.X);
+                        for (var px = startPx; px < endPx; px += 2)
                         {
                             var t = Project.FrameRate.Seconds(clip.SourceInFrame) + px / PixelsPerSecond;
                             var index = (int)(t / media.DurationSeconds * peaks.Length);
@@ -810,7 +853,7 @@ public sealed partial class TimelineView : FrameworkElement
                         }
                     }
                 }
-                var fadePen = new Pen(Brush("#E4E4E4"), 1);
+                var fadePen = FrozenPen("#E4E4E4", 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
                 DrawEnvelopes(dc, track, clip, rect);
@@ -818,7 +861,7 @@ public sealed partial class TimelineView : FrameworkElement
                 if (edgeMode is "TrimLeft" or "TrimRight")
                 {
                     var edgeX = edgeMode == "TrimLeft" ? rect.Left + 1 : rect.Right - 1;
-                    dc.DrawLine(new Pen(Brushes.WhiteSmoke, 2), new Point(edgeX, rect.Top + 2), new Point(edgeX, rect.Bottom - 2));
+                    dc.DrawLine(FrozenPen("#F5F5F5", 2), new Point(edgeX, rect.Top + 2), new Point(edgeX, rect.Bottom - 2));
                     dc.DrawRectangle(Brushes.WhiteSmoke, null, new Rect(edgeX - 2, rect.Top + rect.Height / 2 - 7, 4, 14));
                 }
                 if (dragging is null) DrawEventButtons(dc, track, clip, rect);
@@ -834,17 +877,17 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var t = Project.Tracks[i]; var y = RulerHeight + i * TrackHeight - VerticalOffset;
             var trackAccentColor = t.TrackColor ?? (t.Kind == TrackKind.Video ? "#448DBD" : "#65BECE");
-            dc.DrawRectangle(Brush(t.IsLocked ? "#242424" : "#2B2B2B"), new Pen(Brush("#181818"), 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
+            dc.DrawRectangle(Brush(t.IsLocked ? "#242424" : "#2B2B2B"), FrozenPen("#181818", 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
             dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(1, y + 1, 23, TrackHeight - 2));
             dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 3, TrackHeight - 1));
             if (IsKeyboardFocusWithin && i == ActiveTrackIndex)
-                dc.DrawRectangle(null, new Pen(Brush("#83C9FF"), 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
+                dc.DrawRectangle(null, FrozenPen("#83C9FF", 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
             Text(dc, "···", 4, y + 1, size: 12);
             Text(dc, $"{i + 1}", 5, y + 24, size: 11);
             var indent = t.Kind == TrackKind.Video ? t.CompositeNestingLevel * 14 : 0;
             if (t.CompositeNestingLevel > 0)
             {
-                var branchPen = new Pen(Brush("#666666"), 1.2);
+                var branchPen = FrozenPen("#666666", 1.2);
                 var branchX = 24 + (t.CompositeNestingLevel - 1) * 14 + 7;
                 dc.DrawLine(branchPen, new Point(branchX, y), new Point(branchX, y + TrackHeight / 2));
                 dc.DrawLine(branchPen, new Point(branchX, y + TrackHeight / 2), new Point(branchX + 7, y + TrackHeight / 2));
@@ -1020,10 +1063,10 @@ public sealed partial class TimelineView : FrameworkElement
             else
             {
                 var guideY = pSlot == 0 ? Math.Max(RulerHeight + 1.5, headerY) : headerY;
-                dc.DrawLine(new Pen(Brush("#00D2FF"), 3), new Point(0, guideY), new Point(HeaderWidth - 3, guideY));
+                dc.DrawLine(FrozenPen("#00D2FF", 3), new Point(0, guideY), new Point(HeaderWidth - 3, guideY));
 
                 var badgeRect = new Rect(12, guideY - 11, HeaderWidth - 28, 22);
-                dc.DrawRoundedRectangle(Brush("#0C1822"), new Pen(Brush("#00D2FF"), 1.5), badgeRect, 4, 4);
+                dc.DrawRoundedRectangle(Brush("#0C1822"), FrozenPen("#00D2FF", 1.5), badgeRect, 4, 4);
                 dc.DrawRectangle(Brush(destinationNewTrackKind == TrackKind.Video ? "#448DBD" : "#65BECE"), null,
                     new Rect(badgeRect.X + 6, badgeRect.Y + 4, 5, 14));
                 Text(dc, $"+ [New {destinationNewTrackKind} Layer {pSlot + 1}]", badgeRect.X + 16, badgeRect.Y + 4, Brush("#00E5FF"), 10.5);
@@ -1033,32 +1076,34 @@ public sealed partial class TimelineView : FrameworkElement
         var playX = X(Position);
         if (playX >= HeaderWidth && playX < ActualWidth)
         {
-            dc.DrawLine(new Pen(Brush("#F0F0F0"), 1), new Point(playX, 32), new Point(playX, ActualHeight));
-            dc.DrawGeometry(Brush("#D8B85D"), null, Geometry.Parse($"M {playX.ToString(CultureInfo.InvariantCulture)},32 l -4,-6 8,0 Z"));
+            dc.DrawLine(FrozenPen("#F0F0F0", 1), new Point(playX, 32), new Point(playX, ActualHeight));
+            var playheadGeo = new StreamGeometry();
+            using (var ctx = playheadGeo.Open())
+            {
+                ctx.BeginFigure(new Point(playX, 32), true, true);
+                ctx.LineTo(new Point(playX - 4, 26), true, false);
+                ctx.LineTo(new Point(playX + 4, 26), true, false);
+            }
+            playheadGeo.Freeze();
+            dc.DrawGeometry(Brush("#D8B85D"), null, playheadGeo);
         }
         if (snappedFrame.HasValue && isDragging && dragging is not null)
         {
             var snapX = X(snappedFrame.Value);
             if (snapX >= HeaderWidth && snapX <= ActualWidth)
             {
-                dc.DrawLine(new Pen(Brush("#00E5FF"), 1.5) { DashStyle = new DashStyle([4, 2], 0) }, new Point(snapX, RulerHeight), new Point(snapX, ActualHeight));
+                dc.DrawLine(FrozenDashedPen("#00E5FF", 1.5, [4, 2]), new Point(snapX, RulerHeight), new Point(snapX, ActualHeight));
             }
         }
         if (isMarqueeSelecting && marqueeRect.Width > 0 && marqueeRect.Height > 0)
         {
-            var marqueePen = new Pen(new SolidColorBrush(Color.FromArgb(220, 255, 224, 130)), 1)
-            {
-                DashStyle = new DashStyle([3, 3], 0)
-            };
-            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(45, 228, 223, 143)), marqueePen, marqueeRect);
+            var marqueePen = FrozenDashedPen("#FFE082", 1, [3, 3]);
+            dc.DrawRectangle(Brush("#2DE4DF8F"), marqueePen, marqueeRect);
         }
         if (isZooming && zoomRect.Width > 0 && zoomRect.Height > 0)
         {
-            var zoomPen = new Pen(new SolidColorBrush(Color.FromRgb(0, 210, 255)), 1.2)
-            {
-                DashStyle = new DashStyle([4, 4], 0)
-            };
-            dc.DrawRectangle(new SolidColorBrush(Color.FromArgb(35, 0, 210, 255)), zoomPen, zoomRect);
+            var zoomPen = FrozenDashedPen("#00D2FF", 1.2, [4, 4]);
+            dc.DrawRectangle(Brush("#2300D2FF"), zoomPen, zoomRect);
         }
         if (Project.Tracks.Count == 0) Text(dc, "Import media, then add it to the timeline", HeaderWidth + 30, RulerHeight + 35, Brush("#B8B8B8"));
     }

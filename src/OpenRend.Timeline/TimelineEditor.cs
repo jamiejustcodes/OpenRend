@@ -596,13 +596,45 @@ public sealed partial class TimelineEditor
     public HashSet<Guid> ExpandSelection(IEnumerable<Guid> ids, bool ignoreGroups = false)
     {
         ArgumentNullException.ThrowIfNull(ids);
-        var selected = ids.ToHashSet();
-        var clips = Project.Tracks.SelectMany(t => t.Clips).ToDictionary(c => c.Id);
+        var selected = ids is HashSet<Guid> set ? new HashSet<Guid>(set) : ids.ToHashSet();
+        if (selected.Count == 0) return selected;
+
+        var clips = new Dictionary<Guid, TimelineClip>();
+        for (var t = 0; t < Project.Tracks.Count; t++)
+        {
+            var trackClips = Project.Tracks[t].Clips;
+            for (var c = 0; c < trackClips.Count; c++)
+            {
+                var clip = trackClips[c];
+                clips[clip.Id] = clip;
+            }
+        }
+
         foreach (var id in selected)
             if (!clips.ContainsKey(id)) throw new KeyNotFoundException("A selected clip was not found.");
         if (ignoreGroups) return selected;
-        var groups = selected.Select(id => clips[id].GroupId).OfType<Guid>().ToHashSet();
-        selected.UnionWith(clips.Values.Where(c => c.GroupId.HasValue && groups.Contains(c.GroupId.Value)).Select(c => c.Id));
+
+        HashSet<Guid>? groups = null;
+        foreach (var id in selected)
+        {
+            if (clips.TryGetValue(id, out var clip) && clip.GroupId.HasValue)
+            {
+                groups ??= [];
+                groups.Add(clip.GroupId.Value);
+            }
+        }
+
+        if (groups is not null)
+        {
+            foreach (var clip in clips.Values)
+            {
+                if (clip.GroupId.HasValue && groups.Contains(clip.GroupId.Value))
+                {
+                    selected.Add(clip.Id);
+                }
+            }
+        }
+
         return selected;
     }
 
@@ -653,10 +685,19 @@ public sealed partial class TimelineEditor
     {
         var (_, clip) = FindClip(clipId);
         if (!clip.GroupId.HasValue) return [clipId];
-        return Project.Tracks.SelectMany(t => t.Clips)
-            .Where(c => c.GroupId == clip.GroupId.Value)
-            .Select(c => c.Id)
-            .ToList();
+        var list = new List<Guid>();
+        var targetGroup = clip.GroupId.Value;
+        for (var t = 0; t < Project.Tracks.Count; t++)
+        {
+            var trackClips = Project.Tracks[t].Clips;
+            for (var c = 0; c < trackClips.Count; c++)
+            {
+                var item = trackClips[c];
+                if (item.GroupId == targetGroup)
+                    list.Add(item.Id);
+            }
+        }
+        return list;
     }
 
     public void MoveSelection(IEnumerable<Guid> ids, Guid primaryClipId, Guid targetTrackId, long start, bool ignoreGroups = false, bool ripple = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
@@ -1101,7 +1142,7 @@ public sealed partial class TimelineEditor
                     var spans = CollapseSpans(trackGroup.Select(item => item.Clip));
                     foreach (var remaining in trackGroup.Key.Clips.Where(c => !removed.Contains(c.Id)))
                     {
-                        var shift = spans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        var shift = CalculateShiftForFrame(spans, remaining.StartFrame);
                         if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
                     }
                 }
@@ -1113,14 +1154,14 @@ public sealed partial class TimelineEditor
                     var spans = CollapseSpans(trackGroup.Select(item => item.Clip));
                     foreach (var remaining in trackGroup.Key.Clips.Where(c => !removed.Contains(c.Id)))
                     {
-                        var shift = spans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        var shift = CalculateShiftForFrame(spans, remaining.StartFrame);
                         if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
                     }
                 }
                 var allAffectedSpans = CollapseSpans(selected.Select(item => item.Clip));
                 foreach (var marker in Project.Markers)
                 {
-                    var mShift = allAffectedSpans.Where(span => span.End <= marker.Frame).Sum(span => span.End - span.Start);
+                    var mShift = CalculateShiftForFrame(allAffectedSpans, marker.Frame);
                     if (mShift > 0) markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame - mShift));
                 }
             }
@@ -1131,13 +1172,13 @@ public sealed partial class TimelineEditor
                 {
                     foreach (var remaining in track.Clips.Where(c => !removed.Contains(c.Id)))
                     {
-                        var shift = allSpans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        var shift = CalculateShiftForFrame(allSpans, remaining.StartFrame);
                         if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
                     }
                 }
                 foreach (var marker in Project.Markers)
                 {
-                    var mShift = allSpans.Where(span => span.End <= marker.Frame).Sum(span => span.End - span.Start);
+                    var mShift = CalculateShiftForFrame(allSpans, marker.Frame);
                     if (mShift > 0) markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame - mShift));
                 }
             }
@@ -1215,6 +1256,17 @@ public sealed partial class TimelineEditor
             else spans[^1] = (spans[^1].Start, Math.Max(spans[^1].End, clip.EndFrame));
         }
         return spans;
+    }
+
+    internal static long CalculateShiftForFrame(List<(long Start, long End)> spans, long frame)
+    {
+        long shift = 0;
+        for (var i = 0; i < spans.Count; i++)
+        {
+            if (spans[i].End <= frame)
+                shift += (spans[i].End - spans[i].Start);
+        }
+        return shift;
     }
 
     public void SetTrackState(Guid trackId, bool? isMuted = null, bool? isSolo = null, bool? isLocked = null, bool? isVisible = null, bool? armRecord = null)
@@ -1724,7 +1776,18 @@ public sealed partial class TimelineEditor
     private List<(TimelineTrack Track, TimelineClip Clip)> SelectedClips(IEnumerable<Guid> ids, bool ignoreGroups = false)
     {
         var selected = ExpandSelection(ids, ignoreGroups);
-        return Project.Tracks.SelectMany(track => track.Clips.Where(clip => selected.Contains(clip.Id)).Select(clip => (track, clip))).ToList();
+        var result = new List<(TimelineTrack Track, TimelineClip Clip)>(selected.Count);
+        for (var t = 0; t < Project.Tracks.Count; t++)
+        {
+            var track = Project.Tracks[t];
+            for (var c = 0; c < track.Clips.Count; c++)
+            {
+                var clip = track.Clips[c];
+                if (selected.Contains(clip.Id))
+                    result.Add((track, clip));
+            }
+        }
+        return result;
     }
     private static void EnsureTimelineBounds(TimelineClip clip)
     {
