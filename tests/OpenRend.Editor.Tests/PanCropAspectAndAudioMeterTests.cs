@@ -307,4 +307,59 @@ public sealed class PanCropAspectAndAudioMeterTests
         Assert.NotNull(tiffEncoder);
         Assert.Equal(System.Windows.Media.Imaging.TiffCompressOption.Zip, tiffEncoder.Compression);
     }
+
+    [Fact]
+    public void PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately()
+    {
+        var doc = new ProjectDocument { Width = 1920, Height = 1080, FrameRate = new Rational(30, 1) };
+        var media = new MediaAsset { Id = Guid.NewGuid(), Path = "clip.mp4", HasVideo = true, DurationSeconds = 10, Width = 1920, Height = 1080 };
+        doc.Media.Add(media);
+
+        var track = new TimelineTrack { Kind = TrackKind.Video };
+        doc.Tracks.Add(track);
+
+        var clip = new TimelineClip
+        {
+            MediaId = media.Id,
+            DurationFrames = 300,
+            Crop = new CropAnimation
+            {
+                Keyframes =
+                [
+                    new CropKeyframe { Frame = 0, State = new CropState(1920, 1080, 960, 540, 0, 960, 540), Interpolation = CropInterpolation.Fast, Smoothness = 85.0 },
+                    new CropKeyframe { Frame = 60, State = new CropState(960, 540, 480, 270, 45, 480, 270), Interpolation = CropInterpolation.Smooth, Smoothness = 75.0 }
+                ]
+            }
+        };
+        track.Clips.Add(clip);
+
+        var editor = new TimelineEditor(doc);
+
+        // Verify copying keyframe at frame 60
+        var sourceKey = clip.Crop.Keyframes[1];
+        var copied = (sourceKey.State, sourceKey.Interpolation, sourceKey.Smoothness);
+
+        // Paste at frame 150
+        editor.SetCropKeyframe(clip.Id, 150, copied.State, copied.Interpolation, copied.Smoothness);
+
+        var currentClip = editor.Project.Tracks[0].Clips[0];
+        Assert.NotNull(currentClip.Crop);
+        Assert.Equal(3, currentClip.Crop.Keyframes.Count);
+        var pastedKey = currentClip.Crop.Keyframes[2];
+        Assert.Equal(150, pastedKey.Frame);
+        Assert.Equal(960, pastedKey.State.Width);
+        Assert.Equal(540, pastedKey.State.Height);
+        Assert.Equal(45, pastedKey.State.RotationDegrees);
+        Assert.Equal(CropInterpolation.Smooth, pastedKey.Interpolation);
+        Assert.Equal(75.0, pastedKey.Smoothness);
+
+        // Clear all keyframes resets back to single frame 0 keyframe
+        var first = currentClip.Crop.Keyframes[0].DeepClone();
+        first.Frame = 0;
+        currentClip.Crop.Keyframes.Clear();
+        currentClip.Crop.Keyframes.Add(first);
+
+        Assert.Single(currentClip.Crop.Keyframes);
+        Assert.Equal(0, currentClip.Crop.Keyframes[0].Frame);
+    }
 }

@@ -88,6 +88,42 @@ public sealed class CropAnimation
             CropInterpolation.Sharp => .5 + 4 * centered * centered * centered,
             _ => progress
         };
-        return CropState.Lerp(left.State, right.State, weight);
+        var linearState = CropState.Lerp(left.State, right.State, weight);
+
+        // Smooth keyframes with >0 smoothness across multiple segments apply 2D Catmull-Rom motion path smoothing.
+        if (left.Interpolation == CropInterpolation.Smooth && s > 1e-4 && Keyframes.Count >= 3)
+        {
+            var p1X = left.State.CenterX;
+            var p1Y = left.State.CenterY;
+            var p2X = right.State.CenterX;
+            var p2Y = right.State.CenterY;
+
+            var p0X = low > 0 ? Keyframes[low - 1].State.CenterX : 2.0 * p1X - p2X;
+            var p0Y = low > 0 ? Keyframes[low - 1].State.CenterY : 2.0 * p1Y - p2Y;
+
+            var p3X = high < Keyframes.Count - 1 ? Keyframes[high + 1].State.CenterX : 2.0 * p2X - p1X;
+            var p3Y = high < Keyframes.Count - 1 ? Keyframes[high + 1].State.CenterY : 2.0 * p2Y - p1Y;
+
+            var t = weight;
+            var t2 = t * t;
+            var t3 = t2 * t;
+
+            var smoothX = 0.5 * ((2.0 * p1X) +
+                (-p0X + p2X) * t +
+                (2.0 * p0X - 5.0 * p1X + 4.0 * p2X - p3X) * t2 +
+                (-p0X + 3.0 * p1X - 3.0 * p2X + p3X) * t3);
+
+            var smoothY = 0.5 * ((2.0 * p1Y) +
+                (-p0Y + p2Y) * t +
+                (2.0 * p0Y - 5.0 * p1Y + 4.0 * p2Y - p3Y) * t2 +
+                (-p0Y + 3.0 * p1Y - 3.0 * p2Y + p3Y) * t3);
+
+            var cx = linearState.CenterX * (1.0 - s) + smoothX * s;
+            var cy = linearState.CenterY * (1.0 - s) + smoothY * s;
+
+            return linearState with { CenterX = cx, CenterY = cy };
+        }
+
+        return linearState;
     }
 }

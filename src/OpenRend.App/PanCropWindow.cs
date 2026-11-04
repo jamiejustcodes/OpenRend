@@ -8,6 +8,8 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using OpenRend.Core;
 using OpenRend.Timeline;
+using System.IO;
+using OpenRend.Project;
 
 namespace OpenRend.App;
 
@@ -28,6 +30,12 @@ public sealed class PanCropWindow : Window
     private readonly ComboBox presets;
     private readonly CheckBox lockAspect;
     private readonly TextBlock status;
+    private static string PanCropPreferencesPath => Path.Combine(
+        Environment.GetEnvironmentVariable("OPENREND_DATA_DIR") ??
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenRend"),
+        "pancrop.json");
+    private PanCropPreferences panCropPrefs = new();
+    private readonly List<string> presetNames = [];
     private long localFrame;
     private bool refreshing;
     private bool closed;
@@ -64,26 +72,28 @@ public sealed class PanCropWindow : Window
         DockPanel.SetDock(redo, Dock.Right); top.Children.Add(redo);
         var presetRow = new DockPanel { LastChildFill = true, Margin = new Thickness(3, 1, 3, 1) };
         Grid.SetRow(presetRow, 2); root.Children.Add(presetRow);
-        presetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 72 });
-        presets = new ComboBox
-        {
-            ItemsSource = new[]
-            {
-                "Full frame",
-                "Half size",
-                "Square center",
-                "16:9 Widescreen TV (1.778)",
-                "4:3 Standard TV (1.333)",
-                "9:16 Vertical Video (0.5625)",
-                "2.39:1 CinemaScope (2.390)",
-                "Match Output Aspect"
-            }
-        };
+        presetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 72, VerticalAlignment = VerticalAlignment.Center });
+
+        var deletePresetBtn = Button("âœ•", "Delete preset", DeleteCurrentPreset);
+        AutomationProperties.SetAutomationId(deletePresetBtn, "DeleteCropPreset");
+        DockPanel.SetDock(deletePresetBtn, Dock.Right);
+        presetRow.Children.Add(deletePresetBtn);
+
+        var savePresetBtn = Button("ðŸ’¾", "Save preset", SaveCurrentPreset);
+        AutomationProperties.SetAutomationId(savePresetBtn, "SaveCropPreset");
+        DockPanel.SetDock(savePresetBtn, Dock.Right);
+        presetRow.Children.Add(savePresetBtn);
+
+        presets = new ComboBox { IsEditable = true };
         AutomationProperties.SetName(presets, "Crop preset");
+        AutomationProperties.SetAutomationId(presets, "CropPresetCombo");
+        PopulatePresets();
         presets.SelectionChanged += (_, _) =>
         {
             if (refreshing || presets.SelectedIndex < 0) return;
+            var selectedName = presets.SelectedItem as string ?? presets.Text;
             var identity = CropState.Identity(Source.Width, Source.Height);
+
             CropState CalculateAspectCrop(double targetAspect)
             {
                 double sourceAspect = (double)Source.Width / Source.Height;
@@ -92,16 +102,18 @@ public sealed class PanCropWindow : Window
                 return identity with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 };
             }
 
-            var preset = presets.SelectedIndex switch
+            var preset = selectedName switch
             {
-                1 => identity with { Width = identity.Width / 2, Height = identity.Height / 2 },
-                2 => identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) },
-                3 => CalculateAspectCrop(16.0 / 9.0),
-                4 => CalculateAspectCrop(4.0 / 3.0),
-                5 => CalculateAspectCrop(9.0 / 16.0),
-                6 => CalculateAspectCrop(2.39),
-                7 => CalculateAspectCrop((double)vm.Project.Width / vm.Project.Height),
-                _ => identity
+                "Full frame" => identity,
+                "Half size" => identity with { Width = identity.Width / 2, Height = identity.Height / 2 },
+                "Square center" => identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) },
+                "16:9 Widescreen TV (1.778)" => CalculateAspectCrop(16.0 / 9.0),
+                "4:3 Standard TV (1.333)" => CalculateAspectCrop(4.0 / 3.0),
+                "9:16 Vertical Video (0.5625)" => CalculateAspectCrop(9.0 / 16.0),
+                "2.39:1 CinemaScope (2.390)" => CalculateAspectCrop(2.39),
+                "Match Output Aspect" => CalculateAspectCrop((double)vm.Project.Width / vm.Project.Height),
+                "Match Source Aspect" => identity,
+                _ => panCropPrefs.CustomPresets.FirstOrDefault(p => string.Equals(p.Name, selectedName, StringComparison.OrdinalIgnoreCase))?.ToState() ?? identity
             };
             Edit(() => editor.SetCropKeyframe(clipId, localFrame, preset, CurrentInterpolation, CurrentSmoothness));
         };
@@ -175,10 +187,111 @@ public sealed class PanCropWindow : Window
         Section("Source");
         lockAspect = new CheckBox { Content = "Lock aspect ratio", IsChecked = true, Margin = new Thickness(12, 4, 0, 4) };
         properties.Children.Add(lockAspect);
-        var toolbar = new StackPanel { Width = 30, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+        var toolbar = new StackPanel { Width = 32, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(2, 4, 0, 0) };
+
+        Button MakeToolBtn(string content, string tooltip, string autoId, Action onClick)
+        {
+            var btn = new Button
+            {
+                Content = content,
+                ToolTip = tooltip,
+                Padding = new Thickness(2, 1, 2, 1),
+                MinWidth = 26,
+                Height = 24,
+                Margin = new Thickness(0, 1, 0, 1),
+                HorizontalAlignment = HorizontalAlignment.Center
+            };
+            AutomationProperties.SetName(btn, tooltip);
+            AutomationProperties.SetAutomationId(btn, autoId);
+            btn.Click += (_, _) => onClick();
+            return btn;
+        }
+
+        Button moveFreeBtn = null!;
+        Button moveXBtn = null!;
+        Button moveYBtn = null!;
+
+        void UpdateMoveRadios()
+        {
+            var activeBrush = (Brush)FindResource("SelectionBrush");
+            var defaultBrush = (Brush)FindResource("ButtonBackgroundBrush");
+            var activePen = Brushes.White;
+            var defaultPen = (Brush)FindResource("BorderBrush");
+
+            moveFreeBtn.Background = workspace.MoveConstraint == CropMoveConstraint.Free ? activeBrush : defaultBrush;
+            moveFreeBtn.BorderBrush = workspace.MoveConstraint == CropMoveConstraint.Free ? activePen : defaultPen;
+
+            moveXBtn.Background = workspace.MoveConstraint == CropMoveConstraint.HorizontalOnly ? activeBrush : defaultBrush;
+            moveXBtn.BorderBrush = workspace.MoveConstraint == CropMoveConstraint.HorizontalOnly ? activePen : defaultPen;
+
+            moveYBtn.Background = workspace.MoveConstraint == CropMoveConstraint.VerticalOnly ? activeBrush : defaultBrush;
+            moveYBtn.BorderBrush = workspace.MoveConstraint == CropMoveConstraint.VerticalOnly ? activePen : defaultPen;
+        }
+
+        moveFreeBtn = MakeToolBtn("✥", "Move freely in X and Y", "CropMoveFree", () =>
+        {
+            workspace.MoveConstraint = CropMoveConstraint.Free;
+            UpdateMoveRadios();
+        });
+
+        moveXBtn = MakeToolBtn("↔", "Move in X only", "CropMoveXOnly", () =>
+        {
+            workspace.MoveConstraint = CropMoveConstraint.HorizontalOnly;
+            UpdateMoveRadios();
+        });
+
+        moveYBtn = MakeToolBtn("↕", "Move in Y only", "CropMoveYOnly", () =>
+        {
+            workspace.MoveConstraint = CropMoveConstraint.VerticalOnly;
+            UpdateMoveRadios();
+        });
+
+        UpdateMoveRadios();
+
+        var lockAspectBtn = MakeToolBtn("🔒", "Lock aspect ratio", "CropToolbarLockAspect", () =>
+        {
+            lockAspect.IsChecked = !(lockAspect.IsChecked == true);
+        });
+
+        Button sizeCenterBtn = null!;
+        sizeCenterBtn = MakeToolBtn("⌖", "Size about center", "CropSizeAboutCenter", () =>
+        {
+            workspace.SizeAboutCenter = !workspace.SizeAboutCenter;
+            sizeCenterBtn.Background = workspace.SizeAboutCenter ? (Brush)FindResource("SelectionBrush") : (Brush)FindResource("ButtonBackgroundBrush");
+            sizeCenterBtn.BorderBrush = workspace.SizeAboutCenter ? Brushes.White : (Brush)FindResource("BorderBrush");
+        });
+        sizeCenterBtn.Background = workspace.SizeAboutCenter ? (Brush)FindResource("SelectionBrush") : (Brush)FindResource("ButtonBackgroundBrush");
+        sizeCenterBtn.BorderBrush = workspace.SizeAboutCenter ? Brushes.White : (Brush)FindResource("BorderBrush");
+
+        lockAspect.Checked += (_, _) =>
+        {
+            lockAspectBtn.Content = "🔒";
+            lockAspectBtn.Background = (Brush)FindResource("SelectionBrush");
+            lockAspectBtn.BorderBrush = Brushes.White;
+        };
+        lockAspect.Unchecked += (_, _) =>
+        {
+            lockAspectBtn.Content = "🔓";
+            lockAspectBtn.Background = (Brush)FindResource("ButtonBackgroundBrush");
+            lockAspectBtn.BorderBrush = (Brush)FindResource("BorderBrush");
+        };
+        if (lockAspect.IsChecked == true)
+        {
+            lockAspectBtn.Background = (Brush)FindResource("SelectionBrush");
+            lockAspectBtn.BorderBrush = Brushes.White;
+        }
+
+        toolbar.Children.Add(moveFreeBtn);
+        toolbar.Children.Add(moveXBtn);
+        toolbar.Children.Add(moveYBtn);
+        toolbar.Children.Add(new Separator { Margin = new Thickness(2, 2, 2, 2) });
+        toolbar.Children.Add(lockAspectBtn);
+        toolbar.Children.Add(sizeCenterBtn);
+        toolbar.Children.Add(new Separator { Margin = new Thickness(2, 2, 2, 2) });
         toolbar.Children.Add(Button("+", "Zoom crop workspace in", () => workspace.Zoom = Math.Min(8, workspace.Zoom * 1.25)));
         toolbar.Children.Add(Button("−", "Zoom crop workspace out", () => workspace.Zoom = Math.Max(.1, workspace.Zoom / 1.25)));
         toolbar.Children.Add(Button("Fit", "Fit source in crop workspace", () => workspace.Zoom = 1));
+        toolbar.Children.Add(Button("1:1", "1:1 Normal zoom", () => workspace.Zoom = 1.0));
         body.Children.Add(toolbar);
         Grid.SetColumn(workspace, 1); body.Children.Add(workspace);
         workspace.PreviewChanged += value => { state = value; RefreshFields(); };
@@ -194,9 +307,27 @@ public sealed class PanCropWindow : Window
             double h = sourceAspect > targetAspect ? Source.Height : Source.Width / targetAspect;
             Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation, CurrentSmoothness));
         };
+        workspace.OnMatchSourceAspectClicked += () =>
+        {
+            var identity = CropState.Identity(Source.Width, Source.Height);
+
+            Edit(() => editor.SetCropKeyframe(clipId, localFrame, identity, CurrentInterpolation, CurrentSmoothness));
+        };
         workspace.OnCenterClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 }, CurrentInterpolation, CurrentSmoothness));
         workspace.OnFlipHorizontalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (180.0 - state.RotationDegrees) % 360.0 }, CurrentInterpolation, CurrentSmoothness));
         workspace.OnFlipVerticalClicked += () => Edit(() => editor.SetCropKeyframe(clipId, localFrame, state with { RotationDegrees = (-state.RotationDegrees) % 360.0 }, CurrentInterpolation, CurrentSmoothness));
+        workspace.OnClearAllKeyframesClicked += () =>
+        {
+            Edit(() =>
+            {
+                var clip = EventClip;
+                if (clip.Crop == null) return;
+                var first = clip.Crop.Keyframes.FirstOrDefault()?.DeepClone() ?? new CropKeyframe { Frame = 0, State = CropState.Identity(Source.Width, Source.Height) };
+                first.Frame = 0;
+                clip.Crop.Keyframes.Clear();
+                clip.Crop.Keyframes.Add(first);
+            });
+        };
         var bottom = new Grid(); bottom.RowDefinitions.Add(new() { Height = new GridLength(62) }); bottom.RowDefinitions.Add(new() { Height = new GridLength(42) });
         Grid.SetRow(bottom, 4); root.Children.Add(bottom);
         lane.Margin = new Thickness(145, 0, 8, 0); bottom.Children.Add(lane);
@@ -205,6 +336,8 @@ public sealed class PanCropWindow : Window
         lane.InterpolationChanged += value => interpolation.SelectedItem = value;
         lane.DeleteKeyframeRequested += f => Edit(() => editor.RemoveCropKeyframe(clipId, f));
         lane.AddKeyframeRequested += f => Edit(() => editor.SetCropKeyframe(clipId, f, state, CurrentInterpolation, CurrentSmoothness));
+        lane.GetKeyframeState = f => TimelineEvaluator.CropAt(EventClip, Source, f);
+        lane.PasteKeyframeRequested += (f, st, interp, smooth) => Edit(() => editor.SetCropKeyframe(clipId, f, st, interp, smooth));
         bottom.Children.Add(new TextBlock { Text = "Position", VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(7, 24, 0, 0), Width = 130, HorizontalAlignment = HorizontalAlignment.Left });
         var transport = new DockPanel { LastChildFill = false }; Grid.SetRow(transport, 1); bottom.Children.Add(transport);
         frameField = new TextBox { Width = 105, TextAlignment = TextAlignment.Right, Margin = new Thickness(3, 5, 6, 5) };
@@ -246,6 +379,73 @@ public sealed class PanCropWindow : Window
     private MediaAsset Source => editor.Project.Media.Single(m => m.Id == EventClip.MediaId);
     private CropInterpolation CurrentInterpolation => interpolation.SelectedItem is CropInterpolation value ? value : CropInterpolation.Linear;
     private double CurrentSmoothness => double.TryParse(smoothnessField?.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var v) ? Math.Clamp(v, 0, 100) : 100.0;
+    private void PopulatePresets(string? selectName = null)
+    {
+        panCropPrefs = PanCropPreferencesStore.Load(PanCropPreferencesPath);
+        presetNames.Clear();
+        presetNames.AddRange([
+            "Full frame",
+            "Half size",
+            "Square center",
+            "16:9 Widescreen TV (1.778)",
+            "4:3 Standard TV (1.333)",
+            "9:16 Vertical Video (0.5625)",
+            "2.39:1 CinemaScope (2.390)",
+            "Match Output Aspect",
+            "Match Source Aspect"
+        ]);
+        foreach (var custom in panCropPrefs.CustomPresets)
+        {
+            presetNames.Add(custom.Name);
+        }
+        presets.ItemsSource = null;
+        presets.ItemsSource = presetNames.ToArray();
+
+        if (selectName != null)
+        {
+            presets.SelectedItem = selectName;
+        }
+    }
+
+    private void SaveCurrentPreset()
+    {
+        var name = presets.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            status.Text = "Please enter a preset name to save.";
+            return;
+        }
+        var preset = PanCropPreset.FromState(name, state);
+        var list = new List<PanCropPreset>(panCropPrefs.CustomPresets);
+        var existingIndex = list.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existingIndex >= 0) list[existingIndex] = preset;
+        else list.Add(preset);
+
+        panCropPrefs = panCropPrefs with { CustomPresets = list };
+        PanCropPreferencesStore.Save(panCropPrefs, PanCropPreferencesPath);
+        PopulatePresets(name);
+        status.Text = $"Preset '{name}' saved.";
+    }
+
+    private void DeleteCurrentPreset()
+    {
+        var selected = presets.SelectedItem as string ?? presets.Text?.Trim();
+        if (string.IsNullOrWhiteSpace(selected)) return;
+        var list = new List<PanCropPreset>(panCropPrefs.CustomPresets);
+        var removed = list.RemoveAll(p => string.Equals(p.Name, selected, StringComparison.OrdinalIgnoreCase));
+        if (removed > 0)
+        {
+            panCropPrefs = panCropPrefs with { CustomPresets = list };
+            PanCropPreferencesStore.Save(panCropPrefs, PanCropPreferencesPath);
+            PopulatePresets("Full frame");
+            status.Text = $"Preset '{selected}' deleted.";
+        }
+        else
+        {
+            status.Text = "Built-in presets cannot be deleted.";
+        }
+    }
+
     private static Button Button(string text, string label, Action action)
     {
         var button = new Button { Content = text, ToolTip = label, Padding = new Thickness(6, 1, 6, 1), MinHeight = 23, VerticalAlignment = VerticalAlignment.Center };
@@ -271,6 +471,11 @@ public sealed class PanCropWindow : Window
         {
             RefreshFields(); frameField.Text = localFrame.ToString(CultureInfo.InvariantCulture);
             var identity = CropState.Identity(Source.Width, Source.Height);
+            if (presets.SelectedIndex < 0)
+            {
+                var customMatch = panCropPrefs.CustomPresets.FindIndex(p => p.ToState() == state);
+                if (customMatch >= 0) presets.SelectedIndex = 9 + customMatch;
+            }
             presets.SelectedIndex = state == identity ? 0 : state == (identity with { Width = identity.Width / 2, Height = identity.Height / 2 }) ? 1
                 : state == (identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) }) ? 2 : -1;
             var current = checked(localFrame + EventClip.CropOffsetFrames);
@@ -381,6 +586,8 @@ public sealed class PanCropWindow : Window
     private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }
 
+public enum CropMoveConstraint { Free, HorizontalOnly, VerticalOnly }
+
 internal sealed class CropWorkspace : FrameworkElement
 {
     public const int RotationHandleIndex = 4;
@@ -393,14 +600,18 @@ internal sealed class CropWorkspace : FrameworkElement
     public long CropOffsetFrames { get; set; }
     public long ActiveLocalFrame { get; set; }
     public Func<bool>? LockAspect { get; set; }
+    public bool SizeAboutCenter { get; set; } = true;
+    public CropMoveConstraint MoveConstraint { get; set; } = CropMoveConstraint.Free;
     public event Action<CropState>? PreviewChanged;
     public event Action<CropState>? Committed;
     public event Action? Cancelled;
     public event Action? OnRestoreClicked;
     public event Action? OnMatchOutputAspectClicked;
+    public event Action? OnMatchSourceAspectClicked;
     public event Action? OnFlipHorizontalClicked;
     public event Action? OnFlipVerticalClicked;
     public event Action? OnCenterClicked;
+    public event Action? OnClearAllKeyframesClicked;
     private double zoom = 1;
     public double Zoom { get => zoom; set { zoom = value; InvalidateVisual(); } }
     private CropState? dragState;
@@ -420,20 +631,27 @@ internal sealed class CropWorkspace : FrameworkElement
         restoreItem.Click += (_, _) => OnRestoreClicked?.Invoke();
         var matchAspectItem = new MenuItem { Header = "Match Output Aspect" };
         matchAspectItem.Click += (_, _) => OnMatchOutputAspectClicked?.Invoke();
+        var matchSourceAspectItem = new MenuItem { Header = "Match Source Aspect" };
+        matchSourceAspectItem.Click += (_, _) => OnMatchSourceAspectClicked?.Invoke();
         var flipHItem = new MenuItem { Header = "Flip Horizontal" };
         flipHItem.Click += (_, _) => OnFlipHorizontalClicked?.Invoke();
         var flipVItem = new MenuItem { Header = "Flip Vertical" };
         flipVItem.Click += (_, _) => OnFlipVerticalClicked?.Invoke();
         var centerItem = new MenuItem { Header = "Center" };
         centerItem.Click += (_, _) => OnCenterClicked?.Invoke();
+        var clearAllItem = new MenuItem { Header = "Clear All Keyframes" };
+        clearAllItem.Click += (_, _) => OnClearAllKeyframesClicked?.Invoke();
 
         ContextMenu.Items.Add(restoreItem);
         ContextMenu.Items.Add(matchAspectItem);
+        ContextMenu.Items.Add(matchSourceAspectItem);
         ContextMenu.Items.Add(new Separator());
         ContextMenu.Items.Add(flipHItem);
         ContextMenu.Items.Add(flipVItem);
         ContextMenu.Items.Add(new Separator());
         ContextMenu.Items.Add(centerItem);
+        ContextMenu.Items.Add(new Separator());
+        ContextMenu.Items.Add(clearAllItem);
     }
     private Point ToDisplay(Point source) => new(SourceRect.X + source.X * Scale, SourceRect.Y + source.Y * Scale);
     private Point Rotate(Point source)
@@ -483,15 +701,33 @@ internal sealed class CropWorkspace : FrameworkElement
         if (Keyframes is not null && Keyframes.Count >= 2)
         {
             var pathPen = new Pen(new SolidColorBrush(Color.FromRgb(0x00, 0xA2, 0xE8)), 1.5) { DashStyle = new DashStyle([4, 2], 0) };
-            var kfPoints = Keyframes.Select(k => ToDisplay(Rotate(new Point(k.State.CenterX, k.State.CenterY)))).ToArray();
-            for (var i = 1; i < kfPoints.Length; i++)
+            var anim = new CropAnimation { Keyframes = Keyframes };
+            var minFrame = Keyframes[0].Frame;
+            var maxFrame = Keyframes[^1].Frame;
+            var totalFrames = Math.Max(1, maxFrame - minFrame);
+            var step = Math.Max(1L, totalFrames / 60);
+
+            Point prevPoint = default;
+            var hasPrev = false;
+            for (var f = minFrame; f <= maxFrame; f += step)
             {
-                dc.DrawLine(pathPen, kfPoints[i - 1], kfPoints[i]);
+                var evalState = anim.Evaluate(f);
+                var pt = ToDisplay(Rotate(new Point(evalState.CenterX, evalState.CenterY)));
+                if (hasPrev) dc.DrawLine(pathPen, prevPoint, pt);
+                prevPoint = pt;
+                hasPrev = true;
             }
+            if (minFrame != maxFrame)
+            {
+                var lastState = anim.Evaluate(maxFrame);
+                var pt = ToDisplay(Rotate(new Point(lastState.CenterX, lastState.CenterY)));
+                if (hasPrev) dc.DrawLine(pathPen, prevPoint, pt);
+            }
+
             for (var i = 0; i < Keyframes.Count; i++)
             {
                 var kf = Keyframes[i];
-                var pt = kfPoints[i];
+                var pt = ToDisplay(Rotate(new Point(kf.State.CenterX, kf.State.CenterY)));
                 var isCurrent = (kf.Frame - CropOffsetFrames) == ActiveLocalFrame;
                 dc.PushTransform(new RotateTransform(45, pt.X, pt.Y));
                 if (isCurrent)
@@ -532,22 +768,73 @@ internal sealed class CropWorkspace : FrameworkElement
         else if (resizeCorner >= 0)
         {
             var angle = -before.RotationDegrees * Math.PI / 180;
-            var widthDelta = (resizeCorner is 0 or 3 ? -2 : 2) * (Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y);
-            var heightDelta = (resizeCorner is 0 or 1 ? -2 : 2) * (Math.Sin(angle) * delta.X + Math.Cos(angle) * delta.Y);
-            var width = Math.Max(.001, before.Width + widthDelta); var height = Math.Max(.001, before.Height + heightDelta);
-            if (LockAspect?.Invoke() == true)
+            var lx = Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y;
+            var ly = Math.Sin(angle) * delta.X + Math.Cos(angle) * delta.Y;
+
+            if (SizeAboutCenter)
             {
-                // Either drag axis can drive an aspect-locked corner, including a vertical drag.
-                if (Math.Abs(heightDelta / before.Height) > Math.Abs(widthDelta / before.Width)) width = before.Width * height / before.Height;
-                else height = before.Height * width / before.Width;
+                var widthDelta = (resizeCorner is 0 or 3 ? -2 : 2) * lx;
+                var heightDelta = (resizeCorner is 0 or 1 ? -2 : 2) * ly;
+                var width = Math.Max(.001, before.Width + widthDelta);
+                var height = Math.Max(.001, before.Height + heightDelta);
+                if (LockAspect?.Invoke() == true)
+                {
+                    if (Math.Abs(heightDelta / before.Height) > Math.Abs(widthDelta / before.Width)) width = before.Width * height / before.Height;
+                    else height = before.Height * width / before.Width;
+                }
+                State = before with { Width = width, Height = height };
             }
-            State = before with { Width = width, Height = height };
+            else
+            {
+                var signX = resizeCorner is 0 or 3 ? -1 : 1;
+                var signY = resizeCorner is 0 or 1 ? -1 : 1;
+
+                var widthDelta = signX * lx;
+                var heightDelta = signY * ly;
+
+                var width = Math.Max(.001, before.Width + widthDelta);
+                var height = Math.Max(.001, before.Height + heightDelta);
+
+                if (LockAspect?.Invoke() == true)
+                {
+                    if (Math.Abs(heightDelta / before.Height) > Math.Abs(widthDelta / before.Width))
+                    {
+                        width = before.Width * height / before.Height;
+                    }
+                    else
+                    {
+                        height = before.Height * width / before.Width;
+                    }
+                }
+
+                var localShiftX = (signX * (width - before.Width)) * 0.5;
+                var localShiftY = (signY * (height - before.Height)) * 0.5;
+
+                var rotAngle = before.RotationDegrees * Math.PI / 180;
+                var shiftX = Math.Cos(rotAngle) * localShiftX - Math.Sin(rotAngle) * localShiftY;
+                var shiftY = Math.Sin(rotAngle) * localShiftX + Math.Cos(rotAngle) * localShiftY;
+
+                State = before with
+                {
+                    Width = width,
+                    Height = height,
+                    CenterX = before.CenterX + shiftX,
+                    CenterY = before.CenterY + shiftY
+                };
+            }
         }
         else
         {
-            // The displayed delta is converted back through the crop's rotation.
+            var effectiveDelta = delta;
+            if (MoveConstraint == CropMoveConstraint.HorizontalOnly) effectiveDelta = new Vector(delta.X, 0);
+            else if (MoveConstraint == CropMoveConstraint.VerticalOnly) effectiveDelta = new Vector(0, delta.Y);
+
             var angle = -before.RotationDegrees * Math.PI / 180;
-            State = before with { CenterX = before.CenterX + Math.Cos(angle) * delta.X - Math.Sin(angle) * delta.Y, CenterY = before.CenterY + Math.Sin(angle) * delta.X + Math.Cos(angle) * delta.Y };
+            State = before with
+            {
+                CenterX = before.CenterX + Math.Cos(angle) * effectiveDelta.X - Math.Sin(angle) * effectiveDelta.Y,
+                CenterY = before.CenterY + Math.Sin(angle) * effectiveDelta.X + Math.Cos(angle) * effectiveDelta.Y
+            };
         }
         PreviewChanged?.Invoke(State); InvalidateVisual();
     }
@@ -574,6 +861,8 @@ internal sealed class CropWorkspace : FrameworkElement
 
 internal sealed class CropKeyframeLane : FrameworkElement
 {
+    public static (CropState State, CropInterpolation Interpolation, double Smoothness)? CopiedKeyframe { get; private set; }
+    public Func<long, CropState>? GetKeyframeState { get; set; }
     public long Duration { get; set; } = 1;
     public long Position { get; set; }
     private (long Frame, CropInterpolation Interpolation, double Smoothness)[] keyDetails = [(0, CropInterpolation.Linear, 100.0)];
@@ -596,7 +885,10 @@ internal sealed class CropKeyframeLane : FrameworkElement
     public event Action<CropInterpolation>? InterpolationChanged;
     public event Action<long>? DeleteKeyframeRequested;
     public event Action<long>? AddKeyframeRequested;
+    public event Action<long, CropState, CropInterpolation, double>? PasteKeyframeRequested;
     private readonly Dictionary<CropInterpolation, MenuItem> curveItems = [];
+    private readonly MenuItem copyItem;
+    private readonly MenuItem pasteItem;
     private readonly MenuItem deleteItem;
     private long? activeMenuKey;
     private long? dragging;
@@ -618,7 +910,16 @@ internal sealed class CropKeyframeLane : FrameworkElement
             curveItems.Add(curve, item); ContextMenu.Items.Add(item);
         }
         ContextMenu.Items.Add(new Separator());
-        deleteItem = new MenuItem { Header = "Delete" };
+        copyItem = new MenuItem { Header = "Copy Keyframe", InputGestureText = "Ctrl+C" };
+        copyItem.Click += (_, _) => CopyCurrentKeyframe();
+        ContextMenu.Items.Add(copyItem);
+
+        pasteItem = new MenuItem { Header = "Paste Keyframe", InputGestureText = "Ctrl+V" };
+        pasteItem.Click += (_, _) => PasteCurrentKeyframe();
+        ContextMenu.Items.Add(pasteItem);
+
+        ContextMenu.Items.Add(new Separator());
+        deleteItem = new MenuItem { Header = "Delete", InputGestureText = "Del" };
         deleteItem.Click += (_, _) =>
         {
             if (activeMenuKey is > 0) DeleteKeyframeRequested?.Invoke(activeMenuKey.Value);
@@ -629,6 +930,8 @@ internal sealed class CropKeyframeLane : FrameworkElement
             var key = e.CursorLeft < 0 ? Keys.Contains(Position) ? Position : (long?)null : KeyAt(new Point(e.CursorLeft, e.CursorTop));
             if (key is null) { e.Handled = true; return; }
             PrepareCurveMenu(key.Value);
+            copyItem.IsEnabled = true;
+            pasteItem.IsEnabled = CopiedKeyframe != null;
             ContextMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             ContextMenu.HorizontalOffset = 0; ContextMenu.VerticalOffset = 0;
         };
@@ -639,6 +942,22 @@ internal sealed class CropKeyframeLane : FrameworkElement
         var nearest = Keys.OrderBy(frame => Math.Abs(FrameX(frame) - point.X)).First();
         return Math.Abs(FrameX(nearest) - point.X) < 7 ? nearest : null;
     }
+    private void CopyCurrentKeyframe()
+    {
+        var frame = activeMenuKey ?? Position;
+        var detail = KeyDetails.FirstOrDefault(k => k.Frame == frame);
+        var interp = detail.Frame == frame ? detail.Interpolation : Interpolation;
+        var smooth = detail.Frame == frame ? detail.Smoothness : 100.0;
+        var st = GetKeyframeState?.Invoke(frame) ?? CropState.Identity(1920, 1080);
+        CopiedKeyframe = (st, interp, smooth);
+    }
+
+    private void PasteCurrentKeyframe()
+    {
+        if (CopiedKeyframe is not { } copied) return;
+        PasteKeyframeRequested?.Invoke(Position, copied.State, copied.Interpolation, copied.Smoothness);
+    }
+
     private void PrepareCurveMenu(long frame)
     {
         activeMenuKey = frame;
@@ -731,6 +1050,21 @@ internal sealed class CropKeyframeLane : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e) { dragging = null; InvalidateVisual(); }
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            if (e.Key == Key.C)
+            {
+                CopyCurrentKeyframe();
+                e.Handled = true;
+                return;
+            }
+            if (e.Key == Key.V && CopiedKeyframe != null)
+            {
+                PasteCurrentKeyframe();
+                e.Handled = true;
+                return;
+            }
+        }
         if (e.Key == Key.Delete && Position > 0 && Keys.Contains(Position))
         {
             DeleteKeyframeRequested?.Invoke(Position);

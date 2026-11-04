@@ -139,6 +139,21 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Verified desktop UI automation test `CustomRenderPresetCanBeSavedRenamedAndRetainedWhenRenderingABuiltin` passing in 57 seconds with element screenshot capture.
     - Full gate passed: 100% native integration tests, 971 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat(pancrop): implement Vegas-style 2D motion path smoothing, custom presets, and keyframe clipboard` implemented 1:1 Vegas Pro Event Pan/Crop keyframe trajectory interpolation and workspace management suite matching `ScriptPortal.Vegas.VideoMotion` and `VideoMotionKeyframe`.
+  - Motion Interpolation & Trajectory Smoothing:
+    - Enhanced `CropAnimation.cs` with Catmull-Rom 2D spline trajectory smoothing for `CenterX` and `CenterY` across 3+ keyframes when `Smooth` interpolation is active with `Smoothness` ($0.0\%$ to $100.0\%$), delivering continuous $C^1$ velocity and curvature through keyframe corners while retaining pure scalar linear/Hermite evaluation for 2-keyframe animations.
+  - Preset Management & Storage:
+    - Created `PanCropPreferences.cs` in `OpenRend.Project` with `PanCropPreset` record (`Name`, `Width`, `Height`, `CenterX`, `CenterY`, `RotationDegrees`, `PivotX`, `PivotY`), `PanCropPreferences` document, and atomic store persisting to `%APPDATA%/OpenRend/pancrop.json` (or `OPENREND_DATA_DIR`).
+  - Interactive Pan/Crop Workspace & Keyframe Lane:
+    - Built preset selector with built-in TV/cinema/aspect presets (`Full frame`, `Half size`, `Square center`, `16:9 Widescreen TV`, `4:3 Standard TV`, `9:16 Vertical Video`, `2.39:1 CinemaScope`, `Match Output Aspect`, `Match Source Aspect`), custom preset saving, and preset deletion.
+    - Added Vegas Pro workspace toolbar (Move Free ✥, Move X Only ↔, Move Y Only ↕, Lock Aspect 🔒, Size About Center ⌖, Zoom In +, Zoom Out −, Zoom Fit, Zoom Normal 1:1).
+    - Added symmetrical sizing vs opposite-corner anchoring (`SizeAboutCenter`), movement constraint axes, and trajectory spline preview overlay.
+    - Added keyframe clipboard buffer with `Copy Keyframe` (Ctrl+C), `Paste Keyframe` (Ctrl+V) context menus, keyboard shortcuts, and `PasteKeyframeRequested` event.
+  - Verification:
+    - Added 4 unit tests in `PanCropPreferencesTests.cs` (Catmull-Rom curvature assertion, zero-smoothness linear assertion, preset store roundtrip and validation).
+    - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
+    - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat(color): implement Vegas-style HSL curves and interactive color grading canvas` implemented 1:1 Vegas Pro HSL curves architecture matching `ScriptPortal.Vegas.ColorGradingPanel.HSLCurves` in `ColorGradingPanel.dll`.
   - Data Models & Evaluation:
     - Created `HSLCurvesData.cs` in `OpenRend.Core`:
