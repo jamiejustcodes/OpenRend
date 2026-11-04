@@ -132,9 +132,12 @@
         <MenuItem Header="Audio Envelopes">
           <MenuItem x:Name="AudioVolumeEnvelopeMenu" Header="Volume" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
           <MenuItem x:Name="AudioPanEnvelopeMenu" Header="Pan" InputGestureText="Shift+P" Click="ToggleTrackPanEnvelopeClick"/>
+          <MenuItem x:Name="AudioMuteEnvelopeMenu" Header="Mute" Click="ToggleTrackMuteEnvelopeClick"/>
         </MenuItem>
         <MenuItem Header="Video Envelopes">
           <MenuItem x:Name="VideoCompositeEnvelopeMenu" Header="Track Composite Level" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>
+          <MenuItem x:Name="VideoFadeToColorEnvelopeMenu" Header="Fade to Color" Click="ToggleTrackFadeToColorEnvelopeClick"/>
+          <MenuItem x:Name="VideoMuteEnvelopeMenu" Header="Mute" Click="ToggleTrackMuteEnvelopeClick"/>
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_Tools">

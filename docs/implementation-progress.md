@@ -212,6 +212,30 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `ColorGradingProcessorTests.cs` (OpenRend.Media.Tests) testing HSL curve hue shift and saturation modulation on pixel buffers.
     - Full gate passed: 100% native integration tests, 982 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat: implement vegas pro 1:1 audio bus, master bus, and track envelope automation suite` implemented 1:1 Vegas Pro Audio Bus and Master Bus Envelope Automation matching `ScriptPortal.Vegas.AudioBusTrack`, `MasterBus`, and `EnvelopeType` (Volume, Pan, Mute).
+  - Core & Models:
+    - Extended `AudioBusTrack.cs` with `Envelopes` collection, deep cloning, and schema validation ensuring envelope types are unique and restricted to `Volume`, `Pan`, and `Mute`.
+    - Extended `ProjectDocument.cs` with `MasterAudioEnvelopes` collection, deep cloning, and schema validation restricting master envelopes to `Volume` and `Mute`.
+  - Timeline Operations:
+    - In `TimelineEditor.AudioBuses.cs`, implemented atomic undo/redo operations for audio buses: `AddAudioBusEnvelope`, `RemoveAudioBusEnvelope`, `ToggleAudioBusEnvelope`, `SetAudioBusEnvelopePoint`, `RemoveAudioBusEnvelopePoint`, and `SetAudioBusEnvelopePointCurve`.
+    - Implemented atomic undo/redo operations for the master bus: `AddMasterAudioEnvelope`, `RemoveMasterAudioEnvelope`, `ToggleMasterAudioEnvelope`, `SetMasterAudioEnvelopePoint`, `RemoveMasterAudioEnvelopePoint`, and `SetMasterAudioEnvelopePointCurve`.
+    - Updated `TimelineEditor.Restore()` to preserve `MasterAudioEnvelopes`.
+  - Audio Rendering & DSP Pipeline:
+    - In `TimelineRenderService.cs`, integrated dynamic envelope curve modulation into `RenderAudio`:
+      - Audio Bus Tracks: evaluated `Mute` envelope (disabling sub-bus rendering when active), `Volume` envelope (modulating bus gain), and `Pan` envelope (modulating stereo balance).
+      - Master Audio Bus: evaluated `Mute` envelope (muting master output) and `Volume` envelope (modulating final master buffer level).
+  - UI Implementation:
+    - In `MixingConsoleWindow.cs`:
+      - Added `env` button on Track channel strips opening an automation envelope toggle context menu (`Volume Envelope`, `Pan Envelope`, `Mute Envelope`).
+      - Added `env` button on Audio Bus channel strips with context menu for `Volume Envelope`, `Pan Envelope`, and `Mute Envelope`.
+      - Added `env` button on Master Bus channel strip with context menu for `Volume Envelope` and `Mute Envelope`.
+    - In `MainWindow.xaml` and `MainWindow.xaml.cs`:
+      - Added `Insert > Audio Envelopes > Mute` menu item and handler.
+      - Added `Insert > Video Envelopes > Fade to Color` and `Mute` menu items and handlers.
+  - Verification:
+    - Added 4 comprehensive unit tests in `AudioBusEnvelopeTests.cs` (OpenRend.Editor.Tests) verifying audio bus and master envelope addition, toggling, undo/redo, point/curve editing, and schema validation.
+    - Full gate passed: 100% native integration tests, 1,024 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat: implement vegas pro 1:1 video fx parameter keyframing, timeline lane, and ofx curve interpolation suite` implemented 1:1 Vegas Pro Video FX Parameter Keyframe Automation and OFX parameter interpolation matching `ScriptPortal.Vegas.EffectKeyframe` and `OFXKeyframe`.
   - Core & Models:
     - Created `VideoEffectKeyframe.cs` in `OpenRend.Core`:

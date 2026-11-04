@@ -12,6 +12,8 @@ public sealed class AudioBusTrack
     public bool IsSolo { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<AudioEffect> AudioEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ClipEnvelope>? Envelopes { get; set; }
 
     public AudioBusTrack DeepClone() => new()
     {
@@ -21,7 +23,8 @@ public sealed class AudioBusTrack
         Pan = Pan,
         IsMuted = IsMuted,
         IsSolo = IsSolo,
-        AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList()
+        AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList(),
+        Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()
     };
 
     public void Validate()
@@ -39,6 +42,16 @@ public sealed class AudioBusTrack
                 fx.Validate();
             }
         }
+        if (Envelopes != null)
+        {
+            var envTypes = new HashSet<EnvelopeType>();
+            foreach (var env in Envelopes)
+            {
+                if (env == null || !envTypes.Add(env.Type)) throw new InvalidDataException("Envelope types must be unique within an audio bus.");
+                if (env.Type is not (EnvelopeType.Volume or EnvelopeType.Pan or EnvelopeType.Mute))
+                    throw new InvalidDataException($"Envelope type '{env.Type}' is not supported on an audio bus.");
+                env.Validate();
+            }
+        }
     }
 }
-

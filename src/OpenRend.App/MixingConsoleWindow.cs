@@ -320,12 +320,13 @@ public sealed class MixingConsoleWindow : Window
         Grid.SetRow(headerPanel, 0);
         stripGrid.Children.Add(headerPanel);
 
-        // 2. Bus assignment ComboBox & FX button
+        // 2. Bus assignment ComboBox & FX/Env buttons
         var busRow = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var btnGroup = new StackPanel { Orientation = Orientation.Horizontal };
         var fxBtn = new Button
         {
             Content = "fx",
-            Width = 24,
+            Width = 22,
             Height = 18,
             FontSize = 10,
             Padding = new Thickness(0),
@@ -336,8 +337,40 @@ public sealed class MixingConsoleWindow : Window
             var win = new AudioTrackFxWindow(vm, track.Id) { Owner = this };
             win.ShowDialog();
         };
-        DockPanel.SetDock(fxBtn, Dock.Right);
-        busRow.Children.Add(fxBtn);
+        btnGroup.Children.Add(fxBtn);
+
+        var envBtn = new Button
+        {
+            Content = "env",
+            Width = 22,
+            Height = 18,
+            Margin = new Thickness(2, 0, 0, 0),
+            FontSize = 9,
+            Padding = new Thickness(0),
+            ToolTip = "Track Automation Envelopes"
+        };
+        envBtn.Click += (_, _) =>
+        {
+            var menu = new ContextMenu();
+            var volItem = new MenuItem { Header = "Volume Envelope", IsCheckable = true, IsChecked = vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.Volume) };
+            volItem.Click += (_, _) => { vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.Volume); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(volItem);
+
+            var panItem = new MenuItem { Header = "Pan Envelope", IsCheckable = true, IsChecked = vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.Pan) };
+            panItem.Click += (_, _) => { vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.Pan); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(panItem);
+
+            var muteItem = new MenuItem { Header = "Mute Envelope", IsCheckable = true, IsChecked = vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.Mute) };
+            muteItem.Click += (_, _) => { vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.Mute); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(muteItem);
+
+            menu.PlacementTarget = envBtn;
+            menu.IsOpen = true;
+        };
+        btnGroup.Children.Add(envBtn);
+
+        DockPanel.SetDock(btnGroup, Dock.Right);
+        busRow.Children.Add(btnGroup);
 
         var busCombo = new ComboBox
         {
@@ -644,7 +677,7 @@ public sealed class MixingConsoleWindow : Window
         Grid.SetRow(headerPanel, 0);
         stripGrid.Children.Add(headerPanel);
 
-        // 2. Bus FX button
+        // 2. Bus FX & Env buttons
         var fxRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) };
         var fxBtn = new Button
         {
@@ -661,6 +694,36 @@ public sealed class MixingConsoleWindow : Window
             win.ShowDialog();
         };
         fxRow.Children.Add(fxBtn);
+
+        var envBtn = new Button
+        {
+            Content = "env",
+            Width = 28,
+            Height = 18,
+            Margin = new Thickness(4, 0, 0, 0),
+            FontSize = 9,
+            Padding = new Thickness(0),
+            ToolTip = $"{bus.Name} Automation Envelopes"
+        };
+        envBtn.Click += (_, _) =>
+        {
+            var menu = new ContextMenu();
+            var volItem = new MenuItem { Header = "Volume Envelope", IsCheckable = true, IsChecked = vm.Editor.HasAudioBusEnvelope(bus.Id, EnvelopeType.Volume) };
+            volItem.Click += (_, _) => { vm.Editor.ToggleAudioBusEnvelope(bus.Id, EnvelopeType.Volume); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(volItem);
+
+            var panItem = new MenuItem { Header = "Pan Envelope", IsCheckable = true, IsChecked = vm.Editor.HasAudioBusEnvelope(bus.Id, EnvelopeType.Pan) };
+            panItem.Click += (_, _) => { vm.Editor.ToggleAudioBusEnvelope(bus.Id, EnvelopeType.Pan); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(panItem);
+
+            var muteItem = new MenuItem { Header = "Mute Envelope", IsCheckable = true, IsChecked = vm.Editor.HasAudioBusEnvelope(bus.Id, EnvelopeType.Mute) };
+            muteItem.Click += (_, _) => { vm.Editor.ToggleAudioBusEnvelope(bus.Id, EnvelopeType.Mute); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(muteItem);
+
+            menu.PlacementTarget = envBtn;
+            menu.IsOpen = true;
+        };
+        fxRow.Children.Add(envBtn);
         Grid.SetRow(fxRow, 1);
         stripGrid.Children.Add(fxRow);
 
@@ -872,14 +935,30 @@ public sealed class MixingConsoleWindow : Window
         Grid.SetRow(titleBadge, 0);
         grid.Children.Add(titleBadge);
 
-        // 2. FX, Mute & Dim buttons
+        // 2. FX, Env, Mute & Dim buttons
         var btnRow = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 8) };
 
-        var masterFxBtn = new Button { Content = "fx", Width = 26, Height = 20, Margin = new Thickness(1), ToolTip = "Master Audio FX Chain" };
+        var masterFxBtn = new Button { Content = "fx", Width = 24, Height = 20, Margin = new Thickness(1), ToolTip = "Master Audio FX Chain" };
         masterFxBtn.Click += (_, _) =>
         {
             var win = new AudioTrackFxWindow(vm, Guid.Empty) { Owner = this };
             win.ShowDialog();
+        };
+
+        var masterEnvBtn = new Button { Content = "env", Width = 24, Height = 20, Margin = new Thickness(1), ToolTip = "Master Automation Envelopes" };
+        masterEnvBtn.Click += (_, _) =>
+        {
+            var menu = new ContextMenu();
+            var volItem = new MenuItem { Header = "Volume Envelope", IsCheckable = true, IsChecked = vm.Editor.HasMasterAudioEnvelope(EnvelopeType.Volume) };
+            volItem.Click += (_, _) => { vm.Editor.ToggleMasterAudioEnvelope(EnvelopeType.Volume); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(volItem);
+
+            var muteItem = new MenuItem { Header = "Mute Envelope", IsCheckable = true, IsChecked = vm.Editor.HasMasterAudioEnvelope(EnvelopeType.Mute) };
+            muteItem.Click += (_, _) => { vm.Editor.ToggleMasterAudioEnvelope(EnvelopeType.Mute); onProjectChanged(); RefreshTracks(); };
+            menu.Items.Add(muteItem);
+
+            menu.PlacementTarget = masterEnvBtn;
+            menu.IsOpen = true;
         };
 
         masterMuteBtn.Click += (_, _) =>
@@ -900,6 +979,7 @@ public sealed class MixingConsoleWindow : Window
         };
 
         btnRow.Children.Add(masterFxBtn);
+        btnRow.Children.Add(masterEnvBtn);
         btnRow.Children.Add(masterMuteBtn);
         btnRow.Children.Add(masterDimBtn);
         Grid.SetRow(btnRow, 1);

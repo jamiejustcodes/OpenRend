@@ -163,6 +163,8 @@ public sealed class ProjectDocument
     public List<VideoEffect> VideoOutputEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<AudioEffect> MasterAudioEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ClipEnvelope>? MasterAudioEnvelopes { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public double MasterAudioGain { get; set; } = 1.0;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -211,6 +213,7 @@ public sealed class ProjectDocument
         Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
         VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),
         MasterAudioEffects = MasterAudioEffects.Select(e => e.DeepClone()).ToList(),
+        MasterAudioEnvelopes = MasterAudioEnvelopes?.Select(e => e.DeepClone()).ToList(),
         MasterAudioGain = MasterAudioGain,
         MasterAudioMute = MasterAudioMute,
         MasterAudioDim = MasterAudioDim,
@@ -248,6 +251,17 @@ public sealed class ProjectDocument
             {
                 if (effect == null || !masterAudioEffectIds.Add(effect.Id)) throw new InvalidDataException("Master audio effect IDs must be unique.");
                 effect.Validate();
+            }
+        }
+        if (MasterAudioEnvelopes != null)
+        {
+            var masterEnvTypes = new HashSet<EnvelopeType>();
+            foreach (var env in MasterAudioEnvelopes)
+            {
+                if (env == null || !masterEnvTypes.Add(env.Type)) throw new InvalidDataException("Master audio envelope types must be unique.");
+                if (env.Type is not (EnvelopeType.Volume or EnvelopeType.Mute))
+                    throw new InvalidDataException($"Envelope type '{env.Type}' is not supported on the master audio bus.");
+                env.Validate();
             }
         }
         if (Markers != null)

@@ -2341,6 +2341,41 @@ public partial class MainWindow : Window
             RequestPreview();
         });
     }
+
+    private void ToggleTrackMuteEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        if (trackIdx < 0 || trackIdx >= vm.Project.Tracks.Count) return;
+        var track = vm.Project.Tracks[trackIdx];
+        Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.Mute);
+            vm.Status = $"{(vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.Mute) ? "Added" : "Removed")} Track Mute envelope.";
+            Refresh();
+            RequestPreview();
+        });
+    }
+
+    private void ToggleTrackFadeToColorEnvelopeClick(object sender, RoutedEventArgs e)
+    {
+        var trackIdx = Timeline.ActiveTrackIndex;
+        if (trackIdx < 0 || trackIdx >= vm.Project.Tracks.Count) return;
+        var track = vm.Project.Tracks[trackIdx];
+        if (track.Kind != TrackKind.Video)
+        {
+            vm.Status = "Fade to Color envelope is only available on video tracks.";
+            return;
+        }
+        Guard(() =>
+        {
+            Pause();
+            vm.Editor.ToggleTrackEnvelope(track.Id, EnvelopeType.FadeToColor);
+            vm.Status = $"{(vm.Editor.HasTrackEnvelope(track.Id, EnvelopeType.FadeToColor) ? "Added" : "Removed")} Track Fade to Color envelope.";
+            Refresh();
+            RequestPreview();
+        });
+    }
     private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { DefaultLayoutClick(sender, e); Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
