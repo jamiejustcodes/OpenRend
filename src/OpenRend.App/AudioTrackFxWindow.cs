@@ -12,14 +12,15 @@ namespace OpenRend.App;
 
 /// <summary>
 /// 1:1 Vegas Pro Audio Plug-In Chain Dialog.
-/// Supports Track Audio FX chains and Master Bus FX chains with 4-band Parametric EQ,
-/// Track Compressor, and Track Noise Gate, including live curve visualization and factory presets.
+/// Supports Track Audio FX chains, Master Bus FX chains, and Assignable Audio Bus FX chains
+/// with 4-band Parametric EQ, Track Compressor, and Track Noise Gate, including live curve visualization and factory presets.
 /// </summary>
 public sealed class AudioTrackFxWindow : Window
 {
     private readonly EditorViewModel vm;
     private readonly Guid trackId; // Guid.Empty for Master Bus
     private readonly bool isMasterBus;
+    private readonly bool isBus;
     private readonly ComboBox presetCombo = new() { Width = 260, Height = 24, Margin = new Thickness(6, 0, 6, 0) };
     private readonly StackPanel chainPanel = new() { Orientation = Orientation.Horizontal, Margin = new Thickness(6) };
     private readonly ContentControl editorHost = new() { Margin = new Thickness(12) };
@@ -31,9 +32,11 @@ public sealed class AudioTrackFxWindow : Window
         trackId = targetTrackId;
         isMasterBus = targetTrackId == Guid.Empty;
 
-        var track = !isMasterBus ? vm.Project.Tracks.FirstOrDefault(t => t.Id == trackId) : null;
-        var trackName = track?.Name ?? "Audio";
-        Title = isMasterBus ? "Audio Master Bus FX - Master" : $"Audio Track FX - {trackName}";
+        var bus = !isMasterBus ? vm.Project.AudioBuses?.FirstOrDefault(b => b.Id == trackId) : null;
+        isBus = bus != null;
+        var track = !isMasterBus && !isBus ? vm.Project.Tracks.FirstOrDefault(t => t.Id == trackId) : null;
+        var trackName = isBus ? bus!.Name : (track?.Name ?? "Audio");
+        Title = isMasterBus ? "Audio Master Bus FX - Master" : (isBus ? $"Audio Bus FX - {trackName}" : $"Audio Track FX - {trackName}");
         Width = 740;
         Height = 580;
         MinWidth = 600;
@@ -73,7 +76,7 @@ public sealed class AudioTrackFxWindow : Window
 
         var chainTitle = new TextBlock
         {
-            Text = isMasterBus ? "Master FX Chain" : "Track FX Chain",
+            Text = isMasterBus ? "Master FX Chain" : (isBus ? "Bus FX Chain" : "Track FX Chain"),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Center,
             Foreground = new SolidColorBrush(Color.FromRgb(100, 180, 240)),
@@ -110,6 +113,8 @@ public sealed class AudioTrackFxWindow : Window
     private List<AudioEffect> GetEffects()
     {
         if (isMasterBus) return vm.Project.MasterAudioEffects;
+        var bus = vm.Project.AudioBuses?.FirstOrDefault(b => b.Id == trackId);
+        if (bus != null) return bus.AudioEffects;
         var track = vm.Project.Tracks.FirstOrDefault(t => t.Id == trackId);
         return track?.AudioEffects ?? [];
     }
@@ -124,6 +129,8 @@ public sealed class AudioTrackFxWindow : Window
             {
                 if (isMasterBus)
                     vm.Editor.AddMasterAudioEffect(fx);
+                else if (isBus)
+                    vm.Editor.AddAudioBusEffect(trackId, fx);
                 else
                     vm.Editor.AddTrackAudioEffect(trackId, fx);
             }
@@ -188,6 +195,8 @@ public sealed class AudioTrackFxWindow : Window
             {
                 if (isMasterBus)
                     vm.Editor.UpdateMasterAudioEffectParameter(current.Id, k, v);
+                else if (isBus)
+                    vm.Editor.UpdateAudioBusEffectParameter(trackId, current.Id, k, v);
                 else
                     vm.Editor.UpdateTrackAudioEffectParameter(trackId, current.Id, k, v);
             }
@@ -240,6 +249,8 @@ public sealed class AudioTrackFxWindow : Window
                 var bypassed = !(check.IsChecked ?? false);
                 if (isMasterBus)
                     vm.Editor.SetMasterAudioEffectBypassed(fx.Id, bypassed);
+                else if (isBus)
+                    vm.Editor.SetAudioBusEffectBypassed(trackId, fx.Id, bypassed);
                 else
                     vm.Editor.SetTrackAudioEffectBypassed(trackId, fx.Id, bypassed);
             };
@@ -506,6 +517,8 @@ public sealed class AudioTrackFxWindow : Window
     {
         if (isMasterBus)
             vm.Editor.UpdateMasterAudioEffectParameter(fx.Id, param, value);
+        else if (isBus)
+            vm.Editor.UpdateAudioBusEffectParameter(trackId, fx.Id, param, value);
         else
             vm.Editor.UpdateTrackAudioEffectParameter(trackId, fx.Id, param, value);
     }

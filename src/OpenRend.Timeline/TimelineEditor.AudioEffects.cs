@@ -128,6 +128,50 @@ public sealed partial class TimelineEditor
         });
     }
 
+    public void AddAudioBusEffect(Guid busId, AudioEffect effect)
+    {
+        ArgumentNullException.ThrowIfNull(effect);
+        effect.Validate();
+        Execute(p =>
+        {
+            var b = p.AudioBuses.FirstOrDefault(x => x.Id == busId) ?? throw new KeyNotFoundException("Audio bus not found.");
+            b.AudioEffects.Add(effect.DeepClone());
+        });
+    }
+
+    public void RemoveAudioBusEffect(Guid busId, Guid effectId)
+    {
+        Execute(p =>
+        {
+            var b = p.AudioBuses.FirstOrDefault(x => x.Id == busId) ?? throw new KeyNotFoundException("Audio bus not found.");
+            var idx = b.AudioEffects.FindIndex(e => e.Id == effectId);
+            if (idx >= 0) b.AudioEffects.RemoveAt(idx);
+        });
+    }
+
+    public void SetAudioBusEffectBypassed(Guid busId, Guid effectId, bool bypassed)
+    {
+        Execute(p =>
+        {
+            var b = p.AudioBuses.FirstOrDefault(x => x.Id == busId) ?? throw new KeyNotFoundException("Audio bus not found.");
+            var fx = b.AudioEffects.FirstOrDefault(e => e.Id == effectId) ?? throw new KeyNotFoundException("Audio bus effect not found.");
+            fx.IsBypassed = bypassed;
+        });
+    }
+
+    public void UpdateAudioBusEffectParameter(Guid busId, Guid effectId, string paramName, double value)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(paramName);
+        if (!double.IsFinite(value)) throw new ArgumentOutOfRangeException(nameof(value));
+
+        Execute(p =>
+        {
+            var b = p.AudioBuses.FirstOrDefault(x => x.Id == busId) ?? throw new KeyNotFoundException("Audio bus not found.");
+            var fx = b.AudioEffects.FirstOrDefault(e => e.Id == effectId) ?? throw new KeyNotFoundException("Audio bus effect not found.");
+            fx.Parameters[paramName] = value;
+        });
+    }
+
     public void UpdateMasterAudioEffectParameter(Guid effectId, string paramName, double value)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(paramName);

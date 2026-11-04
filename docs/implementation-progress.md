@@ -212,6 +212,21 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `ColorGradingProcessorTests.cs` (OpenRend.Media.Tests) testing HSL curve hue shift and saturation modulation on pixel buffers.
     - Full gate passed: 100% native integration tests, 982 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat: implement vegas pro 1:1 audio mixer console, assignable fx buses, and peak clip indicators` implemented 1:1 Vegas Pro Audio Mixer Console (Ctrl+Alt+5) matching `ScriptPortal.Vegas.AudioBusTrack`, `AudioFXBusTrack`, and `AudioBusMode`.
+  - Architecture & UI:
+    - Built comprehensive Vegas Pro Mixing Console (`MixingConsoleWindow.cs`):
+      - Top Console Toolbar: `+ Add Bus` button, Section View Toggles (`Tracks`, `Buses`, `Master`), and `Reset Clips` button.
+      - Track Channel Strips: Track index badge, track name, Bus assignment routing dropdown (`Master`, `Bus A`, `Bus B`, ...), Track FX button (`fx`), Invert Phase button (`Ø`), Mute (`M`), Solo (`S`), Pan rotary slider with center double-click reset, Volume Fader (-60 dB to +6 dB with 0 dB double-click reset), dB scale ticks, dynamic peak meter, latching overload clip LED indicator, and numeric dB readout.
+      - Audio Bus Strips: Bus badge with warm gold/amber styling (`#C87A14`), Delete Bus button (`✕`), Bus FX button (`fx`), Mute (`M`), Solo (`S`), Pan slider, Volume Fader, dB scale, dynamic peak meter, and latching clip LED.
+      - Master Bus Strip: Master Bus badge (`#1E5080`), Master FX button (`fx`), Master Mute (`M`), Master Monitor Dim (`Dim` -20 dB), Master Volume Fader, dB scale, stereo Left/Right peak meters with individual Left and Right latching clip LEDs, and numeric peak readouts.
+    - Enhanced `AudioTrackFxWindow.cs`: Full support for Track Audio FX chains, Master Bus FX chains, and Assignable Audio Bus FX chains with 4-band Parametric EQ, Track Compressor, and Track Noise Gate, preset application, and live frequency response curve plotting.
+  - Backend & Timeline Operations:
+    - Added atomic undo/redo operations in `TimelineEditor.AudioEffects.cs`: `AddAudioBusEffect`, `RemoveAudioBusEffect`, `SetAudioBusEffectBypassed`, and `UpdateAudioBusEffectParameter`.
+    - Latching overload clip detection: clip LEDs latch bright red (`#FF2020`) when levels exceed 0.0 dB (peak > 1.0) and can be reset individually by clicking or collectively via `Reset Clips`.
+  - Verification:
+    - Added 5 comprehensive unit tests in `MixingConsoleEditorTests.cs` (OpenRend.Editor.Tests) verifying audio bus creation, deletion, routing, volume, pan, mute, solo, bus audio effects chains, master gain/mute/dim, and undo/redo.
+    - Full gate passed: 100% native integration tests, 1,013 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat: implement vegas pro 1:1 video track parent/child compositing hierarchy, adjustment tracks, and audio bus routing` implemented 1:1 Vegas Pro Video Track Compositing Hierarchy, Adjustment Tracks, and Audio Bus Routing matching `ScriptPortal.Vegas.VideoTrack` (`CompositeNestingLevel`, `IsCompositingChild`, `IsCompositingParent`, `IsAdjustmentTrack`) and `AudioBusTrack` (`BusTracks`, `AddAudioBusTrack`, `MasterBus`).
   - Data Models:
     - Created `AudioBusTrack.cs` with `Id`, `Name`, `Gain`, `Pan`, `IsMuted`, `IsSolo`, `AudioEffects`, deep cloning, and schema validation.
