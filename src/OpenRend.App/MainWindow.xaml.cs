@@ -1379,8 +1379,8 @@ public partial class MainWindow : Window
     {
         var dim = !vm.Project.MasterAudioDim;
         vm.Editor.SetMasterAudioDim(dim);
-        MasterDimBtn.Background = dim ? new SolidColorBrush(Color.FromRgb(200, 140, 20)) : (Brush)FindResource("ButtonBackground");
-        MasterDimBtn.Foreground = dim ? Brushes.Black : (Brush)FindResource("TextColor");
+        MasterDimBtn.Background = dim ? new SolidColorBrush(Color.FromRgb(200, 140, 20)) : (TryFindResource("ButtonBackground") as Brush ?? TryFindResource("ButtonBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)));
+        MasterDimBtn.Foreground = dim ? Brushes.Black : (TryFindResource("TextColor") as Brush ?? Brushes.White);
         vm.Status = $"Master audio dim: {(dim ? "-20 dB active" : "off")}.";
     });
 
@@ -1388,8 +1388,8 @@ public partial class MainWindow : Window
     {
         var mute = !vm.Project.MasterAudioMute;
         vm.Editor.SetMasterAudioMute(mute);
-        MasterMuteBtn.Background = mute ? new SolidColorBrush(Color.FromRgb(180, 40, 40)) : (Brush)FindResource("ButtonBackground");
-        MasterMuteBtn.Foreground = mute ? Brushes.White : (Brush)FindResource("TextColor");
+        MasterMuteBtn.Background = mute ? new SolidColorBrush(Color.FromRgb(180, 40, 40)) : (TryFindResource("ButtonBackground") as Brush ?? TryFindResource("ButtonBackgroundBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)));
+        MasterMuteBtn.Foreground = mute ? Brushes.White : (TryFindResource("TextColor") as Brush ?? Brushes.White);
         vm.Status = $"Master audio mute: {(mute ? "muted" : "unmuted")}.";
     });
 

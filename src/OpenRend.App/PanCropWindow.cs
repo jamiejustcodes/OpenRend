@@ -84,12 +84,12 @@ public sealed class PanCropWindow : Window
     public PanCropWindow(EditorViewModel viewModel, Guid selectedClip, Action<long> seekPreview)
     {
         vm = viewModel; editor = vm.Editor; clipId = selectedClip; seek = seekPreview;
-        Style = (Style)FindResource(typeof(Window));
+        if (TryFindResource(typeof(Window)) is Style windowStyle) Style = windowStyle;
         Title = "Video event Pan/Crop"; Width = 902; Height = 632;
         MinWidth = 700; MinHeight = 480; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var clip = EventClip;
         localFrame = Math.Clamp(vm.Position - clip.StartFrame, 0, clip.DurationFrames - 1);
-        var root = new Grid { Background = (Brush)FindResource("PanelBrush") };
+        var root = new Grid { Background = TryFindResource("PanelBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x22, 0x22, 0x22)) };
         root.RowDefinitions.Add(new() { Height = new GridLength(28) });
         root.RowDefinitions.Add(new() { Height = new GridLength(30) });
         root.RowDefinitions.Add(new() { Height = new GridLength(28) });
@@ -98,9 +98,9 @@ public sealed class PanCropWindow : Window
         var heading = new TextBlock { Text = "Event Pan/Crop:  " + clip.Name, Margin = new Thickness(10, 0, 0, 0) };
         root.Children.Add(heading);
 
-        var top = new DockPanel { Background = (Brush)FindResource("HeaderBrush"), LastChildFill = false };
+        var top = new DockPanel { Background = TryFindResource("HeaderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x11, 0x11, 0x11)), LastChildFill = false };
         Grid.SetRow(top, 1); root.Children.Add(top);
-        top.Children.Add(new TextBlock { Text = "Pan/Crop", Background = (Brush)FindResource("SelectionBrush"), Padding = new Thickness(8, 4, 8, 4) });
+        top.Children.Add(new TextBlock { Text = "Pan/Crop", Background = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF)), Padding = new Thickness(8, 4, 8, 4) });
         var reset = Button("Reset", "Reset Pan/Crop or Mask", () => Edit(() =>
         {
             if (activeTrack == PanCropTrack.Position) editor.ResetCrop(clipId);
@@ -398,10 +398,10 @@ public sealed class PanCropWindow : Window
 
         void UpdateMoveRadios()
         {
-            var activeBrush = (Brush)FindResource("SelectionBrush");
-            var defaultBrush = (Brush)FindResource("ButtonBackgroundBrush");
+            var activeBrush = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF));
+            var defaultBrush = TryFindResource("ButtonBackgroundBrush") as Brush ?? TryFindResource("ButtonBackground") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
             var activePen = Brushes.White;
-            var defaultPen = (Brush)FindResource("BorderBrush");
+            var defaultPen = TryFindResource("BorderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
 
             moveFreeBtn.Background = workspace.MoveConstraint == CropMoveConstraint.Free ? activeBrush : defaultBrush;
             moveFreeBtn.BorderBrush = workspace.MoveConstraint == CropMoveConstraint.Free ? activePen : defaultPen;
@@ -420,8 +420,11 @@ public sealed class PanCropWindow : Window
         Button sizeCenterBtn = null!;
         void UpdateSizeCenterButton()
         {
-            sizeCenterBtn.Background = workspace.SizeAboutCenter ? (Brush)FindResource("SelectionBrush") : (Brush)FindResource("ButtonBackgroundBrush");
-            sizeCenterBtn.BorderBrush = workspace.SizeAboutCenter ? Brushes.White : (Brush)FindResource("BorderBrush");
+            var activeBrush = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF));
+            var defaultBrush = TryFindResource("ButtonBackgroundBrush") as Brush ?? TryFindResource("ButtonBackground") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
+            var defaultPen = TryFindResource("BorderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+            sizeCenterBtn.Background = workspace.SizeAboutCenter ? activeBrush : defaultBrush;
+            sizeCenterBtn.BorderBrush = workspace.SizeAboutCenter ? Brushes.White : defaultPen;
         }
         sizeCenterBtn = MakeToolBtn("⌖", "Size about center", "CropSizeAboutCenter", () =>
         {
@@ -430,8 +433,18 @@ public sealed class PanCropWindow : Window
         });
         UpdateSizeCenterButton();
 
-        lockAspect.Checked += (_, _) => { lockAspectBtn.Content = "🔒"; lockAspectBtn.Background = (Brush)FindResource("SelectionBrush"); lockAspectBtn.BorderBrush = Brushes.White; };
-        lockAspect.Unchecked += (_, _) => { lockAspectBtn.Content = "🔓"; lockAspectBtn.Background = (Brush)FindResource("ButtonBackgroundBrush"); lockAspectBtn.BorderBrush = (Brush)FindResource("BorderBrush"); };
+        lockAspect.Checked += (_, _) =>
+        {
+            lockAspectBtn.Content = "🔒";
+            lockAspectBtn.Background = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF));
+            lockAspectBtn.BorderBrush = Brushes.White;
+        };
+        lockAspect.Unchecked += (_, _) =>
+        {
+            lockAspectBtn.Content = "🔓";
+            lockAspectBtn.Background = TryFindResource("ButtonBackgroundBrush") as Brush ?? TryFindResource("ButtonBackground") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
+            lockAspectBtn.BorderBrush = TryFindResource("BorderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
+        };
 
         positionTools.Add(moveFreeBtn);
         positionTools.Add(moveXBtn);
@@ -450,10 +463,10 @@ public sealed class PanCropWindow : Window
 
         void UpdateMaskToolButtons()
         {
-            var activeBrush = (Brush)FindResource("SelectionBrush");
-            var defaultBrush = (Brush)FindResource("ButtonBackgroundBrush");
+            var activeBrush = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF));
+            var defaultBrush = TryFindResource("ButtonBackgroundBrush") as Brush ?? TryFindResource("ButtonBackground") as Brush ?? new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A));
             var activePen = Brushes.White;
-            var defaultPen = (Brush)FindResource("BorderBrush");
+            var defaultPen = TryFindResource("BorderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x33, 0x33, 0x33));
 
             normalToolBtn.Background = activeMaskTool == MaskTool.Normal ? activeBrush : defaultBrush;
             normalToolBtn.BorderBrush = activeMaskTool == MaskTool.Normal ? activePen : defaultPen;
@@ -655,7 +668,7 @@ public sealed class PanCropWindow : Window
 
     private void UpdateTrackVisuals()
     {
-        var activeBrush = (Brush)FindResource("SelectionBrush");
+        var activeBrush = TryFindResource("SelectionBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x19, 0x8C, 0xFF));
         var activeText = Brushes.White;
         var defaultBrush = Brushes.Transparent;
         var defaultText = Brushes.Silver;
