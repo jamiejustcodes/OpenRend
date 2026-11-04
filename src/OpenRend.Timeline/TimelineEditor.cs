@@ -1509,7 +1509,11 @@ public sealed partial class TimelineEditor
         Project.DeinterlaceMethod = copy.DeinterlaceMethod; Project.PixelFormat = copy.PixelFormat;
         Project.HDRMode = copy.HDRMode; Project.AudioSampleRate = copy.AudioSampleRate;
         Project.AudioBitDepth = copy.AudioBitDepth; Project.PrerenderFolder = copy.PrerenderFolder;
-        Project.RulerTimeFormat = copy.RulerTimeFormat; Project.Author = copy.Author;
+        Project.RulerTimeFormat = copy.RulerTimeFormat; Project.RulerStartTimeFrames = copy.RulerStartTimeFrames;
+        Project.BeatsPerMinute = copy.BeatsPerMinute; Project.BeatsPerMeasure = copy.BeatsPerMeasure;
+        Project.Author = copy.Author; Project.Engineer = copy.Engineer;
+        Project.Copyright = copy.Copyright; Project.Comments = copy.Comments;
+        Project.UniversalAlbumId = copy.UniversalAlbumId; Project.RecordedFilesFolder = copy.RecordedFilesFolder;
         Project.Copyright = copy.Copyright; Project.Comments = copy.Comments;
         Project.Media = copy.Media; Project.Tracks = copy.Tracks; Project.VideoOutputEffects = copy.VideoOutputEffects;
         Project.MasterAudioEffects = copy.MasterAudioEffects; Project.MasterAudioGain = copy.MasterAudioGain;

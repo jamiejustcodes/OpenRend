@@ -2371,15 +2371,22 @@ public partial class MainWindow : Window
             p.AudioSampleRate = dialog.AudioSampleRate;
             p.AudioBitDepth = dialog.AudioBitDepth;
             p.PrerenderFolder = dialog.PrerenderFolder;
+            p.RecordedFilesFolder = dialog.RecordedFilesFolder;
             p.RulerFormat = dialog.RulerFormat;
             p.RulerTimeFormat = dialog.RulerTimeFormat;
             p.RulerStartTimeFrames = dialog.RulerStartTimeFrames;
             p.BeatsPerMinute = dialog.BeatsPerMinute;
             p.BeatsPerMeasure = dialog.BeatsPerMeasure;
             p.Author = dialog.Author;
+            p.Engineer = dialog.Engineer;
             p.Copyright = dialog.Copyright;
             p.Comments = dialog.Comments;
+            p.UniversalAlbumId = dialog.UniversalAlbumId;
         });
+        if (dialog.StartWithSettingsChecked)
+        {
+            SaveDefaultProjectSettings(vm.Project);
+        }
         Refresh();
     }
     private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / pause\nEnter  Pause\nEsc  Stop\nAlt+Left / Alt+Right  Step one frame\nCtrl+Home / Ctrl+End  Timeline bounds\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");

@@ -1,10 +1,13 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Media;
 using OpenRend.Core;
+using OpenRend.Media;
 
 namespace OpenRend.App;
 
@@ -61,16 +64,20 @@ public sealed class ProjectSettingsWindow : Window
     private readonly ComboBox resampleCombo;
     private readonly TextBox prerenderFolderBox;
     private readonly TextBlock freeSpaceText;
+    private readonly TextBox recordedFolderBox;
     private readonly TextBox summaryTitleBox;
     private readonly TextBox summaryArtistBox;
+    private readonly TextBox summaryEngineerBox;
     private readonly TextBox summaryCopyrightBox;
     private readonly TextBox summaryCommentsBox;
+    private readonly TextBox summaryAlbumIdBox;
     private readonly ComboBox sampleRateCombo;
     private readonly ComboBox bitDepthCombo;
     private readonly ComboBox rulerTimeFormatCombo;
     private readonly TextBox rulerStartBox;
     private readonly TextBox bpmBox;
     private readonly TextBox beatsPerMeasureBox;
+    private readonly CheckBox startWithSettingsCheck;
     public RulerFormat RulerFormat { get; private set; }
     public long RulerStartTimeFrames { get; private set; }
     public double BeatsPerMinute { get; private set; }
@@ -89,10 +96,14 @@ public sealed class ProjectSettingsWindow : Window
     public int AudioSampleRate { get; private set; }
     public int AudioBitDepth { get; private set; }
     public string? PrerenderFolder { get; private set; }
+    public string? RecordedFilesFolder { get; private set; }
     public string? RulerTimeFormat { get; private set; }
     public string? Author { get; private set; }
+    public string? Engineer { get; private set; }
     public string? Copyright { get; private set; }
     public string? Comments { get; private set; }
+    public string? UniversalAlbumId { get; private set; }
+    public bool StartWithSettingsChecked => startWithSettingsCheck.IsChecked == true;
 
     public event Action<ProjectSettingsWindow>? Applied;
 
@@ -127,8 +138,11 @@ public sealed class ProjectSettingsWindow : Window
         BeatsPerMinute = project.BeatsPerMinute;
         BeatsPerMeasure = project.BeatsPerMeasure;
         Author = project.Author;
+        Engineer = project.Engineer;
         Copyright = project.Copyright;
         Comments = project.Comments;
+        UniversalAlbumId = project.UniversalAlbumId;
+        RecordedFilesFolder = project.RecordedFilesFolder;
 
         var rootGrid = new Grid { Margin = new Thickness(8) };
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
@@ -147,7 +161,19 @@ public sealed class ProjectSettingsWindow : Window
         var videoGrid = CreateFormGrid();
 
         int row = 0;
-        // Template
+        // Template & Match Media
+        var templatePanel = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
+        var matchMediaBtn = new Button
+        {
+            Content = "Match Media…",
+            ToolTip = "Match Media Video Settings…",
+            Padding = new Thickness(6, 2, 6, 2),
+            Margin = new Thickness(4, 0, 0, 0)
+        };
+        AutomationProperties.SetAutomationId(matchMediaBtn, "MatchMediaButton");
+        DockPanel.SetDock(matchMediaBtn, Dock.Right);
+        matchMediaBtn.Click += (_, _) => MatchMediaVideoSettings();
+
         templateCombo = new ComboBox
         {
             ItemsSource = Presets.Select(p => p.Name).ToList(),
@@ -156,7 +182,9 @@ public sealed class ProjectSettingsWindow : Window
             Margin = new Thickness(0, 2, 0, 2)
         };
         templateCombo.SelectionChanged += TemplateComboSelectionChanged;
-        AddFormRow(videoGrid, row++, "Template:", templateCombo);
+        templatePanel.Children.Add(matchMediaBtn);
+        templatePanel.Children.Add(templateCombo);
+        AddFormRow(videoGrid, row++, "Template:", templatePanel);
 
         // Width & Height
         widthBox = CreateTextBox(project.Width.ToString());
@@ -274,6 +302,31 @@ public sealed class ProjectSettingsWindow : Window
         var resampleAudioCombo = CreateComboBox(["Best", "Good", "Preview"], 0);
         AddFormRow(audioGrid, aRow++, "Resample and stretch quality:", resampleAudioCombo);
 
+        var recFolderPanel = new DockPanel { Margin = new Thickness(0, 2, 0, 2) };
+        var browseRecBtn = new Button
+        {
+            Content = "Browse…",
+            Padding = new Thickness(8, 2, 8, 2),
+            Margin = new Thickness(4, 0, 0, 0)
+        };
+        DockPanel.SetDock(browseRecBtn, Dock.Right);
+        var defaultRecFolder = !string.IsNullOrWhiteSpace(project.RecordedFilesFolder)
+            ? project.RecordedFilesFolder
+            : Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyMusic), "OpenRend");
+        recordedFolderBox = CreateTextBox(defaultRecFolder);
+        AutomationProperties.SetAutomationId(recordedFolderBox, "RecordedFilesFolderBox");
+        browseRecBtn.Click += (_, _) =>
+        {
+            var fbd = new System.Windows.Forms.FolderBrowserDialog { SelectedPath = recordedFolderBox.Text };
+            if (fbd.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            {
+                recordedFolderBox.Text = fbd.SelectedPath;
+            }
+        };
+        recFolderPanel.Children.Add(browseRecBtn);
+        recFolderPanel.Children.Add(recordedFolderBox);
+        AddFormRow(audioGrid, aRow++, "Recorded files folder:", recFolderPanel);
+
         audioTab.Content = audioGrid;
         tabs.Items.Add(audioTab);
 
@@ -314,13 +367,17 @@ public sealed class ProjectSettingsWindow : Window
         summaryArtistBox = CreateTextBox(project.Author ?? "");
         AddFormRow(summaryGrid, sRow++, "Artist:", summaryArtistBox);
 
+        summaryEngineerBox = CreateTextBox(project.Engineer ?? "");
+        AutomationProperties.SetAutomationId(summaryEngineerBox, "SummaryEngineerBox");
+        AddFormRow(summaryGrid, sRow++, "Engineer:", summaryEngineerBox);
+
         summaryCopyrightBox = CreateTextBox(project.Copyright ?? "© OpenRend");
         AddFormRow(summaryGrid, sRow++, "Copyright:", summaryCopyrightBox);
 
         summaryCommentsBox = new TextBox
         {
             AcceptsReturn = true,
-            Height = 80,
+            Height = 60,
             Text = project.Comments ?? "",
             Background = (Brush)FindResource("ColorBG"),
             Foreground = (Brush)FindResource("TextColor"),
@@ -329,6 +386,10 @@ public sealed class ProjectSettingsWindow : Window
         };
         AddFormRow(summaryGrid, sRow++, "Comments:", summaryCommentsBox);
 
+        summaryAlbumIdBox = CreateTextBox(project.UniversalAlbumId ?? "");
+        AutomationProperties.SetAutomationId(summaryAlbumIdBox, "SummaryAlbumIdBox");
+        AddFormRow(summaryGrid, sRow++, "Universal Album ID:", summaryAlbumIdBox);
+
         summaryTab.Content = summaryGrid;
         tabs.Items.Add(summaryTab);
 
@@ -336,11 +397,20 @@ public sealed class ProjectSettingsWindow : Window
         rootGrid.Children.Add(tabs);
 
         // --- Bottom Buttons Bar ---
+        var bottomContainer = new StackPanel { Margin = new Thickness(0, 8, 0, 4) };
+        startWithSettingsCheck = new CheckBox
+        {
+            Content = "Start all new projects with these settings",
+            Foreground = (Brush)FindResource("TextColor"),
+            Margin = new Thickness(4, 0, 4, 8)
+        };
+        AutomationProperties.SetAutomationId(startWithSettingsCheck, "StartAllNewProjectsCheck");
+        bottomContainer.Children.Add(startWithSettingsCheck);
+
         var bottomBar = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            Margin = new Thickness(0, 10, 0, 4)
+            HorizontalAlignment = HorizontalAlignment.Right
         };
 
         var okBtn = new Button
@@ -381,8 +451,10 @@ public sealed class ProjectSettingsWindow : Window
         bottomBar.Children.Add(cancelBtn);
         bottomBar.Children.Add(applyBtn);
 
-        Grid.SetRow(bottomBar, 1);
-        rootGrid.Children.Add(bottomBar);
+        bottomContainer.Children.Add(bottomBar);
+
+        Grid.SetRow(bottomContainer, 1);
+        rootGrid.Children.Add(bottomContainer);
 
         Content = rootGrid;
 
@@ -465,18 +537,80 @@ public sealed class ProjectSettingsWindow : Window
         templateCombo.SelectedIndex = Presets.Length - 1; // Custom
     }
 
+    private void MatchMediaVideoSettings()
+    {
+        var ofd = new Microsoft.Win32.OpenFileDialog
+        {
+            Title = "Match Media Video Settings",
+            Filter = "Media Files (*.mp4;*.mov;*.mkv;*.avi;*.wmv;*.webm;*.m4v)|*.mp4;*.mov;*.mkv;*.avi;*.wmv;*.webm;*.m4v|All Files (*.*)|*.*",
+            CheckFileExists = true
+        };
+        if (ofd.ShowDialog(this) == true)
+        {
+            try
+            {
+                using var mediaService = new MediaService();
+                var asset = mediaService.ProbeAsync(ofd.FileName).GetAwaiter().GetResult();
+                ApplyMatchedMedia(asset);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, $"Failed to inspect media file:\n{ex.Message}", "Match Media Video Settings", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+        }
+    }
+
+    public void ApplyMatchedMedia(MediaAsset asset)
+    {
+        if (asset.Width > 0 && asset.Height > 0)
+        {
+            widthBox.Text = asset.Width.ToString();
+            heightBox.Text = asset.Height.ToString();
+            var rate = MatchFrameRate(asset.FrameRate);
+            MatchFrameRateToCombo(rate);
+            fieldOrderCombo.SelectedIndex = 0; // Progressive scan default
+            pixelAspectCombo.SelectedIndex = 0; // 1.0000 Square default
+            SelectMatchingPreset(asset.Width, asset.Height, rate);
+        }
+    }
+
+    public static Rational MatchFrameRate(double fps) => fps switch
+    {
+        _ when Math.Abs(fps - 59.94) < 0.05 => new Rational(60000, 1001),
+        _ when Math.Abs(fps - 50.0) < 0.05 => new Rational(50, 1),
+        _ when Math.Abs(fps - 29.97) < 0.05 => new Rational(30000, 1001),
+        _ when Math.Abs(fps - 25.0) < 0.05 => new Rational(25, 1),
+        _ when Math.Abs(fps - 24.0) < 0.05 => new Rational(24, 1),
+        _ when Math.Abs(fps - 23.976) < 0.05 => new Rational(24000, 1001),
+        _ when Math.Abs(fps - 30.0) < 0.05 => new Rational(30, 1),
+        _ when Math.Abs(fps - 60.0) < 0.05 => new Rational(60, 1),
+        _ when Math.Abs(fps - 120.0) < 0.05 => new Rational(120, 1),
+        _ when fps > 0 => new Rational((int)Math.Round(fps * 1000), 1000),
+        _ => new Rational(30000, 1001)
+    };
+
     private void MatchFrameRateToCombo(Rational rate)
     {
         double fps = rate.Value;
-        for (int i = 0; i < frameRateCombo.Items.Count; i++)
+        if (frameRateCombo.ItemsSource is System.Collections.IList list)
         {
-            var str = frameRateCombo.Items[i]?.ToString() ?? "";
-            var numStr = str.Split(' ')[0];
-            if (double.TryParse(numStr, out var val) && Math.Abs(val - fps) < 0.05)
+            for (int i = 0; i < list.Count; i++)
             {
-                frameRateCombo.SelectedIndex = i;
-                return;
+                var str = list[i]?.ToString() ?? "";
+                var numStr = str.Split(' ')[0];
+                if (double.TryParse(numStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var val) && Math.Abs(val - fps) < 0.05)
+                {
+                    frameRateCombo.SelectedIndex = i;
+                    return;
+                }
             }
+            var customLabel = $"{fps:0.000}";
+            var newList = new List<string>();
+            foreach (var item in list) newList.Add(item?.ToString() ?? "");
+            newList.Add(customLabel);
+            frameRateCombo.ItemsSource = newList;
+            frameRateCombo.SelectedIndex = newList.Count - 1;
+            return;
         }
         frameRateCombo.SelectedIndex = 2; // Default 29.970
     }
@@ -493,6 +627,11 @@ public sealed class ProjectSettingsWindow : Window
         if (text.StartsWith("30.000")) return new Rational(30, 1);
         if (text.StartsWith("60.000")) return new Rational(60, 1);
         if (text.StartsWith("120.000")) return new Rational(120, 1);
+        var numStr = text.Split(' ')[0];
+        if (double.TryParse(numStr, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var customFps) && customFps > 0)
+        {
+            return MatchFrameRate(customFps);
+        }
         return new Rational(30000, 1001);
     }
 
@@ -561,8 +700,11 @@ public sealed class ProjectSettingsWindow : Window
             BeatsPerMeasure = beatsVal;
         }
         Author = string.IsNullOrWhiteSpace(summaryArtistBox.Text) ? null : summaryArtistBox.Text.Trim();
+        Engineer = string.IsNullOrWhiteSpace(summaryEngineerBox.Text) ? null : summaryEngineerBox.Text.Trim();
         Copyright = string.IsNullOrWhiteSpace(summaryCopyrightBox.Text) ? null : summaryCopyrightBox.Text.Trim();
         Comments = string.IsNullOrWhiteSpace(summaryCommentsBox.Text) ? null : summaryCommentsBox.Text.Trim();
+        UniversalAlbumId = string.IsNullOrWhiteSpace(summaryAlbumIdBox.Text) ? null : summaryAlbumIdBox.Text.Trim();
+        RecordedFilesFolder = string.IsNullOrWhiteSpace(recordedFolderBox.Text) ? null : recordedFolderBox.Text.Trim();
 
         return true;
     }
@@ -614,7 +756,7 @@ public sealed class ProjectSettingsWindow : Window
 
     private ComboBox CreateComboBox(string[] items, int selectedIndex) => new()
     {
-        ItemsSource = items,
+        ItemsSource = items.ToList(),
         SelectedIndex = selectedIndex,
         Background = (Brush)FindResource("ColorBG"),
         Foreground = (Brush)FindResource("TextColor"),

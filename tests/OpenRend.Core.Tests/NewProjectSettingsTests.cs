@@ -55,4 +55,59 @@ public sealed class NewProjectSettingsTests
         }
         finally { File.Delete(path); }
     }
+
+    [Fact]
+    public void WelcomePreferencesPreserveDefaultProjectTemplate()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"openrend-welcome-default-{Guid.NewGuid():N}.json");
+        try
+        {
+            var defaultTemplate = new ProjectDocument
+            {
+                Name = "Default Template",
+                Width = 3840,
+                Height = 2160,
+                FrameRate = new Rational(60, 1),
+                FieldOrder = VideoFieldOrder.ProgressiveScan,
+                PixelAspectRatio = 1.0,
+                PixelFormat = ProjectPixelFormat.Float32Bit,
+                RenderQuality = VideoRenderQuality.Best,
+                MotionBlur = MotionBlurType.Gaussian,
+                DeinterlaceMethod = VideoDeinterlaceMethod.InterpolateFields,
+                AudioSampleRate = 96000,
+                AudioBitDepth = 32,
+                PrerenderFolder = @"C:\OpenRend\Prerender",
+                RecordedFilesFolder = @"C:\OpenRend\RecordedAudio",
+                RulerFormat = RulerFormat.SmpteFilmSync,
+                RulerTimeFormat = RulerFormat.SmpteFilmSync.ToDisplayName(),
+                BeatsPerMinute = 128.0,
+                BeatsPerMeasure = 4,
+                Author = "Template Author",
+                Engineer = "Template Engineer",
+                Copyright = "© 2026",
+                UniversalAlbumId = "ALBUM-DEFAULT"
+            };
+
+            var preferences = new WelcomePreferences
+            {
+                ShowAtStartup = true,
+                DefaultProjectTemplate = defaultTemplate
+            };
+
+            WelcomePreferencesStore.Save(preferences, path);
+            var loaded = WelcomePreferencesStore.Load(path);
+
+            Assert.NotNull(loaded.DefaultProjectTemplate);
+            Assert.Equal(3840, loaded.DefaultProjectTemplate.Width);
+            Assert.Equal(2160, loaded.DefaultProjectTemplate.Height);
+            Assert.Equal(new Rational(60, 1), loaded.DefaultProjectTemplate.FrameRate);
+            Assert.Equal(ProjectPixelFormat.Float32Bit, loaded.DefaultProjectTemplate.PixelFormat);
+            Assert.Equal(96000, loaded.DefaultProjectTemplate.AudioSampleRate);
+            Assert.Equal(32, loaded.DefaultProjectTemplate.AudioBitDepth);
+            Assert.Equal(@"C:\OpenRend\RecordedAudio", loaded.DefaultProjectTemplate.RecordedFilesFolder);
+            Assert.Equal("Template Engineer", loaded.DefaultProjectTemplate.Engineer);
+            Assert.Equal("ALBUM-DEFAULT", loaded.DefaultProjectTemplate.UniversalAlbumId);
+        }
+        finally { File.Delete(path); }
+    }
 }

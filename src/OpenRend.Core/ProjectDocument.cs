@@ -151,6 +151,12 @@ public sealed class ProjectDocument
     public string? Copyright { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Comments { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Engineer { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? UniversalAlbumId { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecordedFilesFolder { get; set; }
     public List<MediaAsset> Media { get; set; } = [];
     public List<TimelineTrack> Tracks { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -198,6 +204,9 @@ public sealed class ProjectDocument
         Author = Author,
         Copyright = Copyright,
         Comments = Comments,
+        Engineer = Engineer,
+        UniversalAlbumId = UniversalAlbumId,
+        RecordedFilesFolder = RecordedFilesFolder,
         Media = Media.Select(m => m.DeepClone()).ToList(),
         Tracks = Tracks.Select(t => t.DeepClone()).ToList(),
         VideoOutputEffects = VideoOutputEffects.Select(e => e.DeepClone()).ToList(),

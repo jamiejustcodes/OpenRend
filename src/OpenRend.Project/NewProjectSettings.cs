@@ -76,6 +76,7 @@ public sealed record WelcomePreferences
     public bool ShowAtStartup { get; init; } = true;
     public NewProjectSettings NewProject { get; init; } = new();
     public string[] RecentProjects { get; init; } = [];
+    public ProjectDocument? DefaultProjectTemplate { get; init; }
 
     public void Validate()
     {
@@ -83,6 +84,7 @@ public sealed record WelcomePreferences
             RecentProjects.Any(path => string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)))
             throw new InvalidDataException("Welcome preferences are invalid.");
         NewProject.Validate();
+        DefaultProjectTemplate?.Validate();
     }
 
     public WelcomePreferences WithRecentProject(string path) => this with
