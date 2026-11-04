@@ -1035,7 +1035,18 @@ public sealed partial class TimelineEditor
             var leftDuration = checked(frame - item.Clip.StartFrame);
             var envelope = item.Clip.FadeDurationFrames ?? item.Clip.DurationFrames;
             var right = item.Clip.DeepClone(); right.Id = Guid.NewGuid(); right.StartFrame = frame;
-            right.SourceInFrame = checked(right.SourceInFrame + leftDuration); right.DurationFrames -= leftDuration;
+                        // Velocity envelope and playback rate modulated source frame progression
+            var effPlaybackRate = double.IsFinite(item.Clip.PlaybackRate) && item.Clip.PlaybackRate != 0 ? item.Clip.PlaybackRate : 1.0;
+            if (item.Clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velEnv)
+            {
+                right.SourceInFrame = velEnv.CalculateAccumulatedSourceFrame(item.Clip.SourceInFrame, leftDuration, effPlaybackRate, item.Clip.IsReversed, item.Clip.DurationFrames);
+            }
+            else
+            {
+                right.SourceInFrame = item.Clip.IsReversed
+                    ? item.Clip.SourceInFrame
+                    : checked(item.Clip.SourceInFrame + (long)Math.Round(leftDuration * Math.Abs(effPlaybackRate)));
+            } right.DurationFrames -= leftDuration;
             if (right.Crop is not null) right.CropOffsetFrames = checked(right.CropOffsetFrames + leftDuration);
             right.FadeOffsetFrames = checked(right.FadeOffsetFrames + leftDuration); right.FadeDurationFrames = envelope;
             if (right.GroupId is Guid original)
@@ -1043,11 +1054,31 @@ public sealed partial class TimelineEditor
                 if (!rightGroups.TryGetValue(original, out var group)) rightGroups[original] = group = Guid.NewGuid();
                 right.GroupId = group;
             }
-            return (item.Track, item.Clip, Right: right, LeftDuration: leftDuration, Envelope: envelope);
+            List<ClipEnvelope>? leftEnvelopes = null;
+            if (item.Clip.Envelopes != null)
+            {
+                leftEnvelopes = [];
+                var rightEnvelopes = new List<ClipEnvelope>();
+                foreach (var env in item.Clip.Envelopes)
+                {
+                    var (leftEnv, rightEnv) = env.SplitAt(leftDuration);
+                    leftEnvelopes.Add(leftEnv);
+                    rightEnvelopes.Add(rightEnv);
+                }
+                right.Envelopes = rightEnvelopes;
+            }
+
+            return (item.Track, item.Clip, Right: right, LeftDuration: leftDuration, Envelope: envelope, LeftEnvelopes: leftEnvelopes);
         }).ToList();
         Execute(_ =>
         {
-            foreach (var split in splits) { split.Clip.DurationFrames = split.LeftDuration; split.Clip.FadeDurationFrames = split.Envelope; split.Track.Clips.Add(split.Right); }
+            foreach (var split in splits)
+            {
+                split.Clip.DurationFrames = split.LeftDuration;
+                split.Clip.FadeDurationFrames = split.Envelope;
+                if (split.LeftEnvelopes != null) split.Clip.Envelopes = split.LeftEnvelopes;
+                split.Track.Clips.Add(split.Right);
+            }
         });
         return splits.Select(split => split.Right).ToArray();
     }

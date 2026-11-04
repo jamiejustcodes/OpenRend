@@ -47,7 +47,32 @@ public sealed partial class TimelineEditor
                         var rightClip = clip.DeepClone();
                         rightClip.Id = Guid.NewGuid();
                         rightClip.StartFrame = checked(atFrame + durationFrames);
-                        rightClip.SourceInFrame = checked(clip.SourceInFrame + leftDuration);
+                        // Calculate source frame with velocity modulation
+                        var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
+                        if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velEnv)
+                        {
+                            rightClip.SourceInFrame = velEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, leftDuration, effPlaybackRate, clip.IsReversed, clip.DurationFrames);
+                        }
+                        else
+                        {
+                            rightClip.SourceInFrame = clip.IsReversed
+                                ? clip.SourceInFrame
+                                : checked(clip.SourceInFrame + (long)Math.Round(leftDuration * Math.Abs(effPlaybackRate)));
+                        }
+
+                        if (clip.Envelopes != null)
+                        {
+                            var leftEnvelopes = new List<ClipEnvelope>();
+                            var rightEnvelopes = new List<ClipEnvelope>();
+                            foreach (var env in clip.Envelopes)
+                            {
+                                var (leftEnv, rightEnv) = env.SplitAt(leftDuration);
+                                leftEnvelopes.Add(leftEnv);
+                                rightEnvelopes.Add(rightEnv);
+                            }
+                            clip.Envelopes = leftEnvelopes;
+                            rightClip.Envelopes = rightEnvelopes;
+                        }
                         rightClip.DurationFrames = rightDuration;
                         if (rightClip.Crop is not null) rightClip.CropOffsetFrames = checked(rightClip.CropOffsetFrames + leftDuration);
                         rightClip.FadeOffsetFrames = 0;
@@ -150,18 +175,46 @@ public sealed partial class TimelineEditor
                     {
                         var leftDuration = startFrame - clip.StartFrame;
                         var rightDuration = clip.EndFrame - endFrame;
-                        var rightSourceIn = clip.SourceInFrame + (endFrame - clip.StartFrame);
+                        var cutDuration = endFrame - clip.StartFrame;
+
+                        var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
+                        long rightSourceIn;
+                        if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velEnv)
+                        {
+                            rightSourceIn = velEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, cutDuration, effPlaybackRate, clip.IsReversed, clip.DurationFrames);
+                        }
+                        else
+                        {
+                            rightSourceIn = clip.IsReversed
+                                ? clip.SourceInFrame
+                                : checked(clip.SourceInFrame + (long)Math.Round(cutDuration * Math.Abs(effPlaybackRate)));
+                        }
 
                         var rightClip = clip.DeepClone();
                         rightClip.Id = Guid.NewGuid();
                         rightClip.StartFrame = startFrame; // shifted left to start of cut
                         rightClip.SourceInFrame = rightSourceIn;
                         rightClip.DurationFrames = rightDuration;
-                        if (rightClip.Crop is not null) rightClip.CropOffsetFrames = checked(rightClip.CropOffsetFrames + (endFrame - clip.StartFrame));
+                        if (rightClip.Crop is not null) rightClip.CropOffsetFrames = checked(rightClip.CropOffsetFrames + cutDuration);
                         rightClip.FadeOffsetFrames = 0;
                         rightClip.FadeDurationFrames = null;
                         rightClip.FadeInFrames = Math.Min(rightClip.FadeInFrames, rightClip.DurationFrames);
                         rightClip.FadeOutFrames = Math.Min(rightClip.FadeOutFrames, checked(rightClip.DurationFrames - rightClip.FadeInFrames));
+
+                        if (clip.Envelopes != null)
+                        {
+                            var leftEnvelopes = new List<ClipEnvelope>();
+                            var rightEnvelopes = new List<ClipEnvelope>();
+                            foreach (var env in clip.Envelopes)
+                            {
+                                var (leftEnv, _) = env.SplitAt(leftDuration);
+                                var (_, rightEnv) = env.SplitAt(cutDuration);
+                                leftEnvelopes.Add(leftEnv);
+                                rightEnvelopes.Add(rightEnv);
+                            }
+                            clip.Envelopes = leftEnvelopes;
+                            rightClip.Envelopes = rightEnvelopes;
+                        }
 
                         clip.DurationFrames = leftDuration;
                         clip.FadeOffsetFrames = 0;
@@ -174,7 +227,12 @@ public sealed partial class TimelineEditor
                     // Case 3: Clip straddles left boundary (starts before, ends inside) -> trim tail
                     else if (clip.StartFrame < startFrame && clip.EndFrame > startFrame)
                     {
-                        clip.DurationFrames = startFrame - clip.StartFrame;
+                        var leftDuration = startFrame - clip.StartFrame;
+                        if (clip.Envelopes != null)
+                        {
+                            clip.Envelopes = clip.Envelopes.Select(e => e.SplitAt(leftDuration).Left).ToList();
+                        }
+                        clip.DurationFrames = leftDuration;
                         clip.FadeOffsetFrames = 0;
                         clip.FadeDurationFrames = null;
                         clip.FadeInFrames = Math.Min(clip.FadeInFrames, clip.DurationFrames);
@@ -184,8 +242,24 @@ public sealed partial class TimelineEditor
                     else if (clip.StartFrame >= startFrame && clip.StartFrame < endFrame)
                     {
                         var removedFromHead = endFrame - clip.StartFrame;
+                        var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
+                        if (clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velEnv)
+                        {
+                            clip.SourceInFrame = velEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, removedFromHead, effPlaybackRate, clip.IsReversed, clip.DurationFrames);
+                        }
+                        else
+                        {
+                            clip.SourceInFrame = clip.IsReversed
+                                ? clip.SourceInFrame
+                                : checked(clip.SourceInFrame + (long)Math.Round(removedFromHead * Math.Abs(effPlaybackRate)));
+                        }
+
+                        if (clip.Envelopes != null)
+                        {
+                            clip.Envelopes = clip.Envelopes.Select(e => e.SplitAt(removedFromHead).Right).ToList();
+                        }
+
                         clip.StartFrame = startFrame;
-                        clip.SourceInFrame = checked(clip.SourceInFrame + removedFromHead);
                         clip.DurationFrames = checked(clip.DurationFrames - removedFromHead);
                         if (clip.Crop is not null) clip.CropOffsetFrames = checked(clip.CropOffsetFrames + removedFromHead);
                         clip.FadeOffsetFrames = 0;

@@ -255,6 +255,118 @@ public sealed partial class TimelineEditor
         });
     }
 
+    /// <summary>
+    /// Resets all points on a clip envelope back to default unity value, clearing intermediate points.
+    /// Aligned with Vegas Pro "Reset All" / "Reset All Points" envelope menu action.
+    /// </summary>
+    public void ResetClipEnvelope(Guid clipId, EnvelopeType type)
+    {
+        Execute("Reset Envelope", p =>
+        {
+            var clip = p.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+            if (clip?.Envelopes == null) return;
+
+            var env = clip.Envelopes.FirstOrDefault(e => e.Type == type);
+            if (env == null) return;
+
+            var defVal = env.DefaultValue;
+            env.Points.Clear();
+            env.Points.Add(new EnvelopePoint(0, defVal, EnvelopeCurveType.Linear));
+            env.Points.Add(new EnvelopePoint(clip.DurationFrames, defVal, EnvelopeCurveType.Linear));
+        });
+    }
+
+    /// <summary>
+    /// Sets all points on a clip envelope to a specific target value.
+    /// Aligned with Vegas Pro "Set to > 100% / 200% / 300% / 0% / -100%" envelope actions.
+    /// </summary>
+    public void SetAllClipEnvelopePoints(Guid clipId, EnvelopeType type, double value)
+    {
+        Execute("Set All Envelope Points", p =>
+        {
+            var clip = p.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+            if (clip == null) return;
+
+            clip.Envelopes ??= [];
+            var env = clip.Envelopes.FirstOrDefault(e => e.Type == type);
+            if (env == null)
+            {
+                env = new ClipEnvelope { Type = type, IsEnabled = true };
+                clip.Envelopes.Add(env);
+            }
+
+            var clamped = Math.Clamp(value, env.MinValue, env.MaxValue);
+            if (env.Points.Count == 0)
+            {
+                env.Points.Add(new EnvelopePoint(0, clamped, EnvelopeCurveType.Linear));
+                env.Points.Add(new EnvelopePoint(clip.DurationFrames, clamped, EnvelopeCurveType.Linear));
+            }
+            else
+            {
+                foreach (var pt in env.Points)
+                {
+                    pt.Value = clamped;
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// Resets all points on a track envelope back to default unity value.
+    /// </summary>
+    public void ResetTrackEnvelope(Guid trackId, EnvelopeType type)
+    {
+        Execute("Reset Track Envelope", p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (track?.Envelopes == null) return;
+
+            var env = track.Envelopes.FirstOrDefault(e => e.Type == type);
+            if (env == null) return;
+
+            var defVal = env.DefaultValue;
+            var duration = Math.Max(p.DurationFrames, 300);
+            env.Points.Clear();
+            env.Points.Add(new EnvelopePoint(0, defVal, EnvelopeCurveType.Linear));
+            env.Points.Add(new EnvelopePoint(duration, defVal, EnvelopeCurveType.Linear));
+        });
+    }
+
+    /// <summary>
+    /// Sets all points on a track envelope to a specific target value.
+    /// </summary>
+    public void SetAllTrackEnvelopePoints(Guid trackId, EnvelopeType type, double value)
+    {
+        Execute("Set All Track Envelope Points", p =>
+        {
+            var track = p.Tracks.FirstOrDefault(t => t.Id == trackId);
+            if (track == null) return;
+
+            track.Envelopes ??= [];
+            var env = track.Envelopes.FirstOrDefault(e => e.Type == type);
+            if (env == null)
+            {
+                env = new ClipEnvelope { Type = type, IsEnabled = true };
+                track.Envelopes.Add(env);
+            }
+
+            var clamped = Math.Clamp(value, env.MinValue, env.MaxValue);
+            if (env.Points.Count == 0)
+            {
+                var duration = Math.Max(p.DurationFrames, 300);
+                env.Points.Add(new EnvelopePoint(0, clamped, EnvelopeCurveType.Linear));
+                env.Points.Add(new EnvelopePoint(duration, clamped, EnvelopeCurveType.Linear));
+            }
+            else
+            {
+                foreach (var pt in env.Points)
+                {
+                    pt.Value = clamped;
+                }
+            }
+        });
+    }
+
     public void SetTrackEnvelopePointCurve(Guid trackId, EnvelopeType type, long frame, EnvelopeCurveType curve)
     {
         Execute(p =>
