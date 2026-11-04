@@ -1,4 +1,4 @@
-using System.ComponentModel;
+﻿using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -314,8 +314,10 @@ public partial class MainWindow : Window
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
         Timeline.DuplicateTrackRequested += id => Guard(() => vm.Editor.DuplicateTrack(id));
         Timeline.DeleteTrackRequested += id => Guard(() => vm.Editor.DeleteTrack(id));
-        Timeline.UnlinkRequested += () => UnlinkClick(this, new RoutedEventArgs());
-        Timeline.LinkRequested += () => LinkClick(this, new RoutedEventArgs());
+        Timeline.UnlinkRequested += () => GroupRemoveClick(this, new RoutedEventArgs());
+        Timeline.LinkRequested += () => GroupCreateClick(this, new RoutedEventArgs());
+        Timeline.ClearGroupRequested += () => GroupClearClick(this, new RoutedEventArgs());
+        Timeline.SelectAllInGroupRequested += id => GroupSelectAllInClipGroup(id);
         Timeline.ToggleEnvelopeRequested += (id, type) => Guard(() =>
         {
             Pause();
@@ -933,7 +935,7 @@ public partial class MainWindow : Window
         }
         else
         {
-            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups);
+            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups, gesture.Ripple, gesture.RippleMode);
             vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
         RequestPreview();
@@ -1684,21 +1686,110 @@ public partial class MainWindow : Window
     private void MinimizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState.Minimized;
     private void MaximizeClick(object sender, RoutedEventArgs e) => WindowState = WindowState == WindowState.Maximized ? WindowState.Normal : WindowState.Maximized;
     private void SelectAllClick(object sender, RoutedEventArgs e) { vm.Selection.Clear(); vm.Selection.UnionWith(vm.Project.Tracks.SelectMany(t => t.Clips).Select(c => c.Id)); Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector(); CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0; }
-    private void LinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.LinkClips(vm.Selection); vm.Status = "Linked selected clips into a group."; });
-    private void UnlinkClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.UnlinkClips(vm.Selection); vm.Status = "Unlinked clip group."; });
+    private void GroupCreateClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.Editor.LinkClips(vm.Selection);
+        Timeline.InvalidateVisual();
+        vm.Status = "Created new group from selected clips.";
+    });
+    private void GroupRemoveClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.Editor.RemoveFromGroup(vm.Selection);
+        Timeline.InvalidateVisual();
+        vm.Status = "Removed selected clips from group.";
+    });
+    private void GroupClearClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.Editor.ClearGroup(vm.Selection);
+        Timeline.InvalidateVisual();
+        vm.Status = "Cleared clip group(s).";
+    });
+    private void GroupSelectAllClick(object sender, RoutedEventArgs e)
+    {
+        var groupIds = vm.Project.Tracks.SelectMany(t => t.Clips)
+            .Where(c => vm.Selection.Contains(c.Id) && c.GroupId.HasValue)
+            .Select(c => c.GroupId!.Value)
+            .ToHashSet();
+        if (groupIds.Count == 0) return;
+        var allInGroups = vm.Project.Tracks.SelectMany(t => t.Clips)
+            .Where(c => c.GroupId.HasValue && groupIds.Contains(c.GroupId.Value))
+            .Select(c => c.Id);
+        vm.Selection.UnionWith(allInGroups);
+        Timeline.Selection.Clear();
+        Timeline.Selection.UnionWith(vm.Selection);
+        Timeline.InvalidateVisual();
+        UpdateInspector();
+    }
+    private void GroupSelectAllInClipGroup(Guid clipId)
+    {
+        var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        if (clip is null || !clip.GroupId.HasValue) return;
+        var allInGroup = vm.Project.Tracks.SelectMany(t => t.Clips)
+            .Where(c => c.GroupId == clip.GroupId.Value)
+            .Select(c => c.Id);
+        vm.Selection.Clear();
+        vm.Selection.UnionWith(allInGroup);
+        Timeline.Selection.Clear();
+        Timeline.Selection.UnionWith(vm.Selection);
+        Timeline.InvalidateVisual();
+        UpdateInspector();
+    }
+    private void LinkClick(object sender, RoutedEventArgs e) => GroupCreateClick(sender, e);
+    private void UnlinkClick(object sender, RoutedEventArgs e) => GroupRemoveClick(sender, e);
     private void IgnoreGroupsClick(object sender, RoutedEventArgs e)
     {
-        vm.IgnoreGroups = IgnoreGroupsMenu.IsChecked;
+        vm.IgnoreGroups = sender == IgnoreGroupsToggle ? (IgnoreGroupsToggle.IsChecked == true) : (IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked);
+        if (IgnoreGroupsToggle is not null) IgnoreGroupsToggle.IsChecked = vm.IgnoreGroups;
+        if (IgnoreGroupsMenu is not null) IgnoreGroupsMenu.IsChecked = vm.IgnoreGroups;
         Timeline.IgnoreGroups = vm.IgnoreGroups;
-        vm.Status = vm.IgnoreGroups ? "Ignore clip groups enabled." : "Ignore clip groups disabled.";
+        vm.Status = vm.IgnoreGroups ? "Ignore event grouping enabled." : "Ignore event grouping disabled.";
     }
     private void VideoTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p => p.Tracks.Insert(0, new TimelineTrack
     { Kind = TrackKind.Video, Name = $"Video {p.Tracks.Count(t => t.Kind == TrackKind.Video) + 1}" })));
     private void AudioTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.AddTrack(TrackKind.Audio));
     private void SnapClick(object sender, RoutedEventArgs e) { Timeline.Snapping = SnapToggle.IsChecked == true; SnappingMenu.IsChecked = Timeline.Snapping; }
     private void SnapMenuClick(object sender, RoutedEventArgs e) { SnapToggle.IsChecked = SnappingMenu.IsChecked; SnapClick(sender, e); }
-    private void RippleClick(object sender, RoutedEventArgs e) { vm.Ripple = RippleToggle.IsChecked == true; RippleMenu.IsChecked = vm.Ripple; }
-    private void RippleMenuClick(object sender, RoutedEventArgs e) { RippleToggle.IsChecked = RippleMenu.IsChecked; RippleClick(sender, e); }
+    private void RippleClick(object sender, RoutedEventArgs e)
+    {
+        vm.Ripple = RippleToggle.IsChecked == true;
+        if (RippleMenu is not null) RippleMenu.IsChecked = vm.Ripple;
+        Timeline.Ripple = vm.Ripple;
+        UpdateRippleTooltip();
+        vm.Status = vm.Ripple ? $"Auto Ripple enabled ({GetRippleModeDescription(vm.RippleMode)})." : "Auto Ripple disabled.";
+    }
+    private void RippleMenuClick(object sender, RoutedEventArgs e)
+    {
+        if (RippleToggle is not null) RippleToggle.IsChecked = RippleMenu.IsChecked;
+        RippleClick(sender, e);
+    }
+    private void RippleAffectedTracksClick(object sender, RoutedEventArgs e) => SetRippleMode(AutoRippleMode.AffectedTracks);
+    private void RippleAffectedTracksMarkersClick(object sender, RoutedEventArgs e) => SetRippleMode(AutoRippleMode.AffectedTracksAndMarkers);
+    private void RippleAllTracksMarkersClick(object sender, RoutedEventArgs e) => SetRippleMode(AutoRippleMode.AllTracksAndMarkers);
+    private void SetRippleMode(AutoRippleMode mode)
+    {
+        vm.RippleMode = mode;
+        Timeline.RippleMode = mode;
+        if (RippleAffectedTracksMenu is not null) RippleAffectedTracksMenu.IsChecked = mode == AutoRippleMode.AffectedTracks;
+        if (RippleAffectedTracksMarkersMenu is not null) RippleAffectedTracksMarkersMenu.IsChecked = mode == AutoRippleMode.AffectedTracksAndMarkers;
+        if (RippleAllTracksMarkersMenu is not null) RippleAllTracksMarkersMenu.IsChecked = mode == AutoRippleMode.AllTracksAndMarkers;
+        UpdateRippleTooltip();
+        vm.Status = $"Auto Ripple mode: {GetRippleModeDescription(mode)}.";
+    }
+    private static string GetRippleModeDescription(AutoRippleMode mode) => mode switch
+    {
+        AutoRippleMode.AffectedTracks => "Affected Tracks",
+        AutoRippleMode.AffectedTracksAndMarkers => "Affected Tracks, Bus Tracks, Markers",
+        AutoRippleMode.AllTracksAndMarkers => "All Tracks, Markers, Regions",
+        _ => mode.ToString()
+    };
+    private void UpdateRippleTooltip()
+    {
+        if (RippleToggle is not null)
+            RippleToggle.ToolTip = $"Auto Ripple (Ctrl+L) - {GetRippleModeDescription(vm.RippleMode)}";
+    }
     private void LoopPlaybackClick(object sender, RoutedEventArgs e)
     {
         loopPlayback = !loopPlayback;
@@ -2053,7 +2144,11 @@ public partial class MainWindow : Window
             Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.D5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.NumPad5 when ctrl && alt => () => MixingConsoleClick(this, e),
-            Key.U when ctrl && shift => () => { IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked; IgnoreGroupsClick(this, e); },
+            Key.L when ctrl && !shift && !alt => () => { RippleToggle.IsChecked = RippleToggle.IsChecked != true; RippleClick(this, e); },
+            Key.F when !ctrl && !shift && !alt => () => SetRippleMode(AutoRippleMode.AffectedTracks),
+            Key.F when ctrl && shift && !alt => () => SetRippleMode(AutoRippleMode.AffectedTracksAndMarkers),
+            Key.F when ctrl && !shift && alt => () => SetRippleMode(AutoRippleMode.AllTracksAndMarkers),
+            Key.U when ctrl && shift => () => { IgnoreGroupsClick(IgnoreGroupsToggle ?? (object)this, e); },
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
             Key.X when ctrl => () => CutClick(this, e),
@@ -2069,8 +2164,8 @@ public partial class MainWindow : Window
             Key.Escape => () => { Timeline.CancelPointerInput(); StopClick(this, e); },
             Key.S => () => SplitClick(this, e),
             Key.Delete => () => DeleteClick(this, e),
-            Key.G => () => LinkClick(this, e),
-            Key.U => () => UnlinkClick(this, e),
+            Key.G when !ctrl && !shift && !alt => () => GroupCreateClick(this, e),
+            Key.U when !ctrl && !shift && !alt => () => GroupRemoveClick(this, e),
             Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); },
             Key.Q when !ctrl && !alt && !shift => () => LoopPlaybackClick(this, e),
             Key.X when !ctrl && !alt && !shift => () => AutoCrossfadeClick(this, e),

@@ -1,4 +1,4 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -10,7 +10,7 @@ using OpenRend.Core;
 
 namespace OpenRend.UI;
 
-public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null, bool IgnoreGroups = false);
+public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null, bool IgnoreGroups = false, bool Ripple = false, AutoRippleMode RippleMode = AutoRippleMode.AffectedTracks);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
 public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition, bool IsCut = false);
 
@@ -43,6 +43,8 @@ public sealed partial class TimelineView : FrameworkElement
         set { if (pixelsPerSecond == value) return; pixelsPerSecond = value; RefreshGeometry(); }
     }
     public bool Snapping { get; set; } = true;
+    public bool Ripple { get; set; }
+    public AutoRippleMode RippleMode { get; set; } = AutoRippleMode.AffectedTracks;
     public bool IgnoreGroups { get; set; }
     internal bool ShouldIgnoreGroups => IgnoreGroups || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
     private double offset;
@@ -65,6 +67,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<ClipGesture>? EditRequested;
     public event Action? UnlinkRequested;
     public event Action? LinkRequested;
+    public event Action? ClearGroupRequested;
+    public event Action<Guid>? SelectAllInGroupRequested;
     public event Action<Guid, string>? TrackAction;
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
@@ -295,10 +299,20 @@ public sealed partial class TimelineView : FrameworkElement
         var before = Selection.ToHashSet();
         if (!add) Selection.Clear();
         levelTrack = null; levelKind = null;
-        Selection.Add(clipId);
+        var clip = Project.Tracks[index].Clips.Single(c => c.Id == clipId);
+        if (!ShouldIgnoreGroups && clip.GroupId.HasValue)
+        {
+            var grouped = Project.Tracks.SelectMany(t => t.Clips)
+                .Where(c => c.GroupId == clip.GroupId.Value)
+                .Select(c => c.Id);
+            Selection.UnionWith(grouped);
+        }
+        else
+        {
+            Selection.Add(clipId);
+        }
         activeClipId = clipId;
         ActivateTrack(index);
-        var clip = Project.Tracks[index].Clips.Single(c => c.Id == clipId);
         if (ensureVisible && (X(clip.StartFrame) < HeaderWidth || ActualWidth > HeaderWidth && X(clip.StartFrame) >= ActualWidth))
             Offset = Math.Max(0, Project.FrameRate.Seconds(clip.StartFrame) * PixelsPerSecond - 10);
         NotifySelection(before);
@@ -307,7 +321,18 @@ public sealed partial class TimelineView : FrameworkElement
     internal void RemoveClipSelection(Guid clipId)
     {
         var before = Selection.ToHashSet();
-        Selection.Remove(clipId);
+        var clip = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        if (clip is not null && !ShouldIgnoreGroups && clip.GroupId.HasValue)
+        {
+            var grouped = Project.Tracks.SelectMany(t => t.Clips)
+                .Where(c => c.GroupId == clip.GroupId.Value)
+                .Select(c => c.Id);
+            foreach (var id in grouped) Selection.Remove(id);
+        }
+        else
+        {
+            Selection.Remove(clipId);
+        }
         NotifySelection(before);
     }
 
@@ -647,12 +672,13 @@ public sealed partial class TimelineView : FrameworkElement
                     dc.DrawRectangle(Brush("#E0A020"), null, new Rect(lockX + 1, lockY + 5, 8, 6));
                     headerOffset = 13.0;
                 }
+                var groupPrefix = clip.GroupId.HasValue ? "[G] " : "";
                 var takePrefix = clip.Takes is { Count: > 1 } ? $"[Take {clip.ActiveTakeIndex + 1}/{clip.Takes.Count}] " : "";
                 var reversePrefix = clip.IsReversed ? "[Reverse] " : "";
                 var rateSuffix = Math.Abs(clip.PlaybackRate - 1.0) > 0.001 ? $" [{clip.PlaybackRate:0.##}x]" : "";
                 var mutedSuffix = clip.IsMuted ? " [Muted]" : "";
                 var phaseSuffix = clip.InvertPhase ? " [Phase \u00D8]" : "";
-                var displayName = $"{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{mutedSuffix}";
+                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {
@@ -1228,7 +1254,9 @@ public sealed partial class TimelineView : FrameworkElement
                     clip.SourceInFrame + left,
                     clip.DurationFrames + (commitMode == "TrimRight" ? commitDelta : -left),
                     commitMode,
-                    IgnoreGroups: commitIgnoreGroups));
+                    IgnoreGroups: commitIgnoreGroups,
+                    Ripple: Ripple,
+                    RippleMode: RippleMode));
             }
         }
 

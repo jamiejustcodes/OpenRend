@@ -1,4 +1,4 @@
-using System.Text.Json.Serialization;
+﻿using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
@@ -412,6 +412,14 @@ public enum TrackAutomationMode
     AutomationTouch = 2,
     AutomationLatch = 3,
     AutomationWrite = 4
+}
+
+[JsonConverter(typeof(JsonStringEnumConverter<AutoRippleMode>))]
+public enum AutoRippleMode
+{
+    AffectedTracks = 0,
+    AffectedTracksAndMarkers = 1,
+    AllTracksAndMarkers = 2
 }
 
 public static class VegasTrackColors

@@ -1,4 +1,4 @@
-using OpenRend.Core;
+﻿using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -588,16 +588,9 @@ public sealed partial class TimelineEditor
         return right;
     }
 
-    public void DeleteClip(Guid clipId, bool ripple = false)
+    public void DeleteClip(Guid clipId, bool ripple = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
-        var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track, clip);
-        Execute(_ =>
-        {
-            track.Clips.Remove(clip);
-            if (ripple)
-                foreach (var later in track.Clips.Where(c => c.StartFrame >= clip.EndFrame)) later.StartFrame -= clip.DurationFrames;
-        });
+        DeleteSelection([clipId], ripple: ripple, ignoreGroups: true, rippleMode: rippleMode);
     }
 
     public HashSet<Guid> ExpandSelection(IEnumerable<Guid> ids, bool ignoreGroups = false)
@@ -615,7 +608,7 @@ public sealed partial class TimelineEditor
 
     public void LinkClips(IEnumerable<Guid> ids)
     {
-        var selected = SelectedClips(ids);
+        var selected = SelectedClips(ids, ignoreGroups: false);
         foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         if (selected.Count < 2) throw new ArgumentException("Select at least two clips to link.", nameof(ids));
         if (selected[0].Clip.GroupId.HasValue && selected.All(item => item.Clip.GroupId == selected[0].Clip.GroupId)) return;
@@ -625,10 +618,45 @@ public sealed partial class TimelineEditor
 
     public void UnlinkClips(IEnumerable<Guid> ids)
     {
-        var selected = SelectedClips(ids);
+        var selected = SelectedClips(ids, ignoreGroups: false);
         foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         if (selected.All(item => item.Clip.GroupId is null)) return;
         Execute(_ => { foreach (var item in selected) item.Clip.GroupId = null; });
+    }
+
+    public void RemoveFromGroup(IEnumerable<Guid> ids)
+    {
+        var expanded = SelectedClips(ids, ignoreGroups: false);
+        foreach (var item in expanded) EnsureUnlocked(item.Track, item.Clip);
+
+        var selected = SelectedClips(ids, ignoreGroups: true);
+        var toRemove = selected.Where(item => item.Clip.GroupId.HasValue).ToList();
+        if (toRemove.Count == 0) return;
+        Execute(_ =>
+        {
+            var affectedGroups = toRemove.Select(item => item.Clip.GroupId!.Value).Distinct().ToList();
+            foreach (var item in toRemove) item.Clip.GroupId = null;
+            foreach (var gid in affectedGroups)
+            {
+                var remaining = Project.Tracks.SelectMany(t => t.Clips).Where(c => c.GroupId == gid).ToList();
+                if (remaining.Count < 2)
+                {
+                    foreach (var c in remaining) c.GroupId = null;
+                }
+            }
+        });
+    }
+
+    public void ClearGroup(IEnumerable<Guid> ids) => UnlinkClips(ids);
+
+    public IReadOnlyList<Guid> GetGroupMembers(Guid clipId)
+    {
+        var (_, clip) = FindClip(clipId);
+        if (!clip.GroupId.HasValue) return [clipId];
+        return Project.Tracks.SelectMany(t => t.Clips)
+            .Where(c => c.GroupId == clip.GroupId.Value)
+            .Select(c => c.Id)
+            .ToList();
     }
 
     public void MoveSelection(IEnumerable<Guid> ids, Guid primaryClipId, Guid targetTrackId, long start, bool ignoreGroups = false)
@@ -700,13 +728,14 @@ public sealed partial class TimelineEditor
         return newTrack;
     }
 
-    public void TrimSelection(Guid primaryClipId, long newStart, long sourceIn, long duration, bool ignoreGroups = false)
+    public void TrimSelection(Guid primaryClipId, long newStart, long sourceIn, long duration, bool ignoreGroups = false, bool ripple = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
         var selected = SelectedClips([primaryClipId], ignoreGroups);
         var primary = FindClip(primaryClipId).Clip;
         var startDelta = checked(newStart - primary.StartFrame);
         var sourceDelta = checked(sourceIn - primary.SourceInFrame);
         var durationDelta = checked(duration - primary.DurationFrames);
+        var oldEnd = primary.EndFrame;
         var changes = new Dictionary<Guid, TimelineClip>();
         foreach (var item in selected)
         {
@@ -725,6 +754,59 @@ public sealed partial class TimelineEditor
             trimmed.FadeDurationFrames = null;
             changes.Add(trimmed.Id, trimmed);
         }
+
+        var shifts = new Dictionary<Guid, long>();
+        var markerShifts = new Dictionary<Guid, long>();
+
+        if (ripple)
+        {
+            var delta = startDelta == 0 ? durationDelta : -startDelta;
+            if (delta != 0)
+            {
+                var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
+                var trimmedIds = selected.Select(s => s.Clip.Id).ToHashSet();
+
+                if (rippleMode == AutoRippleMode.AffectedTracks)
+                {
+                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                    {
+                        foreach (var clip in track.Clips.Where(c => !trimmedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                        {
+                            shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                        }
+                    }
+                }
+                else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                    {
+                        foreach (var clip in track.Clips.Where(c => !trimmedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                        {
+                            shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                        }
+                    }
+                    foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                    {
+                        markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                    }
+                }
+                else // AllTracksAndMarkers
+                {
+                    foreach (var track in Project.Tracks)
+                    {
+                        foreach (var clip in track.Clips.Where(c => !trimmedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                        {
+                            shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                        }
+                    }
+                    foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                    {
+                        markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                    }
+                }
+            }
+        }
+
         Execute(_ =>
         {
             foreach (var item in selected)
@@ -735,6 +817,11 @@ public sealed partial class TimelineEditor
                 item.Clip.FadeOffsetFrames = 0; item.Clip.FadeDurationFrames = null;
                 item.Clip.CropOffsetFrames = change.CropOffsetFrames;
             }
+            foreach (var track in Project.Tracks)
+                foreach (var clip in track.Clips)
+                    if (shifts.TryGetValue(clip.Id, out var pos)) clip.StartFrame = pos;
+            foreach (var marker in Project.Markers)
+                if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
         });
     }
 
@@ -767,34 +854,86 @@ public sealed partial class TimelineEditor
         return splits.Select(split => split.Right).ToArray();
     }
 
-    public void DeleteSelection(IEnumerable<Guid> ids, bool ripple = false, bool ignoreGroups = false)
+    public void DeleteSelection(IEnumerable<Guid> ids, bool ripple = false, bool ignoreGroups = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
         var selected = SelectedClips(ids, ignoreGroups);
         if (selected.Count == 0) return;
         foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         var removed = selected.Select(item => item.Clip.Id).ToHashSet();
         var shifts = new Dictionary<Guid, long>();
+        var markerShifts = new Dictionary<Guid, long>();
+
         if (ripple)
-            foreach (var trackGroup in selected.GroupBy(item => item.Track))
+        {
+            if (rippleMode == AutoRippleMode.AffectedTracks)
             {
-                // Collapse the union of removed spans once; overlapping clips must not double the ripple.
-                var spans = new List<(long Start, long End)>();
-                foreach (var clip in trackGroup.Select(item => item.Clip).OrderBy(c => c.StartFrame))
-                    if (spans.Count == 0 || clip.StartFrame > spans[^1].End) spans.Add((clip.StartFrame, clip.EndFrame));
-                    else spans[^1] = (spans[^1].Start, Math.Max(spans[^1].End, clip.EndFrame));
-                foreach (var remaining in trackGroup.Key.Clips.Where(c => !removed.Contains(c.Id)))
+                foreach (var trackGroup in selected.GroupBy(item => item.Track))
                 {
-                    var shift = spans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
-                    shifts.Add(remaining.Id, checked(remaining.StartFrame - shift));
+                    var spans = CollapseSpans(trackGroup.Select(item => item.Clip));
+                    foreach (var remaining in trackGroup.Key.Clips.Where(c => !removed.Contains(c.Id)))
+                    {
+                        var shift = spans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
+                    }
                 }
             }
+            else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+            {
+                foreach (var trackGroup in selected.GroupBy(item => item.Track))
+                {
+                    var spans = CollapseSpans(trackGroup.Select(item => item.Clip));
+                    foreach (var remaining in trackGroup.Key.Clips.Where(c => !removed.Contains(c.Id)))
+                    {
+                        var shift = spans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
+                    }
+                }
+                var allAffectedSpans = CollapseSpans(selected.Select(item => item.Clip));
+                foreach (var marker in Project.Markers)
+                {
+                    var mShift = allAffectedSpans.Where(span => span.End <= marker.Frame).Sum(span => span.End - span.Start);
+                    if (mShift > 0) markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame - mShift));
+                }
+            }
+            else // AutoRippleMode.AllTracksAndMarkers
+            {
+                var allSpans = CollapseSpans(selected.Select(item => item.Clip));
+                foreach (var track in Project.Tracks)
+                {
+                    foreach (var remaining in track.Clips.Where(c => !removed.Contains(c.Id)))
+                    {
+                        var shift = allSpans.Where(span => span.End <= remaining.StartFrame).Sum(span => span.End - span.Start);
+                        if (shift > 0) shifts[remaining.Id] = checked(remaining.StartFrame - shift);
+                    }
+                }
+                foreach (var marker in Project.Markers)
+                {
+                    var mShift = allSpans.Where(span => span.End <= marker.Frame).Sum(span => span.End - span.Start);
+                    if (mShift > 0) markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame - mShift));
+                }
+            }
+        }
+
         Execute(_ =>
         {
             foreach (var item in selected) item.Track.Clips.Remove(item.Clip);
             foreach (var track in Project.Tracks)
                 foreach (var clip in track.Clips)
                     if (shifts.TryGetValue(clip.Id, out var position)) clip.StartFrame = position;
+            foreach (var marker in Project.Markers)
+                if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
         });
+    }
+
+    private static List<(long Start, long End)> CollapseSpans(IEnumerable<TimelineClip> clips)
+    {
+        var spans = new List<(long Start, long End)>();
+        foreach (var clip in clips.OrderBy(c => c.StartFrame))
+        {
+            if (spans.Count == 0 || clip.StartFrame > spans[^1].End) spans.Add((clip.StartFrame, clip.EndFrame));
+            else spans[^1] = (spans[^1].Start, Math.Max(spans[^1].End, clip.EndFrame));
+        }
+        return spans;
     }
 
     public void SetTrackState(Guid trackId, bool? isMuted = null, bool? isSolo = null, bool? isLocked = null, bool? isVisible = null, bool? armRecord = null)

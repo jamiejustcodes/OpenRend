@@ -1,4 +1,4 @@
-<Window x:Class="OpenRend.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:OpenRend.App" xmlns:ui="clr-namespace:OpenRend.UI;assembly=OpenRend.UI" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Style="{StaticResource {x:Type Window}}" Title="{Binding Title}" Width="1400" Height="900" MinWidth="960" MinHeight="620" WindowStyle="None" WindowState="Maximized" WindowStartupLocation="CenterScreen" AllowDrop="True" PreviewKeyDown="WindowKeyDown" Drop="WindowDrop" Closing="WindowClosing">
+﻿<Window x:Class="OpenRend.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:OpenRend.App" xmlns:ui="clr-namespace:OpenRend.UI;assembly=OpenRend.UI" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Style="{StaticResource {x:Type Window}}" Title="{Binding Title}" Width="1400" Height="900" MinWidth="960" MinHeight="620" WindowStyle="None" WindowState="Maximized" WindowStartupLocation="CenterScreen" AllowDrop="True" PreviewKeyDown="WindowKeyDown" Drop="WindowDrop" Closing="WindowClosing">
   <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="5" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
   <Window.Icon><BitmapImage UriSource="OpenRend.ico"/></Window.Icon>
   <Grid>
@@ -41,9 +41,13 @@
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
         <MenuItem Header="Select all clips" InputGestureText="Ctrl+A" Click="SelectAllClick"/>
         <Separator/>
-        <MenuItem Header="Link selected clips" InputGestureText="G" Click="LinkClick"/>
-        <MenuItem Header="Unlink clip group" InputGestureText="U" Click="UnlinkClick"/>
-        <MenuItem x:Name="IgnoreGroupsMenu" Header="Ignore clip groups" InputGestureText="Ctrl+Shift+U" IsCheckable="True" Click="IgnoreGroupsClick"/>
+        <MenuItem Header="_Group">
+          <MenuItem x:Name="GroupCreateMenu" Header="_Create New" InputGestureText="G" Click="GroupCreateClick"/>
+          <MenuItem x:Name="GroupRemoveMenu" Header="_Remove From" InputGestureText="U" Click="GroupRemoveClick"/>
+          <MenuItem x:Name="GroupClearMenu" Header="C_lear" Click="GroupClearClick"/>
+          <MenuItem x:Name="GroupSelectAllMenu" Header="_Select All in Group" Click="GroupSelectAllClick"/>
+        </MenuItem>
+        <MenuItem x:Name="IgnoreGroupsMenu" Header="_Ignore Event Grouping" InputGestureText="Ctrl+Shift+U" IsCheckable="True" Click="IgnoreGroupsClick"/>
         <Separator/>
         <MenuItem Header="Switches">
           <MenuItem x:Name="LockEventMenu" Header="Lock" InputGestureText="Ctrl+Shift+L" Click="LockEventClick"/>
@@ -118,7 +122,12 @@
         <MenuItem x:Name="LoopPlaybackMenu" Header="_Loop Playback" InputGestureText="Q" IsCheckable="True" Click="LoopPlaybackClick"/>
         <MenuItem x:Name="AutoCrossfadeMenu" Header="Automatic _Crossfades" InputGestureText="X" IsCheckable="True" IsChecked="True" Click="AutoCrossfadeClick"/>
         <MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/>
-        <MenuItem x:Name="RippleMenu" Header="Ripple editing" IsCheckable="True" Click="RippleMenuClick"/>
+        <MenuItem x:Name="RippleMenu" Header="Auto _Ripple" InputGestureText="Ctrl+L" IsCheckable="True" Click="RippleMenuClick"/>
+        <MenuItem x:Name="AutoRippleModeMenu" Header="Auto Ripple _Mode">
+          <MenuItem x:Name="RippleAffectedTracksMenu" Header="_Affected Tracks" InputGestureText="F" IsCheckable="True" IsChecked="True" Click="RippleAffectedTracksClick"/>
+          <MenuItem x:Name="RippleAffectedTracksMarkersMenu" Header="Affected Tracks, Bus Tracks, _Markers" InputGestureText="Ctrl+Shift+F" IsCheckable="True" Click="RippleAffectedTracksMarkersClick"/>
+          <MenuItem x:Name="RippleAllTracksMarkersMenu" Header="All _Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" IsCheckable="True" Click="RippleAllTracksMarkersClick"/>
+        </MenuItem>
         <Separator/>
         <MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/>
       </MenuItem>
@@ -673,7 +682,8 @@
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
           <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" Content="X" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
           <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="4,0"/>
-          <CheckBox x:Name="RippleToggle" Content="Ripple" Foreground="{StaticResource TextColor}" Click="RippleClick" Margin="4,0"/>
+          <ToggleButton x:Name="IgnoreGroupsToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="ðŸ”—" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Ignore Event Grouping" ToolTip="Ignore Event Grouping (Ctrl+Shift+U)" Click="IgnoreGroupsClick" Margin="2,0"/>
+          <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="â˜·" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0"/>
         </StackPanel>
       </DockPanel>
     </Border>

@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+﻿using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenRend.Core;
@@ -51,7 +51,10 @@ public sealed class EditorViewModel : ObservableObject
     public bool Busy { get => busy; set => SetProperty(ref busy, value); }
     private double progress;
     public double Progress { get => progress; set => SetProperty(ref progress, value); }
-    public bool Ripple { get; set; }
+    private bool ripple;
+    public bool Ripple { get => ripple; set => SetProperty(ref ripple, value); }
+    private AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks;
+    public AutoRippleMode RippleMode { get => rippleMode; set => SetProperty(ref rippleMode, value); }
     public bool IgnoreGroups { get; set; }
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
@@ -140,11 +143,13 @@ public sealed class EditorViewModel : ObservableObject
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
     }
 
-    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true)
+    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null)
     {
         var asset = Project.Media.Single(m => m.Id == mediaId);
         var start = at ?? Position;
         var chosen = trackId.HasValue ? Project.Tracks.Single(t => t.Id == trackId) : null;
+        var useRipple = ripple ?? Ripple;
+        var mode = rippleMode ?? RippleMode;
         Editor.Execute(p =>
         {
             var primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
@@ -157,6 +162,43 @@ public sealed class EditorViewModel : ObservableObject
             if (target.IsLocked) throw new InvalidOperationException("Unlock the track before placing media.");
             if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
                 throw new InvalidOperationException("This media has no stream for the selected track.");
+
+            TimelineTrack? audioTrack = null;
+            if (primaryKind == TrackKind.Video && asset.HasAudio)
+            {
+                audioTrack = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
+                if (audioTrack is null) { audioTrack = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audioTrack); }
+            }
+
+            if (useRipple)
+            {
+                var affectedTrackIds = new HashSet<Guid> { target.Id };
+                if (audioTrack is not null) affectedTrackIds.Add(audioTrack.Id);
+
+                if (mode == AutoRippleMode.AffectedTracks)
+                {
+                    foreach (var t in p.Tracks.Where(tr => affectedTrackIds.Contains(tr.Id)))
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
+                            c.StartFrame += duration;
+                }
+                else if (mode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var t in p.Tracks.Where(tr => affectedTrackIds.Contains(tr.Id)))
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
+                            c.StartFrame += duration;
+                    foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
+                        m.Frame += duration;
+                }
+                else // AllTracksAndMarkers
+                {
+                    foreach (var t in p.Tracks)
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
+                            c.StartFrame += duration;
+                    foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
+                        m.Frame += duration;
+                }
+            }
+
             var clip = new TimelineClip
             {
                 MediaId = mediaId,
@@ -166,14 +208,14 @@ public sealed class EditorViewModel : ObservableObject
                 DurationFrames = Math.Max(1, duration)
             };
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
-            if (primaryKind == TrackKind.Video && asset.HasAudio)
+            if (audioTrack is not null)
             {
-                clip.GroupId = Guid.NewGuid();
-                var audio = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
-                if (audio is null) { audio = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audio); }
+                var group = Guid.NewGuid();
+                clip.GroupId = group;
                 var sound = clip.DeepClone();
                 sound.Id = Guid.NewGuid();
-                audio.Clips.Add(sound);
+                sound.GroupId = group;
+                audioTrack.Clips.Add(sound);
                 Selection.Add(sound.Id);
             }
         });
@@ -190,7 +232,7 @@ public sealed class EditorViewModel : ObservableObject
     public void Delete()
     {
         if (Selection.Count == 0) return;
-        Editor.DeleteSelection(Selection, Ripple, IgnoreGroups);
+        Editor.DeleteSelection(Selection, Ripple, IgnoreGroups, RippleMode);
         Selection.Clear(); Status = "Deleted selection.";
     }
     public async Task SaveAsync(string path)

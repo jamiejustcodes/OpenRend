@@ -1,4 +1,4 @@
-using System.Windows;
+﻿using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -448,12 +448,18 @@ public sealed partial class TimelineView
         };
         menu.Items.Add(new Separator());
         var groupMenu = new MenuItem { Header = "Group" };
-        var unlink = new MenuItem { Header = "Unlink clip group", InputGestureText = "U" };
-        unlink.Click += (_, _) => UnlinkRequested?.Invoke();
-        var link = new MenuItem { Header = "Link selected clips", InputGestureText = "G" };
+        var link = new MenuItem { Header = "Create New", InputGestureText = "G" };
         link.Click += (_, _) => LinkRequested?.Invoke();
-        groupMenu.Items.Add(unlink);
+        var unlink = new MenuItem { Header = "Remove From", InputGestureText = "U" };
+        unlink.Click += (_, _) => UnlinkRequested?.Invoke();
+        var clear = new MenuItem { Header = "Clear" };
+        clear.Click += (_, _) => ClearGroupRequested?.Invoke();
+        var selectAllInGroup = new MenuItem { Header = "Select All in Group" };
+        selectAllInGroup.Click += (_, _) => SelectAllInGroupRequested?.Invoke(clipId ?? Guid.Empty);
         groupMenu.Items.Add(link);
+        groupMenu.Items.Add(unlink);
+        groupMenu.Items.Add(clear);
+        groupMenu.Items.Add(selectAllInGroup);
         menu.Items.Add(groupMenu);
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
