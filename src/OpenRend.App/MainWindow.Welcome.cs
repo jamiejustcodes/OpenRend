@@ -13,6 +13,9 @@ public partial class MainWindow
     {
         await GuardAsync(async () =>
         {
+            var recovered = await CheckCrashRecoveryAsync();
+            if (recovered) return;
+
             if (WelcomePreferencesStore.Load(WelcomePreferencesPath).ShowAtStartup) await ShowWelcomeAsync();
         });
     }

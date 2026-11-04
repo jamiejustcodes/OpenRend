@@ -447,6 +447,8 @@ public partial class MainWindow : Window
         {
             if (vm.Dirty && generalPreferences.EnableAutoSave)
             {
+                var dataDir = Path.GetDirectoryName(recoveryPath)!;
+                SessionRecoveryManager.RecordHeartbeat(dataDir, true, vm.ProjectPath);
                 recoverySaveTimer.Stop();
                 recoverySaveTimer.Start();
             }
@@ -519,7 +521,6 @@ public partial class MainWindow : Window
             InitializeMediaBins();
             Refresh();
             autosave.Start();
-            await CheckCrashRecoveryAsync();
         };
     }
 
@@ -836,7 +837,7 @@ public partial class MainWindow : Window
         catch { }
     }
 
-    private async Task CheckCrashRecoveryAsync()
+    public async Task<bool> CheckCrashRecoveryAsync()
     {
         var dataDir = Path.GetDirectoryName(recoveryPath)!;
         var candidate = SessionRecoveryManager.CheckCrashRecovery(dataDir);
@@ -868,7 +869,9 @@ public partial class MainWindow : Window
                         vm.MarkDirty();
                         await PopulateMediaVisualsAsync();
                         SessionRecoveryManager.DiscardRecovery(dataDir);
+                        SessionRecoveryManager.StartSession(dataDir, vm.ProjectPath);
                         vm.Status = "Restored autosaved project from previous session. Save as a project to keep these edits.";
+                        return true;
                     }
                     catch (Exception ex)
                     {
@@ -887,6 +890,7 @@ public partial class MainWindow : Window
         }
 
         SessionRecoveryManager.StartSession(dataDir, vm.ProjectPath);
+        return false;
     }
 
     private void MediaToolbarFxClick(object sender, RoutedEventArgs e)
@@ -981,6 +985,8 @@ public partial class MainWindow : Window
         var project = await ProjectStore.LoadAsync(path);
         vm.Replace(project, path);
         RecordRecentProject(path);
+        var dataDir = Path.GetDirectoryName(recoveryPath)!;
+        SessionRecoveryManager.StartSession(dataDir, path);
         await PopulateMediaVisualsAsync();
         var missing = ProjectStore.FindMissingMedia(project);
         vm.Status = missing.Count > 0 ? $"{missing.Count} missing media files. File → Relink missing media." : $"Opened {Path.GetFileName(path)}.";

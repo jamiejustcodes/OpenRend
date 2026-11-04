@@ -158,7 +158,7 @@ public static class SessionRecoveryManager
         try
         {
             var proc = Process.GetProcessById(pid);
-            return !proc.HasExited;
+            return !proc.HasExited && proc.ProcessName.Contains("OpenRend", StringComparison.OrdinalIgnoreCase);
         }
         catch
         {
