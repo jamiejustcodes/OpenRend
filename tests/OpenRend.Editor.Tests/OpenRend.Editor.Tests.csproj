@@ -19,5 +19,6 @@
     <Compile Include="../../src/OpenRend.App/VideoEffectChooserModel.cs" Link="VideoEffectChooserModel.cs" />
     <Compile Include="../../src/OpenRend.App/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
     <Compile Include="../../src/OpenRend.App/WorkspaceLayoutManager.cs" Link="WorkspaceLayoutManager.cs" />
+    <Compile Include="../../src/OpenRend.App/ColorGradingWheelControl.cs" Link="ColorGradingWheelControl.cs" />
   </ItemGroup>
 </Project>

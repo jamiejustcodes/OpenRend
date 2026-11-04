@@ -499,87 +499,70 @@ public sealed class ColorGradingDockControl : UserControl
         grid.RowDefinitions.Add(new RowDefinition());
         grid.RowDefinitions.Add(new RowDefinition());
 
-        var liftCard = MakeWheelCard("Shadows (Lift)", "ColorWheel_Shadows", -0.5, 0.5, 0, 0.01,
-            out lw, out lys, out lr, OnLiftWheelChanged, OnLiftSliderChanged, () => ResetWheelGroup("Lift"));
+        var liftCard = MakeWheelCard("Shadows (Lift)", "ColorWheel_Shadows",
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            0.01, true,
+            out lw, out lys, out lr,
+            (r, g, b, y) => OnWheelGroupChanged("Lift", r, g, b, y),
+            () => ResetWheelGroup("Lift"));
         Grid.SetRow(liftCard, 0); Grid.SetColumn(liftCard, 0); grid.Children.Add(liftCard);
 
-        var gammaCard = MakeWheelCard("Midtones (Gamma)", "ColorWheel_Midtones", 0.2, 3.0, 1.0, 0.01,
-            out gw, out gys, out gr, OnGammaWheelChanged, OnGammaSliderChanged, () => ResetWheelGroup("Gamma"));
+        var gammaCard = MakeWheelCard("Midtones (Gamma)", "ColorWheel_Midtones",
+            0.0, 5.0, 1.0,
+            0.0, 5.0, 1.0,
+            0.0, 5.0, 1.0,
+            0.0, 5.0, 1.0,
+            0.01, false,
+            out gw, out gys, out gr,
+            (r, g, b, y) => OnWheelGroupChanged("Gamma", r, g, b, y),
+            () => ResetWheelGroup("Gamma"));
         Grid.SetRow(gammaCard, 0); Grid.SetColumn(gammaCard, 1); grid.Children.Add(gammaCard);
 
-        var gainCard = MakeWheelCard("Highlights (Gain)", "ColorWheel_Highlights", 0.0, 4.0, 1.0, 0.01,
-            out hw, out hys, out hr, OnGainWheelChanged, OnGainSliderChanged, () => ResetWheelGroup("Gain"));
+        var gainCard = MakeWheelCard("Highlights (Gain)", "ColorWheel_Highlights",
+            0.0, 2.0, 1.0,
+            0.0, 2.0, 1.0,
+            0.0, 2.0, 1.0,
+            0.0, 2.0, 1.0,
+            0.01, true,
+            out hw, out hys, out hr,
+            (r, g, b, y) => OnWheelGroupChanged("Gain", r, g, b, y),
+            () => ResetWheelGroup("Gain"));
         Grid.SetRow(gainCard, 1); Grid.SetColumn(gainCard, 0); grid.Children.Add(gainCard);
 
-        var offsetCard = MakeWheelCard("Offset", "ColorWheel_Log_Offset", -0.5, 0.5, 0.0, 0.01,
-            out ow, out oys, out orBlock, OnOffsetWheelChanged, OnOffsetSliderChanged, () => ResetWheelGroup("Offset"));
+        var offsetCard = MakeWheelCard("Offset", "ColorWheel_Log_Offset",
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            -1.0, 1.0, 0.0,
+            0.01, false,
+            out ow, out oys, out orBlock,
+            (r, g, b, y) => OnWheelGroupChanged("Offset", r, g, b, y),
+            () => ResetWheelGroup("Offset"));
         Grid.SetRow(offsetCard, 1); Grid.SetColumn(offsetCard, 1); grid.Children.Add(offsetCard);
 
         return grid;
     }
 
-    private Border MakeWheelCard(
-        string title, string autoId, double yMin, double yMax, double yDef, double yStep,
+    private FrameworkElement MakeWheelCard(
+        string title, string autoId,
+        double rMin, double rMax, double rDef,
+        double gMin, double gMax, double gDef,
+        double bMin, double bMax, double bDef,
+        double yMin, double yMax, double yDef,
+        double yStep, bool isPickerVisible,
         out ColorGradingWheelControl wheel, out Slider ySlider, out TextBlock readout,
-        Action<double, double> onWheel, Action<double> onSlider, Action onReset)
+        Action<double, double, double, double> onAllChanged, Action onReset)
     {
-        var border = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(40, 40, 40)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60)),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(3),
-            Margin = new Thickness(3),
-            Padding = new Thickness(6)
-        };
-        AutomationProperties.SetAutomationId(border, autoId);
-
-        var stack = new StackPanel();
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        header.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, Foreground = Brushes.White, FontSize = 11 });
-        var resetBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
-        AutomationProperties.SetAutomationId(resetBtn, autoId + "_Reset");
-        resetBtn.Click += (_, _) => onReset();
-        DockPanel.SetDock(resetBtn, Dock.Right);
-        header.Children.Add(resetBtn);
-        stack.Children.Add(header);
-
-        var wheelRow = new DockPanel();
-        wheel = new ColorGradingWheelControl { WheelName = title, Width = 110, Height = 110, Margin = new Thickness(0, 0, 6, 0) };
-        AutomationProperties.SetAutomationId(wheel, autoId + "_Wheel");
-        wheel.ValuesChanged += onWheel;
-        wheelRow.Children.Add(wheel);
-
-        ySlider = new Slider
-        {
-            Orientation = Orientation.Vertical,
-            Minimum = yMin,
-            Maximum = yMax,
-            Value = yDef,
-            SmallChange = yStep,
-            LargeChange = yStep * 5,
-            Height = 100,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        AutomationProperties.SetAutomationId(ySlider, autoId + "_Y");
-        var ys = ySlider;
-        ySlider.ValueChanged += (_, _) => onSlider(ys.Value);
-        DockPanel.SetDock(ySlider, Dock.Right);
-        wheelRow.Children.Add(ySlider);
-        stack.Children.Add(wheelRow);
-
-        readout = new TextBlock
-        {
-            Text = "R: 0.00  G: 0.00  B: 0.00  Y: 0.00",
-            FontSize = 9.5,
-            Foreground = Brushes.LightGray,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0)
-        };
-        stack.Children.Add(readout);
-
-        border.Child = stack;
-        return border;
+        wheel = new ColorGradingWheelControl();
+        wheel.Configure(title, autoId, rMin, rMax, rDef, gMin, gMax, gDef, bMin, bMax, bDef, yMin, yMax, yDef, yStep, isPickerVisible);
+        ySlider = wheel.YSlider;
+        readout = wheel.ReadoutTextBlock;
+        wheel.AllValuesChanged += onAllChanged;
+        wheel.ResetRequested += onReset;
+        return wheel;
     }
 
     // --- Page 2: Tone & Levels ---
@@ -922,31 +905,19 @@ public sealed class ColorGradingDockControl : UserControl
 
             // Lift
             var lr = fx.GetParameter("Lift_R"); var lg = fx.GetParameter("Lift_G"); var lb = fx.GetParameter("Lift_B"); var ly = fx.GetParameter("Lift_Y");
-            liftWheel.ValueX = Math.Clamp((lr - lb) / 1.2, -1, 1);
-            liftWheel.ValueY = Math.Clamp(lg / 0.8, -1, 1);
-            liftYSlider.Value = ly;
-            liftReadout.Text = $"R: {lr:F2}  G: {lg:F2}  B: {lb:F2}  Y: {ly:F2}";
+            liftWheel.SetValues(lr, lg, lb, ly);
 
             // Gamma
             var gr = fx.GetParameter("Gamma_R"); var gg = fx.GetParameter("Gamma_G"); var gb = fx.GetParameter("Gamma_B"); var gy = fx.GetParameter("Gamma_Y");
-            gammaWheel.ValueX = Math.Clamp((gr - gb) / 1.2, -1, 1);
-            gammaWheel.ValueY = Math.Clamp((gg - 1.0) / 0.8, -1, 1);
-            gammaYSlider.Value = gy;
-            gammaReadout.Text = $"R: {gr:F2}  G: {gg:F2}  B: {gb:F2}  Y: {gy:F2}";
+            gammaWheel.SetValues(gr, gg, gb, gy);
 
             // Gain
             var hr = fx.GetParameter("Gain_R"); var hg = fx.GetParameter("Gain_G"); var hb = fx.GetParameter("Gain_B"); var hy = fx.GetParameter("Gain_Y");
-            gainWheel.ValueX = Math.Clamp((hr - hb) / 1.2, -1, 1);
-            gainWheel.ValueY = Math.Clamp((hg - 1.0) / 0.8, -1, 1);
-            gainYSlider.Value = hy;
-            gainReadout.Text = $"R: {hr:F2}  G: {hg:F2}  B: {hb:F2}  Y: {hy:F2}";
+            gainWheel.SetValues(hr, hg, hb, hy);
 
             // Offset
             var or = fx.GetParameter("Offset_R"); var og = fx.GetParameter("Offset_G"); var ob = fx.GetParameter("Offset_B"); var oy = fx.GetParameter("Offset_Y");
-            offsetWheel.ValueX = Math.Clamp((or - ob) / 1.2, -1, 1);
-            offsetWheel.ValueY = Math.Clamp(og / 0.8, -1, 1);
-            offsetYSlider.Value = oy;
-            offsetReadout.Text = $"R: {or:F2}  G: {og:F2}  B: {ob:F2}  Y: {oy:F2}";
+            offsetWheel.SetValues(or, og, ob, oy);
 
             // Levels
             inMinSlider.Value = fx.GetParameter("InMinAdjust");
@@ -1116,45 +1087,16 @@ public sealed class ColorGradingDockControl : UserControl
 
     // --- Wheel Callbacks ---
 
-    private void OnLiftWheelChanged(double vx, double vy)
+    private void OnWheelGroupChanged(string group, double r, double g, double b, double y)
     {
-        var r = Math.Clamp(vx * 0.6, -0.6, 0.6);
-        var g = Math.Clamp(vy * 0.8, -0.8, 0.8);
-        var b = Math.Clamp(-vx * 0.6, -0.6, 0.6);
-        ResetParams(new() { ["Lift_R"] = r, ["Lift_G"] = g, ["Lift_B"] = b });
+        ResetParams(new()
+        {
+            [$"{group}_R"] = r,
+            [$"{group}_G"] = g,
+            [$"{group}_B"] = b,
+            [$"{group}_Y"] = y
+        });
     }
-
-    private void OnLiftSliderChanged(double y) => CommitSingleParam("Lift_Y", y);
-
-    private void OnGammaWheelChanged(double vx, double vy)
-    {
-        var r = Math.Clamp(1.0 + vx * 0.6, 0.2, 3.0);
-        var g = Math.Clamp(1.0 + vy * 0.8, 0.2, 3.0);
-        var b = Math.Clamp(1.0 - vx * 0.6, 0.2, 3.0);
-        ResetParams(new() { ["Gamma_R"] = r, ["Gamma_G"] = g, ["Gamma_B"] = b });
-    }
-
-    private void OnGammaSliderChanged(double y) => CommitSingleParam("Gamma_Y", y);
-
-    private void OnGainWheelChanged(double vx, double vy)
-    {
-        var r = Math.Clamp(1.0 + vx * 0.8, 0.0, 4.0);
-        var g = Math.Clamp(1.0 + vy * 0.8, 0.0, 4.0);
-        var b = Math.Clamp(1.0 - vx * 0.8, 0.0, 4.0);
-        ResetParams(new() { ["Gain_R"] = r, ["Gain_G"] = g, ["Gain_B"] = b });
-    }
-
-    private void OnGainSliderChanged(double y) => CommitSingleParam("Gain_Y", y);
-
-    private void OnOffsetWheelChanged(double vx, double vy)
-    {
-        var r = Math.Clamp(vx * 0.5, -0.5, 0.5);
-        var g = Math.Clamp(vy * 0.5, -0.5, 0.5);
-        var b = Math.Clamp(-vx * 0.5, -0.5, 0.5);
-        ResetParams(new() { ["Offset_R"] = r, ["Offset_G"] = g, ["Offset_B"] = b });
-    }
-
-    private void OnOffsetSliderChanged(double y) => CommitSingleParam("Offset_Y", y);
 
     private void ResetWheelGroup(string group)
     {

@@ -139,6 +139,21 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Verified desktop UI automation test `CustomRenderPresetCanBeSavedRenamedAndRetainedWhenRenderingABuiltin` passing in 57 seconds with element screenshot capture.
     - Full gate passed: 100% native integration tests, 971 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat(color): implement Vegas-style 1:1 color wheels, 4-channel faders, and eyedropper balancing` implemented 1:1 Vegas Pro Color Wheels architecture matching `ScriptPortal.Vegas.ColorGradingPanel.ColorGradingColorBall` and `CmykWheelFromStops`.
+  - Chromaticity Projection & Invertible Transformations:
+    - Reverse-engineered Vegas Pro's basis vectors ($\theta_R = 185^\circ$, $\theta_G = -40^\circ$, $\theta_B = 65^\circ$) and Moore-Penrose pseudo-inverse coefficients mapping polar coordinates $(x, y)$ to $(R, G, B)$ channel projections with exact roundtrip stability.
+    - Generated high-fidelity 8-stop CMYK/RGB disc bitmap matching `CmykWheelFromStops` with non-linear saturation gamma and neutral center baseline.
+  - Interactive UI & Channel Management:
+    - Built `ColorGradingWheelControl.cs` supporting both 2D circular chromaticity disc view and 4-channel vertical faders view (`R`, `G`, `B`, `Y`).
+    - Added direct numeric input boxes under each wheel with mouse-wheel incremental stepping and Ctrl micro-stepping.
+    - Implemented fine-precision drag mode (`Ctrl + Drag`) with scaled mouse delta ($0.2\times$).
+    - Added Black/White balance eyedropper sampling for Lift and Gain with color preview swatch.
+    - Added static clipboard buffer for copying and pasting $(R, G, B, Y)$ values across wheels.
+    - Updated `ColorGradingDockControl.cs` and `ColorGradingWindow.cs` to use the unified 1:1 wheel architecture.
+  - Verification:
+    - Added 6 unit tests in `ColorGradingWheelsEditorTests.cs` (neutral defaults roundtrip, directional vector projection, channel bounds & event updates, wheel/sliders mode toggle, clipboard copy/paste, and eyedropper balance calculation).
+    - Full gate passed: 100% native integration tests, 993 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat(pancrop): implement Vegas-style 2D motion path smoothing, custom presets, and keyframe clipboard` implemented 1:1 Vegas Pro Event Pan/Crop keyframe trajectory interpolation and workspace management suite matching `ScriptPortal.Vegas.VideoMotion` and `VideoMotionKeyframe`.
   - Motion Interpolation & Trajectory Smoothing:
     - Enhanced `CropAnimation.cs` with Catmull-Rom 2D spline trajectory smoothing for `CenterX` and `CenterY` across 3+ keyframes when `Smooth` interpolation is active with `Smoothness` ($0.0\%$ to $100.0\%$), delivering continuous $C^1$ velocity and curvature through keyframe corners while retaining pure scalar linear/Hermite evaluation for 2-keyframe animations.
