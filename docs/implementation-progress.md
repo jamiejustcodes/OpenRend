@@ -212,6 +212,28 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `ColorGradingProcessorTests.cs` (OpenRend.Media.Tests) testing HSL curve hue shift and saturation modulation on pixel buffers.
     - Full gate passed: 100% native integration tests, 982 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat: implement vegas pro 1:1 trimmer window, 2/3/4-point editing, subclip creation, and shuttle suite` implemented 1:1 Vegas Pro Trimmer window architecture matching `ScriptPortal.Vegas.Trimmer`, `CreateSubclip`, and Vegas Pro source editing toolbars.
+  - Core & Models:
+    - Created `TrimmerStream.cs` with `TrimmerPlacementStream` enum (`VideoAndAudio`, `VideoOnly`, `AudioOnly`).
+    - Extended `MediaAsset` in `ProjectDocument.cs` with `DisplayName` property, JSON ignore when null, and name fallback logic.
+    - Added `LoopRegion` observable property and `LoopRegionChanged` event synchronization in `TimelineLoopRegion.cs`, `EditorViewModel.cs`, and `MainWindow.xaml.cs`.
+  - Placement & Editing Operations:
+    - Enhanced `EditorViewModel.PlaceSubclip` to support stream-selective placement (`VideoAndAudio`, `VideoOnly`, `AudioOnly`) and dynamic `playbackRate` adjustment.
+    - Implemented 2-point reverse edit `EditorViewModel.PlaceSubclipUpToCursor` (`Shift+A`): places subclip ending exactly at current timeline cursor.
+    - Implemented 4-point edit `EditorViewModel.PlaceSubclipFitToFill` (`Ctrl+Shift+A`): calculates `rate = sourceDuration / targetDuration` (clamped to [0.05, 10.0]) and fits the marked subclip into the active timeline loop region at matching playback rate.
+  - UI Implementation:
+    - Created `CreateSubclipDialog.cs` with authentic Vegas Pro dark theme styling, In/Out/Length readouts, default subclip numbering, and owner window centering.
+    - Enhanced `TrimmerControl.cs`:
+      - Transport: Jump to Start (`|◄`), Shuttle Reverse (`◄◄` / `J` cycling -1x, -2x, -4x, -8x), Prev Frame (`◄` / `Left`), Play/Pause (`▶/⏸` / `Space` / `K`), Next Frame (`►` / `Right`), Shuttle Forward (`►►` / `L` cycling 1x, 2x, 4x, 8x), Jump to End (`►|`), and Loop Toggle (`↻` / `Q`).
+      - Live shuttle speed indicator readout (`1x`, `2x`, `4x`, `-2x`, etc.).
+      - Stream Mode Selector Buttons: `Both (V/A)` | `Video (V)` | `Audio (A)` with active toggle highlight.
+      - Dual-sided audio waveform peaks rendering directly in the Trimmer scrubber ruler when media has audio (olive-green background `#3A6042` and bright green selection `#5CB874`).
+      - Vegas Pro cyan bracket handles `[` and `]`, translucent blue selection overlay `#30007ACC`, and gold playhead needle diamond cap `#FFD700`.
+      - Insertion Buttons: `Create Subclip`, `Fit to Fill`, `Add to Cursor (Shift+A)`, and `[+] Add (A)`.
+  - Verification:
+    - Added 4 comprehensive unit tests in `TrimmerEditorTests.cs` (OpenRend.Editor.Tests) verifying stream mode routing, 2-point reverse edit up to cursor, 4-point Fit to Fill playback rate scaling, and J-K-L shuttle speed cycling.
+    - Full gate passed: 100% native integration tests, 1,028 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat: implement vegas pro 1:1 audio bus, master bus, and track envelope automation suite` implemented 1:1 Vegas Pro Audio Bus and Master Bus Envelope Automation matching `ScriptPortal.Vegas.AudioBusTrack`, `MasterBus`, and `EnvelopeType` (Volume, Pan, Mute).
   - Core & Models:
     - Extended `AudioBusTrack.cs` with `Envelopes` collection, deep cloning, and schema validation ensuring envelope types are unique and restricted to `Volume`, `Pan`, and `Mute`.

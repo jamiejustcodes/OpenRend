@@ -484,7 +484,9 @@ public sealed class MediaAsset
 {
     public Guid Id { get; set; } = Guid.NewGuid();
     public string Path { get; set; } = "";
-    [JsonIgnore] public string Name => IsGenerated && Generator != null ? $"{Generator.Title} ({Generator.PresetName})" : System.IO.Path.GetFileName(Path);
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DisplayName { get; set; }
+    [JsonIgnore] public string Name => !string.IsNullOrEmpty(DisplayName) ? DisplayName : (IsGenerated && Generator != null ? $"{Generator.Title} ({Generator.PresetName})" : System.IO.Path.GetFileName(Path));
     public bool IsGenerated { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public MediaGeneratorData? Generator { get; set; }

@@ -88,6 +88,12 @@ public sealed class EditorViewModel : ObservableObject
     public void CycleNextEditTool() => EditTool = EditTool.NextTool();
     public void CyclePreviousEditTool() => EditTool = EditTool.PreviousTool();
     public RulerFormat RulerFormat => Project.RulerFormat;
+    private FrameRange? loopRegion;
+    public FrameRange? LoopRegion
+    {
+        get => loopRegion;
+        set => SetProperty(ref loopRegion, value);
+    }
     public void SetRulerFormat(RulerFormat format)
     {
         if (Project.RulerFormat == format) return;
@@ -290,7 +296,7 @@ public sealed class EditorViewModel : ObservableObject
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
     }
 
-    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null)
+    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio, double? playbackRate = null)
     {
         var asset = Project.Media.Single(m => m.Id == mediaId);
         var start = at ?? Position;
@@ -299,7 +305,19 @@ public sealed class EditorViewModel : ObservableObject
         var mode = rippleMode ?? RippleMode;
         Editor.Execute(p =>
         {
-            var primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
+            TrackKind primaryKind;
+            if (stream == TrimmerPlacementStream.AudioOnly)
+            {
+                primaryKind = TrackKind.Audio;
+            }
+            else if (stream == TrimmerPlacementStream.VideoOnly)
+            {
+                primaryKind = TrackKind.Video;
+            }
+            else
+            {
+                primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
+            }
             var target = chosen ?? p.Tracks.FirstOrDefault(t => t.Kind == primaryKind && !t.IsLocked);
             if (target is null)
             {
@@ -311,7 +329,7 @@ public sealed class EditorViewModel : ObservableObject
                 throw new InvalidOperationException("This media has no stream for the selected track.");
 
             TimelineTrack? audioTrack = null;
-            if (primaryKind == TrackKind.Video && asset.HasAudio)
+            if (stream == TrimmerPlacementStream.VideoAndAudio && primaryKind == TrackKind.Video && asset.HasAudio)
             {
                 audioTrack = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
                 if (audioTrack is null) { audioTrack = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audioTrack); }
@@ -346,13 +364,15 @@ public sealed class EditorViewModel : ObservableObject
                 }
             }
 
+            var rate = playbackRate.HasValue ? Math.Clamp(playbackRate.Value, 0.05, 10.0) : 1.0;
             var clip = new TimelineClip
             {
                 MediaId = mediaId,
                 Name = asset.Name,
                 StartFrame = start,
                 SourceInFrame = Math.Max(0, sourceIn),
-                DurationFrames = Math.Max(1, duration)
+                DurationFrames = Math.Max(1, duration),
+                PlaybackRate = rate
             };
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
             if (audioTrack is not null)
@@ -362,11 +382,25 @@ public sealed class EditorViewModel : ObservableObject
                 var sound = clip.DeepClone();
                 sound.Id = Guid.NewGuid();
                 sound.GroupId = group;
+                sound.PlaybackRate = rate;
                 audioTrack.Clips.Add(sound);
                 Selection.Add(sound.Id);
             }
         });
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
+    }
+
+    public void PlaceSubclipUpToCursor(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio)
+    {
+        var start = Math.Max(0, Position - duration);
+        PlaceSubclip(mediaId, sourceIn, duration, trackId, at: start, advanceCursor: false, stream: stream);
+    }
+
+    public void PlaceSubclipFitToFill(Guid mediaId, long sourceIn, long sourceDuration, FrameRange targetRange, Guid? trackId = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio)
+    {
+        var targetDuration = Math.Max(1, targetRange.FrameCount);
+        var rate = (double)sourceDuration / targetDuration;
+        PlaceSubclip(mediaId, sourceIn, targetDuration, trackId, at: targetRange.StartFrame, advanceCursor: true, stream: stream, playbackRate: rate);
     }
 
     public void Split()

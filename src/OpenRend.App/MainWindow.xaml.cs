@@ -411,6 +411,7 @@ public partial class MainWindow : Window
         Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
         Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
+        Timeline.LoopRegionChanged += range => vm.LoopRegion = range;
         TrimmerDeck.Initialize(vm);
         vm.Changed += Refresh;
         timer.Tick += async (_, _) =>

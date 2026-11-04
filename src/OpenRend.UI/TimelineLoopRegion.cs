@@ -11,13 +11,17 @@ public sealed partial class TimelineView
     private long loopAnchor;
     private bool selectingLoop;
 
+    public event Action<FrameRange?>? LoopRegionChanged;
+
     public FrameRange? LoopRegion
     {
         get => loopRegion;
         set
         {
             value?.Validate(Project.DurationFrames);
+            if (loopRegion == value) return;
             loopRegion = value;
+            LoopRegionChanged?.Invoke(value);
             InvalidateVisual();
         }
     }
