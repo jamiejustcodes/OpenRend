@@ -800,7 +800,15 @@
           <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" Content="X" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
           <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="4,0"/>
           <ToggleButton x:Name="IgnoreGroupsToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="ðŸ”—" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Ignore Event Grouping" ToolTip="Ignore Event Grouping (Ctrl+Shift+U)" Click="IgnoreGroupsClick" Margin="2,0"/>
-          <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="&#x2637;" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0"/>
+          <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="&#x2637;" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0">
+            <ToggleButton.ContextMenu>
+              <ContextMenu>
+                <MenuItem x:Name="RippleToggleAffectedTracks" Header="Affected Tracks" InputGestureText="F" Click="RippleAffectedTracksClick" IsChecked="True"/>
+                <MenuItem x:Name="RippleToggleAffectedTracksMarkers" Header="Affected Tracks, Bus Tracks, Markers" InputGestureText="Ctrl+Shift+F" Click="RippleAffectedTracksMarkersClick"/>
+                <MenuItem x:Name="RippleToggleAllTracksMarkers" Header="All Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" Click="RippleAllTracksMarkersClick"/>
+              </ContextMenu>
+            </ToggleButton.ContextMenu>
+          </ToggleButton>
         </StackPanel>
       </DockPanel>
     </Border>

@@ -1052,14 +1052,14 @@ public partial class MainWindow : Window
         {
             if (gesture.NewTrackIndex is { } newIdx && gesture.NewTrackKind is { } newKind)
             {
-                var newTrack = vm.Editor.MoveSelectionToNewTrack(movingIds, gesture.ClipId, newIdx, newKind, gesture.Start, ignoreGroups);
+                var newTrack = vm.Editor.MoveSelectionToNewTrack(movingIds, gesture.ClipId, newIdx, newKind, gesture.Start, ignoreGroups, gesture.Ripple, gesture.RippleMode);
                 var trackIndex = vm.Project.Tracks.IndexOf(newTrack);
                 if (trackIndex >= 0) Timeline.ActivateTrack(trackIndex);
                 vm.Status = $"Created new {newKind} layer '{newTrack.Name}' and moved event.";
             }
             else
             {
-                vm.Editor.MoveSelection(movingIds, gesture.ClipId, gesture.TrackId, gesture.Start, ignoreGroups);
+                vm.Editor.MoveSelection(movingIds, gesture.ClipId, gesture.TrackId, gesture.Start, ignoreGroups, gesture.Ripple, gesture.RippleMode);
                 vm.Status = $"Moved event to {TimelineView.FormatTimecode(gesture.Start, vm.Project.FrameRate)}.";
             }
         }
@@ -1934,6 +1934,9 @@ public partial class MainWindow : Window
         if (RippleAffectedTracksMenu is not null) RippleAffectedTracksMenu.IsChecked = mode == AutoRippleMode.AffectedTracks;
         if (RippleAffectedTracksMarkersMenu is not null) RippleAffectedTracksMarkersMenu.IsChecked = mode == AutoRippleMode.AffectedTracksAndMarkers;
         if (RippleAllTracksMarkersMenu is not null) RippleAllTracksMarkersMenu.IsChecked = mode == AutoRippleMode.AllTracksAndMarkers;
+        if (RippleToggleAffectedTracks is not null) RippleToggleAffectedTracks.IsChecked = mode == AutoRippleMode.AffectedTracks;
+        if (RippleToggleAffectedTracksMarkers is not null) RippleToggleAffectedTracksMarkers.IsChecked = mode == AutoRippleMode.AffectedTracksAndMarkers;
+        if (RippleToggleAllTracksMarkers is not null) RippleToggleAllTracksMarkers.IsChecked = mode == AutoRippleMode.AllTracksAndMarkers;
         UpdateRippleTooltip();
         vm.Status = $"Auto Ripple mode: {GetRippleModeDescription(mode)}.";
     }

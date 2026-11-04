@@ -335,6 +335,39 @@ public sealed class EditorViewModel : ObservableObject
                     if (track.IsLocked) throw new InvalidOperationException("Unlock the destination track before pasting.");
                     destinations.Add(copied.TrackId, track); used.Add(track.Id);
                 }
+            }
+
+            var pasteSpan = ConvertFrame(clipboard.Max(c => c.Clip.EndFrame) - origin);
+            if (Ripple && pasteSpan > 0)
+            {
+                var destinationTrackIds = destinations.Values.Select(d => d.Id).ToHashSet();
+                if (RippleMode == AutoRippleMode.AffectedTracks)
+                {
+                    foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
+                            c.StartFrame += pasteSpan;
+                }
+                else if (RippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
+                            c.StartFrame += pasteSpan;
+                    foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
+                        m.Frame += pasteSpan;
+                }
+                else // AllTracksAndMarkers
+                {
+                    foreach (var t in p.Tracks)
+                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
+                            c.StartFrame += pasteSpan;
+                    foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
+                        m.Frame += pasteSpan;
+                }
+            }
+
+            foreach (var copied in clipboard)
+            {
+                var track = destinations[copied.TrackId];
                 var clip = copied.Clip.DeepClone(); clip.Id = Guid.NewGuid(); clip.MediaId = assets[clip.MediaId];
                 var offset = ConvertFrame(clip.StartFrame - origin);
                 clip.DurationFrames = Math.Max(1, checked(ConvertFrame(clip.EndFrame - origin) - offset));

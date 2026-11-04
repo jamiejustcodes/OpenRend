@@ -1268,6 +1268,8 @@ public sealed partial class TimelineView : FrameworkElement
                         "Move",
                         NewTrackIndex: commitNewTrackIndex,
                         NewTrackKind: commitNewTrackKind,
+                        Ripple: Ripple,
+                        RippleMode: RippleMode,
                         IgnoreGroups: commitIgnoreGroups));
                 }
                 else if (commitDestination >= 0 && commitDestination < Project.Tracks.Count &&
@@ -1281,6 +1283,8 @@ public sealed partial class TimelineView : FrameworkElement
                         clip.SourceInFrame,
                         clip.DurationFrames,
                         "Move",
+                        Ripple: Ripple,
+                        RippleMode: RippleMode,
                         IgnoreGroups: commitIgnoreGroups));
                 }
             }

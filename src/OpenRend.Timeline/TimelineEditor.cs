@@ -659,7 +659,7 @@ public sealed partial class TimelineEditor
             .ToList();
     }
 
-    public void MoveSelection(IEnumerable<Guid> ids, Guid primaryClipId, Guid targetTrackId, long start, bool ignoreGroups = false)
+    public void MoveSelection(IEnumerable<Guid> ids, Guid primaryClipId, Guid targetTrackId, long start, bool ignoreGroups = false, bool ripple = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
         ArgumentNullException.ThrowIfNull(ids);
         var selected = SelectedClips(ids.Append(primaryClipId), ignoreGroups);
@@ -668,6 +668,8 @@ public sealed partial class TimelineEditor
         EnsureUnlocked(target);
         EnsureCompatible(Project.Media.Single(m => m.Id == primary.MediaId), target);
         var delta = checked(start - primary.StartFrame);
+        var oldEnd = primary.EndFrame;
+        var movedIds = selected.Select(s => s.Clip.Id).ToHashSet();
         var positions = new Dictionary<Guid, long>();
         foreach (var item in selected)
         {
@@ -678,14 +680,71 @@ public sealed partial class TimelineEditor
             EnsureSourceBounds(moved, Project.Media.Single(m => m.Id == moved.MediaId));
             positions.Add(moved.Id, moved.StartFrame);
         }
+
+        var shifts = new Dictionary<Guid, long>();
+        var markerShifts = new Dictionary<Guid, long>();
+
+        if (ripple && delta != 0)
+        {
+            var affectedTrackIds = selected.Select(s => s.Track.Id).Append(targetTrackId).ToHashSet();
+            if (rippleMode == AutoRippleMode.AffectedTracks)
+            {
+                foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+            }
+            else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+            {
+                foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                {
+                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                }
+            }
+            else // AutoRippleMode.AllTracksAndMarkers
+            {
+                foreach (var track in Project.Tracks)
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                {
+                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                }
+            }
+        }
+
         Execute(_ =>
         {
             foreach (var item in selected) item.Clip.StartFrame = positions[item.Clip.Id];
+            foreach (var (clipId, newFrame) in shifts)
+            {
+                var (_, clip) = FindClip(clipId);
+                clip.StartFrame = newFrame;
+            }
+            foreach (var (markerId, newFrame) in markerShifts)
+            {
+                var m = Project.Markers.FirstOrDefault(mk => mk.Id == markerId);
+                if (m != null) m.Frame = newFrame;
+            }
             if (source != target) { source.Clips.Remove(primary); target.Clips.Add(primary); }
         });
     }
 
-    public TimelineTrack MoveSelectionToNewTrack(IEnumerable<Guid> ids, Guid primaryClipId, int targetTrackIndex, TrackKind newTrackKind, long start, bool ignoreGroups = false)
+    public TimelineTrack MoveSelectionToNewTrack(IEnumerable<Guid> ids, Guid primaryClipId, int targetTrackIndex, TrackKind newTrackKind, long start, bool ignoreGroups = false, bool ripple = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
         ArgumentNullException.ThrowIfNull(ids);
         var selected = SelectedClips(ids.Append(primaryClipId), ignoreGroups);
@@ -695,6 +754,8 @@ public sealed partial class TimelineEditor
         if (newTrackKind == TrackKind.Audio && !primaryMedia.HasAudio) throw new InvalidOperationException("Video media cannot be placed on an audio track.");
 
         var delta = checked(start - primary.StartFrame);
+        var oldEnd = primary.EndFrame;
+        var movedIds = selected.Select(s => s.Clip.Id).ToHashSet();
         var positions = new Dictionary<Guid, long>();
         foreach (var item in selected)
         {
@@ -704,6 +765,52 @@ public sealed partial class TimelineEditor
             EnsureTimelineBounds(moved);
             EnsureSourceBounds(moved, Project.Media.Single(m => m.Id == moved.MediaId));
             positions.Add(moved.Id, moved.StartFrame);
+        }
+
+        var shifts = new Dictionary<Guid, long>();
+        var markerShifts = new Dictionary<Guid, long>();
+
+        if (ripple && delta != 0)
+        {
+            var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
+            if (rippleMode == AutoRippleMode.AffectedTracks)
+            {
+                foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+            }
+            else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+            {
+                foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                {
+                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                }
+            }
+            else // AutoRippleMode.AllTracksAndMarkers
+            {
+                foreach (var track in Project.Tracks)
+                {
+                    foreach (var clip in track.Clips.Where(c => !movedIds.Contains(c.Id) && c.StartFrame >= oldEnd))
+                    {
+                        shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
+                    }
+                }
+                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
+                {
+                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
+                }
+            }
         }
 
         var newTrack = new TimelineTrack
@@ -719,6 +826,16 @@ public sealed partial class TimelineEditor
             var clampedIndex = Math.Clamp(targetTrackIndex, 0, Project.Tracks.Count);
             Project.Tracks.Insert(clampedIndex, newTrack);
             foreach (var item in selected) item.Clip.StartFrame = positions[item.Clip.Id];
+            foreach (var (clipId, newFrame) in shifts)
+            {
+                var (_, clip) = FindClip(clipId);
+                clip.StartFrame = newFrame;
+            }
+            foreach (var (markerId, newFrame) in markerShifts)
+            {
+                var m = Project.Markers.FirstOrDefault(mk => mk.Id == markerId);
+                if (m != null) m.Frame = newFrame;
+            }
             foreach (var clip in clipsToMove)
             {
                 source.Clips.Remove(clip);
