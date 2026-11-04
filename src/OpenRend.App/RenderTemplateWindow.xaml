@@ -1,44 +1,300 @@
 <Window x:Class="OpenRend.App.RenderTemplateWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Custom Settings — H.264 / AAC MP4" Width="570" Height="440" MinWidth="510" MinHeight="420"
-        WindowStartupLocation="CenterOwner">
+        Title="Custom Settings" Width="680" Height="580" MinWidth="580" MinHeight="500"
+        WindowStartupLocation="CenterOwner"
+        Background="{StaticResource ColorBG}"
+        Foreground="{StaticResource TextColor}"
+        TextElement.FontFamily="Segoe UI"
+        TextElement.FontSize="11">
   <Grid Margin="12">
     <Grid.RowDefinitions>
-      <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
-      <RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+      <!-- Top header / Template Name and notes -->
+      <RowDefinition Height="Auto"/>
+      <!-- Tab Strip Header -->
+      <RowDefinition Height="Auto"/>
+      <!-- Main tab pages container -->
+      <RowDefinition Height="*"/>
+      <!-- Error banner -->
+      <RowDefinition Height="Auto"/>
+      <!-- Bottom actions -->
+      <RowDefinition Height="Auto"/>
     </Grid.RowDefinitions>
-    <Grid Margin="0,0,0,10">
-      <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-      <Label Content="_Template name:" Target="PresetName" Foreground="{DynamicResource TextBrush}"/>
-      <TextBox Grid.Column="1" x:Name="PresetName" MaxLength="120" AutomationProperties.AutomationId="CustomRenderTemplateName" AutomationProperties.Name="Template name" TextChanged="SettingsChanged"/>
+
+    <!-- Top Section: Template Name, Actions, Notes -->
+    <Border Grid.Row="0" Background="{StaticResource ColorD}" Padding="10,8" Margin="0,0,0,10" BorderBrush="{StaticResource ColorM}" BorderThickness="1">
+      <Grid>
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition Width="90"/>
+          <ColumnDefinition Width="*"/>
+          <ColumnDefinition Width="Auto"/>
+        </Grid.ColumnDefinitions>
+        <Grid.RowDefinitions>
+          <RowDefinition Height="Auto"/>
+          <RowDefinition Height="6"/>
+          <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <Label Content="_Template:" Target="PresetName" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+        <TextBox Grid.Column="1" x:Name="PresetName" MaxLength="120" AutomationProperties.AutomationId="CustomRenderTemplateName" AutomationProperties.Name="Template name" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" Padding="6,3" VerticalContentAlignment="Center" TextChanged="SettingsChanged"/>
+        
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="6,0,0,0">
+          <Button x:Name="Save" Content="Save" Style="{StaticResource TextButton}" AutomationProperties.AutomationId="SaveRenderTemplate" Click="SaveClick" ToolTip="Save settings and name to this custom template." Margin="0,0,4,0"/>
+          <Button x:Name="SaveAs" Content="Save As…" Style="{StaticResource TextButton}" AutomationProperties.AutomationId="SaveRenderTemplateAs" Click="SaveAsClick" ToolTip="Save a new custom template with a different name." Margin="0,0,4,0"/>
+          <Button x:Name="Delete" Content="Delete" Style="{StaticResource TextButton}" AutomationProperties.AutomationId="DeleteRenderTemplate" Click="DeleteClick" ToolTip="Delete this custom template."/>
+        </StackPanel>
+
+        <Label Grid.Row="2" Content="_Description:" Target="DescriptionNotes" Foreground="{StaticResource TextColorGrey}" VerticalAlignment="Top" Padding="0,2,0,0"/>
+        <TextBox Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" x:Name="DescriptionNotes" AutomationProperties.AutomationId="CustomRenderDescription" AutomationProperties.Name="Template description notes" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" Padding="6,3" Height="38" TextWrapping="Wrap" VerticalScrollBarVisibility="Auto" TextChanged="SettingsChanged"/>
+      </Grid>
+    </Border>
+
+    <!-- Vegas Pro Tab Strip Header -->
+    <TabControl Grid.Row="1" x:Name="TabStrip" Height="32" Background="{StaticResource HeaderBrush}" BorderThickness="0" SelectionChanged="TabStripSelectionChanged">
+      <TabItem Header="Video" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="VideoTabItem"/>
+      <TabItem Header="Audio" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="AudioTabItem"/>
+      <TabItem Header="System" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="SystemTabItem"/>
+      <TabItem Header="Project" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="ProjectTabItem"/>
+    </TabControl>
+
+    <!-- Tab Pages Container (Preserves Automation Hierarchy across all tabs) -->
+    <Grid Grid.Row="2" Background="{StaticResource PanelBrush}">
+      <!-- ================= VIDEO TAB ================= -->
+      <ScrollViewer x:Name="VideoPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8">
+        <StackPanel>
+          <CheckBox x:Name="IncludeVideoCheck" Content="Include video" AutomationProperties.AutomationId="CustomRenderIncludeVideo" Foreground="{StaticResource TextColor}" FontWeight="SemiBold" Margin="0,0,0,8" Checked="IncludeVideoChanged" Unchecked="IncludeVideoChanged"/>
+
+          <GroupBox Header="Frame Size" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Frame size:" Target="FrameSizeCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Column="1" x:Name="FrameSizeCombo" AutomationProperties.AutomationId="CustomRenderFrameSize" SelectionChanged="FrameSizeComboChanged"/>
+
+              <Label Grid.Row="2" Content="Dimensions:" Foreground="{StaticResource TextColorGrey}" VerticalAlignment="Center" Padding="0"/>
+              <StackPanel Grid.Row="2" Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                <Label Content="Width:" Target="WidthBox" Foreground="{StaticResource TextColor}" Padding="0,0,4,0"/>
+                <TextBox x:Name="WidthBox" Width="65" AutomationProperties.AutomationId="CustomRenderWidth" AutomationProperties.Name="Width" TextChanged="DimensionTextChanged"/>
+                <Label Content="Height:" Target="HeightBox" Foreground="{StaticResource TextColor}" Margin="12,0,4,0" Padding="0"/>
+                <TextBox x:Name="HeightBox" Width="65" AutomationProperties.AutomationId="CustomRenderHeight" AutomationProperties.Name="Height" TextChanged="DimensionTextChanged"/>
+                <TextBlock Text="(positive even integers)" Foreground="{StaticResource TextColorGrey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+              </StackPanel>
+            </Grid>
+          </GroupBox>
+
+          <GroupBox Header="Format &amp; Motion" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Profile:" Target="ProfileCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Column="1" x:Name="ProfileCombo" AutomationProperties.AutomationId="CustomRenderProfile" SelectionChanged="ProfileComboChanged"/>
+
+              <Label Grid.Row="2" Content="Frame rate:" Target="FrameRateCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="2" Grid.Column="1" x:Name="FrameRateCombo" AutomationProperties.AutomationId="CustomRenderFrameRate" SelectionChanged="FrameRateComboChanged"/>
+
+              <Label Grid.Row="4" Content="Field order:" Target="FieldOrderCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="4" Grid.Column="1" x:Name="FieldOrderCombo" AutomationProperties.AutomationId="CustomRenderFieldOrder" SelectionChanged="FieldOrderComboChanged"/>
+
+              <Label Grid.Row="6" Content="Pixel aspect ratio:" Target="PixelAspectCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="6" Grid.Column="1" x:Name="PixelAspectCombo" AutomationProperties.AutomationId="CustomRenderPixelAspect" SelectionChanged="PixelAspectComboChanged"/>
+            </Grid>
+          </GroupBox>
+
+          <GroupBox Header="Bitrate &amp; Rate Control" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Rate control:" Foreground="{StaticResource TextColor}" VerticalAlignment="Top" Padding="0,2,0,0"/>
+              <StackPanel Grid.Column="1">
+                <RadioButton x:Name="Vbr2PassRadio" GroupName="BitrateModeGroup" Content="Variable bit rate (two passes)" AutomationProperties.AutomationId="CustomRenderBitrateVbr2Pass" Foreground="{StaticResource TextColor}" Margin="0,0,0,4" Checked="BitrateModeRadioChanged"/>
+                <RadioButton x:Name="Vbr1PassRadio" GroupName="BitrateModeGroup" Content="Variable bit rate (single pass)" AutomationProperties.AutomationId="CustomRenderBitrateVbr1Pass" Foreground="{StaticResource TextColor}" Margin="0,0,0,4" Checked="BitrateModeRadioChanged"/>
+                <RadioButton x:Name="CbrRadio" GroupName="BitrateModeGroup" Content="Constant bit rate" AutomationProperties.AutomationId="CustomRenderBitrateCbr" Foreground="{StaticResource TextColor}" Margin="0,0,0,4" Checked="BitrateModeRadioChanged"/>
+                <RadioButton x:Name="CrfRadio" GroupName="BitrateModeGroup" Content="Constant rate factor / Quality (CRF)" AutomationProperties.AutomationId="CustomRenderBitrateCrf" Foreground="{StaticResource TextColor}" Checked="BitrateModeRadioChanged"/>
+              </StackPanel>
+
+              <Label Grid.Row="2" Content="Maximum (bps):" Target="MaxBitrateBox" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <DockPanel Grid.Row="2" Grid.Column="1">
+                <TextBox x:Name="MaxBitrateBox" Width="140" AutomationProperties.AutomationId="CustomRenderMaxBitrate" AutomationProperties.Name="Maximum bitrate in bps" TextChanged="SettingsChanged"/>
+                <TextBlock x:Name="MaxBitrateMbpsText" Text="24.0 Mbps" Foreground="{StaticResource TextColorGrey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+              </DockPanel>
+
+              <Label Grid.Row="4" Content="Average (bps):" Target="AvgBitrateBox" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <DockPanel Grid.Row="4" Grid.Column="1">
+                <TextBox x:Name="AvgBitrateBox" Width="140" AutomationProperties.AutomationId="CustomRenderAvgBitrate" AutomationProperties.Name="Average bitrate in bps" TextChanged="SettingsChanged"/>
+                <TextBlock x:Name="AvgBitrateMbpsText" Text="12.0 Mbps" Foreground="{StaticResource TextColorGrey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+              </DockPanel>
+
+              <Label Grid.Row="6" Content="_Quality (CRF):" Target="Quality" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <DockPanel Grid.Row="6" Grid.Column="1">
+                <TextBox x:Name="Quality" Width="65" MaxLength="2" AutomationProperties.AutomationId="CustomRenderCrf" AutomationProperties.Name="Quality (CRF)" TextChanged="SettingsChanged" GotFocus="FieldGotFocus"/>
+                <TextBlock Text="0–51. Lower values retain more detail and make larger files." Foreground="{StaticResource TextColorGrey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+              </DockPanel>
+            </Grid>
+          </GroupBox>
+
+          <GroupBox Header="Encode Mode" Style="{StaticResource PreferencesGroup}">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Encode mode:" Target="HwAccelCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Column="1" x:Name="HwAccelCombo" AutomationProperties.AutomationId="CustomRenderHwAccel" SelectionChanged="HwAccelComboChanged"/>
+
+              <Label Grid.Row="2" Content="_Encoder speed:" Target="Speed" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Speed" AutomationProperties.AutomationId="CustomRenderEncoderSpeed" AutomationProperties.Name="Encoder speed" SelectionChanged="SpeedChanged" GotFocus="FieldGotFocus"/>
+            </Grid>
+          </GroupBox>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ================= AUDIO TAB ================= -->
+      <ScrollViewer x:Name="AudioPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8">
+        <StackPanel>
+          <CheckBox x:Name="IncludeAudioCheck" Content="Include audio" AutomationProperties.AutomationId="CustomRenderIncludeAudio" Foreground="{StaticResource TextColor}" FontWeight="SemiBold" Margin="0,0,0,8" Checked="IncludeAudioChanged" Unchecked="IncludeAudioChanged"/>
+
+          <GroupBox Header="Audio Format &amp; Quality" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="130"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Audio format:" Target="AudioFormatCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Column="1" x:Name="AudioFormatCombo" AutomationProperties.AutomationId="CustomRenderAudioFormat" SelectionChanged="AudioFormatComboChanged"/>
+
+              <Label Grid.Row="2" Content="Sample rate (Hz):" Target="SampleRateCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="2" Grid.Column="1" x:Name="SampleRateCombo" AutomationProperties.AutomationId="CustomRenderAudioSampleRate" SelectionChanged="SampleRateComboChanged"/>
+
+              <Label Grid.Row="4" Content="_Bitrate (kbps):" Target="AudioBitrate" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <DockPanel Grid.Row="4" Grid.Column="1">
+                <TextBox x:Name="AudioBitrate" Width="80" MaxLength="3" AutomationProperties.AutomationId="CustomRenderAudioBitrate" AutomationProperties.Name="Audio bitrate (kbps)" TextChanged="SettingsChanged" GotFocus="FieldGotFocus"/>
+                <TextBlock Text="32–512 kbps" Foreground="{StaticResource TextColorGrey}" Margin="10,0,0,0" VerticalAlignment="Center"/>
+              </DockPanel>
+
+              <Label Grid.Row="6" Content="Channels:" Target="ChannelsCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="6" Grid.Column="1" x:Name="ChannelsCombo" AutomationProperties.AutomationId="CustomRenderAudioChannels" SelectionChanged="ChannelsComboChanged"/>
+            </Grid>
+          </GroupBox>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ================= SYSTEM TAB ================= -->
+      <ScrollViewer x:Name="SystemPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8">
+        <StackPanel>
+          <GroupBox Header="Container Format" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <StackPanel Margin="8,6">
+              <TextBlock x:Name="FormatDetailsText" Text="MAGIX AVC/AAC MP4 (*.mp4)" Foreground="{StaticResource TextColor}" Margin="0,0,0,4"/>
+              <TextBlock x:Name="FormatNotesText" Text="Standard MPEG-4 Part 14 multimedia container with advanced video coding and AAC audio." Foreground="{StaticResource TextColorGrey}" TextWrapping="Wrap"/>
+            </StackPanel>
+          </GroupBox>
+
+          <GroupBox Header="Hardware Encoder Diagnostics" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
+            <StackPanel Margin="8,6">
+              <DockPanel LastChildFill="True">
+                <Button x:Name="CheckGpuButton" Content="Check GPU" Style="{StaticResource TextButton}" AutomationProperties.AutomationId="CustomRenderCheckGpu" Click="CheckGpuClick" MinWidth="100" Margin="0,0,12,0"/>
+                <TextBlock Text="Probe graphics hardware and verify available GPU acceleration encoders." Foreground="{StaticResource TextColorGrey}" VerticalAlignment="Center"/>
+              </DockPanel>
+              <Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Margin="0,8,0,0" Padding="8,6">
+                <TextBlock x:Name="GpuStatusText" AutomationProperties.AutomationId="CustomRenderGpuStatus" Text="Click 'Check GPU' to test available hardware encoders." Foreground="{StaticResource TextColor}" TextWrapping="Wrap"/>
+              </Border>
+            </StackPanel>
+          </GroupBox>
+
+          <GroupBox Header="Web Streaming" Style="{StaticResource PreferencesGroup}">
+            <StackPanel Margin="8,6">
+              <CheckBox x:Name="FastStartCheck" Content="Enable progressive download (Fast start for web streaming)" AutomationProperties.AutomationId="CustomRenderFastStart" Foreground="{StaticResource TextColor}" IsChecked="True"/>
+              <TextBlock Text="Moves the MOOV atom to the beginning of the file so video begins playing before complete download." Foreground="{StaticResource TextColorGrey}" Margin="20,4,0,0" TextWrapping="Wrap"/>
+            </StackPanel>
+          </GroupBox>
+        </StackPanel>
+      </ScrollViewer>
+
+      <!-- ================= PROJECT TAB ================= -->
+      <ScrollViewer x:Name="ProjectPanel" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="8">
+        <StackPanel>
+          <GroupBox Header="Quality &amp; Color Management" Style="{StaticResource PreferencesGroup}">
+            <Grid Margin="8,6">
+              <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="150"/>
+                <ColumnDefinition Width="*"/>
+              </Grid.ColumnDefinitions>
+              <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="6"/>
+                <RowDefinition Height="Auto"/>
+              </Grid.RowDefinitions>
+
+              <Label Content="Video rendering quality:" Target="QualityCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Column="1" x:Name="QualityCombo" AutomationProperties.AutomationId="CustomRenderQuality" SelectionChanged="QualityComboChanged"/>
+
+              <Label Grid.Row="2" Content="Color space:" Target="ColorSpaceCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="2" Grid.Column="1" x:Name="ColorSpaceCombo" AutomationProperties.AutomationId="CustomRenderColorSpace" SelectionChanged="ColorSpaceComboChanged"/>
+
+              <Label Grid.Row="4" Content="Resample mode:" Target="ResampleCombo" Foreground="{StaticResource TextColor}" VerticalAlignment="Center" Padding="0"/>
+              <ComboBox Grid.Row="4" Grid.Column="1" x:Name="ResampleCombo" AutomationProperties.AutomationId="CustomRenderResampleMode" SelectionChanged="ResampleComboChanged"/>
+            </Grid>
+          </GroupBox>
+        </StackPanel>
+      </ScrollViewer>
     </Grid>
-    <TextBlock Grid.Row="1" x:Name="ProjectDetails" TextWrapping="Wrap" Margin="0,0,0,8"/>
-    <GroupBox Grid.Row="2" Header="Video" Style="{StaticResource PreferencesGroup}" Margin="0,0,0,8">
-      <Grid Margin="8">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Label Content="_Quality (CRF):" Target="Quality" Foreground="{DynamicResource TextBrush}"/>
-        <TextBox Grid.Column="1" x:Name="Quality" MaxLength="2" AutomationProperties.AutomationId="CustomRenderCrf" AutomationProperties.Name="Quality (CRF)" TextChanged="SettingsChanged"/>
-        <TextBlock Grid.Row="1" Grid.Column="1" Text="0–51. Lower values retain more detail and make larger files." TextWrapping="Wrap" Margin="2,4,2,8"/>
-        <Label Grid.Row="2" Content="_Encoder speed:" Target="Speed" Foreground="{DynamicResource TextBrush}"/>
-        <ComboBox Grid.Row="2" Grid.Column="1" x:Name="Speed" AutomationProperties.AutomationId="CustomRenderEncoderSpeed" AutomationProperties.Name="Encoder speed" SelectionChanged="SpeedChanged"/>
-      </Grid>
-    </GroupBox>
-    <GroupBox Grid.Row="3" Header="Audio" Style="{StaticResource PreferencesGroup}">
-      <Grid Margin="8">
-        <Grid.ColumnDefinitions><ColumnDefinition Width="135"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
-        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-        <Label Content="_Bitrate (kbps):" Target="AudioBitrate" Foreground="{DynamicResource TextBrush}"/>
-        <TextBox Grid.Column="1" x:Name="AudioBitrate" MaxLength="3" AutomationProperties.AutomationId="CustomRenderAudioBitrate" AutomationProperties.Name="Audio bitrate (kbps)" TextChanged="SettingsChanged"/>
-        <TextBlock Grid.Row="1" Grid.Column="1" Text="32–512 kbps · AAC stereo · 48 kHz" Margin="2,4,2,0"/>
-      </Grid>
-    </GroupBox>
-    <TextBlock Grid.Row="4" x:Name="Error" AutomationProperties.AutomationId="CustomRenderTemplateError" Foreground="#FFB4AB" TextWrapping="Wrap" Margin="0,8,0,6"/>
-    <StackPanel Grid.Row="5" Orientation="Horizontal" HorizontalAlignment="Right">
-      <Button x:Name="Save" Content="Save" MinWidth="80" AutomationProperties.AutomationId="SaveRenderTemplate" Click="SaveClick" ToolTip="Save settings and name to this custom template."/>
-      <Button x:Name="SaveAs" Content="Save As…" MinWidth="80" AutomationProperties.AutomationId="SaveRenderTemplateAs" Click="SaveAsClick" ToolTip="Save a new custom template with a different name."/>
-      <Button Content="Cancel" MinWidth="80" IsCancel="True"/>
+
+    <!-- Error Banner -->
+    <TextBlock Grid.Row="3" x:Name="Error" AutomationProperties.AutomationId="CustomRenderTemplateError" Foreground="#FF7B5F" TextWrapping="Wrap" Margin="0,6,0,6" MinHeight="16"/>
+
+    <!-- Bottom Actions: OK, Cancel -->
+    <StackPanel Grid.Row="4" Orientation="Horizontal" HorizontalAlignment="Right">
+      <Button x:Name="OkButton" Content="OK" Style="{StaticResource TextButton}" Background="{StaticResource ActiveColor}" MinWidth="80" Height="26" FontWeight="SemiBold" IsDefault="True" AutomationProperties.AutomationId="CustomRenderOk" Click="OkClick" Margin="0,0,6,0"/>
+      <Button x:Name="CancelButton" Content="Cancel" Style="{StaticResource TextButton}" MinWidth="80" Height="26" IsCancel="True" AutomationProperties.AutomationId="CustomRenderCancel"/>
     </StackPanel>
   </Grid>
 </Window>

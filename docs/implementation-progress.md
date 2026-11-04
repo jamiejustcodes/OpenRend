@@ -59,6 +59,14 @@ OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered
 
 Status: complete. Render As dialog replicates Vegas Pro 1:1 render layout, including format categories list (All Formats, MAGIX AVC/AAC MP4, MAGIX HEVC/AAC MP4, Apple ProRes MOV, Sony Wave Audio WAV, MP3 Audio), dynamic format and property search filtering, Match project settings filtering, and favorite presets. Render options include loop region range export, stretch video to fill output frame size (letterbox bypass), channel remapping (None/Stereo, Downmix to Mono, Swap L/R, Mute Left, Mute Right), and integrated/true-peak loudness log generation (.loudness.log). Dynamic status provides live estimated output file size and drive free space. Auto-extension switching automatically updates file extension when selecting audio, ProRes, or MP4 presets.
 
+Template customization replicates the authentic Vegas Pro 1:1 "Custom Settings" tabbed dialog (`RenderTemplateWindow.xaml`):
+- Top Bar: Template name input, Save, Save As, Delete template actions, and template description notes.
+- Video Tab: Frame size presets (Project, 1080p, 4K UHD, 720p, 4K DCI, 480p, Custom), even dimension validation, Profile (Baseline, Main, High), Frame Rate presets, Field Order, Pixel Aspect Ratio presets, Bitrate Mode (VBR 2-pass, VBR 1-pass, CBR, CRF) with Maximum and Average bps inputs, Encode mode (Auto, NVENC, AMF, QSV, CPU), and Encoder Speed presets.
+- Audio Tab: Audio format, Sample rate (44.1k, 48k, 96k Hz), Bitrate (32–512 kbps), and Channels (Stereo, 5.1 Surround).
+- System Tab: File format container details, Live "Check GPU" hardware encoder diagnostics probing available NVENC/AMF/QSV encoders, and Fast start progressive download for web streaming.
+- Project Tab: Video rendering quality (Default, Draft, Preview, Good, Best), Color space (sRGB/BT.709, BT.2020, ACEScg), and Resample mode.
+- Export Engine Integration: `ExportService.cs` maps bitrate modes, profiles, hardware encoders (`h264_nvenc`, `hevc_nvenc`, `h264_amf`, etc.), audio channel counts, and faststart flags, with graceful hardware dimension constraint verification.
+
 ## 7. Final Cut Pro 7 XML and CMX 3600 EDL interchange — high
 
 - [x] Parse and write sequence metadata, tracks, clip items and transitions for the supported format.
@@ -108,6 +116,26 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
 - 2026-11-03: `bcc72ce` implemented Vegas Pro 1:1 Slideshow Builder. Reverse engineered `ScriptPortal.Vegas.Slideshow.dll`. Implemented `SlideshowData.cs`, `TimelineEditor.Slideshow.cs`, and `SlideshowWindow.cs` with two tabs (Pictures and Settings), Ken Burns pan/zoom crop keyframes, dissolve/crossfade transitions, and atomic batch undo/redo. All 750 non-desktop managed tests passed with 0 errors and 0 warnings. Repackaged `dist/OpenRend/OpenRend.exe`.
 
 ## Work log
+
+- 2026-11-04: `feat: implement vegas pro 1:1 render template customization settings dialog and hardware acceleration` implemented 1:1 Vegas Pro Render Template Customization Settings Dialog matching `ScriptPortal.Vegas.dll` (`RenderTemplate`, `Renderer`, `HardwareAccelerationType`) and `RenderAsDialog.dll` (`RenderAsDialogData::ShowEditTemplateDialog`).
+  - Data Models:
+    - Extended `RenderTemplate.cs` with `BitrateMode` (CRF, VBR_2Pass, VBR_1Pass, CBR), `AverageBitrateBps`, `MaxBitrateBps`, `VideoProfile` (Baseline, Main, High), `FieldOrder`, `PixelAspectRatio`, `Rational? FrameRate`, `HardwareAcceleration` (Auto, NVENC, AMF, QSV, CPU), `AudioChannels` (Stereo, 5.1 Surround), `RenderQuality` (ProjectSettings, Draft, Preview, Good, Best), `ColorSpaceOption` (ProjectSettings, Rec709, Rec2020, ACEScg), `ResampleMode`, `FastStart`, and `DescriptionText`.
+    - Added comprehensive schema and invariant validation: positive even dimensions, positive bitrates, `MaxBitrateBps >= AverageBitrateBps`, positive sample rates and pixel aspect ratios, and channel validation.
+    - Updated `Description()` with rich technical format summaries and `EstimatedBytes()` with exact bitrate duration calculations for CBR/VBR rate control modes.
+  - Hardware Acceleration & Export Engine:
+    - Created `HardwareAccelerationHelper.cs` with cached probe diagnostics querying NVENC, AMF, and QSV encoders via FFmpeg.
+    - Enhanced `ExportService.cs` to apply bitrate modes (CBR/VBR bitrates, buffer sizes, CRF), video profile flags, hardware-accelerated codecs (`h264_nvenc`, `hevc_nvenc`, `h264_amf`, etc.), faststart progressive download flags, audio channel counts, and encoder hardware dimension checks (falling back to CPU for dimensions under hardware minimums).
+  - UI Implementation:
+    - Redesigned `RenderTemplateWindow.xaml` and `RenderTemplateWindow.xaml.cs` to replicate the authentic 1:1 Vegas Pro Custom Settings layout with 4 tabs:
+      - Video Tab: frame size presets and custom width/height inputs, video profile, frame rate presets, field order, pixel aspect ratio, bitrate mode radio group with Maximum/Average bps inputs and live Mbps readouts, encode mode dropdown, and encoder speed presets.
+      - Audio Tab: audio format, sample rate, bitrate, and channel configurations.
+      - System Tab: container format details, interactive "Check GPU" button probing hardware encoders with live diagnostics feedback, and web streaming progressive download toggle.
+      - Project Tab: video rendering quality, color space, and resample mode settings.
+    - Preserved complete UI Automation hierarchy across all tabs with zero-height inactive panels and focus-based tab switching.
+  - Verification:
+    - Added 8 unit tests in `RenderTemplateCustomizationTests.cs` testing validation invariants, VBR/CBR bitrates, audio channels, pixel aspect ratios, JSON serialization roundtrip, bitrate estimation, and GPU diagnostics.
+    - Verified desktop UI automation test `CustomRenderPresetCanBeSavedRenamedAndRetainedWhenRenderingABuiltin` passing in 57 seconds with element screenshot capture.
+    - Full gate passed: 100% native integration tests, 971 managed tests passed cleanly with 0 warnings and 0 errors.
 
 - 2026-11-04: `feat: implement vegas pro 1:1 video track parent/child compositing hierarchy, adjustment tracks, and audio bus routing` implemented 1:1 Vegas Pro Video Track Compositing Hierarchy, Adjustment Tracks, and Audio Bus Routing matching `ScriptPortal.Vegas.VideoTrack` (`CompositeNestingLevel`, `IsCompositingChild`, `IsCompositingParent`, `IsAdjustmentTrack`) and `AudioBusTrack` (`BusTracks`, `AddAudioBusTrack`, `MasterBus`).
   - Data Models:

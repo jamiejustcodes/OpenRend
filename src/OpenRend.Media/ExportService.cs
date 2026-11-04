@@ -170,13 +170,137 @@ public sealed class ExportService(TimelineRenderService renderer)
                 {
                     arguments.AddRange(["-c:v", "prores_ks", "-profile:v", (template.ProResProfile ?? 2).ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv422p10le", "-c:a", "pcm_s24le", "-f", "mov", temporaryMedia]);
                 }
-                else if (template.VideoCodec == "libx265")
-                {
-                    arguments.AddRange(["-c:v", "libx265", "-preset", template.EncoderSpeed.ToString().ToLowerInvariant(), "-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", template.AudioBitrateKbps.ToString(CultureInfo.InvariantCulture) + "k", "-f", "mp4", temporaryMedia]);
-                }
                 else
                 {
-                    arguments.AddRange(["-c:v", "libx264", "-preset", template.EncoderSpeed.ToString().ToLowerInvariant(), "-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture), "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", template.AudioBitrateKbps.ToString(CultureInfo.InvariantCulture) + "k", "-movflags", "+faststart", "-f", "mp4", temporaryMedia]);
+                    var isNvenc = false;
+                    var isAmf = false;
+                    var isQsv = false;
+                    var codec = template.VideoCodec;
+
+                    var hw = template.HardwareAcceleration;
+                    if (hw == HardwareAcceleration.Auto)
+                    {
+                        // Hardware encoders (NVENC, AMF, QSV) enforce minimum dimension constraints (typically 128x128).
+                        if (outWidth >= 128 && outHeight >= 128)
+                        {
+                            var detected = HardwareAccelerationHelper.Current;
+                            if (detected.HasNvenc) hw = HardwareAcceleration.NVENC;
+                            else if (detected.HasQsv) hw = HardwareAcceleration.QSV;
+                            else if (detected.HasAmf) hw = HardwareAcceleration.AMF;
+                            else hw = HardwareAcceleration.CPU;
+                        }
+                        else
+                        {
+                            hw = HardwareAcceleration.CPU;
+                        }
+                    }
+                    else if (hw == HardwareAcceleration.NVENC && (outWidth < 128 || outHeight < 128))
+                    {
+                        hw = HardwareAcceleration.CPU;
+                    }
+
+                    if (hw == HardwareAcceleration.NVENC)
+                    {
+                        codec = template.VideoCodec == "libx265" ? "hevc_nvenc" : "h264_nvenc";
+                        isNvenc = true;
+                    }
+                    else if (hw == HardwareAcceleration.AMF)
+                    {
+                        codec = template.VideoCodec == "libx265" ? "hevc_amf" : "h264_amf";
+                        isAmf = true;
+                    }
+                    else if (hw == HardwareAcceleration.QSV)
+                    {
+                        codec = template.VideoCodec == "libx265" ? "hevc_qsv" : "h264_qsv";
+                        isQsv = true;
+                    }
+
+                    arguments.AddRange(["-c:v", codec]);
+
+                    if (isNvenc)
+                    {
+                        var nvencPreset = template.EncoderSpeed switch
+                        {
+                            EncoderSpeed.Ultrafast or EncoderSpeed.Superfast or EncoderSpeed.Veryfast => "p1",
+                            EncoderSpeed.Faster or EncoderSpeed.Fast => "p3",
+                            EncoderSpeed.Medium => "p4",
+                            EncoderSpeed.Slow => "p5",
+                            EncoderSpeed.Slower => "p6",
+                            EncoderSpeed.Veryslow => "p7",
+                            _ => "p4"
+                        };
+                        arguments.AddRange(["-preset", nvencPreset]);
+                        if (template.BitrateMode == BitrateMode.CBR)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-maxrate", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-bufsize", (template.AverageBitrateBps * 2).ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else if (template.BitrateMode is BitrateMode.VBR_1Pass or BitrateMode.VBR_2Pass)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-maxrate", template.MaxBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-bufsize", (template.MaxBitrateBps * 2).ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else
+                        {
+                            arguments.AddRange(["-cq", template.VideoCrf.ToString(CultureInfo.InvariantCulture)]);
+                        }
+                    }
+                    else if (isAmf || isQsv)
+                    {
+                        if (template.BitrateMode == BitrateMode.CBR)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else if (template.BitrateMode is BitrateMode.VBR_1Pass or BitrateMode.VBR_2Pass)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-maxrate", template.MaxBitrateBps.ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else
+                        {
+                            arguments.AddRange(["-global_quality", template.VideoCrf.ToString(CultureInfo.InvariantCulture)]);
+                        }
+                    }
+                    else
+                    {
+                        arguments.AddRange(["-preset", template.EncoderSpeed.ToString().ToLowerInvariant()]);
+                        if (template.BitrateMode == BitrateMode.CBR)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-minrate", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-maxrate", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-bufsize", (template.AverageBitrateBps * 2).ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else if (template.BitrateMode is BitrateMode.VBR_1Pass or BitrateMode.VBR_2Pass)
+                        {
+                            arguments.AddRange(["-b:v", template.AverageBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-maxrate", template.MaxBitrateBps.ToString(CultureInfo.InvariantCulture),
+                                                "-bufsize", (template.MaxBitrateBps * 2).ToString(CultureInfo.InvariantCulture)]);
+                        }
+                        else
+                        {
+                            arguments.AddRange(["-crf", template.VideoCrf.ToString(CultureInfo.InvariantCulture)]);
+                        }
+                    }
+
+                    if (template.VideoCodec == "libx264" || isNvenc || isAmf || isQsv)
+                    {
+                        arguments.AddRange(["-profile:v", template.Profile.ToString().ToLowerInvariant()]);
+                    }
+
+                    arguments.AddRange(["-pix_fmt", "yuv420p"]);
+                    arguments.AddRange(["-c:a", "aac", "-b:a", template.AudioBitrateKbps.ToString(CultureInfo.InvariantCulture) + "k"]);
+                    if (template.AudioChannels != 2)
+                    {
+                        arguments.AddRange(["-ac", template.AudioChannels.ToString(CultureInfo.InvariantCulture)]);
+                    }
+                    if (template.FastStart)
+                    {
+                        arguments.AddRange(["-movflags", "+faststart"]);
+                    }
+                    arguments.AddRange(["-f", "mp4", temporaryMedia]);
                 }
 
                 foreach (var argument in arguments) start.ArgumentList.Add(argument);

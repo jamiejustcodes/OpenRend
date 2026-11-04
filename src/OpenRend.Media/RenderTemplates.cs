@@ -8,6 +8,27 @@ namespace OpenRend.Media;
 [JsonConverter(typeof(JsonStringEnumConverter<EncoderSpeed>))]
 public enum EncoderSpeed { Ultrafast, Superfast, Veryfast, Faster, Fast, Medium, Slow, Slower, Veryslow }
 
+[JsonConverter(typeof(JsonStringEnumConverter<BitrateMode>))]
+public enum BitrateMode { CRF, VBR_2Pass, VBR_1Pass, CBR }
+
+[JsonConverter(typeof(JsonStringEnumConverter<VideoProfile>))]
+public enum VideoProfile { Baseline, Main, High }
+
+[JsonConverter(typeof(JsonStringEnumConverter<FieldOrder>))]
+public enum FieldOrder { Progressive, UpperFieldFirst, LowerFieldFirst }
+
+[JsonConverter(typeof(JsonStringEnumConverter<HardwareAcceleration>))]
+public enum HardwareAcceleration { Auto, NVENC, AMF, QSV, CPU }
+
+[JsonConverter(typeof(JsonStringEnumConverter<RenderQuality>))]
+public enum RenderQuality { ProjectSettings, Draft, Preview, Good, Best }
+
+[JsonConverter(typeof(JsonStringEnumConverter<ColorSpaceOption>))]
+public enum ColorSpaceOption { ProjectSettings, Rec709, Rec2020, ACEScg }
+
+[JsonConverter(typeof(JsonStringEnumConverter<ResampleMode>))]
+public enum ResampleMode { ProjectSettings, SmartResample, ForceResample, DisableResample }
+
 public sealed record RenderTemplate(string Id, string Name, int VideoCrf, int AudioBitrateKbps)
 {
     public EncoderSpeed EncoderSpeed { get; init; } = EncoderSpeed.Fast;
@@ -23,6 +44,24 @@ public sealed record RenderTemplate(string Id, string Name, int VideoCrf, int Au
     public int AudioBitsPerSample { get; init; } = 16;
     public int? ProResProfile { get; init; }
 
+    // Vegas Pro 1:1 Extended Render Template Properties
+    public BitrateMode BitrateMode { get; init; } = BitrateMode.CRF;
+    public long AverageBitrateBps { get; init; } = 12_000_000;
+    public long MaxBitrateBps { get; init; } = 24_000_000;
+    public VideoProfile Profile { get; init; } = VideoProfile.High;
+    public FieldOrder FieldOrder { get; init; } = FieldOrder.Progressive;
+    public double PixelAspectRatio { get; init; } = 1.0;
+    public Rational? FrameRate { get; init; }
+    public HardwareAcceleration HardwareAcceleration { get; init; } = HardwareAcceleration.Auto;
+    public int AudioChannels { get; init; } = 2;
+    public RenderQuality Quality { get; init; } = RenderQuality.ProjectSettings;
+    public ColorSpaceOption ColorSpace { get; init; } = ColorSpaceOption.ProjectSettings;
+    public ResampleMode ResampleMode { get; init; } = ResampleMode.ProjectSettings;
+    public bool FastStart { get; init; } = true;
+    public bool IncludeVideo { get; init; } = true;
+    public bool IncludeAudio { get; init; } = true;
+    public string? DescriptionText { get; init; }
+
     [JsonIgnore]
     public bool IsCustom => Id is not null && Id.StartsWith("custom-", StringComparison.Ordinal);
 
@@ -33,46 +72,104 @@ public sealed record RenderTemplate(string Id, string Name, int VideoCrf, int Au
             throw new InvalidDataException("The custom render template ID is invalid.");
         if (string.IsNullOrWhiteSpace(Name) || Name.Length > 120 || Name != Name.Trim() || Name.Any(char.IsControl))
             throw new InvalidDataException("Enter a template name of 1 to 120 characters without control characters.");
-        if (!IsAudioOnly && VideoCodec != "prores_ks" && VideoCrf is < 0 or > 51)
-            throw new InvalidDataException("H.264/HEVC quality must be between 0 and 51.");
+        if (!IsAudioOnly && VideoCodec != "prores_ks")
+        {
+            if (VideoCrf is < 0 or > 51)
+                throw new InvalidDataException("H.264/HEVC quality must be between 0 and 51.");
+            if (BitrateMode is BitrateMode.VBR_1Pass or BitrateMode.VBR_2Pass)
+            {
+                if (AverageBitrateBps <= 0)
+                    throw new InvalidDataException("Average bitrate must be greater than zero.");
+                if (MaxBitrateBps < AverageBitrateBps)
+                    throw new InvalidDataException("Maximum bitrate cannot be less than average bitrate.");
+            }
+            else if (BitrateMode is BitrateMode.CBR)
+            {
+                if (AverageBitrateBps <= 0)
+                    throw new InvalidDataException("Constant bitrate must be greater than zero.");
+            }
+        }
         if (AudioCodec is "aac" or "libmp3lame" && AudioBitrateKbps is < 32 or > 512)
             throw new InvalidDataException("Audio bitrate must be between 32 and 512 kbps.");
         if (!Enum.IsDefined(EncoderSpeed)) throw new InvalidDataException("The encoder speed is not supported.");
+        if (!Enum.IsDefined(BitrateMode)) throw new InvalidDataException("The bitrate mode is not supported.");
+        if (!Enum.IsDefined(Profile)) throw new InvalidDataException("The video profile is not supported.");
+        if (!Enum.IsDefined(FieldOrder)) throw new InvalidDataException("The field order is not supported.");
+        if (!Enum.IsDefined(HardwareAcceleration)) throw new InvalidDataException("The hardware acceleration mode is not supported.");
+        if (!Enum.IsDefined(Quality)) throw new InvalidDataException("The render quality is not supported.");
+        if (!Enum.IsDefined(ColorSpace)) throw new InvalidDataException("The color space is not supported.");
+        if (!Enum.IsDefined(ResampleMode)) throw new InvalidDataException("The resample mode is not supported.");
         if (Width.HasValue && (Width.Value <= 0 || (Width.Value & 1) != 0))
             throw new InvalidDataException("Width must be a positive even integer.");
         if (Height.HasValue && (Height.Value <= 0 || (Height.Value & 1) != 0))
             throw new InvalidDataException("Height must be a positive even integer.");
+        if (PixelAspectRatio <= 0 || double.IsNaN(PixelAspectRatio) || double.IsInfinity(PixelAspectRatio))
+            throw new InvalidDataException("Pixel aspect ratio must be a positive number.");
+        if (AudioChannels is not (1 or 2 or 6))
+            throw new InvalidDataException("Audio channels must be 1, 2, or 6.");
+        if (AudioSampleRate <= 0)
+            throw new InvalidDataException("Audio sample rate must be a positive integer.");
     }
 
     public string Description(ProjectDocument project)
     {
+        if (!string.IsNullOrWhiteSpace(DescriptionText))
+            return DescriptionText;
+
         if (IsAudioOnly)
         {
             var codec = AudioCodec == "pcm_s24le" ? "24-bit PCM" : AudioCodec == "pcm_s16le" ? "16-bit PCM" : AudioCodec.ToUpperInvariant();
             var rateStr = $"{AudioSampleRate:N0} Hz";
             var bitStr = AudioBitrateKbps > 0 ? $", {AudioBitrateKbps} kbps" : "";
-            return $"{FormatName}; {codec}, {rateStr}, Stereo{bitStr}";
+            var chStr = AudioChannels == 6 ? "5.1 Surround" : AudioChannels == 1 ? "Mono" : "Stereo";
+            return $"{FormatName}; {codec}, {rateStr}, {chStr}{bitStr}";
         }
         var w = Width ?? project.Width;
         var h = Height ?? project.Height;
-        var fps = project.FrameRate.Value;
-        var vCodec = VideoCodec == "libx265" ? "HEVC" : VideoCodec == "prores_ks" ? "Apple ProRes" : "H.264 AVC";
-        return $"{w} × {h}, {fps:0.###} fps; {vCodec}, {AudioCodec.ToUpperInvariant()} stereo {AudioSampleRate / 1000} kHz, {AudioBitrateKbps} kbps";
+        var fps = FrameRate?.Value ?? project.FrameRate.Value;
+        var vCodec = VideoCodec switch
+        {
+            "libx265" => "HEVC",
+            "prores_ks" => "Apple ProRes",
+            _ => "H.264 AVC"
+        };
+        var bitInfo = BitrateMode switch
+        {
+            BitrateMode.CBR => $"{AverageBitrateBps / 1_000_000.0:0.#} Mbps CBR",
+            BitrateMode.VBR_1Pass => $"{AverageBitrateBps / 1_000_000.0:0.#} Mbps VBR",
+            BitrateMode.VBR_2Pass => $"{AverageBitrateBps / 1_000_000.0:0.#} Mbps 2-Pass VBR",
+            _ => $"CRF {VideoCrf}"
+        };
+        var chStrVideo = AudioChannels == 6 ? "5.1" : "stereo";
+        var hwStr = HardwareAcceleration != HardwareAcceleration.Auto && HardwareAcceleration != HardwareAcceleration.CPU
+            ? $", {HardwareAcceleration}"
+            : "";
+        return $"{w} × {h}, {fps:0.###} fps; {vCodec} ({Profile}{hwStr}, {bitInfo}), {AudioCodec.ToUpperInvariant()} {chStrVideo} {AudioSampleRate / 1000} kHz, {AudioBitrateKbps} kbps";
     }
 
     public long EstimatedBytes(ProjectDocument project, long durationFrames)
     {
         if (durationFrames <= 0) return 0;
-        var seconds = (double)durationFrames * project.FrameRate.Denominator / project.FrameRate.Numerator;
+        var fpsNum = FrameRate?.Numerator ?? project.FrameRate.Numerator;
+        var fpsDen = FrameRate?.Denominator ?? project.FrameRate.Denominator;
+        var seconds = (double)durationFrames * fpsDen / fpsNum;
         if (IsAudioOnly)
         {
             if (AudioCodec.StartsWith("pcm", StringComparison.OrdinalIgnoreCase))
             {
                 var bytesPerSample = AudioBitsPerSample / 8;
-                return (long)(AudioSampleRate * 2 * bytesPerSample * seconds);
+                return (long)(AudioSampleRate * AudioChannels * bytesPerSample * seconds);
             }
             return (long)(AudioBitrateKbps * 1000 / 8.0 * seconds);
         }
+
+        var audioBps = AudioBitrateKbps * 1000.0;
+        if (BitrateMode is BitrateMode.CBR or BitrateMode.VBR_1Pass or BitrateMode.VBR_2Pass)
+        {
+            var totalBps = AverageBitrateBps + audioBps;
+            return (long)(totalBps / 8.0 * seconds);
+        }
+
         var pixels = (long)(Width ?? project.Width) * (Height ?? project.Height);
         var baseBpp = VideoCodec switch
         {
@@ -81,9 +178,8 @@ public sealed record RenderTemplate(string Id, string Name, int VideoCrf, int Au
             _ => 0.10
         };
         var crfFactor = Math.Pow(0.94, VideoCrf - 20);
-        var fps = project.FrameRate.Value;
+        var fps = FrameRate?.Value ?? project.FrameRate.Value;
         var videoBps = pixels * fps * baseBpp * crfFactor;
-        var audioBps = AudioBitrateKbps * 1000.0;
         return (long)((videoBps + audioBps) / 8.0 * seconds);
     }
 }
@@ -105,14 +201,14 @@ public static class RenderTemplateCatalog
 
     public static IReadOnlyList<RenderTemplate> All { get; } = Array.AsReadOnly<RenderTemplate>([
         // MAGIX AVC / AAC MP4
-        new(DefaultId, "Project settings", 20, 192) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac" },
-        new("project-mp4-high", "Project settings — High quality", 17, 256) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac" },
-        new("project-mp4-4k", "Internet 4K 2160p", 18, 320) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", Width = 3840, Height = 2160 },
-        new("project-mp4-720p", "Internet HD 720p", 22, 160) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", Width = 1280, Height = 720 },
+        new(DefaultId, "Project settings", 20, 192) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", AverageBitrateBps = 14_000_000, MaxBitrateBps = 24_000_000, Profile = VideoProfile.High },
+        new("project-mp4-high", "Project settings — High quality", 17, 256) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", AverageBitrateBps = 24_000_000, MaxBitrateBps = 40_000_000, Profile = VideoProfile.High },
+        new("project-mp4-4k", "Internet 4K 2160p", 18, 320) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", Width = 3840, Height = 2160, AverageBitrateBps = 48_000_000, MaxBitrateBps = 80_000_000, Profile = VideoProfile.High },
+        new("project-mp4-720p", "Internet HD 720p", 22, 160) { FormatId = "mp4-avc", FormatName = "MAGIX AVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx264", AudioCodec = "aac", Width = 1280, Height = 720, AverageBitrateBps = 8_000_000, MaxBitrateBps = 14_000_000, Profile = VideoProfile.Main },
 
         // MAGIX HEVC / AAC MP4
-        new("project-hevc-4k", "MAGIX HEVC Internet UHD 2160p", 22, 256) { FormatId = "mp4-hevc", FormatName = "MAGIX HEVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx265", AudioCodec = "aac", Width = 3840, Height = 2160 },
-        new("project-hevc-1080p", "MAGIX HEVC Internet HD 1080p", 24, 192) { FormatId = "mp4-hevc", FormatName = "MAGIX HEVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx265", AudioCodec = "aac", Width = 1920, Height = 1080 },
+        new("project-hevc-4k", "MAGIX HEVC Internet UHD 2160p", 22, 256) { FormatId = "mp4-hevc", FormatName = "MAGIX HEVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx265", AudioCodec = "aac", Width = 3840, Height = 2160, AverageBitrateBps = 28_000_000, MaxBitrateBps = 48_000_000, Profile = VideoProfile.Main },
+        new("project-hevc-1080p", "MAGIX HEVC Internet HD 1080p", 24, 192) { FormatId = "mp4-hevc", FormatName = "MAGIX HEVC/AAC MP4", Extension = ".mp4", VideoCodec = "libx265", AudioCodec = "aac", Width = 1920, Height = 1080, AverageBitrateBps = 10_000_000, MaxBitrateBps = 18_000_000, Profile = VideoProfile.Main },
 
         // Apple ProRes MOV
         new("project-prores-422", "Apple ProRes 422", 0, 0) { FormatId = "mov-prores", FormatName = "Apple ProRes", Extension = ".mov", VideoCodec = "prores_ks", AudioCodec = "pcm_s24le", ProResProfile = 2, AudioBitsPerSample = 24 },
