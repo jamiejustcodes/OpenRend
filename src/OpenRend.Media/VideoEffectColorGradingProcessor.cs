@@ -81,6 +81,15 @@ internal static partial class VideoEffectProcessor
         var greenLut = hasCurves && !curves!.Green.IsIdentity ? curves.Green.BuildLut() : null;
         var blueLut = hasCurves && !curves!.Blue.IsIdentity ? curves.Blue.BuildLut() : null;
 
+        // 8. Precompute HSL Curves LUTs
+        var hslCurves = effect.HSLCurves;
+        var hasHslCurves = hslCurves is not null && hslCurves.HasAdjustments;
+        var hvhLut = hasHslCurves && !hslCurves!.HueVsHue.IsIdentity ? hslCurves.HueVsHue.BuildLut(360, true) : null;
+        var hvsLut = hasHslCurves && !hslCurves!.HueVsSat.IsIdentity ? hslCurves.HueVsSat.BuildLut(360, true) : null;
+        var hvlLut = hasHslCurves && !hslCurves!.HueVsLum.IsIdentity ? hslCurves.HueVsLum.BuildLut(360, true) : null;
+        var svsLut = hasHslCurves && !hslCurves!.SatVsSat.IsIdentity ? hslCurves.SatVsSat.BuildLut(256, false) : null;
+        var lvsLut = hasHslCurves && !hslCurves!.LumVsSat.IsIdentity ? hslCurves.LumVsSat.BuildLut(256, false) : null;
+
         // Apply primary grading operations in single color transform pass
         output = Color(output, (red, green, blue) =>
         {
@@ -187,6 +196,63 @@ internal static partial class VideoEffectProcessor
                 blue = bByte / 255.0;
             }
 
+            // HSL Curves (Hue vs Hue, Hue vs Sat, Hue vs Lum, Sat vs Sat, Lum vs Sat)
+            if (hasHslCurves)
+            {
+                var r0 = Math.Clamp(red, 0.0, 1.0);
+                var g0 = Math.Clamp(green, 0.0, 1.0);
+                var b0 = Math.Clamp(blue, 0.0, 1.0);
+                var max = Math.Max(r0, Math.Max(g0, b0));
+                var min = Math.Min(r0, Math.Min(g0, b0));
+                var delta = max - min;
+                var l = (max + min) * 0.5;
+                var s = delta == 0 ? 0 : delta / (1.0 - Math.Abs(2.0 * l - 1.0));
+                var h = delta == 0 ? 0 : max == r0 ? ((g0 - b0) / delta) % 6.0 : max == g0 ? (b0 - r0) / delta + 2.0 : (r0 - g0) / delta + 4.0;
+                h = WrapAngle(h / 6.0, 1.0);
+
+                if (hvhLut is not null)
+                {
+                    var hIdx = Math.Clamp((int)(h * 359.99), 0, 359);
+                    h = WrapAngle(h + (hvhLut[hIdx] - 0.5), 1.0);
+                }
+                if (hvsLut is not null)
+                {
+                    var hIdx = Math.Clamp((int)(h * 359.99), 0, 359);
+                    s = Math.Clamp(s * (hvsLut[hIdx] * 2.0), 0.0, 1.0);
+                }
+                if (hvlLut is not null)
+                {
+                    var hIdx = Math.Clamp((int)(h * 359.99), 0, 359);
+                    l = Math.Clamp(l + (hvlLut[hIdx] - 0.5), 0.0, 1.0);
+                }
+                if (svsLut is not null)
+                {
+                    var sIdx = Math.Clamp((int)(s * 255.99), 0, 255);
+                    s = Math.Clamp(s * (svsLut[sIdx] * 2.0), 0.0, 1.0);
+                }
+                if (lvsLut is not null)
+                {
+                    var lIdx = Math.Clamp((int)(l * 255.99), 0, 255);
+                    s = Math.Clamp(s * (lvsLut[lIdx] * 2.0), 0.0, 1.0);
+                }
+
+                var c = (1.0 - Math.Abs(2.0 * l - 1.0)) * s;
+                var x = c * (1.0 - Math.Abs((h * 6.0) % 2.0 - 1.0));
+                var m = l - c * 0.5;
+                var (rh, gh, bh) = ((int)(h * 6.0)) switch
+                {
+                    0 => (c + m, x + m, m),
+                    1 => (x + m, c + m, m),
+                    2 => (m, c + m, x + m),
+                    3 => (m, x + m, c + m),
+                    4 => (x + m, m, c + m),
+                    _ => (c + m, m, x + m)
+                };
+                red = rh;
+                green = gh;
+                blue = bh;
+            }
+
             // HSL
             if (hasHsl)
             {
@@ -207,4 +273,6 @@ internal static partial class VideoEffectProcessor
 
         return output;
     }
+
+    private static double WrapAngle(double value, double size) => (value % size + size) % size;
 }

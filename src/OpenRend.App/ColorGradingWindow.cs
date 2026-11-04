@@ -81,6 +81,8 @@ public sealed class ColorGradingWindow : Window
     // Curves Control
     private readonly ColorCurvesControl curvesControl;
     private readonly TextBlock curveReadout;
+    private readonly HSLCurvesControl hslCurvesControl;
+    private readonly TextBlock hslCurveReadout;
 
     // LUT Slots
     private readonly TextBlock cameraLutPathText;
@@ -229,7 +231,7 @@ public sealed class ColorGradingWindow : Window
             out valHslSlider, out valHslVal);
 
         // Page 3: Curves
-        curvesPage = CreateCurvesPage(out curvesControl, out curveReadout);
+        curvesPage = CreateCurvesPage(out curvesControl, out curveReadout, out hslCurvesControl, out hslCurveReadout);
 
         // Page 4: LUTs
         lutsPage = CreateLutsPage(
@@ -543,15 +545,45 @@ public sealed class ColorGradingWindow : Window
         return grid;
     }
 
-    private Grid CreateCurvesPage(out ColorCurvesControl curvesCtrl, out TextBlock readoutText)
+    private Grid CreateCurvesPage(
+        out ColorCurvesControl curvesCtrl, out TextBlock readoutText,
+        out HSLCurvesControl hslCurvesCtrl, out TextBlock hslReadoutText)
     {
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
-        grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
-        // Row 0: Channel selectors and readout
-        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var modeBar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        Button? btnTabColor = null, btnTabHsl = null;
+
+        var colorGrid = new Grid();
+        colorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        colorGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        colorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        var hslGrid = new Grid { Visibility = Visibility.Collapsed };
+        hslGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        hslGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+        hslGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+        void SelectSubTab(bool showColor)
+        {
+            colorGrid.Visibility = showColor ? Visibility.Visible : Visibility.Collapsed;
+            hslGrid.Visibility = showColor ? Visibility.Collapsed : Visibility.Visible;
+            if (btnTabColor != null) btnTabColor.FontWeight = showColor ? FontWeights.Bold : FontWeights.Normal;
+            if (btnTabHsl != null) btnTabHsl.FontWeight = showColor ? FontWeights.Normal : FontWeights.Bold;
+        }
+
+        btnTabColor = MakeToolButton("Color Curves (RGB)", "Tab_SubColorCurves", () => SelectSubTab(true));
+        btnTabHsl = MakeToolButton("HSL Curves", "Tab_SubHSLCurves", () => SelectSubTab(false));
+        btnTabColor.FontWeight = FontWeights.Bold;
+        modeBar.Children.Add(btnTabColor);
+        modeBar.Children.Add(btnTabHsl);
+        Grid.SetRow(modeBar, 0);
+        grid.Children.Add(modeBar);
+
+        // --- Color Curves Sub Page ---
+        var colorHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
         var channelStack = new StackPanel { Orientation = Orientation.Horizontal };
 
         var ctrl = new ColorCurvesControl();
@@ -579,7 +611,7 @@ public sealed class ColorGradingWindow : Window
         channelStack.Children.Add(btnR);
         channelStack.Children.Add(btnG);
         channelStack.Children.Add(btnB);
-        header.Children.Add(channelStack);
+        colorHeader.Children.Add(channelStack);
 
         readoutText = new TextBlock
         {
@@ -591,16 +623,14 @@ public sealed class ColorGradingWindow : Window
         };
         AutomationProperties.SetAutomationId(readoutText, "ColorCurves_Readout");
         DockPanel.SetDock(readoutText, Dock.Right);
-        header.Children.Add(readoutText);
-        Grid.SetRow(header, 0);
-        grid.Children.Add(header);
+        colorHeader.Children.Add(readoutText);
+        Grid.SetRow(colorHeader, 0);
+        colorGrid.Children.Add(colorHeader);
 
-        // Row 1: Interactive Canvas
         Grid.SetRow(curvesCtrl, 1);
-        grid.Children.Add(curvesCtrl);
+        colorGrid.Children.Add(curvesCtrl);
 
-        // Row 2: Bottom Toolbar
-        var bottomBar = new StackPanel
+        var colorBottomBar = new StackPanel
         {
             Orientation = Orientation.Horizontal,
             Margin = new Thickness(0, 8, 0, 0)
@@ -609,15 +639,89 @@ public sealed class ColorGradingWindow : Window
         var resetAllCurvesBtn = MakeToolButton("Reset All Curves", "ColorCurves_ResetAll", () => ctrl.ResetAll());
         var smoothBtn = MakeToolButton("Smooth Curve", "ColorCurves_Smooth", () => ctrl.SmoothActive());
 
-        bottomBar.Children.Add(resetCurrentBtn);
-        bottomBar.Children.Add(resetAllCurvesBtn);
-        bottomBar.Children.Add(smoothBtn);
-        Grid.SetRow(bottomBar, 2);
-        grid.Children.Add(bottomBar);
+        colorBottomBar.Children.Add(resetCurrentBtn);
+        colorBottomBar.Children.Add(resetAllCurvesBtn);
+        colorBottomBar.Children.Add(smoothBtn);
+        Grid.SetRow(colorBottomBar, 2);
+        colorGrid.Children.Add(colorBottomBar);
 
         var ro = readoutText;
         ctrl.PointSelected += text => ro.Text = text;
         ctrl.CurvesChanged += OnCurvesChanged;
+
+        // --- HSL Curves Sub Page ---
+        var hslHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        var hslModeStack = new StackPanel { Orientation = Orientation.Horizontal };
+
+        var hCtrl = new HSLCurvesControl();
+        hslCurvesCtrl = hCtrl;
+        AutomationProperties.SetAutomationId(hslCurvesCtrl, "ColorGrading_HSLCurvesCanvas");
+
+        Button? btnHvh = null, btnHvs = null, btnHvl = null, btnSvs = null, btnLvs = null;
+
+        void UpdateHslButtonStyles(HSLCurveMode m)
+        {
+            if (btnHvh != null) btnHvh.FontWeight = m == HSLCurveMode.HueVsHue ? FontWeights.Bold : FontWeights.Normal;
+            if (btnHvs != null) btnHvs.FontWeight = m == HSLCurveMode.HueVsSat ? FontWeights.Bold : FontWeights.Normal;
+            if (btnHvl != null) btnHvl.FontWeight = m == HSLCurveMode.HueVsLum ? FontWeights.Bold : FontWeights.Normal;
+            if (btnSvs != null) btnSvs.FontWeight = m == HSLCurveMode.SatVsSat ? FontWeights.Bold : FontWeights.Normal;
+            if (btnLvs != null) btnLvs.FontWeight = m == HSLCurveMode.LumVsSat ? FontWeights.Bold : FontWeights.Normal;
+        }
+
+        btnHvh = MakeChannelButton("Hue vs Hue", Brushes.White, () => { hCtrl.ActiveMode = HSLCurveMode.HueVsHue; UpdateHslButtonStyles(HSLCurveMode.HueVsHue); });
+        btnHvs = MakeChannelButton("Hue vs Sat", Brushes.White, () => { hCtrl.ActiveMode = HSLCurveMode.HueVsSat; UpdateHslButtonStyles(HSLCurveMode.HueVsSat); });
+        btnHvl = MakeChannelButton("Hue vs Lum", Brushes.White, () => { hCtrl.ActiveMode = HSLCurveMode.HueVsLum; UpdateHslButtonStyles(HSLCurveMode.HueVsLum); });
+        btnSvs = MakeChannelButton("Sat vs Sat", Brushes.White, () => { hCtrl.ActiveMode = HSLCurveMode.SatVsSat; UpdateHslButtonStyles(HSLCurveMode.SatVsSat); });
+        btnLvs = MakeChannelButton("Lum vs Sat", Brushes.White, () => { hCtrl.ActiveMode = HSLCurveMode.LumVsSat; UpdateHslButtonStyles(HSLCurveMode.LumVsSat); });
+
+        UpdateHslButtonStyles(HSLCurveMode.HueVsSat);
+
+        hslModeStack.Children.Add(btnHvh);
+        hslModeStack.Children.Add(btnHvs);
+        hslModeStack.Children.Add(btnHvl);
+        hslModeStack.Children.Add(btnSvs);
+        hslModeStack.Children.Add(btnLvs);
+        hslHeader.Children.Add(hslModeStack);
+
+        hslReadoutText = new TextBlock
+        {
+            Foreground = (Brush)FindResource("SubtleTextBrush"),
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Margin = new Thickness(0, 0, 4, 0),
+            Text = "Mode: Hue vs Sat (6 pts)"
+        };
+        AutomationProperties.SetAutomationId(hslReadoutText, "HSLCurves_Readout");
+        DockPanel.SetDock(hslReadoutText, Dock.Right);
+        hslHeader.Children.Add(hslReadoutText);
+        Grid.SetRow(hslHeader, 0);
+        hslGrid.Children.Add(hslHeader);
+
+        Grid.SetRow(hslCurvesCtrl, 1);
+        hslGrid.Children.Add(hslCurvesCtrl);
+
+        var hslBottomBar = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Margin = new Thickness(0, 8, 0, 0)
+        };
+        var resetCurrentHslBtn = MakeToolButton("Reset Active Curve", "HSLCurves_ResetCurrent", () => hCtrl.ResetActive());
+        var resetAllHslBtn = MakeToolButton("Reset All Curves", "HSLCurves_ResetAll", () => hCtrl.ResetAll());
+
+        hslBottomBar.Children.Add(resetCurrentHslBtn);
+        hslBottomBar.Children.Add(resetAllHslBtn);
+        Grid.SetRow(hslBottomBar, 2);
+        hslGrid.Children.Add(hslBottomBar);
+
+        var hro = hslReadoutText;
+        hCtrl.PointSelected += text => hro.Text = text;
+        hCtrl.CurvesChanged += OnCurvesChanged;
+
+        // Container row 1 holds both sub-grids
+        Grid.SetRow(colorGrid, 1);
+        Grid.SetRow(hslGrid, 1);
+        grid.Children.Add(colorGrid);
+        grid.Children.Add(hslGrid);
 
         return grid;
     }
@@ -646,6 +750,7 @@ public sealed class ColorGradingWindow : Window
         if (target is not null)
         {
             target.Curves = curvesControl.Curves.DeepClone();
+            target.HSLCurves = hslCurvesControl.Curves.DeepClone();
             vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
         }
         RequestPreview();
@@ -917,6 +1022,7 @@ public sealed class ColorGradingWindow : Window
 
             // Curves
             curvesControl.Curves = fx.Curves?.DeepClone() ?? new ColorCurvesData();
+            hslCurvesControl.Curves = fx.HSLCurves?.DeepClone() ?? new HSLCurvesData();
 
             // Camera LUT
             cameraLutPathText.Text = fx.Lut is not null ? (fx.Lut.Title ?? "Embedded 3D LUT") : "(No LUT loaded)";
@@ -1206,6 +1312,7 @@ public sealed class ColorGradingWindow : Window
                 target.Lut = null;
                 target.LookLut = null;
                 target.Curves = null;
+                target.HSLCurves = null;
                 target.Parameters = defaults;
                 vm.Editor.SetScopedVideoEffects(scope, targetId, effects);
             }

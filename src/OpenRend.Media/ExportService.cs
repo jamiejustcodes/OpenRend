@@ -194,7 +194,7 @@ public sealed class ExportService(TimelineRenderService renderer)
                             hw = HardwareAcceleration.CPU;
                         }
                     }
-                    else if (hw == HardwareAcceleration.NVENC && (outWidth < 128 || outHeight < 128))
+                    else if (hw is HardwareAcceleration.NVENC or HardwareAcceleration.AMF or HardwareAcceleration.QSV && (outWidth < 128 || outHeight < 128))
                     {
                         hw = HardwareAcceleration.CPU;
                     }

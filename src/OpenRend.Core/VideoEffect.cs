@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace OpenRend.Core;
 
 public enum VideoEffectKind
@@ -28,6 +30,8 @@ public sealed class VideoEffect
     public CubeLut? Lut { get; set; }
     public CubeLut? LookLut { get; set; }
     public ColorCurvesData? Curves { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public HSLCurvesData? HSLCurves { get; set; }
     public double Amount { get; set; }
     public double SecondaryAmount { get; set; }
     public Dictionary<string, double> Parameters { get; set; } = [];
@@ -71,6 +75,7 @@ public sealed class VideoEffect
         copy.Lut = Lut?.DeepClone();
         copy.LookLut = LookLut?.DeepClone();
         copy.Curves = Curves?.DeepClone();
+        copy.HSLCurves = HSLCurves?.DeepClone();
         return copy;
     }
 
@@ -84,9 +89,12 @@ public sealed class VideoEffect
             throw new InvalidDataException("Only a Color Grading effect can contain Look LUT data.");
         if (Kind != VideoEffectKind.ColorGrading && Curves is not null)
             throw new InvalidDataException("Only a Color Grading effect can contain Color Curves data.");
+        if (Kind != VideoEffectKind.ColorGrading && HSLCurves is not null)
+            throw new InvalidDataException("Only a Color Grading effect can contain HSL Curves data.");
         Lut?.Validate();
         LookLut?.Validate();
         Curves?.Validate();
+        HSLCurves?.Validate();
         var definitions = VideoEffectCatalog.Get(Kind).Parameters;
         if (Parameters.Any(pair => pair.Key is "Amount" or "SecondaryAmount" || !definitions.Any(parameter => parameter.Key == pair.Key)))
             throw new InvalidDataException("Video effect contains an unknown parameter.");

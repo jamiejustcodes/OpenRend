@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using OpenRend.Core;
 using Xunit;
 
@@ -126,5 +128,49 @@ public sealed class ColorGradingProcessorTests
             Assert.InRange(Math.Abs(r - g), 0, 1);
             Assert.InRange(Math.Abs(g - b), 0, 1);
         }
+    }
+
+    [Fact]
+    public void ApplyColorGrading_WithHSLCurves_ModulatesTargetColor()
+    {
+        // 2x2 pure red BGRA image: B=0, G=0, R=255, A=255
+        const int width = 2;
+        const int height = 2;
+        var source = new byte[width * height * 4];
+        for (var i = 0; i < source.Length; i += 4)
+        {
+            source[i + 0] = 0;
+            source[i + 1] = 0;
+            source[i + 2] = 255;
+            source[i + 3] = 255;
+        }
+
+        var hsl = new HSLCurvesData();
+        // Shift red (0°) towards yellow by elevating HueVsHue point 0 (Y = 0.65)
+        hsl.HueVsHue.Points[0].Y = 0.65;
+        // Also suppress saturation of red using HueVsSat point 0 (Y = 0.25 -> ~50% reduction)
+        hsl.HueVsSat.Points[0].Y = 0.25;
+
+        var effect = new VideoEffect
+        {
+            Kind = VideoEffectKind.ColorGrading,
+            IsEnabled = true,
+            HSLCurves = hsl
+        };
+
+        var output = VideoEffectProcessor.Apply(source, width, height, [effect]);
+        Assert.Equal(source.Length, output.Length);
+
+        // Alpha channel preserved
+        Assert.Equal(255, output[3]);
+
+        // Red was shifted and desaturated, so Green should now be > 0 and Red < 255
+        var bOut = output[0];
+        var gOut = output[1];
+        var rOut = output[2];
+
+        Assert.True(gOut > 0, "Hue shift should have introduced green component to pure red.");
+        Assert.True(rOut > 0);
+        Assert.True(bOut >= 0);
     }
 }

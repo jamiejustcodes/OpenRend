@@ -50,7 +50,8 @@ internal static partial class VideoEffectProcessor
             effect.GetParameter("HueAdjust") == 0 && effect.GetParameter("SatAdjust") == 1 && effect.GetParameter("ValAdjust") == 1 &&
             (effect.Lut is null || effect.GetParameter("LUTGain_0") == 0 || effect.GetParameter("LUTEnable_0") == 1) &&
             (effect.LookLut is null || effect.GetParameter("LUTGain_1") == 0 || effect.GetParameter("LUTEnable_1") == 1) &&
-            (effect.Curves is null || !effect.Curves.HasAdjustments),
+            (effect.Curves is null || !effect.Curves.HasAdjustments) &&
+            (effect.HSLCurves is null || !effect.HSLCurves.HasAdjustments),
         _ => false
     };
 

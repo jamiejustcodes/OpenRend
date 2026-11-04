@@ -139,6 +139,28 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Verified desktop UI automation test `CustomRenderPresetCanBeSavedRenamedAndRetainedWhenRenderingABuiltin` passing in 57 seconds with element screenshot capture.
     - Full gate passed: 100% native integration tests, 971 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat(color): implement Vegas-style HSL curves and interactive color grading canvas` implemented 1:1 Vegas Pro HSL curves architecture matching `ScriptPortal.Vegas.ColorGradingPanel.HSLCurves` in `ColorGradingPanel.dll`.
+  - Data Models & Evaluation:
+    - Created `HSLCurvesData.cs` in `OpenRend.Core`:
+      - `HSLCurveMode` enum (`HueVsHue`, `HueVsSat`, `HueVsLum`, `SatVsSat`, `LumVsSat`).
+      - `HSLCurvePoint` class and `HSLCurve` class with 6 preset anchor points for hue curves (0°, 60°, 120°, 180°, 240°, 300°) and 5 linear anchor points for sat/lum curves.
+      - Smooth Hermite curve evaluation with periodic wrap-around at 0° == 360° for circular hue interpolation.
+      - Precomputed LUT generator `BuildLut(int steps, bool isHuePeriodic)` for real-time per-frame grading passes.
+      - `HSLCurvesData` holding all 5 curve instances with validation, deep cloning, and identity checks.
+    - Extended `VideoEffect.cs` with `HSLCurves` property, validation, and deep cloning.
+  - Image Processing Pipeline:
+    - Enhanced `VideoEffectProcessor.cs` to check `effect.HSLCurves?.HasAdjustments`.
+    - Enhanced `VideoEffectColorGradingProcessor.cs` to precompute LUTs for active HSL curves and execute per-pixel HSL modulation pass evaluating hue shifts, saturation scale, and luminance offsets.
+    - Enhanced `ExportService.cs` with dimension safety fallback preventing NVENC/AMF/QSV hardware encoder failure on frames smaller than 128x128.
+  - UI Implementation:
+    - Created `HSLCurvesControl.cs` in `OpenRend.App`:
+      - Interactive 2D canvas with bottom spectrum gradient bar (7-stop rainbow gradient for hue curves, grayscale/saturation gradients for sat/lum), dashed center baseline at 50% neutral modulation, control points with dynamic point colors matching hue, dragging, double-click removal, point addition, and mode switching.
+    - Enhanced `ColorGradingWindow.cs` and `ColorGradingDockControl.cs` with sub-tab switching between `Color Curves (RGB)` and `HSL Curves` (`Hue vs Hue`, `Hue vs Sat`, `Hue vs Lum`, `Sat vs Sat`, `Lum vs Sat`).
+  - Verification:
+    - Added unit tests in `HSLCurvesTests.cs` (OpenRend.Core.Tests) testing periodic wrap-around interpolation, linear clamping, LUT generation, deep cloning, and JSON serialization.
+    - Added unit test in `ColorGradingProcessorTests.cs` (OpenRend.Media.Tests) testing HSL curve hue shift and saturation modulation on pixel buffers.
+    - Full gate passed: 100% native integration tests, 982 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat: implement vegas pro 1:1 video track parent/child compositing hierarchy, adjustment tracks, and audio bus routing` implemented 1:1 Vegas Pro Video Track Compositing Hierarchy, Adjustment Tracks, and Audio Bus Routing matching `ScriptPortal.Vegas.VideoTrack` (`CompositeNestingLevel`, `IsCompositingChild`, `IsCompositingParent`, `IsAdjustmentTrack`) and `AudioBusTrack` (`BusTracks`, `AddAudioBusTrack`, `MasterBus`).
   - Data Models:
     - Created `AudioBusTrack.cs` with `Id`, `Name`, `Gain`, `Pan`, `IsMuted`, `IsSolo`, `AudioEffects`, deep cloning, and schema validation.
