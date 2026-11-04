@@ -1,4 +1,4 @@
-﻿using System.Collections.ObjectModel;
+using System.Collections.ObjectModel;
 using System.IO;
 using CommunityToolkit.Mvvm.ComponentModel;
 using OpenRend.Core;
@@ -56,6 +56,7 @@ public sealed class EditorViewModel : ObservableObject
     public string? ProjectPath { get => projectPath; private set { SetProperty(ref projectPath, value); OnPropertyChanged(nameof(Title)); } }
     private bool dirty;
     public bool Dirty { get => dirty; private set { SetProperty(ref dirty, value); OnPropertyChanged(nameof(Title)); } }
+    public bool CreateProjectBackups { get; set; } = true;
     public string Title => $"{Project.Name}{(Dirty ? " *" : "")} \u2014 OpenRend";
     private long position;
     public long Position { get => position; set => SetProperty(ref position, Math.Clamp(value, 0, Project.DurationFrames)); }
@@ -266,7 +267,7 @@ public sealed class EditorViewModel : ObservableObject
         await saveGate.WaitAsync();
         try
         {
-            await ProjectStore.SaveAsync(snapshot, path);
+            await ProjectStore.SaveAsync(snapshot, path, createBackup: CreateProjectBackups);
             if (!ReferenceEquals(Editor, editor)) return;
             ProjectPath = path;
             if (revision == editRevision) Dirty = false;

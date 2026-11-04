@@ -1,4 +1,4 @@
-﻿using System.ComponentModel;
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Windows;
@@ -20,7 +20,8 @@ public partial class MainWindow : Window
 {
     private readonly EditorViewModel vm;
     private readonly DispatcherTimer timer = new() { Interval = TimeSpan.FromMilliseconds(15) };
-    private readonly DispatcherTimer autosave = new() { Interval = TimeSpan.FromSeconds(30) };
+    private readonly DispatcherTimer autosave = new() { Interval = TimeSpan.FromMinutes(5) };
+    private GeneralPreferences generalPreferences = new();
     private PlaybackSession? playback;
     private CancellationTokenSource? exportCancellation;
     private long revision;
@@ -417,11 +418,31 @@ public partial class MainWindow : Window
         };
         autosave.Tick += async (_, _) =>
         {
-            if (!vm.Dirty || vm.Busy) return;
-            try { await ProjectStore.SaveAsync(vm.Project.DeepClone(), recoveryPath); }
+            var dataDir = Path.GetDirectoryName(recoveryPath)!;
+            SessionRecoveryManager.RecordHeartbeat(dataDir, vm.Dirty, vm.ProjectPath);
+            if (!vm.Dirty || vm.Busy || !generalPreferences.EnableAutoSave) return;
+            try
+            {
+                var clone = vm.Project.DeepClone();
+                await ProjectStore.SaveAsync(clone, recoveryPath);
+                if (generalPreferences.UseProjectDirectoryForAutoSave && !string.IsNullOrEmpty(vm.ProjectPath))
+                {
+                    await ProjectStore.SaveAutosaveAsync(clone, vm.ProjectPath);
+                }
+            }
             catch (Exception ex) { vm.Status = "Recovery snapshot could not be saved: " + ex.Message; }
         };
-        Loaded += (_, _) => { initialized = true; LoadWorkspace(); InitializeTransitionBrowser(); InitializeToolsViews(); Refresh(); autosave.Start(); };
+        Loaded += async (_, _) =>
+        {
+            initialized = true;
+            LoadWorkspace();
+            LoadGeneralPreferences();
+            InitializeTransitionBrowser();
+            InitializeToolsViews();
+            Refresh();
+            autosave.Start();
+            await CheckCrashRecoveryAsync();
+        };
     }
 
     private void Guard(Action action)
@@ -648,6 +669,52 @@ public partial class MainWindow : Window
         };
         EmptyLibrary.Text = vm.Library.Count == 0 ? "Import video or audio\nCtrl+I or drop files here" : "No media matches this view";
         EmptyLibrary.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    private void LoadGeneralPreferences()
+    {
+        try { generalPreferences = GeneralPreferencesStore.Load(GeneralPreferencesPath); }
+        catch { generalPreferences = new(); }
+        ApplyGeneralPreferences(generalPreferences);
+    }
+
+    private void ApplyGeneralPreferences(GeneralPreferences prefs)
+    {
+        generalPreferences = prefs;
+        vm.CreateProjectBackups = prefs.CreateProjectBackups;
+        autosave.IsEnabled = prefs.EnableAutoSave;
+        autosave.Interval = TimeSpan.FromMinutes(Math.Clamp(prefs.AutoSaveIntervalMinutes, 1, 120));
+    }
+
+    private async Task CheckCrashRecoveryAsync()
+    {
+        var dataDir = Path.GetDirectoryName(recoveryPath)!;
+        var candidate = SessionRecoveryManager.CheckCrashRecovery(dataDir);
+        if (candidate is not null && File.Exists(candidate.SnapshotPath))
+        {
+            var dialog = new CrashRecoveryWindow(candidate, this);
+            if (dialog.ShowDialog() == true)
+            {
+                try
+                {
+                    Pause();
+                    var recovered = await ProjectStore.LoadAsync(candidate.SnapshotPath);
+                    vm.Replace(recovered, null);
+                    await PopulateMediaVisualsAsync();
+                    vm.Status = "Restored autosaved project from previous session. Save as a project to keep these edits.";
+                }
+                catch (Exception ex)
+                {
+                    vm.Status = "Could not restore autosaved project: " + ex.Message;
+                }
+            }
+            else
+            {
+                SessionRecoveryManager.DiscardRecovery(dataDir);
+            }
+        }
+
+        SessionRecoveryManager.StartSession(dataDir, vm.ProjectPath);
     }
 
     private void MediaToolbarFxClick(object sender, RoutedEventArgs e)
@@ -2242,7 +2309,9 @@ public partial class MainWindow : Window
         try
         {
             if (!await ConfirmUnsavedAsync()) return;
-            Pause(); autosave.Stop(); SaveWorkspace(); allowClose = true;
+            Pause(); autosave.Stop(); SaveWorkspace();
+            SessionRecoveryManager.RecordCleanExit(Path.GetDirectoryName(recoveryPath)!);
+            allowClose = true;
             // Complete the cancelled Closing event before requesting the final close.
             _ = Dispatcher.BeginInvoke(Close);
         }

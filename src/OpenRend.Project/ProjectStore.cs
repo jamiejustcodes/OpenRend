@@ -15,7 +15,12 @@ public static class ProjectStore
         Converters = { new JsonStringEnumConverter() }
     };
 
-    public static async Task SaveAsync(ProjectDocument project, string path, CancellationToken cancellationToken = default)
+    public static string GetBackupPath(string projectPath) => System.IO.Path.GetFullPath(projectPath) + ".bak";
+
+    public static Task SaveAsync(ProjectDocument project, string path, CancellationToken cancellationToken = default)
+        => SaveAsync(project, path, createBackup: false, cancellationToken);
+
+    public static async Task SaveAsync(ProjectDocument project, string path, bool createBackup, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
         project.Validate();
@@ -40,7 +45,11 @@ public static class ProjectStore
                 stream.Flush(flushToDisk: true);
             }
             cancellationToken.ThrowIfCancellationRequested();
-            if (File.Exists(fullPath)) File.Replace(temporary, fullPath, destinationBackupFileName: null);
+            if (File.Exists(fullPath))
+            {
+                var backupFile = createBackup ? GetBackupPath(fullPath) : null;
+                File.Replace(temporary, fullPath, destinationBackupFileName: backupFile);
+            }
             else File.Move(temporary, fullPath);
         }
         finally

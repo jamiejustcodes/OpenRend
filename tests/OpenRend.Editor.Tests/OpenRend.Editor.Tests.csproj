@@ -1,4 +1,4 @@
-﻿<Project Sdk="Microsoft.NET.Sdk">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF><IsTestProject>true</IsTestProject><IsPackable>false</IsPackable></PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
@@ -11,6 +11,9 @@
     <Compile Include="../../src/OpenRend.App/EditorViewModel.cs" Link="EditorViewModel.cs" />
     <Compile Include="../../src/OpenRend.App/TrimmerControl.cs" Link="TrimmerControl.cs" />
     <Compile Include="../../src/OpenRend.App/MediaPropertiesWindow.cs" Link="MediaPropertiesWindow.cs" />
+    <Compile Include="../../src/OpenRend.App/SessionRecoveryManager.cs" Link="SessionRecoveryManager.cs" />
+    <Compile Include="../../src/OpenRend.App/CrashRecoveryWindow.cs" Link="CrashRecoveryWindow.cs" />
+    <Compile Include="../../src/OpenRend.App/EditingPreferencesWindow.cs" Link="EditingPreferencesWindow.cs" />
     <Compile Include="../../src/OpenRend.App/PreviewFrameRequest.cs" Link="PreviewFrameRequest.cs" />
     <Compile Include="../../src/OpenRend.App/VideoEffectChooserModel.cs" Link="VideoEffectChooserModel.cs" />
   </ItemGroup>

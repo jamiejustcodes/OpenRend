@@ -21,6 +21,7 @@ public partial class MainWindow
     private FrameworkElement? draggedElement;
 
     private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
+    private string GeneralPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "general.json");
     private string TransitionPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "transitions.json");
 
     private void InitializeTransitionBrowser()
@@ -139,10 +140,14 @@ public partial class MainWindow
 
     private void EditingPreferencesClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var dialog = new EditingPreferencesWindow(EditingPreferencesStore.Load(EditingPreferencesPath)) { Owner = this };
+        var editing = EditingPreferencesStore.Load(EditingPreferencesPath);
+        var general = GeneralPreferencesStore.Load(GeneralPreferencesPath);
+        var dialog = new EditingPreferencesWindow(editing, general) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         EditingPreferencesStore.Save(dialog.Result, EditingPreferencesPath);
-        vm.Status = "Editing preferences saved.";
+        GeneralPreferencesStore.Save(dialog.GeneralResult, GeneralPreferencesPath);
+        ApplyGeneralPreferences(dialog.GeneralResult);
+        vm.Status = "Preferences saved.";
     });
 
     private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
