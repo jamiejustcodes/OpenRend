@@ -64,6 +64,7 @@ public partial class MainWindow : Window
     public (byte[]? Pixels, int Width, int Height) GetCurrentFrame() => (currentPreviewPixels, previewWidth, previewHeight);
     private VideoScopesWindow? videoScopesWindow;
     private MixingConsoleWindow? mixingConsoleWindow;
+    private EditDetailsWindow? editDetailsWindow;
     public MainWindow(EditorViewModel viewModel)
     {
         vm = viewModel;
@@ -468,6 +469,7 @@ public partial class MainWindow : Window
         Timeline.Project = vm.Project;
         Timeline.IgnoreGroups = vm.IgnoreGroups;
         Timeline.Selection.Clear(); Timeline.Selection.UnionWith(vm.Selection);
+        vm.ActiveTrackIndex = Timeline.ActiveTrackIndex;
         Timeline.InvalidateVisual(); UpdatePosition(); UpdateInspector();
         UndoMenu.IsEnabled = UndoButton.IsEnabled = vm.Editor.CanUndo;
         RedoMenu.IsEnabled = RedoButton.IsEnabled = vm.Editor.CanRedo;
@@ -482,6 +484,7 @@ public partial class MainWindow : Window
         UpdatePreviewStatus();
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
         UpdateRecordTimeDisplay();
+        if (editDetailsWindow != null && editDetailsWindow.IsLoaded) editDetailsWindow.RefreshGrid();
         RequestPreview();
     }
     private string PreviewDescription()
@@ -2223,6 +2226,20 @@ public partial class MainWindow : Window
             videoScopesWindow.Activate();
         }
     }
+
+    private void EditDetailsClick(object sender, RoutedEventArgs e)
+    {
+        if (editDetailsWindow == null || !editDetailsWindow.IsLoaded)
+        {
+            editDetailsWindow = new EditDetailsWindow(vm, () => { Refresh(); RequestPreview(); }, this);
+            editDetailsWindow.Show();
+        }
+        else
+        {
+            editDetailsWindow.Activate();
+            editDetailsWindow.RefreshGrid();
+        }
+    }
     private void ResetWorkspaceClick(object sender, RoutedEventArgs e) { WorkspaceHeight.Height = new GridLength(Math.Min(600, Math.Max(230, ActualHeight - 260))); MediaWidth.Width = new GridLength(1, GridUnitType.Star); PreviewWidth.Width = new GridLength(Math.Min(844, Math.Max(320, ActualWidth - 420))); ToolsTabs.SelectedIndex = 1; Timeline.PixelsPerSecond = 13.4; Timeline.Offset = 0; Refresh(); }
     private void SettingsClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -2297,6 +2314,10 @@ public partial class MainWindow : Window
             Key.NumPad2 when !ctrl && alt && !shift => () => TrimmerClick(this, e),
             Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
+            Key.D4 when ctrl && alt => () => EditDetailsClick(this, e),
+            Key.NumPad4 when ctrl && alt => () => EditDetailsClick(this, e),
+            Key.D4 when !ctrl && alt && !shift => () => EditDetailsClick(this, e),
+            Key.NumPad4 when !ctrl && alt && !shift => () => EditDetailsClick(this, e),
             Key.D5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.NumPad5 when ctrl && alt => () => MixingConsoleClick(this, e),
             Key.L when ctrl && !shift && !alt => () => { RippleToggle.IsChecked = RippleToggle.IsChecked != true; RippleClick(this, e); },

@@ -71,12 +71,14 @@
         <MenuItem Header="Window">
           <MenuItem x:Name="TrimmerWindowMenu" Header="Trimmer" InputGestureText="Alt+2" Click="TrimmerClick"/>
           <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
+          <MenuItem x:Name="EditDetailsWindowMenu" Header="Edit Details" InputGestureText="Ctrl+Alt+4" Click="EditDetailsClick"/>
           <MenuItem x:Name="MixingConsoleWindowMenu" Header="Mixing Console" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
           <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         </MenuItem>
         <MenuItem x:Name="TrimmerMenu" Header="Trimmer…" InputGestureText="Alt+2" Click="TrimmerClick"/>
         <MenuItem x:Name="MixingConsoleMenu" Header="Mixing Console…" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
         <MenuItem x:Name="VideoScopesMenu" Header="Video Scopes…" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
+        <MenuItem x:Name="EditDetailsMenu" Header="Edit Detailsâ€¦" InputGestureText="Ctrl+Alt+4" Click="EditDetailsClick"/>
         <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         <Separator/>
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>

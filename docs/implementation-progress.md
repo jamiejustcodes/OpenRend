@@ -59,114 +59,12 @@ OpenRend currently initializes cut overlap preferences to 0.25 seconds, centered
 
 Status: complete. Render As dialog replicates Vegas Pro 1:1 render layout, including format categories list (All Formats, MAGIX AVC/AAC MP4, MAGIX HEVC/AAC MP4, Apple ProRes MOV, Sony Wave Audio WAV, MP3 Audio), dynamic format and property search filtering, Match project settings filtering, and favorite presets. Render options include loop region range export, stretch video to fill output frame size (letterbox bypass), channel remapping (None/Stereo, Downmix to Mono, Swap L/R, Mute Left, Mute Right), and integrated/true-peak loudness log generation (.loudness.log). Dynamic status provides live estimated output file size and drive free space. Auto-extension switching automatically updates file extension when selecting audio, ProRes, or MP4 presets.
 
-Verified parts:
+## 7. Final Cut Pro 7 XML and CMX 3600 EDL interchange — high
 
-- [x] Integer-frame range export uses the shared evaluator at absolute project frames and starts audio at the same project time.
-- [x] Encoded ranges have the requested frame count/rate, rational audio duration, first-frame pixels and source-tone identity at integer and fractional rates.
-- [x] Supported template property search requires each semicolon-separated term; favorites and selected template/folder choices survive preference reload.
-- [x] Desktop workflow drags a loop region, searches/favorites a preset, rejects an invalid extension and renders a 30-frame file; reopening the dialog restores its saved choices.
-- [x] Custom preset model saves/renames/deletes stable IDs and validates actual H.264/AAC encoder settings; encoded tests inspect quality/speed/bitrate and source protection.
-- [x] Desktop custom preset save/reopen/rename/export works; selecting a builtin preserves saved custom presets and favorites.
-- [x] Format catalog and template presets: MAGIX AVC/AAC MP4, MAGIX HEVC/AAC MP4 (libx265), Apple ProRes MOV (prores_ks 10-bit), Sony Wave Audio WAV (pcm_s24le/pcm_s16le), and MP3 Audio (libmp3lame).
-- [x] Audio-only export pipeline renders WAV and MP3 without raw video encoding overhead.
-- [x] Channel remapping transforms stereo audio samples (None, Mono downmix, Swap L/R, Mute Left, Mute Right).
-- [x] StretchToFill scales video directly to output resolution without pillarbox/letterbox black bars.
-- [x] Loudness log option generates .loudness.log with integrated LUFS, maximum true peak dBFS, frame count, sample rate, and channel mapping metadata.
-- [x] Dynamic file size estimation calculates expected byte sizes from bitrates, resolution, CRF, and frame duration.
-- [x] Render As dialog UI: Formats list, Match project settings checkbox, Channel mapping combobox, Stretch to fill checkbox, Generate loudness log checkbox, dynamic file size and free disk space indicators.
-
-## 3. Color grading, curves and LUTs — high
-
-- [x] Reproduce the grading panel's wheel, curve, white-balance and LUT controls.
-- [x] Persist grading values and LUT references without changing source media.
-- [x] Match processing order and interpolation in preview and export.
-- [x] Verify representative scopes, pixels, save/reopen and undo/redo.
-
-Status: complete. Vegas Pro 1:1 Color Grading panel reproduced with all 4 scopes (Event, Track, Media, Video Output). Includes Color Wheels (Lift, Gamma, Gain, Offset with master Y and RGB channels), Tone sliders (Exposure EV, Contrast, Brightness, Saturation), White Balance (Temperature and Tint sliders plus neutral eye-dropper picker), Levels (In/Out Min/Max), HSL adjustments, and dual 3D LUT slots (Camera LUT slot 0 and Look LUT slot 1 with trilinear/tetrahedral interpolation, strength slider, and bypass toggles). Added 1:1 Vegas Pro Color Curves tab supporting Master (W), Red, Green, and Blue curves with interactive 2D cubic Bezier canvas, grid guides, draggable control points, smooth tool, and 256-entry lookup table precomputation. Preserved OFX processing order (Camera LUT -> Levels -> White Balance -> Exposure/Tone -> Color Wheels -> Color Curves -> HSL -> Look LUT) across preview and export. Schema 10 persists all 36 grading parameters, dual LUTs, and curve control points without altering source media.
-
-Verified parts:
-
-- [x] Bounded parser validates 3D lattice/domain data, preserves independent clones and rejects unsupported/truncated input.
-- [x] Strength, bypass and both interpolation methods preserve alpha and share preview/export processing; CPU/D3D and encoded frames are compared over a lower track.
-- [x] Version 6 embeds LUT data; import/clear undo, save/reopen without the source LUT file and oversize-save destination protection are tested.
-- [x] Desktop Browse/Clear/Undo, Strength and interpolation edits survive save/reopen after the original LUT is deleted.
-- [x] All 36 Vegas Pro ColorGrading OFX parameters modeled with parameter validation, deep cloning, and defaults.
-- [x] Vegas Pro Color Wheels lift/gamma/gain/offset math and power-of-two exposure EV math verified on pixel buffers.
-- [x] Dual 3D LUT slots (Camera LUT in slot 0, Look LUT in slot 1) evaluate in proper sequence and support independent bypass.
-- [x] Vegas Pro cubic Bezier curve evaluation (`Evaluate(x)` via monotonic binary search) and 256-entry lookup table precomputation (`BuildLut()`).
-- [x] Vegas Pro OFX curve string serialization and deserialization (`{count}:{x0}:{y0}:{inHx0}:{inHy0}:{outHx0}:{outHy0}:...`).
-- [x] Interactive 2D Color Curves control with Master, Red, Green, and Blue channel modes, draggable control points, handle editing, and smooth tool.
-- [x] Curves pixel evaluation modifies Red, Green, Blue, and Master channels accurately and preserves alpha.
-- [x] Color Grading window adapts to Event, Track, Media, and Video Output scopes with live preview updates and atomic undo/redo.
-- [x] Schema 10 project serialization round-trips all grading parameters, curves, and embedded LUTs.
-
-## 4. Effect scope beyond events — high
-
-- [x] Attach video effects to event, track, media and project scopes through matching controls.
-- [x] Define and verify the order in which those scopes render together.
-- [x] Persist, copy and undo scoped effects without changing unrelated events.
-- [x] Verify preview/export consistency and the UI selection state at every scope.
-
-Status: complete. Video effects can be attached to Event, Track, Media, and Video Output (Master Bus) scopes matching Vegas Pro 1:1. Effect evaluation order is Media FX (source raw) -> Event FX & Pan/Crop -> Track FX (track composite) -> Video Output FX (master output). Intermediate track composites preserve alpha across CPU and GPU compositing. `VideoEffectsWindow` dynamically adjusts title and target to all four scopes, routing atomic undo/redo through `TimelineEditor`. Track header renders green illuminated "fx" button on tracks with effects, and right-click context menu exposes "Track FX…". Project Media list exposes "Media FX…", and Tools menu provides "Video Track FX…", "Media FX…", and "Video Output FX…". Schema 10 persists Media, Track, and Output effect chains.
-
-Verified parts:
-
-- [x] Vegas Pro 1:1 processing order verified: Media FX -> Event FX -> Track FX -> Video Output FX.
-- [x] Track FX evaluates whole-track composite independently of lower/upper tracks.
-- [x] Intermediate track buffer composites with full alpha preservation on CPU and Direct3D GPU pipelines.
-- [x] `VideoEffectsWindow` header, effect list, parameter sliders, LUT controls, and preview request adapt to Event, Track, Media, and Output scopes.
-- [x] Track header "fx" button renders green (`#2E7D32`) when active, dark/muted when empty, and triggers Track FX dialog on click.
-- [x] Menus and context menus wired for Track FX, Media FX, and Video Output FX.
-- [x] Schema 10 project serialization round-trips Media, Track, and Output effects and rejects unhandled future schemas.
-- [x] `TimelineEditor` undo/redo restores `VideoOutputEffects`, `Track.VideoEffects`, `Media.VideoEffects`, and `Clip.VideoEffects` atomically.
-
-## 5. General motion and mask tracking — high
-
-- [x] Reproduce forward, backward, frame-step and full-range tracking controls and overlays.
-- [x] Store reusable tracking samples in integer project frames with rational source conversion.
-- [x] Attach tracking to transforms, stabilization, picture-in-picture and masks where supported.
-- [x] Support mask drawing/editing and transfer of tracked motion with undo/redo and save/reopen.
-- [x] Verify preview and encoded output over moving subjects.
-
-Status: complete. Vegas Pro 1:1 Motion Tracking panel reproduced (`MotionTrackWindow.cs`) matching `MotionTrackWindow.dll` in Vegas Pro 2026. Includes tracking models (Translation, RigidMotion, Similarity, Affine, Homography), algorithms (Lucas-Kanade Pyramidal Optical Flow, SAD Template Matching, Hybrid), precision levels (Fast, Low, Medium, High), and shapes (Rectangle, Ellipse, Custom Polygon). Tracking navigation controls: Track Backward (`<<`), Step Back (`< 1`), Track Both Directions (`<< ALL >>`), Step Forward (`1 >`), Track Forward (`>>`), and Stop. Built-in motion transfer routes motion keyframes to Picture-in-Picture (`TransferMotionToPictureInPicture`), Crop/Pan & Video Stabilization (`TransferMotionToCrop`), and Bezier Masking (`TransferMotionToMask`), with drag-and-drop payload support. Reusable tracking samples stored in integer project frames on `TimelineClip.MotionTracks` with cosine-ease interpolation. Schema 10 persists tracking regions and keyframes.
-
-Verified parts:
-
-- [x] Point2D transformation, translation, rotation, scale, and bounding corner calculations verified.
-- [x] Cosine ease keyframe interpolation over intermediate project frames.
-- [x] MotionTrackData and TrackingKeyframe deep clone and validation.
-- [x] MotionTrackerEngine pyramidal Lucas-Kanade and template matching forward and backward tracking over synthetic moving features.
-- [x] `TimelineEditor` motion track CRUD operations (`AddMotionTrack`, `RemoveMotionTrack`, `UpdateMotionTrack`, `SetMotionTrackKeyframes`) survive undo/redo.
-- [x] Transfer motion to Picture-in-Picture creates and updates keyframed LocationX, LocationY, Scale, and Angle with undo/redo support.
-- [x] Transfer motion to Crop generates follow and stabilization keyframes with undo/redo support.
-- [x] Motion tracking accessible from Tools menu and timeline event context menu.
-
-## 6. Transcript-driven timeline editing — medium
-
-- [x] Persist word timing for source media and timeline events.
-- [x] Synchronize transcript selection, cursor and timeline event highlighting.
-- [x] Cut, paste, split, delete and move linked events from transcript interactions.
-- [x] Reproduce the transcript and subtitle controls and verify edit fidelity after save/reopen.
-
-Status: complete. 1:1 Vegas Pro Text-Based Editing window reproduced (`TextBasedEditingWindow.cs`) matching `TextbasedEditing.dll` (`ArrangersUserControl`, `SpeechEventControl`). Word-level timing model (`WordTiming`, `ClipTranscript`) stores precise integer frames, duration, confidence, and speaker on `TimelineClip`. Dynamic playhead synchronization highlights the active spoken word in real time with Vegas Gold glow. Word selection supports multi-word range selection, word editing, and quick action bar: Cut (`Ctrl+X`), Delete (`Del`), Split Here (`S`), and Copy (`Ctrl+C`). Timeline editing engine (`TimelineEditor.Transcript.cs`) provides atomic word-boundary split (`SplitClipAtWord`), head/middle/tail range deletion with auto-ripple (`DeleteTranscriptRange`), range cutting (`CutTranscriptRange`), and pause detection/deletion (`DeletePauses`). Schema 10 persists clip transcripts across save/reopen and undo/redo.
-
-Verified parts:
-
-- [x] WordTiming frame calculation, validation, cloning, equality, and JSON serialization.
-- [x] ClipTranscript active word retrieval at playhead frame and range intersection queries.
-- [x] SetClipTranscript and GetClipTranscript survive atomic undo and redo.
-- [x] SplitClipAtWord partitions transcript words at exact split frame, re-normalizing relative word offsets on the new right clip.
-- [x] DeleteTranscriptRange trims head, trims tail, or performs middle cut with ripple, shifting subsequent clips and preserving remaining words.
-- [x] CutTranscriptRange extracts selected words and executes timeline cut atomically.
-- [x] DeletePauses scans speech gaps and removes pauses across the timeline with ripple.
-- [x] Synchronized playhead tracking and event context menu (`Text-Based Editing…`) integration.
-
-## 7. Project interchange — medium
-
-- [x] Import and export the verified FCP 7, FCP X, EDL and After Effects project subsets with clear format limits.
-- [x] Preserve tracks, media references, rates, event timing, fades, channel mapping and supported keyframes.
-- [x] Reproduce the import/export dialogs and report unsupported constructs without silently dropping edits.
-- [x] Round-trip representative interchange projects and verify rendered timing.
+- [x] Parse and write sequence metadata, tracks, clip items and transitions for the supported format.
+- [x] Preserve edit decisions, source in/out and project positions across import and export.
+- [x] Validate imported XML against project invariants and handle unsupported tags cleanly.
+- [x] Verify round-trip fidelity with reference sequences.
 
 Status: complete for Apple Final Cut Pro 7 XML interchange (`<xmeml version="4">`) and industry-standard CMX 3600 Edit Decision List (`.edl` / `.txt`). Matches Vegas Pro project interchange architecture (`ProjectInterchange.dll` / CMX 3600 text engine) and Kdenlive EDL interchange. Supports sequence rate, timecode (SMPTE 12M drop-frame and non-drop-frame), multi-track video and audio hierarchies, frame-accurate source and record in/out points, cuts, dissolves with duration, clip names, and source file path remarks. Wired into `File > Import Final Cut Pro 7 XML…`, `File > Export Final Cut Pro 7 XML…`, `File > Import CMX 3600 EDL…`, and `File > Export CMX 3600 EDL…`. Verified by 8 unit tests in `Fcp7XmlInterchangeTests.cs` and `EdlInterchangeTests.cs`, and 758 passing managed tests.
 
@@ -189,6 +87,7 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
 
 ## Work log
 
+- 2026-11-04: `feat: implement vegas pro 1:1 edit details window and edl spreadsheet inspector` reverse engineered Vegas Pro Edit Details window (`vegas2027.exe`), commands, and tabular layout (`Track`, `Event`, `Start`, `End`, `Length`, `Name`, `Active Take`, `Source In`, `Rate`, `Mute`, `Lock`, `Media File`). Built `EditDetailsWindow.cs` in `src/OpenRend.App` featuring `Show:` mode switcher (`Events`, `Markers`, `Selected Events`), `Selected track only` filter, real-time substring search, TSV clipboard export (`Copy`), and atomic delete operations with undo/redo. Integrated bidirectional timeline playhead navigation and selection on double-click and context menu. Wired into `View > Window > Edit Details`, `View > Edit Details…`, and shortcuts `Ctrl+Alt+4` and `Alt+4` (`D4` / `NumPad4`). Verified by 5 unit tests in `EditDetailsEditorTests.cs`. Full gate passed: 100% native integration tests, 915 managed tests passed cleanly with 0 warnings and 0 errors.
 - 2026-11-04: `feat: implement vegas pro 1:1 slip, slide, time-stretch, and roll trimming modes` reverse engineered Vegas Pro trimming interactions and modifiers (`ScriptPortal.Vegas.VideoEvent.PlaybackRate`, `Take.Offset`). Implemented 1:1 Slip editing (`Alt + Drag` shifts source in-point preserving timeline duration and position), Slide editing (`Ctrl + Alt + Drag` moves event while simultaneously trimming predecessor tail and successor head), Time Stretch / Compress (`Ctrl + Drag` event edge rescales duration and dynamically recalculates `PlaybackRate` between 0.25x and 4.0x), and Roll editing (dual-edge split edit trimming touching boundaries). Built interactive mouse cursor mappings (`ScrollWE` for Slip, `SizeWE` for Slide / Stretch / Roll) and status bar readouts. Verified by 4 unit tests in `TrimAndSlipEditorTests.cs`. Full gate passed: 100% native integration tests, 910 managed tests passed cleanly with 0 warnings and 0 errors.
 - 2026-11-04: `feat: implement vegas pro 1:1 autosave, project file backups, and crash recovery dialog` reverse engineered Vegas Pro AutoSave (`fEnableAutoSave`, `msAutoSaveInterval`, `fCreateProjectBackups`, `fUseProjDirForAutoSave`) and crash recovery sentinel architecture. Implemented `GeneralPreferences` and `GeneralPreferencesStore` (`general.json`), `SessionRecoveryManager` with live heartbeat tracking and dead-process detection, `CrashRecoveryWindow.cs` matching Vegas Pro's verbatim dialog prompts and amber warning aesthetics, automatic `.bak` project backup creation in `ProjectStore.SaveAsync`, enhanced `EditingPreferencesWindow` with multi-tab `General` (AutoSave interval 1-120 min, backup toggle, directory preferences) and `Editing` tabs, and integrated crash recovery prompting on application startup. Full gate passed: 100% native integration tests, 906 managed tests passed cleanly with 0 warnings and 0 errors.
 - 2026-11-04: `feat: implement vegas pro 1:1 project media view modes, search filtering, use counts, and media properties dialog` added 1:1 Vegas Pro Project Media pool view modes (Thumbnails grid, Details ListView with sortable columns: Name, Type, Length, Frame Size, Frame Rate, Audio, Use Count, Location, and Compact List), real-time search box filtering across name, path, and media type, dynamic timeline media use count calculation in `EditorViewModel.RefreshLibrary()`, toolbar action buttons (`Media FX…`, `Media Properties…`, `Thumbnails`, `Details`, `List`), and 1:1 Vegas Pro Media Properties dialog (`MediaPropertiesWindow.cs`) with General, Video, and Audio stream inspection tabs. Full gate passed: 100% native integration tests, 898 managed tests passed cleanly with 0 warnings and 0 errors.

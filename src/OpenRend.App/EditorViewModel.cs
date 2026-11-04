@@ -69,6 +69,7 @@ public sealed class EditorViewModel : ObservableObject
     private AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks;
     public AutoRippleMode RippleMode { get => rippleMode; set => SetProperty(ref rippleMode, value); }
     public bool IgnoreGroups { get; set; }
+    public int ActiveTrackIndex { get; set; }
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];
