@@ -195,6 +195,68 @@ public sealed class ClipEnvelope : IEquatable<ClipEnvelope>
         Points = Points.Select(p => p.DeepClone()).ToList()
     };
 
+    /// <summary>
+    /// Shifts envelope points downstream or upstream of a threshold frame by delta frames.
+    /// Used for timeline event trimming, moving, and ripple insertion.
+    /// </summary>
+    public void ShiftPoints(long thresholdFrame, long delta)
+    {
+        if (Points == null || Points.Count == 0 || delta == 0) return;
+        if (delta < 0)
+        {
+            var deleteSpan = (Start: Math.Max(0, checked(thresholdFrame + delta)), End: thresholdFrame);
+            RippleForSpans([(deleteSpan.Start, deleteSpan.End)]);
+            return;
+        }
+
+        foreach (var pt in Points)
+        {
+            if (pt.Frame >= thresholdFrame)
+            {
+                pt.Frame = Math.Max(0, checked(pt.Frame + delta));
+            }
+        }
+        Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+        for (int i = Points.Count - 1; i > 0; i--)
+        {
+            if (Points[i].Frame == Points[i - 1].Frame)
+            {
+                Points.RemoveAt(i - 1);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Deletes points falling strictly inside collapsed deletion spans and shifts later points left to close the gap.
+    /// Used for timeline event deletion and ripple editing.
+    /// </summary>
+    public void RippleForSpans(IEnumerable<(long Start, long End)> spans)
+    {
+        if (Points == null || Points.Count == 0) return;
+        var spanList = spans.Where(s => s.End > s.Start).OrderBy(s => s.Start).ToList();
+        if (spanList.Count == 0) return;
+
+        Points.RemoveAll(pt => spanList.Any(s => pt.Frame > s.Start && pt.Frame < s.End));
+
+        foreach (var pt in Points)
+        {
+            var shift = spanList.Where(s => s.End <= pt.Frame).Sum(s => s.End - s.Start);
+            if (shift > 0)
+            {
+                pt.Frame = Math.Max(0, checked(pt.Frame - shift));
+            }
+        }
+
+        Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+        for (int i = Points.Count - 1; i > 0; i--)
+        {
+            if (Points[i].Frame == Points[i - 1].Frame)
+            {
+                Points.RemoveAt(i - 1);
+            }
+        }
+    }
+
     public void Validate()
     {
         if (Id == Guid.Empty) throw new InvalidDataException("Envelope ID cannot be empty.");
@@ -222,4 +284,3 @@ public sealed class ClipEnvelope : IEquatable<ClipEnvelope>
     public override bool Equals(object? obj) => Equals(obj as ClipEnvelope);
     public override int GetHashCode() => HashCode.Combine(Id, Type, IsEnabled, Points.Count);
 }
-

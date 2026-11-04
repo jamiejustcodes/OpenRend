@@ -741,6 +741,33 @@ public sealed partial class TimelineEditor
                 if (m != null) m.Frame = newFrame;
             }
             if (source != target) { source.Clips.Remove(primary); target.Clips.Add(primary); }
+
+            if (ripple && delta != 0)
+            {
+                var affectedTrackIds = selected.Select(s => s.Track.Id).Append(targetTrackId).ToHashSet();
+                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                }
+                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks)
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.MasterAudioEnvelopes != null)
+                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
+                }
+            }
         });
     }
 
@@ -841,6 +868,33 @@ public sealed partial class TimelineEditor
                 source.Clips.Remove(clip);
                 newTrack.Clips.Add(clip);
             }
+
+            if (ripple && delta != 0)
+            {
+                var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
+                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                }
+                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks)
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.MasterAudioEnvelopes != null)
+                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
+                }
+            }
         });
         return newTrack;
     }
@@ -853,6 +907,7 @@ public sealed partial class TimelineEditor
         var sourceDelta = checked(sourceIn - primary.SourceInFrame);
         var durationDelta = checked(duration - primary.DurationFrames);
         var oldEnd = primary.EndFrame;
+        var delta = startDelta == 0 ? durationDelta : -startDelta;
         var changes = new Dictionary<Guid, TimelineClip>();
         foreach (var item in selected)
         {
@@ -877,7 +932,6 @@ public sealed partial class TimelineEditor
 
         if (ripple)
         {
-            var delta = startDelta == 0 ? durationDelta : -startDelta;
             if (delta != 0)
             {
                 var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
@@ -939,6 +993,33 @@ public sealed partial class TimelineEditor
                     if (shifts.TryGetValue(clip.Id, out var pos)) clip.StartFrame = pos;
             foreach (var marker in Project.Markers)
                 if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
+
+            if (ripple && delta != 0)
+            {
+                var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
+                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                }
+                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
+                {
+                    foreach (var track in Project.Tracks)
+                        if (track.Envelopes != null)
+                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.AudioBuses != null)
+                        foreach (var bus in Project.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
+                    if (Project.MasterAudioEnvelopes != null)
+                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
+                }
+            }
         });
     }
 
@@ -1039,10 +1120,62 @@ public sealed partial class TimelineEditor
                     if (shifts.TryGetValue(clip.Id, out var position)) clip.StartFrame = position;
             foreach (var marker in Project.Markers)
                 if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
+
+            if (ripple)
+            {
+                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
+                    foreach (var trackGroup in selected.GroupBy(item => item.Track))
+                    {
+                        var spans = CollapseSpans(trackGroup.Select(item => item.Clip));
+                        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackGroup.Key.Id);
+                        if (track?.Envelopes != null)
+                        {
+                            foreach (var env in track.Envelopes) env.RippleForSpans(spans);
+                        }
+                    }
+                    var allAffectedSpans = CollapseSpans(selected.Select(item => item.Clip));
+                    if (Project.AudioBuses != null)
+                    {
+                        foreach (var bus in Project.AudioBuses)
+                        {
+                            if (bus.Envelopes != null)
+                            {
+                                foreach (var env in bus.Envelopes) env.RippleForSpans(allAffectedSpans);
+                            }
+                        }
+                    }
+                }
+                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
+                {
+                    var allSpans = CollapseSpans(selected.Select(item => item.Clip));
+                    foreach (var track in Project.Tracks)
+                    {
+                        if (track.Envelopes != null)
+                        {
+                            foreach (var env in track.Envelopes) env.RippleForSpans(allSpans);
+                        }
+                    }
+                    if (Project.AudioBuses != null)
+                    {
+                        foreach (var bus in Project.AudioBuses)
+                        {
+                            if (bus.Envelopes != null)
+                            {
+                                foreach (var env in bus.Envelopes) env.RippleForSpans(allSpans);
+                            }
+                        }
+                    }
+                    if (Project.MasterAudioEnvelopes != null)
+                    {
+                        foreach (var env in Project.MasterAudioEnvelopes) env.RippleForSpans(allSpans);
+                    }
+                }
+            }
         });
     }
 
-    private static List<(long Start, long End)> CollapseSpans(IEnumerable<TimelineClip> clips)
+    internal static List<(long Start, long End)> CollapseSpans(IEnumerable<TimelineClip> clips)
     {
         var spans = new List<(long Start, long End)>();
         foreach (var clip in clips.OrderBy(c => c.StartFrame))
