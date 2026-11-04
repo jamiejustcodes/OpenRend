@@ -797,7 +797,7 @@ public sealed partial class TimelineEditor
         });
     }
 
-    public void SetTrackState(Guid trackId, bool? isMuted = null, bool? isSolo = null, bool? isLocked = null, bool? isVisible = null)
+    public void SetTrackState(Guid trackId, bool? isMuted = null, bool? isSolo = null, bool? isLocked = null, bool? isVisible = null, bool? armRecord = null)
     {
         var track = FindTrack(trackId);
         Execute(_ =>
@@ -806,6 +806,25 @@ public sealed partial class TimelineEditor
             if (isSolo.HasValue) track.IsSolo = isSolo.Value;
             if (isLocked.HasValue) track.IsLocked = isLocked.Value;
             if (isVisible.HasValue) track.IsVisible = isVisible.Value;
+            if (armRecord.HasValue) track.ArmRecord = armRecord.Value;
+        });
+    }
+
+        public void SetTrackColor(Guid trackId, string? color)
+    {
+        var track = FindTrack(trackId);
+        Execute(_ =>
+        {
+            track.TrackColor = string.IsNullOrWhiteSpace(color) ? null : color;
+        });
+    }
+
+    public void SetTrackAutomationMode(Guid trackId, TrackAutomationMode mode)
+    {
+        var track = FindTrack(trackId);
+        Execute(_ =>
+        {
+            track.AutomationMode = mode;
         });
     }
 

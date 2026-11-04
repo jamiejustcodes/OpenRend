@@ -101,7 +101,23 @@ public partial class MainWindow : Window
             Pause(); var track = vm.Project.Tracks.Single(t => t.Id == id);
             vm.Editor.SetTrackState(id, isMuted: action == "Mute" ? !track.IsMuted : null,
                 isSolo: action == "Solo" ? !track.IsSolo : null, isLocked: action == "Lock" ? !track.IsLocked : null,
-                isVisible: action == "Visible" ? !track.IsVisible : null);
+                isVisible: action == "Visible" ? !track.IsVisible : null,
+                armRecord: action == "Arm" ? !track.ArmRecord : null);
+        });
+        Timeline.TrackArmRequested += (id, armed) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackState(id, armRecord: armed);
+        });
+        Timeline.TrackColorRequested += (id, color) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackColor(id, color);
+        });
+        Timeline.TrackAutomationModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackAutomationMode(id, mode);
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
         Timeline.TransitionDropped += gesture => Guard(() =>
@@ -364,6 +380,7 @@ public partial class MainWindow : Window
         Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
         Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
+        TrimmerDeck.Initialize(vm);
         vm.Changed += Refresh;
         timer.Tick += async (_, _) =>
         {
@@ -1932,6 +1949,22 @@ public partial class MainWindow : Window
             mixingConsoleWindow.RefreshTracks();
         }
     }
+    private void TrimmerClick(object sender, RoutedEventArgs e)
+    {
+        PreviewDeckTabs.SelectedItem = TrimmerTab;
+        TrimmerDeck.Focus();
+    }
+
+    private void OpenInTrimmerClick(object sender, RoutedEventArgs e)
+    {
+        if (MediaList.SelectedItem is MediaItem item)
+        {
+            PreviewDeckTabs.SelectedItem = TrimmerTab;
+            TrimmerDeck.LoadMedia(item.Asset);
+            TrimmerDeck.Focus();
+        }
+    }
+
     private void VideoScopesClick(object sender, RoutedEventArgs e)
     {
         if (videoScopesWindow == null || !videoScopesWindow.IsLoaded)
@@ -2014,6 +2047,8 @@ public partial class MainWindow : Window
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
+            Key.D2 when !ctrl && alt && !shift => () => TrimmerClick(this, e),
+            Key.NumPad2 when !ctrl && alt && !shift => () => TrimmerClick(this, e),
             Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.D5 when ctrl && alt => () => MixingConsoleClick(this, e),

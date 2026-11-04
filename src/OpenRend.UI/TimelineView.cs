@@ -113,6 +113,9 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetTrackEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveTrackEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long, EnvelopeCurveType>? SetTrackEnvelopePointCurveRequested;
+    public event Action<Guid, bool>? TrackArmRequested;
+    public event Action<Guid, string?>? TrackColorRequested;
+    public event Action<Guid, TrackAutomationMode>? TrackAutomationModeRequested;
     public bool HasTrackEnvelope(Guid trackId, EnvelopeType type) =>
         Project.Tracks.FirstOrDefault(t => t.Id == trackId)?.Envelopes?.Any(e => e.Type == type && e.IsEnabled) ?? false;
     private TimelineClip? dragging;
@@ -321,6 +324,7 @@ public sealed partial class TimelineView : FrameworkElement
         if (index < 0) throw new ElementNotAvailableException();
         ActivateTrack(index);
         TrackAction?.Invoke(trackId, action);
+        if (action == "Arm") TrackArmRequested?.Invoke(trackId, !Project.Tracks[index].ArmRecord);
         InvalidateVisual();
         (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
     }
@@ -335,8 +339,20 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var x = action switch { "Mute" => 207, "Solo" => 230, "Lock" => 184, "FX" => 161, "Motion" => 138, "Phase" => 138, _ => 230 };
-        return new Rect(x, RulerHeight + index * TrackHeight - VerticalOffset + (action == "Visible" ? 47 : 4), 21, action == "Visible" ? 18 : 20);
+        var y = RulerHeight + index * TrackHeight - VerticalOffset;
+        return action switch
+        {
+            "Automation" => new Rect(138, y + 4, 21, 20),
+            "FX" => new Rect(161, y + 4, 21, 20),
+            "Lock" => new Rect(184, y + 4, 21, 20),
+            "Mute" => new Rect(207, y + 4, 21, 20),
+            "Solo" => new Rect(230, y + 4, 21, 20),
+            "Motion" => new Rect(207, y + 46, 21, 20),
+            "Visible" => new Rect(230, y + 46, 21, 18),
+            "Arm" => new Rect(207, y + 46, 21, 20),
+            "Phase" => new Rect(230, y + 46, 21, 20),
+            _ => new Rect(230, y + 4, 21, 20)
+        };
     }
 
     internal Rect TrackLevelBounds(Guid trackId, string level)
@@ -635,7 +651,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var reversePrefix = clip.IsReversed ? "[Reverse] " : "";
                 var rateSuffix = Math.Abs(clip.PlaybackRate - 1.0) > 0.001 ? $" [{clip.PlaybackRate:0.##}x]" : "";
                 var mutedSuffix = clip.IsMuted ? " [Muted]" : "";
-                var phaseSuffix = clip.InvertPhase ? " [Phase Ã˜]" : "";
+                var phaseSuffix = clip.InvertPhase ? " [Phase \u00D8]" : "";
                 var displayName = $"{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
@@ -692,13 +708,28 @@ public sealed partial class TimelineView : FrameworkElement
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var t = Project.Tracks[i]; var y = RulerHeight + i * TrackHeight - VerticalOffset;
+            var trackAccentColor = t.TrackColor ?? (t.Kind == TrackKind.Video ? "#448DBD" : "#65BECE");
             dc.DrawRectangle(Brush(t.IsLocked ? "#242424" : "#2B2B2B"), new Pen(Brush("#181818"), 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
-            dc.DrawRectangle(Brush(t.Kind == TrackKind.Video ? "#448DBD" : "#65BECE"), null, new Rect(1, y + 1, 23, TrackHeight - 2));
+            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(1, y + 1, 23, TrackHeight - 2));
+            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 3, TrackHeight - 1));
             if (IsKeyboardFocusWithin && i == ActiveTrackIndex)
                 dc.DrawRectangle(null, new Pen(Brush("#83C9FF"), 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
             Text(dc, "···", 4, y + 1, size: 12);
             Text(dc, $"{i + 1}", 5, y + 24, size: 11);
-            Text(dc, t.Name, 30, y + 5, size: 11, maxWidth: 145);
+            Text(dc, t.Name, 30, y + 5, size: 11, maxWidth: 104);
+
+            // Track Automation mode button [A] at x = 138, y + 4
+            var autoBounds = TrackButtonBounds(t.Id, "Automation");
+            var autoBrush = t.AutomationMode switch
+            {
+                TrackAutomationMode.AutomationRead => Brush("#2E7D32"),
+                TrackAutomationMode.AutomationTouch => Brush("#C62828"),
+                TrackAutomationMode.AutomationLatch => Brush("#E65100"),
+                TrackAutomationMode.AutomationWrite => Brush("#D32F2F"),
+                _ => Brush("#2A2A2A")
+            };
+            dc.DrawRectangle(autoBrush, new Pen(Brush("#383838"), 1), autoBounds);
+            Text(dc, "A", autoBounds.X + 6, autoBounds.Y + 2, t.AutomationMode == TrackAutomationMode.AutomationOff ? Brush("#888888") : Brush("#FFFFFF"), 10.5);
             if (t.Kind == TrackKind.Video && t.CompositeMode != TrackCompositeMode.SourceAlpha) Text(dc, $"[{t.CompositeMode}]", 180, y + 5, Brush("#00D2FF"), 10);
             foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
             {
@@ -773,13 +804,31 @@ public sealed partial class TimelineView : FrameworkElement
                 }
                 Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
 
-                // Track Phase Inversion button [Ã¸] at x = 138
+                // Arm for Record button [â—Ź] at x = 207, y + 46
+                var armBounds = TrackButtonBounds(t.Id, "Arm");
+                if (t.ArmRecord)
+                {
+                    dc.DrawRectangle(Brush("#D32F2F"), null, armBounds);
+                    dc.DrawEllipse(Brushes.White, null, new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
+                }
+                else
+                {
+                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), armBounds);
+                    dc.DrawEllipse(null, new Pen(Brush("#888888"), 1.2), new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
+                    dc.DrawEllipse(Brush("#AA3333"), null, new Point(armBounds.X + 10.5, armBounds.Y + 10), 2, 2);
+                }
+
+                // Track Phase Inversion button [Ã˜] at x = 230, y + 46
                 var phaseBounds = TrackButtonBounds(t.Id, "Phase");
                 if (t.InvertPhase)
                 {
                     dc.DrawRectangle(Brush("#2B6CB0"), null, phaseBounds);
                 }
-                Text(dc, "Ã¸", phaseBounds.X + 5, phaseBounds.Y + 1, t.InvertPhase ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
+                else
+                {
+                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), phaseBounds);
+                }
+                Text(dc, "\u00D8", phaseBounds.X + 5, phaseBounds.Y + 1, t.InvertPhase ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
             }
         }
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
@@ -868,9 +917,28 @@ public sealed partial class TimelineView : FrameworkElement
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
                     adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
-                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase" })
+                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase", "Arm", "Automation" })
                 {
-                    if (action == "FX")
+                    if (action == "Automation")
+                    {
+                        if (TrackButtonBounds(track.Id, "Automation").Contains(origin))
+                        {
+                            var nextMode = track.AutomationMode == TrackAutomationMode.AutomationOff
+                                ? TrackAutomationMode.AutomationRead
+                                : TrackAutomationMode.AutomationOff;
+                            TrackAutomationModeRequested?.Invoke(track.Id, nextMode);
+                            break;
+                        }
+                    }
+                    else if (action == "Arm")
+                    {
+                        if (track.Kind == TrackKind.Audio && TrackButtonBounds(track.Id, "Arm").Contains(origin))
+                        {
+                            InvokeTrackAction(track.Id, "Arm");
+                            break;
+                        }
+                    }
+                    else if (action == "FX")
                     {
                         if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "FX").Contains(origin))
                         {
@@ -1387,6 +1455,64 @@ public sealed partial class TimelineView : FrameworkElement
                 var solo = new MenuItem { Header = "Solo", IsCheckable = true, IsChecked = track.IsSolo };
                 solo.Click += (_, _) => InvokeTrackAction(track.Id, "Solo");
                 menu.Items.Add(solo);
+
+                if (track.Kind == TrackKind.Audio)
+                {
+                    var armItem = new MenuItem { Header = "Arm for Record", IsCheckable = true, IsChecked = track.ArmRecord, InputGestureText = "Ctrl+Alt+R" };
+                    armItem.Click += (_, _) => InvokeTrackAction(track.Id, "Arm");
+                    menu.Items.Add(armItem);
+                }
+
+                var autoMenu = new MenuItem { Header = "Track Automation Mode" };
+                foreach (TrackAutomationMode m in Enum.GetValues<TrackAutomationMode>())
+                {
+                    var autoItem = new MenuItem
+                    {
+                        Header = m switch
+                        {
+                            TrackAutomationMode.AutomationOff => "Automation Off",
+                            TrackAutomationMode.AutomationRead => "Read",
+                            TrackAutomationMode.AutomationTouch => "Touch",
+                            TrackAutomationMode.AutomationLatch => "Latch",
+                            TrackAutomationMode.AutomationWrite => "Write",
+                            _ => m.ToString()
+                        },
+                        IsCheckable = true,
+                        IsChecked = track.AutomationMode == m
+                    };
+                    var targetMode = m;
+                    autoItem.Click += (_, _) => TrackAutomationModeRequested?.Invoke(track.Id, targetMode);
+                    autoMenu.Items.Add(autoItem);
+                }
+                menu.Items.Add(autoMenu);
+
+                var colorMenu = new MenuItem { Header = "Track Display Color" };
+                foreach (var (cName, cHex) in VegasTrackColors.Palette)
+                {
+                    var colorItem = new MenuItem
+                    {
+                        Header = cName,
+                        IsCheckable = true,
+                        IsChecked = (string.IsNullOrEmpty(cHex) && string.IsNullOrEmpty(track.TrackColor)) || track.TrackColor == cHex
+                    };
+                    if (!string.IsNullOrEmpty(cHex))
+                    {
+                        var swatch = new System.Windows.Shapes.Rectangle
+                        {
+                            Width = 14,
+                            Height = 14,
+                            Fill = (Brush)new BrushConverter().ConvertFromString(cHex)!,
+                            Margin = new Thickness(0, 0, 4, 0),
+                            Stroke = Brushes.Black,
+                            StrokeThickness = 1
+                        };
+                        colorItem.Icon = swatch;
+                    }
+                    var targetHex = string.IsNullOrEmpty(cHex) ? null : cHex;
+                    colorItem.Click += (_, _) => TrackColorRequested?.Invoke(track.Id, targetHex);
+                    colorMenu.Items.Add(colorItem);
+                }
+                menu.Items.Add(colorMenu);
             }
 
             menu.PlacementTarget = this;

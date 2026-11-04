@@ -37,7 +37,8 @@ public sealed class TimelineAccessibilityTests
             editor.SetTrackState(id, isMuted: action == "Mute" ? !track.IsMuted : null,
                 isSolo: action == "Solo" ? !track.IsSolo : null,
                 isLocked: action == "Lock" ? !track.IsLocked : null,
-                isVisible: action == "Visible" ? !track.IsVisible : null);
+                isVisible: action == "Visible" ? !track.IsVisible : null,
+                armRecord: action == "Arm" ? !track.ArmRecord : null);
         };
         editor.Changed += (_, _) => view.Project = editor.Project;
         view.TrackLevelRequested += gesture => editor.SetTrackLevels(gesture.TrackId, gain: gesture.Level == "Gain" ? gesture.Value : null,
@@ -151,7 +152,14 @@ public sealed class TimelineAccessibilityTests
             editor.Undo();
             Assert.Equal(initial, toggle.ToggleState);
         }
-        Assert.Equal(3, peer.GetChildren()[1].GetChildren().Count(c => c.GetAutomationControlType() == AutomationControlType.Button));
+        Assert.Equal(4, peer.GetChildren()[1].GetChildren().Count(c => c.GetAutomationControlType() == AutomationControlType.Button));
+        var armBtn = peer.GetChildren()[1].GetChildren().Single(c => c.GetAutomationId().EndsWith("_Arm"));
+        var armToggle = Assert.IsAssignableFrom<IToggleProvider>(armBtn.GetPattern(PatternInterface.Toggle));
+        Assert.Equal(ToggleState.Off, armToggle.ToggleState);
+        Assert.IsAssignableFrom<IInvokeProvider>(armBtn.GetPattern(PatternInterface.Invoke)).Invoke();
+        Assert.Equal(ToggleState.On, armToggle.ToggleState);
+        editor.Undo();
+        Assert.Equal(ToggleState.Off, armToggle.ToggleState);
         view.IsEnabled = false;
         Assert.Throws<ElementNotEnabledException>(() => ((IInvokeProvider)buttons[0].GetPattern(PatternInterface.Invoke)).Invoke());
     });

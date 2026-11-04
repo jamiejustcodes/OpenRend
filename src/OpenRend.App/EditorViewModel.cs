@@ -90,7 +90,7 @@ public sealed class EditorViewModel : ObservableObject
         ProjectPath = path; Position = 0; Selection.Clear(); Dirty = path is null && project.Media.Count > 0;
         RefreshLibrary(); OnPropertyChanged(nameof(Title)); Changed?.Invoke();
     }
-    private void RefreshLibrary()
+    public void RefreshLibrary()
     {
         foreach (var item in Library.Where(i => Project.Media.All(m => m.Id != i.Asset.Id)).ToList()) Library.Remove(item);
         foreach (var item in Library) item.Rebind(Project.Media.Single(m => m.Id == item.Asset.Id));
@@ -139,6 +139,47 @@ public sealed class EditorViewModel : ObservableObject
         });
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
     }
+
+    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true)
+    {
+        var asset = Project.Media.Single(m => m.Id == mediaId);
+        var start = at ?? Position;
+        var chosen = trackId.HasValue ? Project.Tracks.Single(t => t.Id == trackId) : null;
+        Editor.Execute(p =>
+        {
+            var primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
+            var target = chosen ?? p.Tracks.FirstOrDefault(t => t.Kind == primaryKind && !t.IsLocked);
+            if (target is null)
+            {
+                target = new TimelineTrack { Kind = primaryKind, Name = $"{primaryKind} {p.Tracks.Count(t => t.Kind == primaryKind) + 1}" };
+                if (primaryKind == TrackKind.Video) p.Tracks.Insert(0, target); else p.Tracks.Add(target);
+            }
+            if (target.IsLocked) throw new InvalidOperationException("Unlock the track before placing media.");
+            if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
+                throw new InvalidOperationException("This media has no stream for the selected track.");
+            var clip = new TimelineClip
+            {
+                MediaId = mediaId,
+                Name = asset.Name,
+                StartFrame = start,
+                SourceInFrame = Math.Max(0, sourceIn),
+                DurationFrames = Math.Max(1, duration)
+            };
+            target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
+            if (primaryKind == TrackKind.Video && asset.HasAudio)
+            {
+                clip.GroupId = Guid.NewGuid();
+                var audio = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
+                if (audio is null) { audio = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audio); }
+                var sound = clip.DeepClone();
+                sound.Id = Guid.NewGuid();
+                audio.Clips.Add(sound);
+                Selection.Add(sound.Id);
+            }
+        });
+        if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
+    }
+
     public void Split()
     {
         if (!Project.Tracks.SelectMany(t => t.Clips).Any(c => Selection.Contains(c.Id) && c.StartFrame < Position && c.EndFrame > Position))

@@ -9,6 +9,7 @@
     <ProjectReference Include="../../src/OpenRend.Project/OpenRend.Project.csproj" />
     <ProjectReference Include="../../src/OpenRend.Media/OpenRend.Media.csproj" />
     <Compile Include="../../src/OpenRend.App/EditorViewModel.cs" Link="EditorViewModel.cs" />
+    <Compile Include="../../src/OpenRend.App/TrimmerControl.cs" Link="TrimmerControl.cs" />
     <Compile Include="../../src/OpenRend.App/PreviewFrameRequest.cs" Link="PreviewFrameRequest.cs" />
     <Compile Include="../../src/OpenRend.App/VideoEffectChooserModel.cs" Link="VideoEffectChooserModel.cs" />
   </ItemGroup>

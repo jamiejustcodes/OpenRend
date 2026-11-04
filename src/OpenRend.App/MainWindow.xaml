@@ -65,12 +65,14 @@
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem Header="Window">
+          <MenuItem x:Name="TrimmerWindowMenu" Header="Trimmer" InputGestureText="Alt+2" Click="TrimmerClick"/>
           <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
           <MenuItem x:Name="MixingConsoleWindowMenu" Header="Mixing Console" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
           <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         </MenuItem>
-        <MenuItem x:Name="MixingConsoleMenu" Header="Mixing Consoleâ€¦" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
-        <MenuItem x:Name="VideoScopesMenu" Header="Video Scopesâ€¦" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
+        <MenuItem x:Name="TrimmerMenu" Header="Trimmer…" InputGestureText="Alt+2" Click="TrimmerClick"/>
+        <MenuItem x:Name="MixingConsoleMenu" Header="Mixing Console…" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
+        <MenuItem x:Name="VideoScopesMenu" Header="Video Scopes…" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
         <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         <Separator/>
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>
@@ -294,6 +296,7 @@
                 <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch" Background="{StaticResource ColorBG}" BorderThickness="0">
                   <ListBox.ContextMenu>
                     <ContextMenu>
+                      <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
                       <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
                       <MenuItem Header="Media Color Grading…" Click="MediaColorGradingClick"/>
                     </ContextMenu>
@@ -573,7 +576,8 @@
         </TabItem>
       </TabControl>
       <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch"/>
-      <TabControl Grid.Column="2" TabStripPlacement="Bottom"><TabItem Header="Video Preview">
+      <TabControl x:Name="PreviewDeckTabs" Grid.Column="2" TabStripPlacement="Bottom">
+        <TabItem Header="Video Preview">
         <Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="*"/><RowDefinition Height="32"/><RowDefinition Height="28"/></Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Project video settings" Click="SettingsClick" ToolTip="Project video properties"><Image Source="{StaticResource Icon.Settings}"/></Button>
@@ -605,7 +609,11 @@
             <TextBlock x:Name="PreviewInfo" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,2" Foreground="#C8C8C8" FontSize="11"/>
           </Border>
         </Grid>
-      </TabItem></TabControl>
+      </TabItem>
+      <TabItem x:Name="TrimmerTab" Header="Trimmer">
+        <local:TrimmerControl x:Name="TrimmerDeck"/>
+      </TabItem>
+    </TabControl>
       <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Stretch"/>
       <TabControl Grid.Column="4" TabStripPlacement="Bottom"><TabItem Header="Master Bus"><Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="24"/><RowDefinition Height="28"/><RowDefinition Height="*"/><RowDefinition Height="14"/></Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal"><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Reset monitor gain" ToolTip="Reset monitor gain to 0 dB" Click="ResetMasterClick"><Image Source="{StaticResource Icon.Settings}"/></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Mute monitor" ToolTip="Mute monitor" Click="MuteMasterClick"><Image Source="{StaticResource Icon.Pause}"/></Button></StackPanel>

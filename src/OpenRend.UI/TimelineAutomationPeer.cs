@@ -120,7 +120,7 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
     protected override List<AutomationPeer> GetChildrenCore()
     {
         var children = new List<AutomationPeer>();
-        foreach (var action in Track.Kind == TrackKind.Video ? new[] { "Mute", "Solo", "Lock", "Visible" } : new[] { "Mute", "Solo", "Lock" })
+        foreach (var action in Track.Kind == TrackKind.Video ? new[] { "Mute", "Solo", "Lock", "Visible" } : new[] { "Mute", "Solo", "Lock", "Arm" })
         {
             if (!buttons.TryGetValue(action, out var button)) buttons.Add(action, button = new TimelineTrackButtonAutomationPeer(Timeline, id, action));
             children.Add(button);
@@ -291,14 +291,14 @@ internal sealed class TimelineTrackButtonAutomationPeer(TimelineAutomationPeer t
     private ToggleState previous = ReadState(timeline.View.Project.Tracks.Single(t => t.Id == trackId), action);
     private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
     public ToggleState ToggleState => ReadState(Track, action);
-    private static ToggleState ReadState(TimelineTrack track, string action) => (action switch { "Mute" => track.IsMuted, "Solo" => track.IsSolo, "Lock" => track.IsLocked, _ => track.IsVisible }) ? ToggleState.On : ToggleState.Off;
+    private static ToggleState ReadState(TimelineTrack track, string action) => (action switch { "Mute" => track.IsMuted, "Solo" => track.IsSolo, "Lock" => track.IsLocked, "Arm" => track.ArmRecord, _ => track.IsVisible }) ? ToggleState.On : ToggleState.Off;
     protected override string GetAutomationIdCore() => $"Track_{trackId:N}_{action}";
     protected override string GetClassNameCore() => "TimelineTrackButton";
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
     protected override string GetNameCore() => $"{(action == "Visible" ? "Video visibility" : action)} {Track.Name}";
     protected override string GetItemStatusCore() => ToggleState.ToString();
     protected override string GetHelpTextCore() => $"Toggle {(action == "Visible" ? "video visibility" : action.ToLowerInvariant())} for {Track.Name}. Shortcut: {GetAcceleratorKeyCore()}.";
-    protected override string GetAcceleratorKeyCore() => action switch { "Mute" => "M", "Solo" => "Shift+M", "Lock" => "L", _ => "V" };
+    protected override string GetAcceleratorKeyCore() => action switch { "Mute" => "M", "Solo" => "Shift+M", "Lock" => "L", "Arm" => "Ctrl+Alt+R", _ => "V" };
     protected override Rect GetBoundingRectangleCore() => View.ToScreenBounds(View.TrackButtonBounds(trackId, action));
     public override object? GetPattern(PatternInterface patternInterface) => patternInterface is PatternInterface.Invoke or PatternInterface.Toggle ? this : null;
     public void Invoke() { EnsureEnabled(); _ = Track; View.InvokeTrackAction(trackId, action); }

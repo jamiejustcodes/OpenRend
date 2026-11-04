@@ -404,6 +404,39 @@ public sealed class MediaAsset
     }
 }
 
+[JsonConverter(typeof(JsonStringEnumConverter<TrackAutomationMode>))]
+public enum TrackAutomationMode
+{
+    AutomationOff = 0,
+    AutomationRead = 1,
+    AutomationTouch = 2,
+    AutomationLatch = 3,
+    AutomationWrite = 4
+}
+
+public static class VegasTrackColors
+{
+    public static readonly (string Name, string Hex)[] Palette =
+    [
+        ("Default", ""),
+        ("Track 1 - Violet", "#706295"),
+        ("Track 2 - Rose", "#C28493"),
+        ("Track 3 - Coral", "#FF857A"),
+        ("Track 4 - Orange", "#FFAB7A"),
+        ("Track 5 - Amber", "#FFD17A"),
+        ("Track 6 - Mint", "#72C889"),
+        ("Track 7 - Slate", "#8CB7CA"),
+        ("Track 8 - Ocean", "#467D96"),
+        ("Red", "#D32F2F"),
+        ("Indigo", "#3F51B5"),
+        ("Teal", "#00897B"),
+        ("Olive", "#827717"),
+        ("Brown", "#795548"),
+        ("Lime", "#7CB342"),
+        ("Steel Gray", "#607D8B")
+    ];
+}
+
 public sealed class TimelineTrack
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -429,6 +462,12 @@ public sealed class TimelineTrack
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<ClipEnvelope>? Envelopes { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool ArmRecord { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? TrackColor { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public TrackAutomationMode AutomationMode { get; set; } = TrackAutomationMode.AutomationRead;
     public TimelineTrack DeepClone() => new()
     {
         Id = Id,
@@ -447,7 +486,10 @@ public sealed class TimelineTrack
         VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),
         AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList(),
         InvertPhase = InvertPhase,
-        Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList()
+        Envelopes = Envelopes?.Select(e => e.DeepClone()).ToList(),
+        ArmRecord = ArmRecord,
+        TrackColor = TrackColor,
+        AutomationMode = AutomationMode
     };
 }
 
