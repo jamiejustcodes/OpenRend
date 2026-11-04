@@ -1295,6 +1295,136 @@ public sealed partial class TimelineEditor
         Execute(_ => { clip.Crop = null; clip.CropOffsetFrames = 0; });
     }
 
+    public void SetMaskKeyframe(Guid clipId, long localFrame, MaskShape shape, CropInterpolation interpolation, double smoothness = 100.0)
+    {
+        ArgumentNullException.ThrowIfNull(shape);
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        EnsureVideoCrop(track);
+        if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
+        if (!double.IsFinite(smoothness) || smoothness is < 0 or > 100) throw new ArgumentOutOfRangeException(nameof(smoothness));
+        shape.Validate();
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        var animation = clip.Mask?.DeepClone() ?? new MaskAnimation { IsEnabled = true };
+        var keyframe = animation.Keyframes.FirstOrDefault(key => key.Frame == frame);
+        if (keyframe is null)
+        {
+            animation.Keyframes.Add(new MaskKeyframe { Frame = frame, Shape = shape.DeepClone(), Interpolation = interpolation, Smoothness = smoothness });
+            animation.Keyframes.Sort((left, right) => left.Frame.CompareTo(right.Frame));
+        }
+        else
+        {
+            keyframe.Shape = shape.DeepClone();
+            keyframe.Interpolation = interpolation;
+            keyframe.Smoothness = smoothness;
+        }
+        animation.Validate();
+        Execute(_ => clip.Mask = animation);
+    }
+
+    public void SetMaskKeyframeSmoothness(Guid clipId, long localFrame, double smoothness)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        EnsureVideoCrop(track);
+        if (localFrame < 0 || localFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(localFrame));
+        if (!double.IsFinite(smoothness) || smoothness is < 0 or > 100) throw new ArgumentOutOfRangeException(nameof(smoothness));
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        if (clip.Mask is null) return;
+        var existing = clip.Mask.Keyframes.FirstOrDefault(key => key.Frame == frame);
+        if (existing is null || Math.Abs(existing.Smoothness - smoothness) < 1e-6) return;
+        var animation = clip.Mask.DeepClone();
+        var keyframe = animation.Keyframes.Single(key => key.Frame == frame);
+        keyframe.Smoothness = smoothness;
+        animation.Validate();
+        Execute(_ => clip.Mask = animation);
+    }
+
+    public void MoveMaskKeyframe(Guid clipId, long fromLocalFrame, long toLocalFrame, bool preserveDestination = false)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (fromLocalFrame < 0 || fromLocalFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(fromLocalFrame));
+        if (toLocalFrame < 0 || toLocalFrame >= clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(toLocalFrame));
+        var from = checked(fromLocalFrame + clip.CropOffsetFrames);
+        var to = checked(toLocalFrame + clip.CropOffsetFrames);
+        if (clip.Mask is null || clip.Mask.Keyframes.All(key => key.Frame != from)) throw new InvalidOperationException("No mask keyframe exists at the source frame.");
+        if (fromLocalFrame == toLocalFrame) return;
+        var animation = clip.Mask.DeepClone();
+        var moved = animation.Keyframes.Single(key => key.Frame == from);
+        animation.Keyframes.Remove(moved);
+        if (preserveDestination)
+        {
+            var visible = animation.Keyframes.Select(key => (Key: key, Local: (Int128)key.Frame - clip.CropOffsetFrames))
+                .Where(item => item.Local >= 0 && item.Local < clip.DurationFrames).ToDictionary(item => (long)item.Local, item => item.Key);
+            if (visible.ContainsKey(toLocalFrame))
+            {
+                var gap = toLocalFrame;
+                while (gap < clip.DurationFrames - 1 && visible.ContainsKey(gap)) gap++;
+                if (!visible.ContainsKey(gap))
+                {
+                    for (var f = gap; f > toLocalFrame; f--) visible[f - 1].Frame = checked(visible[f - 1].Frame + 1);
+                }
+                else
+                {
+                    gap = toLocalFrame;
+                    while (gap > 0 && visible.ContainsKey(gap)) gap--;
+                    for (var f = gap; f < toLocalFrame; f++) visible[f + 1].Frame = checked(visible[f + 1].Frame - 1);
+                }
+            }
+        }
+        else
+        {
+            animation.Keyframes.RemoveAll(key => key.Frame == to);
+        }
+        moved.Frame = to;
+        animation.Keyframes.Add(moved);
+        animation.Keyframes.Sort((left, right) => left.Frame.CompareTo(right.Frame));
+        animation.Validate();
+        Execute(_ => clip.Mask = animation);
+    }
+
+    public void RemoveMaskKeyframe(Guid clipId, long localFrame)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track);
+        EnsureVideoCrop(track);
+        if (clip.Mask is null || localFrame < 0 || localFrame >= clip.DurationFrames) return;
+        var frame = checked(localFrame + clip.CropOffsetFrames);
+        if (clip.Mask.Keyframes.All(key => key.Frame != frame)) return;
+        Execute(_ =>
+        {
+            clip.Mask.Keyframes.RemoveAll(key => key.Frame == frame);
+            if (clip.Mask.Keyframes.Count == 0) clip.Mask = null;
+        });
+    }
+
+    public void SetMaskEnabled(Guid clipId, bool enabled)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        EnsureVideoCrop(track);
+        if (clip.Mask is null)
+        {
+            if (!enabled) return;
+            var initial = new MaskAnimation { IsEnabled = true };
+            Execute(_ => clip.Mask = initial);
+            return;
+        }
+        if (clip.Mask.IsEnabled == enabled) return;
+        Execute(_ => clip.Mask.IsEnabled = enabled);
+    }
+
+    public void ResetMask(Guid clipId)
+    {
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        EnsureVideoCrop(track);
+        if (clip.Mask is null) return;
+        Execute(_ => clip.Mask = null);
+    }
+
     public List<VideoEffect> GetScopedVideoEffects(EffectScope scope, Guid targetId)
     {
         return scope switch

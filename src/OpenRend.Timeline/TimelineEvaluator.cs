@@ -181,6 +181,13 @@ public static class TimelineEvaluator
         return clip.Crop?.Evaluate(checked(localFrame + clip.CropOffsetFrames)) ?? CropState.Identity(media.Width, media.Height);
     }
 
+    public static MaskShape? MaskAt(TimelineClip clip, long localFrame)
+    {
+        ArgumentNullException.ThrowIfNull(clip);
+        if (clip.Mask is null || !clip.Mask.IsEnabled) return null;
+        return clip.Mask.Evaluate(checked(localFrame + clip.CropOffsetFrames));
+    }
+
     public static (double Left, double Right) AudioGains(TimelineTrack track, TimelineClip clip, double localFrame)
     {
         var gain = track.Gain * clip.Gain * FadeAt(clip, localFrame);

@@ -413,6 +413,11 @@ public sealed class ProjectDocument
                     clip.Crop.Validate();
                 }
                 else if (clip.CropOffsetFrames != 0) throw new InvalidDataException("A crop offset requires crop keyframes.");
+                if (clip.Mask is not null)
+                {
+                    if (track.Kind != TrackKind.Video) throw new InvalidDataException("Mask animation requires a video clip.");
+                    clip.Mask.Validate();
+                }
                 if (clip.VideoEffects == null || track.Kind != TrackKind.Video && clip.VideoEffects.Count != 0)
                     throw new InvalidDataException("Video effects require a video clip.");
                 var effectIds = new HashSet<Guid>();
@@ -674,6 +679,7 @@ public sealed class TimelineClip
     public double Pan { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CropAnimation? Crop { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long CropOffsetFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public MaskAnimation? Mask { get; set; }
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<MotionTrackData> MotionTracks { get; set; } = [];
@@ -689,6 +695,7 @@ public sealed class TimelineClip
     {
         var clone = (TimelineClip)MemberwiseClone();
         clone.Crop = Crop?.DeepClone();
+        clone.Mask = Mask?.DeepClone();
         clone.FadeInTransition = FadeInTransition?.DeepClone();
         clone.FadeOutTransition = FadeOutTransition?.DeepClone();
         clone.VideoEffects = VideoEffects.Select(effect => effect.DeepClone()).ToList();

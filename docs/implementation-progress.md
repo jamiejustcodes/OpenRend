@@ -139,6 +139,27 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Verified desktop UI automation test `CustomRenderPresetCanBeSavedRenamedAndRetainedWhenRenderingABuiltin` passing in 57 seconds with element screenshot capture.
     - Full gate passed: 100% native integration tests, 971 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat(pancrop): implement Vegas-style mask track Bézier path keyframing, tools, and feathering` implemented 1:1 Vegas Pro Event Pan/Crop Mask Track architecture matching `ScriptPortal.Vegas.VideoMotionKeyframe`, `VMKeyframeType.Mask`, and `sharedk.dll` (`Mask`, `Path`, `Anchor`, `PathRasterizer`).
+  - Core Bézier Models & Interpolation:
+    - Created `CropMask.cs` in `OpenRend.Core` with `MaskPoint` (source pixel coordinates, In/Out tangent vectors, and `IsSplit` continuity break), `MaskMode` (`Positive` additive, `Negative` subtractive), `MaskFeatherType` (`None`, `In`, `Out`, `Both`), `MaskPath` (closed status, feather %, opacity %, anti-aliasing), `MaskShape` (multi-path collection with `CreateRectangle` and `CreateOval` using optimal kappa $\kappa = 4/3(\sqrt{2}-1) \approx 0.55228475$), `MaskKeyframe`, and `MaskAnimation` evaluating at integer project frames with rational rate.
+    - Integrated `Mask` on `TimelineClip` in `ProjectDocument.cs` with validation, JSON schema serialization, and deep cloning.
+    - Added `MaskAt(TimelineClip clip, long localFrame)` in `TimelineEvaluator.cs`.
+    - Added complete timeline editing methods in `TimelineEditor.cs`: `SetMaskKeyframe`, `SetMaskKeyframeSmoothness`, `MoveMaskKeyframe`, `RemoveMaskKeyframe`, `SetMaskEnabled`, and `ResetMask`, with full undo/redo integration.
+  - Multi-Pass Gaussian Feathering & Rasterization Engine:
+    - Built `MaskRasterizer.cs` in `OpenRend.Media` with anti-aliased Bézier curve rasterization and $O(1)$-per-pixel 3-pass separable sliding-window box/Gaussian feathering across all feather types (`Both`, `Out`, `In`).
+    - Hooked `TimelineRenderService.cs` and `TimelineRenderService.Dissolve.cs` to apply mask alpha before source sampling transforms, ensuring masked media seamlessly scales, pans, rotates, and composites across preview and export.
+  - Interactive Vegas Pro Pan/Crop Window & Mask Tools:
+    - Added dual track headers at bottom-left: `Position` track and `Mask` track with enable/disable toggle checkbox and active selection styling.
+    - Dynamic sidebar properties switching between Position parameters and Vegas Mask Path parameters (`Mode`, `Anti-alias`, `Opacity %`, `Feather type`, `Feather %`, `Interpolation`, `Smoothness`).
+    - Added Vegas Pro Mask Toolbar: Normal Edit Tool (`⬈`), Anchor Creation Pen Tool (`✎`), Split Tangent Tool (`∠`), Delete Anchor Tool (`⌫`), Rectangle Mask (`▭`), Oval Mask (`◯`), Clear Mask (`✕`), and zoom controls.
+    - Interactive Canvas (`CropWorkspace`): renders video frame, translucent mask fill, contrasting golden-yellow outline with shadow stroke, 7×7 square anchor handles, and tangent handles with circular knobs. Supports Pen tool click-to-add, drag-to-curve, click-first-to-close, anchor dragging, tangent manipulation (linked unless split/Alt-dragged), and interactive rectangle/oval drag creation.
+    - Keyframe Lane (`CropKeyframeLane`): switches between Position and Mask keyframes with active track transport, context menus, and mask shape copy/paste.
+  - Verification:
+    - Added 5 unit tests in `CropMaskTests.cs` (point lerp, shape factory, animation evaluation, feather/opacity lerp).
+    - Added 3 unit tests in `MaskRasterizerTests.cs` (positive rectangle, negative hole punch, edge feather gradient).
+    - Added 6 unit tests in `PanCropMaskEditorTests.cs` (set keyframe, multiple frames, move keyframe, undo/redo, toggle enabled, reset, smoothness, remove keyframe).
+    - Full gate passed: 100% native integration tests, 1,008 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat(color): implement Vegas-style 1:1 color wheels, 4-channel faders, and eyedropper balancing` implemented 1:1 Vegas Pro Color Wheels architecture matching `ScriptPortal.Vegas.ColorGradingPanel.ColorGradingColorBall` and `CmykWheelFromStops`.
   - Chromaticity Projection & Invertible Transformations:
     - Reverse-engineered Vegas Pro's basis vectors ($\theta_R = 185^\circ$, $\theta_G = -40^\circ$, $\theta_B = 65^\circ$) and Moore-Penrose pseudo-inverse coefficients mapping polar coordinates $(x, y)$ to $(R, G, B)$ channel projections with exact roundtrip stability.
