@@ -97,9 +97,9 @@ public sealed class ColorGradingDockControl : UserControl
 
     public ColorGradingDockControl()
     {
-        var panelBrush = new SolidColorBrush(Color.FromRgb(32, 32, 32));
-        var headerBrush = new SolidColorBrush(Color.FromRgb(45, 45, 45));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(55, 55, 55));
+        var panelBrush = new SolidColorBrush(Color.FromRgb(24, 24, 24));
+        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
+        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
         var textBrush = Brushes.White;
 
         Background = panelBrush;
@@ -335,8 +335,8 @@ public sealed class ColorGradingDockControl : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var headerBrush = new SolidColorBrush(Color.FromRgb(40, 40, 40));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60));
+        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
+        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
 
         // Camera LUT Slot 0
         var camBorder = new Border
@@ -578,8 +578,8 @@ public sealed class ColorGradingDockControl : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var headerBrush = new SolidColorBrush(Color.FromRgb(40, 40, 40));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60));
+        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
+        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
 
         // Levels Card
         var levelsBorder = new Border
@@ -652,8 +652,8 @@ public sealed class ColorGradingDockControl : UserControl
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var headerBrush = new SolidColorBrush(Color.FromRgb(40, 40, 40));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(60, 60, 60));
+        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
+        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
 
         // White Balance Card
         var wbBorder = new Border

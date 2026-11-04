@@ -365,8 +365,8 @@ public partial class MainWindow
             {
                 var card = new ListBoxItem
                 {
-                    Width = 124,
-                    Height = 104,
+                    Width = 128,
+                    Height = 108,
                     Padding = new Thickness(4),
                     Margin = new Thickness(3),
                     DataContext = def,
@@ -390,17 +390,19 @@ public partial class MainWindow
 
                 var border = new Border
                 {
-                    Width = 112,
-                    Height = 68,
+                    Width = 116,
+                    Height = 70,
                     BorderBrush = (Brush)FindResource("ColorL"),
                     BorderThickness = new Thickness(1),
-                    Background = previewBrush
+                    Background = previewBrush,
+                    CornerRadius = new CornerRadius(1),
+                    Child = new Border { VerticalAlignment = VerticalAlignment.Bottom, Height = 2, Background = (Brush)FindResource("ActiveColor") }
                 };
                 var nameBlock = new TextBlock
                 {
                     Text = preset.Name,
                     TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 4, 0, 0),
+                    Margin = new Thickness(0, 5, 0, 0),
                     Foreground = (Brush)FindResource("TextColor"),
                     FontSize = 11,
                     TextTrimming = TextTrimming.CharacterEllipsis
@@ -473,9 +475,9 @@ public partial class MainWindow
         new("Checkerboard", "Utility", ["(Default)", "Large Tiles", "Small Tiles", "Horizontal Blinds", "Vertical Blinds", "Grate", "Fence", "Ridges", "Bumps", "Plaid", "Split Screen", "Horizon"], "Vegas Checkerboard: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
         new("Color Gradient", "Creative", ["(Default)", "Linear White to Black", "Soft Contrast", "Radial White to Black", "Linear Black to White", "Sunset", "Sunrise", "Blue Sky", "Sepia Tone"], "Vegas Color Gradient: Generates multi-color smooth gradients with customizable angle and falloff."),
         new("Credit Roll", "Titles and Text", ["(Default)", "Scrolling On Black", "Crawling On Black", "Subtitled Credits", "Dual Column Credits"], "Vegas Credit Roll: Automated scrolling credits generator with multiple text styles."),
-        new("Noise Texture", "Creative", ["(Default)", "Fine Grain", "Coarse Grain", "Perlin Noise", "Simplex Fog", "Turbulence"], "Vegas Noise Texture: Procedural animated noise pattern generator."),
-        new("Solid Color", "Utility", ["(Default)", "Black", "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"], "Vegas Solid Color: Generates solid uniform color frames."),
-        new("Test Pattern", "Utility", ["(Default)", "SMPTE Bars (NTSC)", "SMPTE Bars (PAL)", "Color Bars (NTSC)", "Color Bars (PAL)", "White Porches", "Yellow Porches", "Pluge and Porches", "Ramp", "Gradient"], "Vegas Test Pattern: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
+        new("Noise Texture", "Noise & Textures", ["(Default)", "Fine Grain", "Coarse Grain", "Perlin Noise", "Simplex Fog", "Turbulence"], "Vegas Noise Texture: Procedural animated noise pattern generator."),
+        new("Solid Color", "Solid Colors", ["(Default)", "Black", "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"], "Vegas Solid Color: Generates solid uniform color frames."),
+        new("Test Pattern", "Test Patterns", ["(Default)", "SMPTE Bars (NTSC)", "SMPTE Bars (PAL)", "Color Bars (NTSC)", "Color Bars (PAL)", "White Porches", "Yellow Porches", "Pluge and Porches", "Ramp", "Gradient"], "Vegas Test Pattern: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
         new("Titles & Text", "Titles and Text", ["(Default)", "Title 01", "Subtitle", "Lower Third", "Banner Title", "Pop In", "Action Title", "Film Noir"], "Vegas Titles & Text: OFX high quality vector typography generator.")
     ];
 
@@ -566,8 +568,8 @@ public partial class MainWindow
             {
                 var card = new ListBoxItem
                 {
-                    Width = 124,
-                    Height = 104,
+                    Width = 128,
+                    Height = 108,
                     Padding = new Thickness(4),
                     Margin = new Thickness(3),
                     DataContext = def,
@@ -578,19 +580,21 @@ public partial class MainWindow
                 var sp = new StackPanel();
                 var border = new Border
                 {
-                    Width = 112,
-                    Height = 68,
+                    Width = 116,
+                    Height = 70,
                     BorderBrush = (Brush)FindResource("ColorL"),
                     BorderThickness = new Thickness(1),
-                    Background = GetPresetThumbnailBrush(def.Name, preset)
+                    Background = GetPresetThumbnailBrush(def.Name, preset),
+                    CornerRadius = new CornerRadius(1),
+                    Child = new Border { VerticalAlignment = VerticalAlignment.Bottom, Height = 2, Background = (Brush)FindResource("ActiveColor") }
                 };
                 var nameBlock = new TextBlock
                 {
                     Text = preset,
                     TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 4, 0, 0),
+                    Margin = new Thickness(0, 5, 0, 0),
                     Foreground = (Brush)FindResource("TextColor"),
-                    FontSize = 10,
+                    FontSize = 11,
                     TextTrimming = TextTrimming.CharacterEllipsis
                 };
                 sp.Children.Add(border);

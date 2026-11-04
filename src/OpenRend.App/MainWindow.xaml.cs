@@ -2884,7 +2884,7 @@ public partial class MainWindow : Window
 
         if (ActualWidth > 0)
         {
-            var totalNonPreviewWidth = 240 + 10 + 110 + 16; // 376px
+            var totalNonPreviewWidth = 240 + 10 + 80 + 16; // 346px
             var maxPreviewWidth = Math.Max(280, ActualWidth - totalNonPreviewWidth);
             if (PreviewWidth.Width.IsAbsolute && PreviewWidth.Width.Value > maxPreviewWidth)
             {
@@ -2900,7 +2900,7 @@ public partial class MainWindow : Window
         var w = RestoreBounds.Width > 0 ? RestoreBounds.Width : (Width > 0 ? Width : 1400);
         var h = RestoreBounds.Height > 0 ? RestoreBounds.Height : (Height > 0 ? Height : 900);
         File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(
-            2,
+            3,
             w,
             h,
             PreviewWidth.ActualWidth,
@@ -2915,7 +2915,7 @@ public partial class MainWindow : Window
             if (!File.Exists(WorkspacePath)) return;
             var settings = System.Text.Json.JsonSerializer.Deserialize<WorkspaceSettings>(File.ReadAllText(WorkspacePath));
             if (settings is null) return;
-            if (settings.LayoutVersion != 2) return;
+            if (settings.LayoutVersion != 3) return;
             Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width);
             Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
             WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
@@ -2924,14 +2924,15 @@ public partial class MainWindow : Window
             var effWidth = ActualWidth > 0 ? ActualWidth : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Width : Width);
             var effHeight = ActualHeight > 0 ? ActualHeight : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Height : Height);
 
-            var maxAllowedPreview = Math.Max(280, effWidth - 376);
-            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.7)
+            var maxAllowedPreview = Math.Max(280, effWidth - 346);
+            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.75)
             {
                 PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 280, maxAllowedPreview));
             }
             else
             {
-                PreviewWidth.Width = new GridLength(1.1, GridUnitType.Star);
+                PreviewWidth.Width = new GridLength(1.5, GridUnitType.Star);
+                MediaWidth.Width = new GridLength(0.9, GridUnitType.Star);
             }
 
             var maxAllowedWorkspace = Math.Max(180, effHeight - 265);
@@ -2941,7 +2942,8 @@ public partial class MainWindow : Window
             }
             else
             {
-                WorkspaceHeight.Height = new GridLength(1.1, GridUnitType.Star);
+                WorkspaceHeight.Height = new GridLength(0.85, GridUnitType.Star);
+                TimelineRowHeight.Height = new GridLength(1.25, GridUnitType.Star);
             }
 
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);

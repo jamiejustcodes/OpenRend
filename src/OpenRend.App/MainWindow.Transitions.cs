@@ -240,10 +240,10 @@ public partial class MainWindow
     {
         var item = new ListBoxItem
         {
-            Width = 124,
-            Height = 103,
+            Width = 128,
+            Height = 108,
             Padding = new Thickness(4),
-            Margin = new Thickness(2),
+            Margin = new Thickness(3),
             DataContext = preset,
             ToolTip = "Double-click to add to the selection, or drag to a video overlap."
         };
@@ -254,19 +254,26 @@ public partial class MainWindow
 
         var border = new Border
         {
-            Width = 110,
-            Height = 69,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x77, 0x77, 0x77)),
+            Width = 116,
+            Height = 70,
+            BorderBrush = (Brush)FindResource("ColorL"),
             BorderThickness = new Thickness(1),
-            Background = GetThumbnailBrush(plugin.Category, plugin.Kind)
+            CornerRadius = new CornerRadius(1),
+            Background = GetThumbnailBrush(plugin.Category, plugin.Kind),
+            Child = new Border
+            {
+                VerticalAlignment = VerticalAlignment.Bottom,
+                Height = 2,
+                Background = (Brush)FindResource("ActiveColor")
+            }
         };
 
         var label = new TextBlock
         {
             Text = preset.Name,
             TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(0, 4, 0, 0),
-            Foreground = new SolidColorBrush(Color.FromRgb(0xE6, 0xE6, 0xE6)),
+            Margin = new Thickness(0, 5, 0, 0),
+            Foreground = (Brush)FindResource("TextColor"),
             FontSize = 11,
             TextTrimming = TextTrimming.CharacterEllipsis
         };
@@ -276,12 +283,14 @@ public partial class MainWindow
 
         var addButton = new Button
         {
-            Content = "+",
-            Width = 21,
-            Height = 21,
-            Padding = new Thickness(0),
+            Style = (Style)FindResource("IconButton"),
+            ContentTemplate = (DataTemplate)FindResource("ic_add"),
+            Width = 22,
+            Height = 22,
+            Background = (Brush)FindResource("ColorM"),
             HorizontalAlignment = HorizontalAlignment.Right,
             VerticalAlignment = VerticalAlignment.Top,
+            Margin = new Thickness(2),
             ToolTip = "Add to selected events",
             Tag = preset
         };

@@ -5,9 +5,9 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="32"/>
       <RowDefinition Height="34"/>
-      <RowDefinition x:Name="WorkspaceHeight" Height="1.1*" MinHeight="180"/>
+      <RowDefinition x:Name="WorkspaceHeight" Height="0.85*" MinHeight="180"/>
       <RowDefinition Height="5"/>
-      <RowDefinition x:Name="TimelineRowHeight" Height="1*" MinHeight="140"/>
+      <RowDefinition x:Name="TimelineRowHeight" Height="1.25*" MinHeight="140"/>
       <RowDefinition Height="34"/>
       <RowDefinition Height="20"/>
     </Grid.RowDefinitions>
@@ -235,11 +235,11 @@
     </Border>
     <Grid Grid.Row="2" x:Name="Workspace" Margin="4,0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="MediaWidth" Width="1*" MinWidth="240"/>
+        <ColumnDefinition x:Name="MediaWidth" Width="0.9*" MinWidth="260" MaxWidth="750"/>
         <ColumnDefinition Width="5"/>
-        <ColumnDefinition x:Name="PreviewWidth" Width="1.1*" MinWidth="280"/>
+        <ColumnDefinition x:Name="PreviewWidth" Width="1.5*" MinWidth="340"/>
         <ColumnDefinition Width="5"/>
-        <ColumnDefinition x:Name="MasterBusWidth" Width="110"/>
+        <ColumnDefinition x:Name="MasterBusWidth" Width="80" MinWidth="65" MaxWidth="110"/>
       </Grid.ColumnDefinitions>
       <TabControl x:Name="ToolsTabs" TabStripPlacement="Bottom" SelectedIndex="1">
         <!-- 1:1 Vegas Pro UnifiedExplorer Tab -->
@@ -544,8 +544,11 @@
                   </StackPanel>
                 </TabItem.Header>
               </TabItem>
-              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
               <TabItem Header="Titles and Text" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Test Patterns" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Solid Colors" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Noise &amp; Textures" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
               <TabItem Header="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
             </TabControl>
 
@@ -738,21 +741,122 @@
           <local:ColorGradingDockControl x:Name="DockColorGrading"/>
         </TabItem>
 
+        <!-- 1:1 Vegas Pro Event / Clip Properties Tab -->
         <TabItem x:Name="ClipPropertiesTab" Header="Clip Properties">
-          <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel Margin="12">
-            <TextBlock x:Name="ClipName" Text="Select a timeline clip" FontWeight="SemiBold" Margin="0,0,0,10"/>
-            <Grid x:Name="Inspector" IsEnabled="False"><Grid.ColumnDefinitions><ColumnDefinition Width="125"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><Grid.RowDefinitions><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/><RowDefinition/></Grid.RowDefinitions>
-              <TextBlock Text="Position (frames)"/><TextBox x:Name="ClipStart" Grid.Column="1"/>
-              <TextBlock Grid.Row="1" Text="Source in (frames)"/><TextBox x:Name="ClipIn" Grid.Row="1" Grid.Column="1"/>
-              <TextBlock Grid.Row="2" Text="Duration (frames)"/><TextBox x:Name="ClipDuration" Grid.Row="2" Grid.Column="1"/>
-              <TextBlock Grid.Row="3" Text="Opacity (0–1)"/><TextBox x:Name="ClipOpacity" Grid.Row="3" Grid.Column="1"/>
-              <TextBlock Grid.Row="4" Text="Audio gain"/><TextBox x:Name="ClipGain" Grid.Row="4" Grid.Column="1"/>
-              <TextBlock Grid.Row="5" Text="Pan (−1 to 1)"/><TextBox x:Name="ClipPan" Grid.Row="5" Grid.Column="1"/>
-              <TextBlock Grid.Row="6" Text="Fade in (frames)"/><TextBox x:Name="ClipFadeIn" Grid.Row="6" Grid.Column="1"/>
-              <TextBlock Grid.Row="7" Text="Fade out (frames)"/><TextBox x:Name="ClipFadeOut" Grid.Row="7" Grid.Column="1"/>
-              <StackPanel Grid.Row="8" Grid.Column="1" Orientation="Horizontal"><Button Content="Apply clip properties" Click="ApplyPropertiesClick" Margin="2,10"/><Button Content="Normalize (0 dB)" Click="NormalizeAudioClipClick" ToolTip="Normalize audio peak to 0 dB" Margin="4,10"/><Button x:Name="MuteAudioButton" Content="Mute audio" Click="MuteAudioClipClick" ToolTip="Toggle audio mute (leaves video visible)" Margin="4,10"/><Button x:Name="LockEventButton" Content="Lock" Click="LockEventClick" ToolTip="Toggle event lock" Margin="4,10"/><Button x:Name="MuteEventButton" Content="Mute event" Click="MuteEventClick" ToolTip="Toggle event mute (disables event output)" Margin="4,10"/><Button x:Name="EditTextMediaButton" Content="Edit text…" Click="EditTextMediaClick" ToolTip="Edit Titles &amp; Text media properties" Margin="4,10" Visibility="Collapsed"/></StackPanel>
-            </Grid>
-          </StackPanel></ScrollViewer>
+          <ScrollViewer VerticalScrollBarVisibility="Auto" Background="{StaticResource ColorBG}">
+            <StackPanel Margin="8,8,8,12">
+              <!-- Event Header Card -->
+              <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="2" Margin="0,0,0,8" Padding="10,8">
+                <DockPanel LastChildFill="True">
+                  <!-- Quick Switches on the Right -->
+                  <StackPanel DockPanel.Dock="Right" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="LockEventButton" Style="{StaticResource ToolbarButton}" Margin="2,0" Padding="6,3" Content="Lock" ToolTip="Toggle event lock (Ctrl+Shift+L)" Click="LockEventClick"/>
+                    <Button x:Name="MuteEventButton" Style="{StaticResource ToolbarButton}" Margin="2,0" Padding="6,3" Content="Mute Event" ToolTip="Toggle event mute (disables event output)" Click="MuteEventClick"/>
+                    <Button x:Name="MuteAudioButton" Style="{StaticResource ToolbarButton}" Margin="2,0" Padding="6,3" Content="Mute Audio" ToolTip="Toggle audio mute (Ctrl+Shift+M)" Click="MuteAudioClipClick"/>
+                    <Button x:Name="EditTextMediaButton" Style="{StaticResource ToolbarButton}" Margin="2,0" Padding="6,3" Content="Edit Text…" ToolTip="Edit Titles &amp; Text media properties" Click="EditTextMediaClick" Visibility="Collapsed"/>
+                  </StackPanel>
+                  <!-- Event Icon & Name -->
+                  <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <ContentControl ContentTemplate="{StaticResource ic_properties}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="ClipName" Text="Select a timeline clip" FontWeight="SemiBold" FontSize="12" Foreground="{StaticResource TextColor}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                  </StackPanel>
+                </DockPanel>
+              </Border>
+
+              <!-- Inspector Form Container -->
+              <Grid x:Name="Inspector" IsEnabled="False">
+                <StackPanel>
+                  <!-- Card 1: Timing & Placement -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="2" Margin="0,0,0,8">
+                    <StackPanel>
+                      <Border Background="{StaticResource HoverColor}" Padding="8,4" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+                        <TextBlock Text="Timing &amp; Placement" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource FocusColor}"/>
+                      </Border>
+                      <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="135"/>
+                          <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Position (frames)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipStart" Grid.Row="0" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="1" Text="Source in (frames)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipIn" Grid.Row="1" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="2" Text="Duration (frames)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipDuration" Grid.Row="2" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Card 2: Levels & Envelopes -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="2" Margin="0,0,0,8">
+                    <StackPanel>
+                      <Border Background="{StaticResource HoverColor}" Padding="8,4" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+                        <TextBlock Text="Levels &amp; Envelopes" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource FocusColor}"/>
+                      </Border>
+                      <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="135"/>
+                          <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Opacity (0–1)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipOpacity" Grid.Row="0" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="1" Text="Audio gain (factor)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipGain" Grid.Row="1" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="2" Text="Pan (−1 to 1)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipPan" Grid.Row="2" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Card 3: Fades & Offsets -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="2" Margin="0,0,0,8">
+                    <StackPanel>
+                      <Border Background="{StaticResource HoverColor}" Padding="8,4" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+                        <TextBlock Text="Fades &amp; Offsets" FontSize="11" FontWeight="SemiBold" Foreground="{StaticResource FocusColor}"/>
+                      </Border>
+                      <Grid Margin="10,8">
+                        <Grid.ColumnDefinitions>
+                          <ColumnDefinition Width="135"/>
+                          <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                          <RowDefinition Height="Auto"/>
+                          <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="Fade in (frames)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipFadeIn" Grid.Row="0" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+
+                        <TextBlock Grid.Row="1" Text="Fade out (frames)" Foreground="{StaticResource TextColorGrey}" FontSize="11" VerticalAlignment="Center" Margin="0,3"/>
+                        <TextBox x:Name="ClipFadeOut" Grid.Row="1" Grid.Column="1" Background="{StaticResource ColorBG}" Foreground="{StaticResource TextColor}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" Padding="6,3" FontSize="11" Margin="0,2"/>
+                      </Grid>
+                    </StackPanel>
+                  </Border>
+
+                  <!-- Bottom Actions Footer -->
+                  <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="2" Padding="8,6">
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                      <Button Content="Normalize (0 dB)" Style="{StaticResource TextButton}" Click="NormalizeAudioClipClick" ToolTip="Normalize audio peak to 0 dB" Margin="0,0,6,0" Padding="10,4"/>
+                      <Button Content="Apply clip properties" Style="{StaticResource TextButton}" Background="{StaticResource ActiveColor}" BorderBrush="{StaticResource ActiveColorHover}" Click="ApplyPropertiesClick" Padding="12,4"/>
+                    </StackPanel>
+                  </Border>
+                </StackPanel>
+              </Grid>
+            </StackPanel>
+          </ScrollViewer>
         </TabItem>
       </TabControl>
       <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE"/>
