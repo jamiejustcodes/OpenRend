@@ -831,8 +831,8 @@
         <!-- Right side: Record Time readout, Timecode sunken display, Zoom buttons -->
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
           <TextBlock x:Name="RecordTimeDisplay" Text="Record Time (2 ch): 24:00:00:00" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource TextColorGrey}" Margin="6,0" IsHitTestVisible="False"/>
-          <Border x:Name="TimecodeBorder" Background="{StaticResource ColorBG}" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,2" Margin="4,0" Cursor="Hand" ToolTip="Time at Cursor (Right-click for Ruler Format, Double-click to set time)" MouseRightButtonUp="Timecode_MouseRightButtonUp" MouseLeftButtonDown="Timecode_MouseLeftButtonDown">
-            <TextBlock x:Name="Timecode" FontSize="12" FontFamily="Consolas" FontWeight="SemiBold" Foreground="{StaticResource TextColor}" Text="00:00:00:00"/>
+          <Border x:Name="TimecodeBorder" Background="#0E0E0E" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,3" Margin="4,0" Cursor="Hand" ToolTip="Time at Cursor (Right-click for Ruler Format, Double-click to set time)" MouseRightButtonUp="Timecode_MouseRightButtonUp" MouseLeftButtonDown="Timecode_MouseLeftButtonDown">
+            <TextBlock x:Name="Timecode" FontSize="13" FontFamily="Consolas" FontWeight="Bold" Foreground="#FFFFFF" Text="00:00:00:00"/>
           </Border>
           <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>
           <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in" Foreground="{StaticResource TextColor}"/>
@@ -842,13 +842,14 @@
         <!-- Left side: Transport Buttons & Rate -->
         <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
           <TextBlock x:Name="PlaybackRate" Text="Rate: 0.00" Width="100" FontSize="11" Foreground="{StaticResource TextColorGrey}" Margin="6,0"/>
+          <Button x:Name="TransportRecordButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_record}" AutomationProperties.Name="Record" ToolTip="Record (Ctrl+R)" Click="RecordClick" Margin="1,0"/>
           <ToggleButton x:Name="LoopPlaybackToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_loop}" AutomationProperties.Name="Loop Playback" ToolTip="Loop Playback (Q)" Click="LoopPlaybackClick" Margin="1,0"/>
-          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_first}" AutomationProperties.Name="Play from start" Click="PlayFromStartClick" ToolTip="Play from start (Shift+Space)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_play_from_start}" AutomationProperties.Name="Play from start" Click="PlayFromStartClick" ToolTip="Play from start (Shift+Space)"/>
           <Button x:Name="PlayButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_play}" AutomationProperties.Name="Play" Click="PlayClick" ToolTip="Play / pause (Space)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_pause}" AutomationProperties.Name="Pause" Click="PauseClick" ToolTip="Pause (Enter)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_stop}" AutomationProperties.Name="Stop" Click="StopClick" ToolTip="Stop (Esc)"/>
-          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_first}" AutomationProperties.Name="Go to start" Click="StartClick" ToolTip="Go to start (Ctrl+Home)"/>
-          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_last}" AutomationProperties.Name="Go to end" Click="EndClick" ToolTip="Go to end (Ctrl+End)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_to_start}" AutomationProperties.Name="Go to start" Click="StartClick" ToolTip="Go to start (Ctrl+Home)"/>
+          <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_to_end}" AutomationProperties.Name="Go to end" Click="EndClick" ToolTip="Go to end (Ctrl+End)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_previous}" AutomationProperties.Name="Previous frame" Click="PreviousClick" ToolTip="Previous frame (Alt+Left)"/>
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_step_next}" AutomationProperties.Name="Next frame" Click="NextClick" ToolTip="Next frame (Alt+Right)"/>
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
@@ -856,10 +857,10 @@
           <Button Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_delete}" AutomationProperties.Name="Delete" Click="DeleteClick" ToolTip="Delete"/>
           <Button x:Name="InsertMarkerButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_marker}" AutomationProperties.Name="Insert marker" AutomationProperties.AutomationId="InsertMarkerButton" Click="InsertMarkerClick" ToolTip="Insert marker (M)"/>
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
-          <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" Content="X" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
-          <CheckBox x:Name="SnapToggle" Content="Snap" IsChecked="True" Foreground="{StaticResource TextColor}" Click="SnapClick" Margin="4,0"/>
-          <ToggleButton x:Name="IgnoreGroupsToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="ðŸ”—" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Ignore Event Grouping" ToolTip="Ignore Event Grouping (Ctrl+Shift+U)" Click="IgnoreGroupsClick" Margin="2,0"/>
-          <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" Content="&#x2637;" FontWeight="Bold" Foreground="{StaticResource TextColor}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0">
+          <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" ContentTemplate="{StaticResource ic_autocrossfade}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
+          <ToggleButton x:Name="SnapToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" ContentTemplate="{StaticResource ic_snapping}" AutomationProperties.Name="Enable Snapping" ToolTip="Enable Snapping (N)" Click="SnapClick" Margin="2,0"/>
+          <ToggleButton x:Name="IgnoreGroupsToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_ignore_grouping}" AutomationProperties.Name="Ignore Event Grouping" ToolTip="Ignore Event Grouping (Ctrl+Shift+U)" Click="IgnoreGroupsClick" Margin="2,0"/>
+          <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_ripple}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0">
             <ToggleButton.ContextMenu>
               <ContextMenu>
                 <MenuItem x:Name="RippleToggleAffectedTracks" Header="Affected Tracks" InputGestureText="F" Click="RippleAffectedTracksClick" IsChecked="True"/>

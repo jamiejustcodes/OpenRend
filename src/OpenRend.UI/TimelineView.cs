@@ -217,7 +217,7 @@ public sealed partial class TimelineView : FrameworkElement
     private static readonly ConcurrentDictionary<string, SolidColorBrush> BrushMap = new(StringComparer.OrdinalIgnoreCase);
     private static readonly ConcurrentDictionary<(string Hex, double Thickness), Pen> PenMap = new();
     private static readonly ConcurrentDictionary<(string Hex, double Thickness, string Dash), Pen> DashedPenMap = new();
-    private static readonly Brush BackgroundBrush = Brush("#1E1E1E");
+    private static readonly Brush BackgroundBrush = Brush("#181818");
     private static readonly Typeface Face = new("Segoe UI");
 
     public TimelineView()
@@ -704,13 +704,18 @@ public sealed partial class TimelineView : FrameworkElement
     {
         base.OnRender(dc);
         dc.DrawRectangle(BackgroundBrush, null, new Rect(RenderSize));
+
+        // 1:1 Vegas Pro Ruler background surface (#242424) and dividing line
+        dc.DrawRectangle(Brush("#242424"), null, new Rect(HeaderWidth, 0, Math.Max(0, ActualWidth - HeaderWidth), RulerHeight));
+        dc.DrawLine(FrozenPen("#181818", 1), new Point(HeaderWidth, RulerHeight), new Point(ActualWidth, RulerHeight));
+
         var pen = FrozenPen("#383838", 1);
         var step = PixelsPerSecond >= 130 ? 1 : PixelsPerSecond >= 50 ? 2 : PixelsPerSecond >= 25 ? 5 : PixelsPerSecond >= 10 ? 10 : 20;
         var first = Math.Max(0, (int)(Offset / PixelsPerSecond / step));
         for (var n = first; n * step * PixelsPerSecond - Offset < ActualWidth - HeaderWidth; n++)
         {
             var x = HeaderWidth + n * step * PixelsPerSecond - Offset;
-            dc.DrawLine(FrozenDashedPen("#444444", 1, [2, 3]), new Point(x, RulerHeight), new Point(x, ActualHeight));
+            dc.DrawLine(FrozenDashedPen("#282828", 1, [2, 3]), new Point(x, RulerHeight), new Point(x, ActualHeight));
             var tickFrame = Project.FrameRate.Frames(n * step); Text(dc, TimecodeFormatter.Format(tickFrame, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames, rulerTick: true), x + 3, 30, Brush("#B8B8B8"), 9);
             for (var minor = 1; minor < 5; minor++)
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
@@ -870,20 +875,27 @@ public sealed partial class TimelineView : FrameworkElement
             DrawTrackEnvelopes(dc, track, new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
         }
         dc.Pop();
-        dc.DrawRectangle(Brush("#262626"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
-        Text(dc, TimecodeFormatter.Format(Position, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames), 126, 12, size: 20, maxWidth: 130);
+        dc.DrawRectangle(Brush("#242424"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
+        // 1:1 Vegas Pro Sunken Timecode LCD box at top left of track headers
+        var tcBox = new Rect(6, 6, HeaderWidth - 12, RulerHeight - 12);
+        dc.DrawRectangle(Brush("#0E0E0E"), FrozenPen("#2E2E2E", 1), tcBox);
+        Text(dc, TimecodeFormatter.Format(Position, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames), tcBox.X + 8, tcBox.Y + 4, Brush("#FFFFFF"), 14, tcBox.Width - 16);
         dc.PushClip(new RectangleGeometry(new Rect(0, RulerHeight, HeaderWidth, Math.Max(0, ActualHeight - RulerHeight))));
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var t = Project.Tracks[i]; var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            var trackAccentColor = t.TrackColor ?? (t.Kind == TrackKind.Video ? "#448DBD" : "#65BECE");
-            dc.DrawRectangle(Brush(t.IsLocked ? "#242424" : "#2B2B2B"), FrozenPen("#181818", 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
-            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(1, y + 1, 23, TrackHeight - 2));
-            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 3, TrackHeight - 1));
-            if (IsKeyboardFocusWithin && i == ActiveTrackIndex)
+            var trackAccentColor = !string.IsNullOrEmpty(t.TrackColor) ? t.TrackColor : VegasTrackColors.Palette[(i % 8) + 1].Hex;
+            var isTrackActive = IsKeyboardFocusWithin && i == ActiveTrackIndex;
+            var trackBg = t.IsLocked ? "#202020" : isTrackActive ? "#333333" : "#2A2A2A";
+            dc.DrawRectangle(Brush(trackBg), FrozenPen("#161616", 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
+            // 1:1 Vegas Pro 4px color accent bar on far left
+            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 4, TrackHeight - 1));
+            if (isTrackActive)
                 dc.DrawRectangle(null, FrozenPen("#83C9FF", 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
-            Text(dc, "···", 4, y + 1, size: 12);
-            Text(dc, $"{i + 1}", 5, y + 24, size: 11);
+            // Track number badge
+            var numRect = new Rect(7, y + 4, 18, 18);
+            dc.DrawRectangle(Brush("#1E1E1E"), FrozenPen(trackAccentColor, 1), numRect);
+            Text(dc, $"{i + 1}", numRect.X + (i + 1 < 10 ? 5 : 2), numRect.Y + 2, Brush("#EEEEEE"), 10.5);
             var indent = t.Kind == TrackKind.Video ? t.CompositeNestingLevel * 14 : 0;
             if (t.CompositeNestingLevel > 0)
             {
@@ -909,9 +921,9 @@ public sealed partial class TimelineView : FrameworkElement
                 TrackAutomationMode.AutomationTouch => Brush("#C62828"),
                 TrackAutomationMode.AutomationLatch => Brush("#E65100"),
                 TrackAutomationMode.AutomationWrite => Brush("#D32F2F"),
-                _ => Brush("#2A2A2A")
+                _ => Brush("#242424")
             };
-            dc.DrawRectangle(autoBrush, new Pen(Brush("#383838"), 1), autoBounds);
+            dc.DrawRoundedRectangle(autoBrush, FrozenPen("#383838", 1), autoBounds, 1, 1);
             Text(dc, "A", autoBounds.X + 6, autoBounds.Y + 2, t.AutomationMode == TrackAutomationMode.AutomationOff ? Brush("#888888") : Brush("#FFFFFF"), 10.5);
             if (t.Kind == TrackKind.Video && t.CompositeMode != TrackCompositeMode.SourceAlpha) Text(dc, $"[{t.CompositeMode}]", 180, y + 5, Brush("#00D2FF"), 10);
             foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
@@ -925,9 +937,14 @@ public sealed partial class TimelineView : FrameworkElement
                         "Mute" => Brush("#2B6CB0"), // VEGAS Pro blue mute highlight
                         _ => Brush("#438AC8")
                     };
-                    dc.DrawRectangle(activeBrush, null, bounds);
+                    dc.DrawRoundedRectangle(activeBrush, FrozenPen("#181818", 1), bounds, 1, 1);
+                    Text(dc, label, bounds.X + 5, bounds.Y + 1, Brush("#FFFFFF"), 11);
                 }
-                Text(dc, label, bounds.X + 5, bounds.Y + 1);
+                else
+                {
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), bounds, 1, 1);
+                    Text(dc, label, bounds.X + 5, bounds.Y + 1, Brush("#B8B8B8"), 11);
+                }
             }
             var gain = ReadTrackLevel(t.Id, "Gain"); var opacity = ReadTrackLevel(t.Id, "Opacity"); var pan = ReadTrackLevel(t.Id, "Pan");
             if (t.Kind == TrackKind.Video)
@@ -945,12 +962,16 @@ public sealed partial class TimelineView : FrameworkElement
             foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
             {
                 var bounds = TrackLevelBounds(t.Id, level); var center = bounds.Y + bounds.Height / 2;
-                dc.DrawLine(new Pen(Brush("#141414"), 2), new Point(bounds.Left + 4, center), new Point(bounds.Right - 4, center));
+                dc.DrawLine(FrozenPen("#141414", 2), new Point(bounds.Left + 4, center), new Point(bounds.Right - 4, center));
                 var thumb = bounds.Left + 4 + LevelFraction(level, ReadTrackLevel(t.Id, level)) * (bounds.Width - 8);
-                dc.DrawRectangle(Brush(t.IsLocked ? "#666666" : "#C4C4C4"), null, new Rect(thumb - 5, center - 5, 10, 10));
-                dc.DrawLine(new Pen(Brush("#555555"), 1), new Point(thumb, center - 3), new Point(thumb, center + 3));
-                if (IsKeyboardFocusWithin && levelTrack == t.Id && levelKind == level)
-                    dc.DrawRectangle(null, new Pen(Brush("#91C9EF"), 1), bounds);
+                var isFaderActive = IsKeyboardFocusWithin && levelTrack == t.Id && levelKind == level;
+                var thumbBrush = Brush(t.IsLocked ? "#666666" : isFaderActive ? "#698AFF" : "#CCCCCC");
+                dc.DrawRectangle(thumbBrush, FrozenPen("#181818", 1), new Rect(thumb - 6, center - 5, 12, 10));
+                var slitPen = FrozenPen(isFaderActive ? "#1E3F7A" : "#555555", 1);
+                dc.DrawLine(slitPen, new Point(thumb - 2, center - 3), new Point(thumb - 2, center + 3));
+                dc.DrawLine(slitPen, new Point(thumb + 2, center - 3), new Point(thumb + 2, center + 3));
+                if (isFaderActive)
+                    dc.DrawRectangle(null, FrozenPen("#91C9EF", 1), bounds);
             }
             if (t.Kind == TrackKind.Video)
             {
@@ -958,7 +979,11 @@ public sealed partial class TimelineView : FrameworkElement
                 var hasMotion = t.Motion is not null && t.Motion.MotionKeyframes.Count > 0;
                 if (hasMotion)
                 {
-                    dc.DrawRectangle(Brush("#2B6CB0"), null, motionBounds);
+                    dc.DrawRoundedRectangle(Brush("#2B6CB0"), FrozenPen("#181818", 1), motionBounds, 1, 1);
+                }
+                else
+                {
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), motionBounds, 1, 1);
                 }
                 var mPen = new Pen(hasMotion ? Brush("#FFFFFF") : Brush("#C4C4C4"), 1.2);
                 var mx = motionBounds.X + 4.5;
@@ -970,11 +995,16 @@ public sealed partial class TimelineView : FrameworkElement
                 var hasFx = t.VideoEffects.Count > 0;
                 if (hasFx)
                 {
-                    dc.DrawRectangle(Brush("#2E7D32"), null, fxBounds);
+                    dc.DrawRoundedRectangle(Brush("#2E7D32"), FrozenPen("#181818", 1), fxBounds, 1, 1);
+                }
+                else
+                {
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), fxBounds, 1, 1);
                 }
                 Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
-                dc.DrawRectangle(Brush(t.IsVisible ? "#438AC8" : "#404040"), null, TrackButtonBounds(t.Id, "Visible"));
-                Text(dc, "V", 235, y + 47);
+                var visBounds = TrackButtonBounds(t.Id, "Visible");
+                dc.DrawRoundedRectangle(Brush(t.IsVisible ? "#438AC8" : "#242424"), FrozenPen(t.IsVisible ? "#181818" : "#383838", 1), visBounds, 1, 1);
+                Text(dc, "V", visBounds.X + 5, visBounds.Y + 1, t.IsVisible ? Brush("#FFFFFF") : Brush("#888888"), 11);
 
                 var compBounds = TrackButtonBounds(t.Id, "CompChild");
                 var isChild = t.CompositeNestingLevel > 0;
@@ -1015,35 +1045,39 @@ public sealed partial class TimelineView : FrameworkElement
                 var hasFx = t.AudioEffects.Count > 0;
                 if (hasFx)
                 {
-                    dc.DrawRectangle(Brush("#2E7D32"), null, fxBounds);
+                    dc.DrawRoundedRectangle(Brush("#2E7D32"), FrozenPen("#181818", 1), fxBounds, 1, 1);
+                }
+                else
+                {
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), fxBounds, 1, 1);
                 }
                 Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
 
-                // Arm for Record button [â—Ź] at x = 207, y + 46
+                // Arm for Record button [●] at x = 207, y + 46
                 var armBounds = TrackButtonBounds(t.Id, "Arm");
                 if (t.ArmRecord)
                 {
-                    dc.DrawRectangle(Brush("#D32F2F"), null, armBounds);
+                    dc.DrawRoundedRectangle(Brush("#D32F2F"), FrozenPen("#181818", 1), armBounds, 1, 1);
                     dc.DrawEllipse(Brushes.White, null, new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
                 }
                 else
                 {
-                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), armBounds);
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), armBounds, 1, 1);
                     dc.DrawEllipse(null, new Pen(Brush("#888888"), 1.2), new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
                     dc.DrawEllipse(Brush("#AA3333"), null, new Point(armBounds.X + 10.5, armBounds.Y + 10), 2, 2);
                 }
 
-                // Track Phase Inversion button [Ã˜] at x = 230, y + 46
+                // Track Phase Inversion button [Ø] at x = 230, y + 46
                 var phaseBounds = TrackButtonBounds(t.Id, "Phase");
                 if (t.InvertPhase)
                 {
-                    dc.DrawRectangle(Brush("#2B6CB0"), null, phaseBounds);
+                    dc.DrawRoundedRectangle(Brush("#2B6CB0"), FrozenPen("#181818", 1), phaseBounds, 1, 1);
                 }
                 else
                 {
-                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), phaseBounds);
+                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), phaseBounds, 1, 1);
                 }
-                Text(dc, "\u00D8", phaseBounds.X + 5, phaseBounds.Y + 1, t.InvertPhase ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
+                Text(dc, "\u00D8", phaseBounds.X + 5, phaseBounds.Y + 1, t.InvertPhase ? Brush("#FFFFFF") : Brush("#888888"), 11);
             }
         }
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
@@ -1076,16 +1110,21 @@ public sealed partial class TimelineView : FrameworkElement
         var playX = X(Position);
         if (playX >= HeaderWidth && playX < ActualWidth)
         {
-            dc.DrawLine(FrozenPen("#F0F0F0", 1), new Point(playX, 32), new Point(playX, ActualHeight));
+            dc.DrawLine(FrozenPen("#E5C158", 1), new Point(playX, 32), new Point(playX, ActualHeight));
             var playheadGeo = new StreamGeometry();
             using (var ctx = playheadGeo.Open())
             {
                 ctx.BeginFigure(new Point(playX, 32), true, true);
-                ctx.LineTo(new Point(playX - 4, 26), true, false);
-                ctx.LineTo(new Point(playX + 4, 26), true, false);
+                ctx.LineTo(new Point(playX - 5, 26), true, false);
+                ctx.LineTo(new Point(playX - 5, 18), true, false);
+                ctx.LineTo(new Point(playX + 5, 18), true, false);
+                ctx.LineTo(new Point(playX + 5, 26), true, false);
             }
             playheadGeo.Freeze();
-            dc.DrawGeometry(Brush("#D8B85D"), null, playheadGeo);
+            dc.DrawGeometry(Brush("#E5C158"), FrozenPen("#181818", 1), playheadGeo);
+            // Dual grip slits inside playhead cap
+            dc.DrawLine(FrozenPen("#8C7330", 1), new Point(playX - 2, 20), new Point(playX - 2, 25));
+            dc.DrawLine(FrozenPen("#8C7330", 1), new Point(playX + 2, 20), new Point(playX + 2, 25));
         }
         if (snappedFrame.HasValue && isDragging && dragging is not null)
         {

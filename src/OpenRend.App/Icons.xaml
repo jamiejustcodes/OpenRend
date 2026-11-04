@@ -746,4 +746,12 @@
       <Path Data="M2,3 L5,3 L5,13 L2,13 Z M11,3 L14,3 L14,13 L11,13 Z M5,8 L11,8" Stroke="{StaticResource IconBase}" StrokeThickness="1.2"/>
     </Grid>
   </DataTemplate>
+
+  <!-- 1:1 Vegas Pro Ignore Event Grouping Toggle Icon -->
+  <DataTemplate x:Key="ic_ignore_grouping">
+    <Grid Width="16" Height="16">
+      <Path Data="M6,10.5 L4.5,12 C3.1,13.4 1,11.3 2.4,9.9 L3.9,8.4 C5.3,7 7.4,9.1 6,10.5 Z M10,5.5 L11.5,4 C12.9,2.6 15,4.7 13.6,6.1 L12.1,7.6 C10.7,9 8.6,6.9 10,5.5 Z" Fill="{StaticResource IconBase}"/>
+      <Line X1="2" Y1="14" X2="14" Y2="2" Stroke="{StaticResource IconRed}" StrokeThickness="1.6"/>
+    </Grid>
+  </DataTemplate>
 </ResourceDictionary>

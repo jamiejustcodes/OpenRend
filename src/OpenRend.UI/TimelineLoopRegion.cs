@@ -54,9 +54,50 @@ public sealed partial class TimelineView
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, 0, Math.Max(0, ActualWidth - HeaderWidth), 24)));
         var start = X(range.StartFrame);
         var end = X(range.EndFrame);
-        dc.DrawRectangle(Brush("#60606060"), new Pen(Brush("#AAAAAA"), 1), new Rect(start, 3, end - start, 18));
-        dc.DrawRectangle(Brush("#AAAAAA"), null, new Rect(start, 3, 4, 18));
-        dc.DrawRectangle(Brush("#AAAAAA"), null, new Rect(end - 4, 3, 4, 18));
+        if (end > start)
+        {
+            var goldBrush = Brush("#FFC107");
+            var borderPen = FrozenPen("#181818", 1);
+            var goldPen = FrozenPen("#FFC107", 1.5);
+
+            // Translucent gold wash over the ruler selection
+            dc.DrawRectangle(Brush("#28FFC107"), null, new Rect(start, 2, end - start, 20));
+
+            // Top connecting bar across ruler
+            dc.DrawRectangle(goldBrush, borderPen, new Rect(start, 2, end - start, 3));
+
+            // Start bracket '['
+            var inBracket = new StreamGeometry();
+            using (var ctx = inBracket.Open())
+            {
+                ctx.BeginFigure(new Point(start + 6, 2), true, true);
+                ctx.LineTo(new Point(start, 2), true, false);
+                ctx.LineTo(new Point(start, 22), true, false);
+                ctx.LineTo(new Point(start + 6, 22), true, false);
+                ctx.LineTo(new Point(start + 6, 18), true, false);
+                ctx.LineTo(new Point(start + 3, 18), true, false);
+                ctx.LineTo(new Point(start + 3, 6), true, false);
+                ctx.LineTo(new Point(start + 6, 6), true, false);
+            }
+            inBracket.Freeze();
+            dc.DrawGeometry(goldBrush, borderPen, inBracket);
+
+            // End bracket ']'
+            var outBracket = new StreamGeometry();
+            using (var ctx = outBracket.Open())
+            {
+                ctx.BeginFigure(new Point(end - 6, 2), true, true);
+                ctx.LineTo(new Point(end, 2), true, false);
+                ctx.LineTo(new Point(end, 22), true, false);
+                ctx.LineTo(new Point(end - 6, 22), true, false);
+                ctx.LineTo(new Point(end - 6, 18), true, false);
+                ctx.LineTo(new Point(end - 3, 18), true, false);
+                ctx.LineTo(new Point(end - 3, 6), true, false);
+                ctx.LineTo(new Point(end - 6, 6), true, false);
+            }
+            outBracket.Freeze();
+            dc.DrawGeometry(goldBrush, borderPen, outBracket);
+        }
         dc.Pop();
     }
 }

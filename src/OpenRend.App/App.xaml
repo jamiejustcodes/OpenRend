@@ -5,57 +5,57 @@
         <ResourceDictionary Source="Icons.xaml"/>
       </ResourceDictionary.MergedDictionaries>
 
-      <!-- Vegas Pro 21/2026 Core Color Tokens (VP21_ColorDictionary.xaml) -->
-      <SolidColorBrush x:Key="ColorBG" Color="#111111" />
-      <SolidColorBrush x:Key="ColorD" Color="#222222" />
-      <SolidColorBrush x:Key="ColorM" Color="#333333" />
-      <SolidColorBrush x:Key="ColorL" Color="#444444" />
-      <SolidColorBrush x:Key="ColorEdge" Color="#222222" />
-      <SolidColorBrush x:Key="HoverColor" Color="#444444" />
-      <SolidColorBrush x:Key="FocusColor" Color="#cccccc" />
-      <SolidColorBrush x:Key="ActiveColor" Color="#198cff" />
-      <SolidColorBrush x:Key="ActiveColorHover" Color="#2a9dff" />
-      <SolidColorBrush x:Key="ActiveColorDown" Color="#3baeff" />
-      <SolidColorBrush x:Key="TextColor" Color="#eeeeee" />
-      <SolidColorBrush x:Key="TextColorGrey" Color="#666666" />
+      <!-- Vegas Pro 21/2026/2027 Core Color Tokens (VP21_ColorDictionary.xaml) -->
+      <SolidColorBrush x:Key="ColorBG" Color="#181818" />
+      <SolidColorBrush x:Key="ColorD" Color="#242424" />
+      <SolidColorBrush x:Key="ColorM" Color="#2E2E2E" />
+      <SolidColorBrush x:Key="ColorL" Color="#3E3E3E" />
+      <SolidColorBrush x:Key="ColorEdge" Color="#181818" />
+      <SolidColorBrush x:Key="HoverColor" Color="#383838" />
+      <SolidColorBrush x:Key="FocusColor" Color="#CCCCCC" />
+      <SolidColorBrush x:Key="ActiveColor" Color="#0078D4" />
+      <SolidColorBrush x:Key="ActiveColorHover" Color="#2A9DFF" />
+      <SolidColorBrush x:Key="ActiveColorDown" Color="#3BAEFF" />
+      <SolidColorBrush x:Key="TextColor" Color="#EEEEEE" />
+      <SolidColorBrush x:Key="TextColorGrey" Color="#888888" />
       <SolidColorBrush x:Key="ScrollbarColor" Color="#333333" />
-      <SolidColorBrush x:Key="ScrollbarHoverColor" Color="#444444" />
-      <SolidColorBrush x:Key="ScrollbarBackgroundColor" Color="#111111" />
-      <SolidColorBrush x:Key="ScrollbarForegroundColor" Color="#222222" />
-      <SolidColorBrush x:Key="ScrollArrowColor" Color="#eeeeee" />
-      <SolidColorBrush x:Key="ScrollbarArrowColor" Color="#cccccc" />
+      <SolidColorBrush x:Key="ScrollbarHoverColor" Color="#484848" />
+      <SolidColorBrush x:Key="ScrollbarBackgroundColor" Color="#181818" />
+      <SolidColorBrush x:Key="ScrollbarForegroundColor" Color="#242424" />
+      <SolidColorBrush x:Key="ScrollArrowColor" Color="#EEEEEE" />
+      <SolidColorBrush x:Key="ScrollbarArrowColor" Color="#CCCCCC" />
 
       <!-- Vegas Pro Track Header Palette Tokens -->
       <SolidColorBrush x:Key="Track0" Color="#706295" />
-      <SolidColorBrush x:Key="Track1" Color="#c28493" />
-      <SolidColorBrush x:Key="Track2" Color="#ff857a" />
-      <SolidColorBrush x:Key="Track3" Color="#ffab7a" />
-      <SolidColorBrush x:Key="Track4" Color="#ffd17a" />
-      <SolidColorBrush x:Key="Track5" Color="#72c889" />
-      <SolidColorBrush x:Key="Track6" Color="#8cb7ca" />
-      <SolidColorBrush x:Key="Track7" Color="#467d96" />
+      <SolidColorBrush x:Key="Track1" Color="#C28493" />
+      <SolidColorBrush x:Key="Track2" Color="#FF857A" />
+      <SolidColorBrush x:Key="Track3" Color="#FFAB7A" />
+      <SolidColorBrush x:Key="Track4" Color="#FFD17A" />
+      <SolidColorBrush x:Key="Track5" Color="#72C889" />
+      <SolidColorBrush x:Key="Track6" Color="#8CB7CA" />
+      <SolidColorBrush x:Key="Track7" Color="#467D96" />
 
       <!-- Semantic OpenRend Brushes mapped to Vegas Pro Tokens -->
-      <SolidColorBrush x:Key="WindowBrush" Color="#111111"/>
-      <SolidColorBrush x:Key="PanelBrush" Color="#222222"/>
-      <SolidColorBrush x:Key="HeaderBrush" Color="#111111"/>
-      <SolidColorBrush x:Key="SurfaceBrush" Color="#222222"/>
-      <SolidColorBrush x:Key="PopupBrush" Color="#111111"/>
-      <SolidColorBrush x:Key="HoverBrush" Color="#444444"/>
-      <SolidColorBrush x:Key="PressedBrush" Color="#198cff"/>
-      <SolidColorBrush x:Key="TextBrush" Color="#eeeeee"/>
-      <SolidColorBrush x:Key="MutedBrush" Color="#666666"/>
-      <SolidColorBrush x:Key="MutedTextBrush" Color="#666666"/>
+      <SolidColorBrush x:Key="WindowBrush" Color="#181818"/>
+      <SolidColorBrush x:Key="PanelBrush" Color="#242424"/>
+      <SolidColorBrush x:Key="HeaderBrush" Color="#181818"/>
+      <SolidColorBrush x:Key="SurfaceBrush" Color="#242424"/>
+      <SolidColorBrush x:Key="PopupBrush" Color="#181818"/>
+      <SolidColorBrush x:Key="HoverBrush" Color="#383838"/>
+      <SolidColorBrush x:Key="PressedBrush" Color="#0078D4"/>
+      <SolidColorBrush x:Key="TextBrush" Color="#EEEEEE"/>
+      <SolidColorBrush x:Key="MutedBrush" Color="#888888"/>
+      <SolidColorBrush x:Key="MutedTextBrush" Color="#888888"/>
       <SolidColorBrush x:Key="BorderBrush" Color="#333333"/>
-      <SolidColorBrush x:Key="DividerBrush" Color="#111111"/>
-      <SolidColorBrush x:Key="AccentBrush" Color="#198cff"/>
-      <SolidColorBrush x:Key="FocusBrush" Color="#cccccc"/>
-      <SolidColorBrush x:Key="SelectionBrush" Color="#198cff"/>
+      <SolidColorBrush x:Key="DividerBrush" Color="#181818"/>
+      <SolidColorBrush x:Key="AccentBrush" Color="#0078D4"/>
+      <SolidColorBrush x:Key="FocusBrush" Color="#CCCCCC"/>
+      <SolidColorBrush x:Key="SelectionBrush" Color="#0078D4"/>
       <SolidColorBrush x:Key="ScrollThumbBrush" Color="#333333"/>
-      <SolidColorBrush x:Key="ScrollTrackBrush" Color="#111111"/>
-      <SolidColorBrush x:Key="ButtonBackground" Color="#2A2A2A"/>
-      <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2A2A2A"/>
-      <SolidColorBrush x:Key="ForegroundBrush" Color="#eeeeee"/>
+      <SolidColorBrush x:Key="ScrollTrackBrush" Color="#181818"/>
+      <SolidColorBrush x:Key="ButtonBackground" Color="#2E2E2E"/>
+      <SolidColorBrush x:Key="ButtonBackgroundBrush" Color="#2E2E2E"/>
+      <SolidColorBrush x:Key="ForegroundBrush" Color="#EEEEEE"/>
       <SolidColorBrush x:Key="ForegroundMutedBrush" Color="#888888"/>
       <SolidColorBrush x:Key="SubtleTextBrush" Color="#888888"/>
       <SolidColorBrush x:Key="TextMutedBrush" Color="#888888"/>
@@ -507,7 +507,95 @@
         </Style.Triggers>
       </Style>
 
-      <Style TargetType="Slider"><Setter Property="Background" Value="Transparent"/><Setter Property="Foreground" Value="{StaticResource TextColorGrey}"/><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Slider"><Grid Background="{TemplateBinding Background}" MinHeight="16" MinWidth="16"><Border x:Name="Rail" Background="{StaticResource BorderBrush}" Height="1" VerticalAlignment="Center"/><Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}"><Track.DecreaseRepeatButton><RepeatButton Style="{StaticResource TrackRepeatButton}" Command="{x:Static Slider.DecreaseLarge}"/></Track.DecreaseRepeatButton><Track.Thumb><Thumb x:Name="SliderThumb" Width="8" Height="14" Background="{TemplateBinding Foreground}"><Thumb.Template><ControlTemplate TargetType="Thumb"><Border Background="{TemplateBinding Background}" BorderBrush="{StaticResource ColorM}" BorderThickness="1"/></ControlTemplate></Thumb.Template></Thumb></Track.Thumb><Track.IncreaseRepeatButton><RepeatButton Style="{StaticResource TrackRepeatButton}" Command="{x:Static Slider.IncreaseLarge}"/></Track.IncreaseRepeatButton></Track></Grid><ControlTemplate.Triggers><Trigger Property="Orientation" Value="Vertical"><Setter TargetName="Rail" Property="Height" Value="Auto"/><Setter TargetName="Rail" Property="Width" Value="1"/><Setter TargetName="Rail" Property="VerticalAlignment" Value="Stretch"/><Setter TargetName="Rail" Property="HorizontalAlignment" Value="Center"/><Setter TargetName="SliderThumb" Property="Width" Value="14"/><Setter TargetName="SliderThumb" Property="Height" Value="8"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="SliderThumb" Property="Background" Value="{StaticResource FocusBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+      <!-- Vegas Pro Authentic BasicSliderStyle with 2px Center Rail and Dual-Slit Grip Thumb -->
+      <Style TargetType="Slider">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="{StaticResource TextColorGrey}"/>
+        <Setter Property="MinHeight" Value="20"/>
+        <Setter Property="MinWidth" Value="24"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="Slider">
+              <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
+                <Border x:Name="Rail" Background="{StaticResource ScrollbarBackgroundColor}" BorderBrush="{StaticResource ColorEdge}" BorderThickness="0,1" Height="2" Margin="6,0" VerticalAlignment="Center"/>
+                <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
+                  <Track.DecreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource TrackRepeatButton}" Command="{x:Static Slider.DecreaseLarge}"/>
+                  </Track.DecreaseRepeatButton>
+                  <Track.Thumb>
+                    <Thumb x:Name="SliderThumb" Width="14" Height="16" Focusable="False">
+                      <Thumb.Template>
+                        <ControlTemplate TargetType="Thumb">
+                          <Grid x:Name="ThumbSurface" Background="#C4C4C4">
+                            <Border BorderBrush="#181818" BorderThickness="1"/>
+                            <!-- Vegas Pro dual vertical grip slits -->
+                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="6" Height="8" IsHitTestVisible="False">
+                              <Border Width="1" HorizontalAlignment="Left" Background="#555555"/>
+                              <Border Width="1" HorizontalAlignment="Right" Background="#555555"/>
+                            </Grid>
+                          </Grid>
+                          <ControlTemplate.Triggers>
+                            <Trigger Property="IsMouseOver" Value="True">
+                              <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource ActiveColorHover}"/>
+                            </Trigger>
+                            <Trigger Property="IsDragging" Value="True">
+                              <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource ActiveColorDown}"/>
+                            </Trigger>
+                          </ControlTemplate.Triggers>
+                        </ControlTemplate>
+                      </Thumb.Template>
+                    </Thumb>
+                  </Track.Thumb>
+                  <Track.IncreaseRepeatButton>
+                    <RepeatButton Style="{StaticResource TrackRepeatButton}" Command="{x:Static Slider.IncreaseLarge}"/>
+                  </Track.IncreaseRepeatButton>
+                </Track>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger Property="Orientation" Value="Vertical">
+                  <Setter TargetName="Rail" Property="Height" Value="Auto"/>
+                  <Setter TargetName="Rail" Property="Width" Value="2"/>
+                  <Setter TargetName="Rail" Property="BorderThickness" Value="1,0"/>
+                  <Setter TargetName="Rail" Property="Margin" Value="0,6"/>
+                  <Setter TargetName="Rail" Property="VerticalAlignment" Value="Stretch"/>
+                  <Setter TargetName="Rail" Property="HorizontalAlignment" Value="Center"/>
+                  <Setter TargetName="SliderThumb" Property="Width" Value="16"/>
+                  <Setter TargetName="SliderThumb" Property="Height" Value="14"/>
+                  <Setter TargetName="SliderThumb" Property="Template">
+                    <Setter.Value>
+                      <ControlTemplate TargetType="Thumb">
+                        <Grid x:Name="VThumbSurface" Background="#C4C4C4">
+                          <Border BorderBrush="#181818" BorderThickness="1"/>
+                          <!-- Vegas Pro dual horizontal grip slits -->
+                          <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="8" Height="6" IsHitTestVisible="False">
+                            <Border Height="1" VerticalAlignment="Top" Background="#555555"/>
+                            <Border Height="1" VerticalAlignment="Bottom" Background="#555555"/>
+                          </Grid>
+                        </Grid>
+                        <ControlTemplate.Triggers>
+                          <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="VThumbSurface" Property="Background" Value="{StaticResource ActiveColorHover}"/>
+                          </Trigger>
+                          <Trigger Property="IsDragging" Value="True">
+                            <Setter TargetName="VThumbSurface" Property="Background" Value="{StaticResource ActiveColorDown}"/>
+                          </Trigger>
+                        </ControlTemplate.Triggers>
+                      </ControlTemplate>
+                    </Setter.Value>
+                  </Setter>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocusWithin" Value="True">
+                  <Setter TargetName="SliderThumb" Property="Background" Value="{StaticResource FocusBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.35"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
       <Style TargetType="ProgressBar"><Setter Property="Height" Value="5"/><Setter Property="Foreground" Value="{StaticResource AccentBrush}"/><Setter Property="Background" Value="{StaticResource ColorM}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ProgressBar"><Border Background="{TemplateBinding Background}"><Grid x:Name="PART_Track" ClipToBounds="True"><Border x:Name="PART_Indicator" HorizontalAlignment="Left" Background="{TemplateBinding Foreground}"/></Grid></Border></ControlTemplate></Setter.Value></Setter></Style>
       <Style TargetType="GridSplitter"><Setter Property="Background" Value="{StaticResource DividerBrush}"/></Style>
       <Style TargetType="ToolTip"><Setter Property="Background" Value="{StaticResource ColorM}"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="7,4"/><Setter Property="FontSize" Value="11"/></Style>

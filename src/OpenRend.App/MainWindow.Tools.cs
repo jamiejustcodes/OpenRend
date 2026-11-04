@@ -276,7 +276,7 @@ public partial class MainWindow
             var dock = new DockPanel();
             var star = new ToggleButton
             {
-                Content = "â˜†",
+                Content = "☆",
                 Width = 22,
                 Height = 20,
                 Padding = new Thickness(0),
@@ -286,8 +286,8 @@ public partial class MainWindow
                 ToolTip = $"Favorite {def.Name}"
             };
             AutomationProperties.SetName(star, $"Favorite {def.Name}");
-            star.Checked += (_, _) => { favoriteVideoFx.Add(def.Kind); star.Content = "â˜…"; };
-            star.Unchecked += (_, _) => { favoriteVideoFx.Remove(def.Kind); star.Content = "â˜†"; };
+            star.Checked += (_, _) => { favoriteVideoFx.Add(def.Kind); star.Content = "★"; };
+            star.Unchecked += (_, _) => { favoriteVideoFx.Remove(def.Kind); star.Content = "☆"; };
 
             var icon = new ContentControl
             {
@@ -357,7 +357,7 @@ public partial class MainWindow
             if (VideoFxInfoText is not null)
             {
                 // 1:1 Vegas Pro OFX capability string & description
-                VideoFxInfoText.Text = $"Vegas {def.Name}: OFX, 32-bit floating point, GPU Accelerated, Grouping Vegas\\{GetFxCategory(def)}, Version 1.0 â€” Professional visual processing filter.";
+                VideoFxInfoText.Text = $"Vegas {def.Name}: OFX, 32-bit floating point, GPU Accelerated, Grouping Vegas\\{GetFxCategory(def)}, Version 1.0 — Professional visual processing filter.";
             }
 
             var presets = GetPresetsForEffect(def.Kind);

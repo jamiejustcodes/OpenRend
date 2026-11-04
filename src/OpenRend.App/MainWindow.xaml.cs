@@ -1372,6 +1372,31 @@ public partial class MainWindow : Window
         finally { vm.Busy = false; CancelRender.Visibility = Visibility.Collapsed; exportCancellation.Dispose(); exportCancellation = null; Refresh(); }
     });
     private void CancelExportClick(object sender, RoutedEventArgs e) => exportCancellation?.Cancel();
+    private void RecordClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var armedTrack = vm.Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && t.ArmRecord);
+        if (armedTrack is not null)
+        {
+            vm.Status = $"Armed for recording on track '{armedTrack.Name}'.";
+        }
+        else
+        {
+            var targetTrack = vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex);
+            if (targetTrack is null || targetTrack.Kind != TrackKind.Audio)
+            {
+                targetTrack = vm.Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio);
+            }
+            if (targetTrack is not null)
+            {
+                vm.Editor.SetTrackState(targetTrack.Id, armRecord: true);
+                vm.Status = $"Track '{targetTrack.Name}' armed for recording.";
+            }
+            else
+            {
+                vm.Status = "Add an audio track to enable recording.";
+            }
+        }
+    });
     private async void PlayClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         if (playbackStarting) { Pause(); return; }
