@@ -4,7 +4,8 @@ namespace OpenRend.Media;
 
 internal static partial class VideoEffectProcessor
 {
-    internal static bool HasActiveEffects(IReadOnlyList<VideoEffect> effects) => effects.Any(effect => effect.IsEnabled && !IsIdentity(effect));
+    internal static bool HasActiveEffects(IReadOnlyList<VideoEffect> effects) =>
+        effects.Any(effect => effect.IsEnabled && (!IsIdentity(effect) || effect.Animation is { IsEnabled: true, Keyframes.Count: > 0 }));
 
     private static bool IsIdentity(VideoEffect effect) => effect.Kind switch
     {
@@ -66,8 +67,9 @@ internal static partial class VideoEffectProcessor
         if (!HasActiveEffects(effects)) return source;
         // Decoder frames remain immutable. Each chain stage owns its output before the next stage reads it.
         var output = (byte[])source.Clone();
-        foreach (var effect in effects)
+        foreach (var rawEffect in effects)
         {
+            var effect = rawEffect.EvaluateAt(projectFrame);
             if (!effect.IsEnabled || IsIdentity(effect)) continue;
             double P(string key) => effect.GetParameter(key);
             var amount = effect.Amount;

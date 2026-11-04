@@ -32,6 +32,8 @@ public sealed class VideoEffect
     public ColorCurvesData? Curves { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public HSLCurvesData? HSLCurves { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public VideoEffectAnimation? Animation { get; set; }
     public double Amount { get; set; }
     public double SecondaryAmount { get; set; }
     public Dictionary<string, double> Parameters { get; set; } = [];
@@ -76,7 +78,25 @@ public sealed class VideoEffect
         copy.LookLut = LookLut?.DeepClone();
         copy.Curves = Curves?.DeepClone();
         copy.HSLCurves = HSLCurves?.DeepClone();
+        copy.Animation = Animation?.DeepClone();
         return copy;
+    }
+
+    /// <summary>
+    /// Evaluates the effect at the specified frame, interpolating keyframed parameters if animation is enabled.
+    /// </summary>
+    public VideoEffect EvaluateAt(long frame)
+    {
+        if (Animation is { IsEnabled: true, Keyframes.Count: > 0 })
+        {
+            var (evalAmount, evalSecondary, evalParams) = Animation.Evaluate(frame, this);
+            var clone = DeepClone();
+            clone.Amount = evalAmount;
+            clone.SecondaryAmount = evalSecondary;
+            clone.Parameters = evalParams;
+            return clone;
+        }
+        return this;
     }
 
     public void Validate()
@@ -95,6 +115,7 @@ public sealed class VideoEffect
         LookLut?.Validate();
         Curves?.Validate();
         HSLCurves?.Validate();
+        Animation?.Validate();
         var definitions = VideoEffectCatalog.Get(Kind).Parameters;
         if (Parameters.Any(pair => pair.Key is "Amount" or "SecondaryAmount" || !definitions.Any(parameter => parameter.Key == pair.Key)))
             throw new InvalidDataException("Video effect contains an unknown parameter.");

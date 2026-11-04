@@ -212,6 +212,26 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `ColorGradingProcessorTests.cs` (OpenRend.Media.Tests) testing HSL curve hue shift and saturation modulation on pixel buffers.
     - Full gate passed: 100% native integration tests, 982 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-04: `feat: implement vegas pro 1:1 video fx parameter keyframing, timeline lane, and ofx curve interpolation suite` implemented 1:1 Vegas Pro Video FX Parameter Keyframe Automation and OFX parameter interpolation matching `ScriptPortal.Vegas.EffectKeyframe` and `OFXKeyframe`.
+  - Core & Models:
+    - Created `VideoEffectKeyframe.cs` in `OpenRend.Core`:
+      - `EffectInterpolation` enum (`Linear`, `Hold`, `Slow`, `Fast`, `Smooth`, `Sharp`).
+      - `VideoEffectKeyframe` modeling frame, Amount, SecondaryAmount, parameter dictionary, interpolation curve, and smoothness.
+      - `VideoEffectAnimation` with validation, binary search keyframe lookup, and exact curve evaluation (including Hermite cubic S-curve for Smooth, cubic centered power for Sharp, quadratic for Slow/Fast, and Hold).
+    - Extended `VideoEffect` with `Animation` property, deep cloning, validation, and `EvaluateAt(frame)` dynamic snapshot evaluation.
+  - Image Processing & Rendering Pipeline:
+    - In `VideoEffectProcessor.cs`, enhanced `HasActiveEffects` to recognize animated effects even with neutral defaults, and enhanced `Apply` to evaluate each effect at the local/project frame snapshot.
+    - In `TimelineRenderService.cs` and `TimelineRenderService.Dissolve.cs`, mapped event FX keyframe evaluation to local clip frame (`frame - layer.Clip.StartFrame`) so keyframes naturally follow clip positioning on the timeline, while track and output FX evaluate at integer project frame.
+  - Timeline Operations:
+    - Created `TimelineEditor.VideoEffectKeyframes.cs` with atomic undo/redo operations: `SetScopedVideoEffectKeyframe`, `RemoveScopedVideoEffectKeyframe`, `SetScopedVideoEffectKeyframeInterpolation`, `MoveScopedVideoEffectKeyframe`, and `SetScopedVideoEffectAnimationEnabled`.
+  - UI Implementation:
+    - Created `EffectKeyframeLane.cs` in `OpenRend.App`: interactive time ruler ticks, diamond keyframe markers (`◆`), dragging to reposition keyframe frames in time, red playhead cursor with top arrow cap, keyboard navigation, and right-click context menu with all 6 Vegas interpolation curves.
+    - Enhanced `VideoEffectsWindow.cs`: added `Animate` toggle button, collapsible keyframe lane host with transport controls (`◄|`, `◆+`, `◆-`, `|►`), dynamic frame readout, real-time parameter sync when seeking keyframes, and automatic keyframe creation on parameter edits when animation is enabled.
+  - Verification:
+    - Added 4 unit tests in `VideoEffectKeyframeTests.cs` (OpenRend.Core.Tests) testing keyframe validation, linear interpolation, curve evaluations (`Hold`, `Fast`, `Slow`, `Smooth`, `Sharp`), and `EvaluateAt` clamping.
+    - Added 3 unit tests in `VideoEffectKeyframeEditorTests.cs` (OpenRend.Editor.Tests) verifying scoped keyframe addition, removal, interpolation changes, timeline move, animation enable/disable, and undo/redo.
+    - Full gate passed: 100% native integration tests, 1,020 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat: implement vegas pro 1:1 audio mixer console, assignable fx buses, and peak clip indicators` implemented 1:1 Vegas Pro Audio Mixer Console (Ctrl+Alt+5) matching `ScriptPortal.Vegas.AudioBusTrack`, `AudioFXBusTrack`, and `AudioBusMode`.
   - Architecture & UI:
     - Built comprehensive Vegas Pro Mixing Console (`MixingConsoleWindow.cs`):

@@ -533,13 +533,13 @@ public sealed partial class TimelineRenderService
             var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
             var handles = ActiveSubtitleClipId == layer.Clip.Id;
             var pixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, handles, out _);
-            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, frame);
+            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
             return new(pixels, width, height, null);
         }
         if (IsColorGeneratorLayer(layer))
         {
             var pixels = RenderColorGenerator(layer.Media.Path, width, height);
-            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, frame);
+            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
             return new(pixels, width, height, null);
         }
         var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
@@ -556,7 +556,7 @@ public sealed partial class TimelineRenderService
             if (VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
                 pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
             if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
+                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
             if (hasMask)
             {
                 var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));

@@ -58,7 +58,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         if (layer.Opacity <= 0) continue;
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
-                            adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, layer.Clip.VideoEffects, frame);
+                            adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                         }
                     }
                     if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects))
@@ -120,7 +120,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
-                            subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, frame);
+                            subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                         }
                         if (currentCompositor != null)
                         {
@@ -135,7 +135,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         var colorPixels = MediaGeneratorSynthesizer.Render(layer.Media, width, height, frame);
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
-                            colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, frame);
+                            colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                         }
                         if (currentCompositor != null)
                         {
@@ -164,7 +164,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         }
                         if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                         {
-                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, frame);
+                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                         }
                         if (hasMask)
                         {
