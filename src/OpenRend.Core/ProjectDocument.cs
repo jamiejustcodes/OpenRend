@@ -167,6 +167,8 @@ public sealed class ProjectDocument
     public List<TimelineMarker> Markers { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<ProjectNoteItem> Notes { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<MediaBin> MediaBins { get; set; } = [];
     [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
 
     public ProjectDocument DeepClone() => new()
@@ -202,7 +204,8 @@ public sealed class ProjectDocument
         MasterAudioMute = MasterAudioMute,
         MasterAudioDim = MasterAudioDim,
         Markers = Markers.Select(m => m.DeepClone()).ToList(),
-        Notes = Notes.Select(n => n.DeepClone()).ToList()
+        Notes = Notes.Select(n => n.DeepClone()).ToList(),
+        MediaBins = MediaBins.Select(b => b.DeepClone()).ToList()
     };
 
     public void Validate()
@@ -417,10 +420,13 @@ public sealed class MediaAsset
     public bool HasAudio { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<string> Tags { get; set; } = [];
     public MediaAsset DeepClone()
     {
         var clone = (MediaAsset)MemberwiseClone();
         clone.VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList();
+        clone.Tags = [..Tags];
         clone.Generator = Generator?.DeepClone();
         return clone;
     }

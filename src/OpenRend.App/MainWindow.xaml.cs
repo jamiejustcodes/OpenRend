@@ -443,6 +443,7 @@ public partial class MainWindow : Window
             InitializeToolsViews();
             InitializeRulerEvents();
             InitializeEditToolsEvents();
+            InitializeMediaBins();
             Refresh();
             autosave.Start();
             await CheckCrashRecoveryAsync();
@@ -635,7 +636,17 @@ public partial class MainWindow : Window
 
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
-        mediaFilter = (e.NewValue as TreeViewItem)?.Tag as string ?? "All";
+        var tag = (e.NewValue as TreeViewItem)?.Tag;
+        if (tag is Guid binId)
+        {
+            activeBinId = binId;
+            mediaFilter = "Bin";
+        }
+        else
+        {
+            activeBinId = null;
+            mediaFilter = tag as string ?? "All";
+        }
         UpdateMediaFilter();
     }
 
@@ -657,24 +668,45 @@ public partial class MainWindow : Window
     {
         var query = MediaSearchBox?.Text?.Trim();
         var view = CollectionViewSource.GetDefaultView(vm.Library);
+        if (view == null) return;
         view.Filter = item =>
         {
             if (item is not MediaItem media) return false;
-            var matchesCat = mediaFilter switch
+            bool matchesCat;
+            if (activeBinId.HasValue)
             {
-                "Video" => media.Asset.HasVideo,
-                "Audio" => media.Asset.HasAudio,
-                "Missing" => !File.Exists(media.Asset.Path),
-                _ => true
-            };
+                var bin = vm.Project.MediaBins.FirstOrDefault(b => b.Id == activeBinId.Value);
+                matchesCat = bin != null && bin.MediaIds.Contains(media.Asset.Id);
+            }
+            else
+            {
+                matchesCat = mediaFilter switch
+                {
+                    "Video" => media.Asset.HasVideo,
+                    "Audio" => media.Asset.HasAudio && !media.Asset.HasVideo,
+                    "Images" => !media.Asset.HasVideo && !media.Asset.HasAudio || IsImageMedia(media.Asset),
+                    "Missing" => !File.Exists(media.Asset.Path),
+                    _ => true
+                };
+            }
             if (!matchesCat) return false;
             if (string.IsNullOrEmpty(query)) return true;
             return media.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
                 || media.Path.Contains(query, StringComparison.OrdinalIgnoreCase)
-                || media.Type.Contains(query, StringComparison.OrdinalIgnoreCase);
+                || media.Type.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || media.Asset.Tags.Any(tag => tag.Contains(query, StringComparison.OrdinalIgnoreCase));
         };
-        EmptyLibrary.Text = vm.Library.Count == 0 ? "Import video or audio\nCtrl+I or drop files here" : "No media matches this view";
-        EmptyLibrary.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+        var currentBinName = activeBinId.HasValue ? vm.Project.MediaBins.FirstOrDefault(b => b.Id == activeBinId.Value)?.Name : mediaFilter;
+        if (MediaCount != null)
+        {
+            var matchCount = view.Cast<object>().Count();
+            MediaCount.Text = $"{matchCount} items (in {currentBinName ?? "All Media"})";
+        }
+        if (EmptyLibrary != null)
+        {
+            EmptyLibrary.Text = vm.Library.Count == 0 ? "Import video or audio\nCtrl+I or drop files here" : "No media matches this view";
+            EmptyLibrary.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
+        }
     }
 
     private void LoadGeneralPreferences()

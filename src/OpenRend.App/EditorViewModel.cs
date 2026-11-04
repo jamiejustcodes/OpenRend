@@ -103,6 +103,51 @@ public sealed class EditorViewModel : ObservableObject
         Changed?.Invoke();
         Status = $"Moved cursor to {TimecodeFormatter.Format(frame, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)}.";
     }
+
+    public MediaBin CreateMediaBin(string name, Guid? parentBinId = null)
+    {
+        var bin = Editor.CreateMediaBin(name, parentBinId);
+        Changed?.Invoke();
+        Status = $"Created media bin \"{name}\".";
+        return bin;
+    }
+
+    public void RenameMediaBin(Guid binId, string newName)
+    {
+        Editor.RenameMediaBin(binId, newName);
+        Changed?.Invoke();
+        Status = $"Renamed bin to \"{newName}\".";
+    }
+
+    public void DeleteMediaBin(Guid binId)
+    {
+        Editor.DeleteMediaBin(binId);
+        Changed?.Invoke();
+        Status = "Deleted media bin.";
+    }
+
+    public void AddMediaToBin(Guid binId, Guid mediaId)
+    {
+        Editor.AddMediaToBin(binId, mediaId);
+        Changed?.Invoke();
+        var bin = Project.MediaBins.FirstOrDefault(b => b.Id == binId);
+        Status = $"Added media to bin \"{bin?.Name ?? "Bin"}\".";
+    }
+
+    public void RemoveMediaFromBin(Guid binId, Guid mediaId)
+    {
+        Editor.RemoveMediaFromBin(binId, mediaId);
+        Changed?.Invoke();
+        var bin = Project.MediaBins.FirstOrDefault(b => b.Id == binId);
+        Status = $"Removed media from bin \"{bin?.Name ?? "Bin"}\".";
+    }
+
+    public void SetMediaTags(Guid mediaId, IEnumerable<string> tags)
+    {
+        Editor.SetMediaTags(mediaId, tags);
+        Changed?.Invoke();
+        Status = "Updated media tags.";
+    }
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];
