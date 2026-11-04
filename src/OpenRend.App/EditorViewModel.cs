@@ -12,18 +12,30 @@ public sealed class MediaItem(MediaAsset asset) : ObservableObject
 {
     public MediaAsset Asset { get; private set; } = asset;
     public string Name => Asset.Name;
-    public string Details => $"{(Asset.HasVideo ? $"{Asset.Width} × {Asset.Height}  •  {Asset.FrameRate:0.###} fps" : "Audio")}  •  {Asset.DurationSeconds:0.00} s";
+    public string Details => $"{(Asset.HasVideo ? $"{Asset.Width} \u00D7 {Asset.Height}  \u2022  {Asset.FrameRate:0.###} fps" : "Audio")}  \u2022  {Asset.DurationSeconds:0.00} s";
+    public string Type => Asset.IsGenerated ? "Generated" : Asset.HasVideo ? "Video" : "Audio";
+    public string FrameSize => Asset.HasVideo ? $"{Asset.Width} \u00D7 {Asset.Height}" : "\u2014";
+    public string FrameRateText => Asset.HasVideo ? $"{Asset.FrameRate:0.###} fps" : "\u2014";
+    public string DurationText => TimeSpan.FromSeconds(Asset.DurationSeconds).ToString(@"hh\:mm\:ss\.ff");
+    public string Path => Asset.Path;
+    public string AudioInfo => Asset.HasAudio ? "Stereo, 48 kHz" : "\u2014";
+    private int useCount;
+    public int UseCount { get => useCount; set => SetProperty(ref useCount, value); }
     public bool HasEffects => Asset.VideoEffects.Count > 0;
     public System.Windows.Media.Brush FxBadgeBrush => HasEffects
         ? new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(0x2E, 0x7D, 0x32))
         : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x80, 0x33, 0x33, 0x33));
     private System.Windows.Media.ImageSource? thumbnail;
     public System.Windows.Media.ImageSource? Thumbnail { get => thumbnail; set => SetProperty(ref thumbnail, value); }
-    public void Rebind(MediaAsset current)
+    public void Rebind(MediaAsset current, int count = 0)
     {
         if (!string.Equals(Asset.Path, current.Path, StringComparison.OrdinalIgnoreCase)) Thumbnail = null;
         Asset = current;
+        UseCount = count;
         OnPropertyChanged(nameof(Asset)); OnPropertyChanged(nameof(Name)); OnPropertyChanged(nameof(Details));
+        OnPropertyChanged(nameof(Type)); OnPropertyChanged(nameof(FrameSize)); OnPropertyChanged(nameof(FrameRateText));
+        OnPropertyChanged(nameof(DurationText)); OnPropertyChanged(nameof(Path)); OnPropertyChanged(nameof(AudioInfo));
+        OnPropertyChanged(nameof(UseCount));
         OnPropertyChanged(nameof(HasEffects)); OnPropertyChanged(nameof(FxBadgeBrush));
     }
 }
@@ -95,9 +107,19 @@ public sealed class EditorViewModel : ObservableObject
     }
     public void RefreshLibrary()
     {
+        var counts = Project.Tracks.SelectMany(t => t.Clips).GroupBy(c => c.MediaId).ToDictionary(g => g.Key, g => g.Count());
         foreach (var item in Library.Where(i => Project.Media.All(m => m.Id != i.Asset.Id)).ToList()) Library.Remove(item);
-        foreach (var item in Library) item.Rebind(Project.Media.Single(m => m.Id == item.Asset.Id));
-        foreach (var asset in Project.Media.Where(m => Library.All(i => i.Asset.Id != m.Id))) Library.Add(new MediaItem(asset));
+        foreach (var item in Library)
+        {
+            var count = counts.GetValueOrDefault(item.Asset.Id, 0);
+            item.Rebind(Project.Media.Single(m => m.Id == item.Asset.Id), count);
+        }
+        foreach (var asset in Project.Media.Where(m => Library.All(i => i.Asset.Id != m.Id)))
+        {
+            var item = new MediaItem(asset);
+            item.UseCount = counts.GetValueOrDefault(asset.Id, 0);
+            Library.Add(item);
+        }
     }
     public async Task<MediaAsset> ImportAsync(string path, CancellationToken cancellationToken = default)
     {

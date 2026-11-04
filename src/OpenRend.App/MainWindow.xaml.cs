@@ -603,24 +603,68 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
     }
+    private MediaItem? SelectedLibraryItem =>
+        (MediaList?.SelectedItem ?? MediaDetailsList?.SelectedItem ?? MediaCompactList?.SelectedItem) as MediaItem;
+
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
         mediaFilter = (e.NewValue as TreeViewItem)?.Tag as string ?? "All";
-        if (MediaList is not null) UpdateMediaFilter();
+        UpdateMediaFilter();
     }
+
+    private void MediaSearchChanged(object sender, TextChangedEventArgs e) => UpdateMediaFilter();
+
+    private void MediaViewModeClick(object sender, RoutedEventArgs e)
+    {
+        var source = sender as System.Windows.Controls.Primitives.ToggleButton;
+        if (MediaViewThumbnails is not null) MediaViewThumbnails.IsChecked = source == MediaViewThumbnails;
+        if (MediaViewDetails is not null) MediaViewDetails.IsChecked = source == MediaViewDetails;
+        if (MediaViewList is not null) MediaViewList.IsChecked = source == MediaViewList;
+
+        if (MediaList is not null) MediaList.Visibility = MediaViewThumbnails?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (MediaDetailsList is not null) MediaDetailsList.Visibility = MediaViewDetails?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (MediaCompactList is not null) MediaCompactList.Visibility = MediaViewList?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+    }
+
     private void UpdateMediaFilter()
     {
+        var query = MediaSearchBox?.Text?.Trim();
         var view = CollectionViewSource.GetDefaultView(vm.Library);
-        view.Filter = item => item is MediaItem media && mediaFilter switch
+        view.Filter = item =>
         {
-            "Video" => media.Asset.HasVideo,
-            "Audio" => media.Asset.HasAudio,
-            "Missing" => !File.Exists(media.Asset.Path),
-            _ => true
+            if (item is not MediaItem media) return false;
+            var matchesCat = mediaFilter switch
+            {
+                "Video" => media.Asset.HasVideo,
+                "Audio" => media.Asset.HasAudio,
+                "Missing" => !File.Exists(media.Asset.Path),
+                _ => true
+            };
+            if (!matchesCat) return false;
+            if (string.IsNullOrEmpty(query)) return true;
+            return media.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || media.Path.Contains(query, StringComparison.OrdinalIgnoreCase)
+                || media.Type.Contains(query, StringComparison.OrdinalIgnoreCase);
         };
         EmptyLibrary.Text = vm.Library.Count == 0 ? "Import video or audio\nCtrl+I or drop files here" : "No media matches this view";
         EmptyLibrary.Visibility = view.IsEmpty ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private void MediaToolbarFxClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedLibraryItem;
+        if (selected is null) { vm.Status = "Select a media item in the pool to edit Media FX."; return; }
+        OpenMediaEffects(selected.Asset.Id);
+    }
+
+    private void MediaToolbarPropsClick(object sender, RoutedEventArgs e)
+    {
+        var selected = SelectedLibraryItem;
+        if (selected is null) { vm.Status = "Select a media item to view properties."; return; }
+        new MediaPropertiesWindow(selected.Asset, this).ShowDialog();
+    }
+
+    private void MediaPropertiesClick(object sender, RoutedEventArgs e) => MediaToolbarPropsClick(sender, e);
     private void UpdatePosition()
     {
         Timeline.Position = vm.Position; Timeline.InvalidateVisual();
@@ -870,7 +914,7 @@ public partial class MainWindow : Window
     });
     private void PlaceSelectedClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        if (MediaList.SelectedItem is not MediaItem item) { vm.Status = "Select a source in Project Media."; return; }
+        if (SelectedLibraryItem is not MediaItem item) { vm.Status = "Select a source in Project Media."; return; }
         Pause(); vm.Place(item.Asset.Id);
     });
     private void RemoveUnusedClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p =>
@@ -880,7 +924,7 @@ public partial class MainWindow : Window
     }));
     private void MediaDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (MediaList.SelectedItem is MediaItem item && item.Asset.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))
+        if (SelectedLibraryItem is MediaItem item && item.Asset.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))
         {
             var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.MediaId == item.Asset.Id);
             Pause();
@@ -893,12 +937,27 @@ public partial class MainWindow : Window
     }
     private void MediaMouseMove(object sender, MouseEventArgs e)
     {
-        if (e.LeftButton == MouseButtonState.Pressed && MediaList.SelectedItem is MediaItem item)
-            DragDrop.DoDragDrop(MediaList, new DataObject("OpenRend.Media", item.Asset.Id), DragDropEffects.Copy);
+        if (e.LeftButton == MouseButtonState.Pressed && SelectedLibraryItem is MediaItem item)
+        {
+            var sourceElement = sender as FrameworkElement ?? MediaList;
+            DragDrop.DoDragDrop(sourceElement, new DataObject("OpenRend.Media", item.Asset.Id), DragDropEffects.Copy);
+        }
     }
     private void MediaSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (MediaList.SelectedItem is MediaItem item) { MediaDetails.Text = item.Details; vm.Status = $"{item.Name}  •  {item.Details}"; }
+        var item = SelectedLibraryItem;
+        if (item is not null)
+        {
+            if (sender != MediaList && MediaList is not null && MediaList.SelectedItem != item) MediaList.SelectedItem = item;
+            if (sender != MediaDetailsList && MediaDetailsList is not null && MediaDetailsList.SelectedItem != item) MediaDetailsList.SelectedItem = item;
+            if (sender != MediaCompactList && MediaCompactList is not null && MediaCompactList.SelectedItem != item) MediaCompactList.SelectedItem = item;
+            MediaDetails.Text = $"{item.Name}  â€¢  {item.Details}  â€¢  Used {item.UseCount}x  â€¢  {item.Path}";
+            vm.Status = $"{item.Name}  â€¢  {item.Details}";
+        }
+        else
+        {
+            MediaDetails.Text = string.Empty;
+        }
     }
     private void BrowseFolderClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -1222,7 +1281,7 @@ public partial class MainWindow : Window
     });
     private void MediaColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var item = MediaList.SelectedItem as MediaItem ?? vm.Library.FirstOrDefault();
+        var item = SelectedLibraryItem ?? vm.Library.FirstOrDefault();
         if (item is null) { vm.Status = "Select a media item to edit its color grading."; return; }
         if (!item.Asset.HasVideo) { vm.Status = "Select a video media asset to edit its color grading."; return; }
         OpenMediaColorGrading(item.Asset.Id);
@@ -2048,7 +2107,7 @@ public partial class MainWindow : Window
 
     private void OpenInTrimmerClick(object sender, RoutedEventArgs e)
     {
-        if (MediaList.SelectedItem is MediaItem item)
+        if (SelectedLibraryItem is MediaItem item)
         {
             PreviewDeckTabs.SelectedItem = TrimmerTab;
             TrimmerDeck.LoadMedia(item.Asset);
