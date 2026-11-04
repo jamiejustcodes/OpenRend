@@ -349,16 +349,34 @@ public sealed class EditorViewModel : ObservableObject
                 else if (mode == AutoRippleMode.AffectedTracksAndMarkers)
                 {
                     foreach (var t in p.Tracks.Where(tr => affectedTrackIds.Contains(tr.Id)))
+                    {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
                             c.StartFrame += duration;
+                        if (t.Envelopes != null)
+                            foreach (var env in t.Envelopes) env.ShiftPoints(start, duration);
+                    }
+                    if (p.AudioBuses != null)
+                        foreach (var bus in p.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
                         m.Frame += duration;
                 }
                 else // AllTracksAndMarkers
                 {
                     foreach (var t in p.Tracks)
+                    {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
                             c.StartFrame += duration;
+                        if (t.Envelopes != null)
+                            foreach (var env in t.Envelopes) env.ShiftPoints(start, duration);
+                    }
+                    if (p.AudioBuses != null)
+                        foreach (var bus in p.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
+                    if (p.MasterAudioEnvelopes != null)
+                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(start, duration);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
                         m.Frame += duration;
                 }
@@ -415,6 +433,44 @@ public sealed class EditorViewModel : ObservableObject
         if (Selection.Count == 0) return;
         Editor.DeleteSelection(Selection, Ripple, IgnoreGroups, RippleMode);
         Selection.Clear(); Status = "Deleted selection.";
+    }
+
+    /// <summary>
+    /// Inserts empty time at the current timeline edit cursor across tracks and ripples downstream events,
+    /// markers, track automation envelopes, and bus envelopes matching the specified AutoRippleMode.
+    /// Aligned with Vegas Pro "Insert > Time...".
+    /// </summary>
+    public void InsertTime(long durationFrames, AutoRippleMode? rippleMode = null)
+    {
+        if (durationFrames <= 0) return;
+        var mode = rippleMode ?? RippleMode;
+        Editor.InsertTime(Position, durationFrames, mode);
+        Status = $"Inserted {TimecodeFormatter.Format(durationFrames, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} at {TimecodeFormatter.Format(Position, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} ({mode}).";
+    }
+
+    /// <summary>
+    /// Deletes the marked time range across tracks, cutting through events and rippling downstream material leftward.
+    /// Uses active timeline loop region when marked, or explicit range arguments.
+    /// Aligned with Vegas Pro "Edit > Delete Time" / "Ripple Delete".
+    /// </summary>
+    public void DeleteTime(long? startFrame = null, long? durationFrames = null, AutoRippleMode? rippleMode = null)
+    {
+        var start = startFrame ?? LoopRegion?.StartFrame ?? 0;
+        var duration = durationFrames ?? LoopRegion?.FrameCount ?? 0;
+        if (duration <= 0)
+        {
+            if (Selection.Count > 0)
+            {
+                Editor.DeleteSelection(Selection, ripple: true, ignoreGroups: IgnoreGroups, rippleMode: rippleMode ?? RippleMode);
+                Selection.Clear();
+                Status = "Deleted selected events with ripple.";
+            }
+            return;
+        }
+
+        var mode = rippleMode ?? RippleMode;
+        Editor.DeleteTime(start, duration, mode);
+        Status = $"Deleted {TimecodeFormatter.Format(duration, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} from {TimecodeFormatter.Format(start, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} ({mode}).";
     }
     public async Task SaveAsync(string path)
     {
@@ -507,16 +563,34 @@ public sealed class EditorViewModel : ObservableObject
                 else if (RippleMode == AutoRippleMode.AffectedTracksAndMarkers)
                 {
                     foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
+                    {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
                             c.StartFrame += pasteSpan;
+                        if (t.Envelopes != null)
+                            foreach (var env in t.Envelopes) env.ShiftPoints(at, pasteSpan);
+                    }
+                    if (p.AudioBuses != null)
+                        foreach (var bus in p.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, pasteSpan);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
                         m.Frame += pasteSpan;
                 }
                 else // AllTracksAndMarkers
                 {
                     foreach (var t in p.Tracks)
+                    {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
                             c.StartFrame += pasteSpan;
+                        if (t.Envelopes != null)
+                            foreach (var env in t.Envelopes) env.ShiftPoints(at, pasteSpan);
+                    }
+                    if (p.AudioBuses != null)
+                        foreach (var bus in p.AudioBuses)
+                            if (bus.Envelopes != null)
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, pasteSpan);
+                    if (p.MasterAudioEnvelopes != null)
+                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(at, pasteSpan);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
                         m.Frame += pasteSpan;
                 }

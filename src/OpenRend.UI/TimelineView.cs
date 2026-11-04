@@ -137,6 +137,8 @@ public sealed partial class TimelineView : FrameworkElement
     }
     public event Action<RulerFormat>? RulerFormatChanged;
     public event Action? SetTimeAtCursorRequested;
+    public event Action? InsertTimeRequested;
+    public event Action? DeleteTimeRequested;
     public EditToolMode EditTool
     {
         get => editTool;
@@ -1780,6 +1782,14 @@ public sealed partial class TimelineView : FrameworkElement
         var setTimeItem = new MenuItem { Header = "Set T&ime at Cursor…" };
         setTimeItem.Click += (_, _) => SetTimeAtCursorRequested?.Invoke();
         menu.Items.Add(setTimeItem);
+
+        var insertTimeItem = new MenuItem { Header = "&Insert Time…" };
+        insertTimeItem.Click += (_, _) => InsertTimeRequested?.Invoke();
+        menu.Items.Add(insertTimeItem);
+
+        var deleteTimeItem = new MenuItem { Header = "&Delete Time", InputGestureText = "Ctrl+Shift+Delete" };
+        deleteTimeItem.Click += (_, _) => DeleteTimeRequested?.Invoke();
+        menu.Items.Add(deleteTimeItem);
 
         menu.IsOpen = true;
     }

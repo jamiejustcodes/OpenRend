@@ -39,6 +39,7 @@
         <Separator/>
         <MenuItem Header="Split at cursor" InputGestureText="S" Click="SplitClick"/>
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
+        <MenuItem x:Name="DeleteTimeMenu" Header="Delete _Time" InputGestureText="Ctrl+Shift+Delete" Click="DeleteTimeClick" AutomationProperties.AutomationId="DeleteTimeMenu"/>
         <MenuItem Header="Select all clips" InputGestureText="Ctrl+A" Click="SelectAllClick"/>
         <Separator/>
         <MenuItem Header="&amp;Editing Tool">
@@ -121,6 +122,7 @@
       </MenuItem>
       <MenuItem Header="_Insert">
         <MenuItem x:Name="InsertMarkerMenu" Header="Marker" InputGestureText="M" Click="InsertMarkerClick" AutomationProperties.AutomationId="InsertMarkerMenu"/>
+        <MenuItem x:Name="InsertTimeMenu" Header="_Time…" Click="InsertTimeClick" AutomationProperties.AutomationId="InsertTimeMenu"/>
         <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" InputGestureText="Ctrl+Shift+N" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
         <Separator/>
         <MenuItem Header="Slideshow…" Click="CreateSlideshowClick"/>

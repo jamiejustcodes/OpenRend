@@ -15,6 +15,8 @@ public partial class MainWindow
         });
 
         Timeline.SetTimeAtCursorRequested += () => Guard(OpenSetTimeAtCursorDialog);
+        Timeline.InsertTimeRequested += () => InsertTimeClick(this, new RoutedEventArgs());
+        Timeline.DeleteTimeRequested += () => DeleteTimeClick(this, new RoutedEventArgs());
 
         SyncRulerFormatMenuChecks();
     }

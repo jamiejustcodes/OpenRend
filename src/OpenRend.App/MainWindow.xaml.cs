@@ -1286,6 +1286,7 @@ public partial class MainWindow : Window
     private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
     private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
     private void DeleteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Delete(); });
+    private void DeleteTimeClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.DeleteTime(); });
     private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
@@ -1853,6 +1854,29 @@ public partial class MainWindow : Window
         var marker = vm.Editor.AddMarker(vm.Position);
         Timeline.InvalidateVisual();
         vm.Status = $"Added Marker {marker.Index} at {TimelineView.FormatTimecode(marker.Frame, vm.Project.FrameRate)}.";
+    });
+
+    private void InsertTimeClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        var defaultDuration = vm.Project.FrameRate.Frames(1.0);
+        var dialog = new InsertTimeDialog(
+            defaultDuration,
+            vm.RippleMode,
+            vm.Project.FrameRate,
+            vm.Project.RulerFormat,
+            vm.Project.AudioSampleRate,
+            vm.Project.BeatsPerMinute,
+            vm.Project.BeatsPerMeasure,
+            vm.Project.RulerStartTimeFrames)
+        {
+            Owner = this
+        };
+        if (dialog.ShowDialog() == true)
+        {
+            SetRippleMode(dialog.SelectedRippleMode);
+            vm.InsertTime(dialog.DurationFrames, dialog.SelectedRippleMode);
+        }
     });
 
     private void OpenMarkerEdit(TimelineMarker marker) => Guard(() =>
@@ -2535,6 +2559,7 @@ public partial class MainWindow : Window
             Key.Space => () => PlayClick(this, e),
             Key.Escape => () => { Timeline.CancelPointerInput(); StopClick(this, e); },
             Key.S => () => SplitClick(this, e),
+            Key.Delete when ctrl && shift => () => DeleteTimeClick(this, e),
             Key.Delete => () => DeleteClick(this, e),
             Key.G when !ctrl && !shift && !alt => () => GroupCreateClick(this, e),
             Key.U when !ctrl && !shift && !alt => () => GroupRemoveClick(this, e),
