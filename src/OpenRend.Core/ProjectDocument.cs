@@ -169,6 +169,8 @@ public sealed class ProjectDocument
     public List<ProjectNoteItem> Notes { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<MediaBin> MediaBins { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<AudioBusTrack> AudioBuses { get; set; } = [];
     [JsonIgnore] public long DurationFrames => Tracks.SelectMany(t => t.Clips).Select(c => c.EndFrame).DefaultIfEmpty(0).Max();
 
     public ProjectDocument DeepClone() => new()
@@ -205,7 +207,8 @@ public sealed class ProjectDocument
         MasterAudioDim = MasterAudioDim,
         Markers = Markers.Select(m => m.DeepClone()).ToList(),
         Notes = Notes.Select(n => n.DeepClone()).ToList(),
-        MediaBins = MediaBins.Select(b => b.DeepClone()).ToList()
+        MediaBins = MediaBins.Select(b => b.DeepClone()).ToList(),
+        AudioBuses = AudioBuses.Select(b => b.DeepClone()).ToList()
     };
 
     public void Validate()
@@ -256,6 +259,24 @@ public sealed class ProjectDocument
                 note.Validate();
             }
         }
+        if (MediaBins != null)
+        {
+            var binIds = new HashSet<Guid>();
+            foreach (var bin in MediaBins)
+            {
+                if (bin == null || !binIds.Add(bin.Id)) throw new InvalidDataException("Project media bin IDs must be unique.");
+                bin.Validate();
+            }
+        }
+        if (AudioBuses != null)
+        {
+            var busIds = new HashSet<Guid>();
+            foreach (var bus in AudioBuses)
+            {
+                if (bus == null || !busIds.Add(bus.Id)) throw new InvalidDataException("Audio bus IDs must be unique.");
+                bus.Validate();
+            }
+        }
         var mediaIds = new HashSet<Guid>();
         var mediaById = new Dictionary<Guid, MediaAsset>();
         foreach (var media in Media)
@@ -281,12 +302,39 @@ public sealed class ProjectDocument
         }
         var trackIds = new HashSet<Guid>();
         var clipIds = new HashSet<Guid>();
+        var hasSeenVideoTrack = false;
+        var prevVideoNestingLevel = 0;
         foreach (var track in Tracks)
         {
             if (track == null || track.Id == Guid.Empty || !trackIds.Add(track.Id) || !Enum.IsDefined(track.Kind) || track.Clips == null) throw new InvalidDataException("Track is invalid.");
             if (!Enum.IsDefined(track.CompositeMode)) throw new InvalidDataException("Track composite mode is invalid.");
             if (track.Kind != TrackKind.Video && track.CompositeMode != TrackCompositeMode.SourceAlpha)
                 throw new InvalidDataException("Audio tracks only support SourceAlpha composite mode.");
+            if (track.CompositeNestingLevel < 0) throw new InvalidDataException("Composite nesting level cannot be negative.");
+            if (track.Kind != TrackKind.Video && track.CompositeNestingLevel > 0)
+                throw new InvalidDataException("Composite nesting is only supported on video tracks.");
+            if (track.Kind != TrackKind.Video && track.IsAdjustmentTrack)
+                throw new InvalidDataException("Adjustment tracks must be video tracks.");
+            if (track.BusTrackId.HasValue && track.Kind != TrackKind.Audio)
+                throw new InvalidDataException("Bus routing requires an audio track.");
+            if (track.BusTrackId.HasValue && (AudioBuses == null || !AudioBuses.Any(b => b.Id == track.BusTrackId.Value)))
+                throw new InvalidDataException("Track references an unknown audio bus.");
+            if (track.Kind == TrackKind.Video)
+            {
+                if (!hasSeenVideoTrack)
+                {
+                    if (track.CompositeNestingLevel != 0)
+                        throw new InvalidDataException("The first video track cannot be a compositing child.");
+                    hasSeenVideoTrack = true;
+                    prevVideoNestingLevel = 0;
+                }
+                else
+                {
+                    if (track.CompositeNestingLevel > prevVideoNestingLevel + 1)
+                        throw new InvalidDataException($"Track '{track.Name}' nesting level ({track.CompositeNestingLevel}) cannot exceed previous level + 1 ({prevVideoNestingLevel + 1}).");
+                    prevVideoNestingLevel = track.CompositeNestingLevel;
+                }
+            }
             if (!double.IsFinite(track.Gain) || track.Gain < 0 || !double.IsFinite(track.Opacity) || track.Opacity is < 0 or > 1 || !double.IsFinite(track.Pan) || track.Pan is < -1 or > 1) throw new InvalidDataException("Track levels are invalid.");
             if (track.VideoEffects != null)
             {
@@ -488,6 +536,14 @@ public sealed class TimelineTrack
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public TrackCompositeMode CompositeMode { get; set; } = TrackCompositeMode.SourceAlpha;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int CompositeNestingLevel { get; set; }
+    [JsonIgnore]
+    public bool IsCompositingChild => CompositeNestingLevel > 0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsAdjustmentTrack { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? BusTrackId { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public TrackMotion? Motion { get; set; }
     public List<TimelineClip> Clips { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -517,6 +573,9 @@ public sealed class TimelineTrack
         Opacity = Opacity,
         Pan = Pan,
         CompositeMode = CompositeMode,
+        CompositeNestingLevel = CompositeNestingLevel,
+        IsAdjustmentTrack = IsAdjustmentTrack,
+        BusTrackId = BusTrackId,
         Motion = Motion?.DeepClone(),
         Clips = Clips.Select(c => c.DeepClone()).ToList(),
         VideoEffects = VideoEffects.Select(e => e.DeepClone()).ToList(),

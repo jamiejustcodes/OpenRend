@@ -25,11 +25,13 @@ public static class TimelineEvaluator
         var soloVideo = project.Tracks.Any(t => t.Kind == TrackKind.Video && t.IsSolo);
         var soloAudio = project.Tracks.Any(t => t.Kind == TrackKind.Audio && t.IsSolo);
         // Return back-to-front layers so callers can composite in enumeration order.
-        foreach (var track in project.Tracks.AsEnumerable().Reverse())
+        var tracks = project.Tracks;
+        for (var i = tracks.Count - 1; i >= 0; i--)
         {
-            if (track.IsMuted || (track.Kind == TrackKind.Video && !track.IsVisible)) continue;
+            var track = tracks[i];
+            if (IsTrackEffectivelyMuted(project, track, i)) continue;
             if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } trackMute && trackMute.ValueAt(frame) >= 0.5) continue;
-            if ((track.Kind == TrackKind.Video ? soloVideo : soloAudio) && !track.IsSolo) continue;
+            if (track.Kind == TrackKind.Video ? (soloVideo && !IsTrackEffectivelySolo(project, track, i)) : (soloAudio && !track.IsSolo)) continue;
             var ordered = track.Kind == TrackKind.Video && track.Clips.Any(c => c.FadeInTransition is not null || c.FadeInFrames > 0)
                 ? track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray()
                 : track.Clips.ToArray();
@@ -185,6 +187,56 @@ public static class TimelineEvaluator
         if (clip.InvertPhase) gain = -gain;
         var (left, right) = BalanceStages(track, clip);
         return (gain * left, gain * right);
+    }
+
+    private static bool IsTrackEffectivelyMuted(ProjectDocument project, TimelineTrack track, int trackIndex)
+    {
+        if (track.IsMuted) return true;
+        if (track.Kind == TrackKind.Video && !track.IsVisible) return true;
+        if (track.Kind == TrackKind.Video && track.CompositeNestingLevel > 0)
+        {
+            var targetLevel = track.CompositeNestingLevel;
+            for (var i = trackIndex - 1; i >= 0; i--)
+            {
+                var ancestor = project.Tracks[i];
+                if (ancestor.Kind != TrackKind.Video) continue;
+                if (ancestor.CompositeNestingLevel < targetLevel)
+                {
+                    if (ancestor.IsMuted || !ancestor.IsVisible) return true;
+                    targetLevel = ancestor.CompositeNestingLevel;
+                    if (targetLevel == 0) break;
+                }
+            }
+        }
+        return false;
+    }
+
+    private static bool IsTrackEffectivelySolo(ProjectDocument project, TimelineTrack track, int trackIndex)
+    {
+        if (track.IsSolo) return true;
+        if (track.Kind == TrackKind.Video)
+        {
+            for (var i = trackIndex + 1; i < project.Tracks.Count; i++)
+            {
+                var next = project.Tracks[i];
+                if (next.Kind != TrackKind.Video) continue;
+                if (next.CompositeNestingLevel <= track.CompositeNestingLevel) break;
+                if (next.IsSolo) return true;
+            }
+            var targetLevel = track.CompositeNestingLevel;
+            for (var i = trackIndex - 1; i >= 0; i--)
+            {
+                var ancestor = project.Tracks[i];
+                if (ancestor.Kind != TrackKind.Video) continue;
+                if (ancestor.CompositeNestingLevel < targetLevel)
+                {
+                    if (ancestor.IsSolo) return true;
+                    targetLevel = ancestor.CompositeNestingLevel;
+                    if (targetLevel == 0) break;
+                }
+            }
+        }
+        return false;
     }
 
     private static (double Left, double Right) BalanceStages(TimelineTrack track, TimelineClip clip)

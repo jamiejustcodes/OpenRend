@@ -95,6 +95,10 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? TrackMotionRequested;
     public event Action<Guid>? TrackColorGradingRequested;
     public event Action<Guid, TrackCompositeMode>? TrackCompositeModeRequested;
+    public event Action<Guid>? TrackMakeCompositingChildRequested;
+    public event Action<Guid>? TrackMakeCompositingParentRequested;
+    public event Action<Guid>? TrackAdjustmentRequested;
+    public event Action<Guid, Guid?>? TrackAudioBusRequested;
     public event Action<Guid>? MotionTrackingRequested;
     public event Action<Guid>? TextBasedEditingRequested;
     public event Action<Guid>? NextTakeRequested;
@@ -432,6 +436,7 @@ public sealed partial class TimelineView : FrameworkElement
             "Mute" => new Rect(207, y + 4, 21, 20),
             "Solo" => new Rect(230, y + 4, 21, 20),
             "Motion" => new Rect(207, y + 46, 21, 20),
+            "CompChild" => new Rect(184, y + 46, 21, 20),
             "Visible" => new Rect(230, y + 46, 21, 18),
             "Arm" => new Rect(207, y + 46, 21, 20),
             "Phase" => new Rect(230, y + 46, 21, 20),
@@ -832,7 +837,22 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawRectangle(null, new Pen(Brush("#83C9FF"), 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
             Text(dc, "···", 4, y + 1, size: 12);
             Text(dc, $"{i + 1}", 5, y + 24, size: 11);
-            Text(dc, t.Name, 30, y + 5, size: 11, maxWidth: 104);
+            var indent = t.Kind == TrackKind.Video ? t.CompositeNestingLevel * 14 : 0;
+            if (t.CompositeNestingLevel > 0)
+            {
+                var branchPen = new Pen(Brush("#666666"), 1.2);
+                var branchX = 24 + (t.CompositeNestingLevel - 1) * 14 + 7;
+                dc.DrawLine(branchPen, new Point(branchX, y), new Point(branchX, y + TrackHeight / 2));
+                dc.DrawLine(branchPen, new Point(branchX, y + TrackHeight / 2), new Point(branchX + 7, y + TrackHeight / 2));
+            }
+            if (t.IsAdjustmentTrack)
+            {
+                var adjRect = new Rect(28 + indent, y + 4, 28, 16);
+                dc.DrawRoundedRectangle(Brush("#6A1B9A"), null, adjRect, 2, 2);
+                Text(dc, "ADJ", adjRect.X + 3, adjRect.Y + 2, Brushes.White, 9.5);
+            }
+            var nameX = 30 + indent + (t.IsAdjustmentTrack ? 30 : 0);
+            Text(dc, t.Name, nameX, y + 5, size: 11, maxWidth: Math.Max(20, 104 - indent - (t.IsAdjustmentTrack ? 30 : 0)));
 
             // Track Automation mode button [A] at x = 138, y + 4
             var autoBounds = TrackButtonBounds(t.Id, "Automation");
@@ -908,9 +928,41 @@ public sealed partial class TimelineView : FrameworkElement
                 Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
                 dc.DrawRectangle(Brush(t.IsVisible ? "#438AC8" : "#404040"), null, TrackButtonBounds(t.Id, "Visible"));
                 Text(dc, "V", 235, y + 47);
+
+                var compBounds = TrackButtonBounds(t.Id, "CompChild");
+                var isChild = t.CompositeNestingLevel > 0;
+                var canIndent = i > 0 && Project.Tracks.Take(i).Any(tr => tr.Kind == TrackKind.Video);
+                if (isChild || canIndent)
+                {
+                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), compBounds);
+                    var btnPen = new Pen(Brush(isChild ? "#E0E0E0" : "#888888"), 1.2);
+                    var cx = compBounds.X + 10.5; var cy = compBounds.Y + 10;
+                    if (isChild)
+                    {
+                        dc.DrawLine(btnPen, new Point(cx + 4, cy + 4), new Point(cx - 1, cy + 4));
+                        dc.DrawLine(btnPen, new Point(cx - 1, cy + 4), new Point(cx - 1, cy - 3));
+                        dc.DrawLine(btnPen, new Point(cx - 4, cy), new Point(cx - 1, cy - 3));
+                        dc.DrawLine(btnPen, new Point(cx + 2, cy), new Point(cx - 1, cy - 3));
+                    }
+                    else
+                    {
+                        dc.DrawLine(btnPen, new Point(cx - 4, cy - 4), new Point(cx - 1, cy - 4));
+                        dc.DrawLine(btnPen, new Point(cx - 1, cy - 4), new Point(cx - 1, cy + 3));
+                        dc.DrawLine(btnPen, new Point(cx - 4, cy), new Point(cx - 1, cy + 3));
+                        dc.DrawLine(btnPen, new Point(cx + 2, cy), new Point(cx - 1, cy + 3));
+                    }
+                }
             }
             else if (t.Kind == TrackKind.Audio)
             {
+                if (t.BusTrackId.HasValue && Project.AudioBuses != null)
+                {
+                    var bus = Project.AudioBuses.FirstOrDefault(b => b.Id == t.BusTrackId.Value);
+                    if (bus != null)
+                    {
+                        Text(dc, $"[{bus.Name}]", 82, y + 5, Brush("#00D2FF"), 9.5);
+                    }
+                }
                 // Track Audio FX button [fx] at x = 161
                 var fxBounds = TrackButtonBounds(t.Id, "FX");
                 var hasFx = t.AudioEffects.Count > 0;
@@ -1037,7 +1089,7 @@ public sealed partial class TimelineView : FrameworkElement
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
                     adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
-                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase", "Arm", "Automation" })
+                foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase", "Arm", "Automation", "CompChild" })
                 {
                     if (action == "Automation")
                     {
@@ -1084,6 +1136,21 @@ public sealed partial class TimelineView : FrameworkElement
                         if (track.Kind == TrackKind.Audio && TrackButtonBounds(track.Id, "Phase").Contains(origin))
                         {
                             TrackPhaseInvertRequested?.Invoke(track.Id);
+                            break;
+                        }
+                    }
+                    else if (action == "CompChild")
+                    {
+                        if (track.Kind == TrackKind.Video && TrackButtonBounds(track.Id, "CompChild").Contains(origin))
+                        {
+                            if (track.CompositeNestingLevel > 0)
+                            {
+                                TrackMakeCompositingParentRequested?.Invoke(track.Id);
+                            }
+                            else
+                            {
+                                TrackMakeCompositingChildRequested?.Invoke(track.Id);
+                            }
                             break;
                         }
                     }
@@ -1826,6 +1893,38 @@ public sealed partial class TimelineView : FrameworkElement
                         compModeMenu.Items.Add(item);
                     }
                     menu.Items.Add(compModeMenu);
+
+                    var makeChild = new MenuItem { Header = "Make Compositing Child" };
+                    makeChild.IsEnabled = trackIndex > 0 && Project.Tracks.Take(trackIndex).Any(tr => tr.Kind == TrackKind.Video);
+                    makeChild.Click += (_, _) => TrackMakeCompositingChildRequested?.Invoke(track.Id);
+                    menu.Items.Add(makeChild);
+
+                    var makeParent = new MenuItem { Header = "Make Compositing Parent" };
+                    makeParent.IsEnabled = track.CompositeNestingLevel > 0;
+                    makeParent.Click += (_, _) => TrackMakeCompositingParentRequested?.Invoke(track.Id);
+                    menu.Items.Add(makeParent);
+
+                    var adjItem = new MenuItem { Header = "Adjustment Track", IsCheckable = true, IsChecked = track.IsAdjustmentTrack };
+                    adjItem.Click += (_, _) => TrackAdjustmentRequested?.Invoke(track.Id);
+                    menu.Items.Add(adjItem);
+                }
+                else if (track.Kind == TrackKind.Audio)
+                {
+                    var busSubmenu = new MenuItem { Header = "Output Bus" };
+                    var masterItem = new MenuItem { Header = "Master", IsCheckable = true, IsChecked = !track.BusTrackId.HasValue };
+                    masterItem.Click += (_, _) => TrackAudioBusRequested?.Invoke(track.Id, null);
+                    busSubmenu.Items.Add(masterItem);
+                    if (Project.AudioBuses != null)
+                    {
+                        foreach (var bus in Project.AudioBuses)
+                        {
+                            var bItem = new MenuItem { Header = bus.Name, IsCheckable = true, IsChecked = track.BusTrackId == bus.Id };
+                            var bId = bus.Id;
+                            bItem.Click += (_, _) => TrackAudioBusRequested?.Invoke(track.Id, bId);
+                            busSubmenu.Items.Add(bItem);
+                        }
+                    }
+                    menu.Items.Add(busSubmenu);
                 }
 
 

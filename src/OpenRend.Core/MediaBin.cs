@@ -22,4 +22,11 @@ public sealed class MediaBin
         ParentBinId = ParentBinId,
         MediaIds = [..MediaIds]
     };
+
+    public void Validate()
+    {
+        if (Id == Guid.Empty) throw new InvalidDataException("Media bin ID must not be empty.");
+        if (string.IsNullOrWhiteSpace(Name)) throw new InvalidDataException("Media bin name cannot be empty.");
+    }
 }
+

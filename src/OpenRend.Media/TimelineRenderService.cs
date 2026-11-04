@@ -45,15 +45,50 @@ public sealed partial class TimelineRenderService : IDisposable
             else for (var i = 3; i < output.Length; i += 4) output[i] = 255;
             var layers = TimelineEvaluator.Evaluate(project, frame).Video;
             var trackGroups = layers.GroupBy(l => l.Track.Id).ToList();
+            byte[]? branchBuffer = null;
 
             foreach (var trackGroup in trackGroups)
             {
                 var track = trackGroup.First().Track;
+                if (track.IsAdjustmentTrack)
+                {
+                    var adjustedBuffer = (byte[])output.Clone();
+                    foreach (var layer in trackGroup)
+                    {
+                        if (layer.Opacity <= 0) continue;
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        {
+                            adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, layer.Clip.VideoEffects, frame);
+                        }
+                    }
+                    if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects))
+                    {
+                        adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, track.VideoEffects, frame);
+                    }
+                    if (track.Opacity >= 0.9999 && track.CompositeMode == TrackCompositeMode.SourceAlpha)
+                    {
+                        Array.Copy(adjustedBuffer, output, output.Length);
+                    }
+                    else
+                    {
+                        var blended = new byte[output.Length];
+                        Array.Copy(output, blended, output.Length);
+                        Composite(blended, width, height, adjustedBuffer, width, height, track.Opacity, track.CompositeMode);
+                        Array.Copy(blended, output, output.Length);
+                    }
+                    continue;
+                }
+
                 var trackMotion = trackGroup.First().TrackMotion;
                 var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
                 var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
                 var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
-                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion;
+                var isChild = track.CompositeNestingLevel > 0;
+                if (isChild && branchBuffer == null)
+                {
+                    branchBuffer = new byte[checked(width * height * 4)];
+                }
+                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion || isChild || branchBuffer != null;
                 var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
                 var currentCompositor = needsOwnBuffer ? null : compositor;
 
@@ -153,6 +188,25 @@ public sealed partial class TimelineRenderService : IDisposable
 
                 if (needsOwnBuffer)
                 {
+                    if (isChild)
+                    {
+                        if (hasTrackEffects)
+                        {
+                            trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
+                        }
+                        Composite(branchBuffer!, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
+                        continue;
+                    }
+
+                    if (branchBuffer != null)
+                    {
+                        var merged = new byte[trackBuffer.Length];
+                        Composite(merged, width, height, branchBuffer, width, height, 1.0);
+                        Composite(merged, width, height, trackBuffer, width, height, 1.0);
+                        trackBuffer = merged;
+                        branchBuffer = null;
+                    }
+
                     if (hasTrackEffects)
                     {
                         trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
@@ -192,6 +246,10 @@ public sealed partial class TimelineRenderService : IDisposable
                         Composite(output, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
                     }
                 }
+            }
+            if (branchBuffer != null)
+            {
+                Composite(output, width, height, branchBuffer, width, height, 1.0);
             }
             if (compositor != null && NativeMethods.CompositorReadback(compositor, output, output.Length) < 0)
                 throw NativeMethods.Error("Could not read composited timeline frame");
@@ -284,6 +342,14 @@ public sealed partial class TimelineRenderService : IDisposable
         var assets = project.Media.ToDictionary(asset => asset.Id);
         var solo = project.Tracks.Any(track => track.Kind == TrackKind.Audio && track.IsSolo);
         float[]? trackBuffer = null;
+        var busBuffers = new Dictionary<Guid, float[]>();
+        if (project.AudioBuses != null)
+        {
+            foreach (var bus in project.AudioBuses)
+            {
+                busBuffers[bus.Id] = new float[output.Length];
+            }
+        }
 
         foreach (var track in project.Tracks)
         {
@@ -334,10 +400,46 @@ public sealed partial class TimelineRenderService : IDisposable
                     AudioDspService.ProcessAudioChain(trackBuffer, MediaService.SampleRate, track.AudioEffects);
                 }
 
-                // 3. Accumulate track into master bus
-                for (var i = 0; i < output.Length; i++)
+                // 3. Accumulate track into assigned sub-bus or master bus
+                if (track.BusTrackId.HasValue && busBuffers.TryGetValue(track.BusTrackId.Value, out var busBuf))
                 {
-                    output[i] += trackBuffer[i];
+                    for (var i = 0; i < busBuf.Length; i++)
+                    {
+                        busBuf[i] += trackBuffer[i];
+                    }
+                }
+                else
+                {
+                    for (var i = 0; i < output.Length; i++)
+                    {
+                        output[i] += trackBuffer[i];
+                    }
+                }
+            }
+        }
+
+        // 3b. Process and accumulate Audio Sub-Busses into Master Bus
+        if (project.AudioBuses != null && project.AudioBuses.Count > 0)
+        {
+            var busSolo = project.AudioBuses.Any(b => b.IsSolo);
+            foreach (var bus in project.AudioBuses)
+            {
+                if (bus.IsMuted || (busSolo && !bus.IsSolo)) continue;
+                if (!busBuffers.TryGetValue(bus.Id, out var busBuf)) continue;
+
+                if (bus.AudioEffects != null && bus.AudioEffects.Count > 0)
+                {
+                    AudioDspService.ProcessAudioChain(busBuf, MediaService.SampleRate, bus.AudioEffects);
+                }
+
+                var busGain = (float)bus.Gain;
+                var leftPan = (float)Math.Clamp(1.0 - bus.Pan, 0.0, 1.0);
+                var rightPan = (float)Math.Clamp(1.0 + bus.Pan, 0.0, 1.0);
+
+                for (var s = 0; s < frames; s++)
+                {
+                    output[s * 2] += busBuf[s * 2] * busGain * leftPan;
+                    output[s * 2 + 1] += busBuf[s * 2 + 1] * busGain * rightPan;
                 }
             }
         }

@@ -173,6 +173,33 @@ public partial class MainWindow : Window
             RequestPreview();
             vm.Status = $"Track compositing mode set to {mode}.";
         });
+        Timeline.TrackMakeCompositingChildRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.MakeCompositingChild(id);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        });
+        Timeline.TrackMakeCompositingParentRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.MakeCompositingParent(id);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        });
+        Timeline.TrackAdjustmentRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.ToggleTrackAdjustment(id);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        });
+        Timeline.TrackAudioBusRequested += (id, busId) => Guard(() =>
+        {
+            Pause();
+            vm.SetTrackAudioBus(id, busId);
+            Timeline.InvalidateVisual();
+        });
         Timeline.ColorGradingRequested += () => ColorGradingClick(this, new RoutedEventArgs());
         Timeline.MotionTrackingRequested += id => OpenMotionTracking(id);
         Timeline.TextBasedEditingRequested += id => OpenTextBasedEditing(id);

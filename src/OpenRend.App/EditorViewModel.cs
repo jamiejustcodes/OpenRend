@@ -148,6 +148,51 @@ public sealed class EditorViewModel : ObservableObject
         Changed?.Invoke();
         Status = "Updated media tags.";
     }
+
+    public void MakeCompositingChild(Guid trackId)
+    {
+        Editor.MakeCompositingChild(trackId);
+        Changed?.Invoke();
+        Status = "Indented track as compositing child.";
+    }
+
+    public void MakeCompositingParent(Guid trackId)
+    {
+        Editor.MakeCompositingParent(trackId);
+        Changed?.Invoke();
+        Status = "Outdented track as compositing parent.";
+    }
+
+    public void ToggleTrackAdjustment(Guid trackId)
+    {
+        Editor.ToggleTrackAdjustment(trackId);
+        Changed?.Invoke();
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+        Status = track?.IsAdjustmentTrack == true ? "Track enabled as adjustment track." : "Track converted to normal video track.";
+    }
+
+    public void SetTrackAudioBus(Guid trackId, Guid? busId)
+    {
+        Editor.SetTrackAudioBus(trackId, busId);
+        Changed?.Invoke();
+        var bus = busId.HasValue ? Project.AudioBuses.FirstOrDefault(b => b.Id == busId.Value) : null;
+        Status = bus is not null ? $"Track routed to {bus.Name}." : "Track routed to Master bus.";
+    }
+
+    public AudioBusTrack CreateAudioBus(string? name = null)
+    {
+        var bus = Editor.CreateAudioBus(name);
+        Changed?.Invoke();
+        Status = $"Created {bus.Name}.";
+        return bus;
+    }
+
+    public void DeleteAudioBus(Guid busId)
+    {
+        Editor.DeleteAudioBus(busId);
+        Changed?.Invoke();
+        Status = "Deleted audio bus.";
+    }
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];
