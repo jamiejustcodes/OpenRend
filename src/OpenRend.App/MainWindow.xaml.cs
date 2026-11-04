@@ -70,12 +70,11 @@ public partial class MainWindow : Window
     {
         vm = viewModel;
         InitializeComponent();
-        SizeChanged += (_, _) =>
+        SizeChanged += (_, _) => ApplyLayoutConstraints();
+        StateChanged += (_, _) =>
         {
-            var available = Math.Max(320, ActualWidth - 420);
-            if (PreviewWidth.Width.Value > available) PreviewWidth.Width = new GridLength(available);
-            var height = Math.Max(230, ActualHeight - 261);
-            if (WorkspaceHeight.Height.Value > height) WorkspaceHeight.Height = new GridLength(height);
+            UpdateMaximizedMargin();
+            ApplyLayoutConstraints();
         };
         SourceInitialized += (_, _) =>
         {
@@ -493,7 +492,9 @@ public partial class MainWindow : Window
         Loaded += async (_, _) =>
         {
             initialized = true;
+            UpdateMaximizedMargin();
             LoadWorkspace();
+            ApplyLayoutConstraints();
             LoadGeneralPreferences();
             InitializeLayoutManager();
             InitializeTransitionBrowser();
@@ -2799,11 +2800,50 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { ShowError(ex); }
     }
+    private void UpdateMaximizedMargin()
+    {
+        RootGrid.Margin = WindowState == WindowState.Maximized
+            ? new Thickness(6)
+            : new Thickness(0);
+    }
+
+    private void ApplyLayoutConstraints()
+    {
+        if (ActualHeight > 0)
+        {
+            var totalNonWorkspaceHeight = 32 + 34 + 5 + 140 + 34 + 20; // 265px
+            var maxWorkspaceHeight = Math.Max(180, ActualHeight - totalNonWorkspaceHeight);
+            if (WorkspaceHeight.Height.IsAbsolute && WorkspaceHeight.Height.Value > maxWorkspaceHeight)
+            {
+                WorkspaceHeight.Height = new GridLength(maxWorkspaceHeight);
+            }
+        }
+
+        if (ActualWidth > 0)
+        {
+            var totalNonPreviewWidth = 240 + 10 + 110 + 16; // 376px
+            var maxPreviewWidth = Math.Max(280, ActualWidth - totalNonPreviewWidth);
+            if (PreviewWidth.Width.IsAbsolute && PreviewWidth.Width.Value > maxPreviewWidth)
+            {
+                PreviewWidth.Width = new GridLength(maxPreviewWidth);
+            }
+        }
+    }
+
     private string WorkspacePath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "workspace.json");
     private void SaveWorkspace()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(WorkspacePath)!);
-        File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(2, RestoreBounds.Width, RestoreBounds.Height, PreviewWidth.ActualWidth, WorkspaceHeight.ActualHeight, Timeline.PixelsPerSecond, WindowState == WindowState.Maximized)));
+        var w = RestoreBounds.Width > 0 ? RestoreBounds.Width : (Width > 0 ? Width : 1400);
+        var h = RestoreBounds.Height > 0 ? RestoreBounds.Height : (Height > 0 ? Height : 900);
+        File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(
+            2,
+            w,
+            h,
+            PreviewWidth.ActualWidth,
+            WorkspaceHeight.ActualHeight,
+            Timeline.PixelsPerSecond,
+            WindowState == WindowState.Maximized)));
     }
     private void LoadWorkspace()
     {
@@ -2813,10 +2853,34 @@ public partial class MainWindow : Window
             var settings = System.Text.Json.JsonSerializer.Deserialize<WorkspaceSettings>(File.ReadAllText(WorkspacePath));
             if (settings is null) return;
             if (settings.LayoutVersion != 2) return;
-            Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width); Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
+            Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width);
+            Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
             WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
-            PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 320, Math.Max(320, ActualWidth - 420)));
-            WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 230, Math.Max(230, ActualHeight - 260)));
+            UpdateMaximizedMargin();
+
+            var effWidth = ActualWidth > 0 ? ActualWidth : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Width : Width);
+            var effHeight = ActualHeight > 0 ? ActualHeight : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Height : Height);
+
+            var maxAllowedPreview = Math.Max(280, effWidth - 376);
+            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.7)
+            {
+                PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 280, maxAllowedPreview));
+            }
+            else
+            {
+                PreviewWidth.Width = new GridLength(1.1, GridUnitType.Star);
+            }
+
+            var maxAllowedWorkspace = Math.Max(180, effHeight - 265);
+            if (settings.WorkspaceHeight > 0 && settings.WorkspaceHeight < effHeight * 0.65)
+            {
+                WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 180, maxAllowedWorkspace));
+            }
+            else
+            {
+                WorkspaceHeight.Height = new GridLength(1.1, GridUnitType.Star);
+            }
+
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
         }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
