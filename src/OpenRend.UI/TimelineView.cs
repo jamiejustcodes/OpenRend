@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Automation.Peers;
@@ -10,7 +10,7 @@ using OpenRend.Core;
 
 namespace OpenRend.UI;
 
-public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null, bool IgnoreGroups = false, bool Ripple = false, AutoRippleMode RippleMode = AutoRippleMode.AffectedTracks);
+public sealed record ClipGesture(Guid ClipId, Guid TrackId, long Start, long SourceIn, long Duration, string Mode, int? NewTrackIndex = null, TrackKind? NewTrackKind = null, bool IgnoreGroups = false, bool Ripple = false, AutoRippleMode RippleMode = AutoRippleMode.AffectedTracks, double? NewPlaybackRate = null, Guid? RollAdjacentClipId = null);
 public sealed record TrackLevelGesture(Guid TrackId, string Level, double Value);
 public sealed record TransitionGesture(Guid OutgoingClipId, Guid IncomingClipId, VideoTransition Transition, bool IsCut = false);
 
@@ -530,7 +530,18 @@ public sealed partial class TimelineView : FrameworkElement
             var reach = Math.Min(10, Math.Max(2, (right - left) / 3));
             var atLeft = left >= HeaderWidth && point.X - left <= reach;
             var atRight = right <= ActualWidth && right - point.X <= reach;
-            return (track, inside, atLeft && (!atRight || point.X - left <= right - point.X) ? "TrimLeft" : atRight ? "TrimRight" : "Move");
+            var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+            var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
+            if (alt) return (track, inside, ctrl ? "Slide" : "Slip");
+            if (atLeft && (!atRight || point.X - left <= right - point.X))
+            {
+                return (track, inside, ctrl ? "TimeStretchLeft" : "TrimLeft");
+            }
+            if (atRight)
+            {
+                return (track, inside, ctrl ? "TimeStretchRight" : "TrimRight");
+            }
+            return (track, inside, "Move");
         }
         var edge = track.Clips.SelectMany(clip => new[] { (Clip: clip, X: X(clip.StartFrame), Mode: "TrimLeft"), (Clip: clip, X: X(clip.EndFrame), Mode: "TrimRight") })
             .Where(item => item.X >= HeaderWidth && item.X <= ActualWidth && Math.Abs(item.X - point.X) <= 10)
@@ -541,7 +552,16 @@ public sealed partial class TimelineView : FrameworkElement
     {
         if (HitEventButton(point) is { } button) return button.Track.IsLocked || (button.Clip.IsLocked && button.Action != "More") ? Cursors.No : Cursors.Hand;
         var hit = HitClip(point);
-        return hit is null ? Cursors.Arrow : (hit.Value.Track.IsLocked || hit.Value.Clip.IsLocked) ? Cursors.No : hit.Value.Mode == "Move" ? Cursors.Arrow : Cursors.SizeWE;
+        if (hit is null) return Cursors.Arrow;
+
+        if (hit.Value.Track.IsLocked || hit.Value.Clip.IsLocked) return Cursors.No;
+        return hit.Value.Mode switch
+        {
+            "Slip" => Cursors.ScrollWE,
+            "Slide" => Cursors.SizeWE,
+            "Move" => Cursors.Arrow,
+            _ => Cursors.SizeWE
+        };
     }
     private void UpdateHover(Point point)
     {
@@ -550,6 +570,7 @@ public sealed partial class TimelineView : FrameworkElement
         var nextButton = button is { } hovered ? (hovered.Clip.Id, hovered.Action) : ((Guid, string)?)null;
         if (hoverEventButton != nextButton) { hoverEventButton = nextButton; InvalidateVisual(); }
         var hit = HitClip(point);
+
         var id = button is null && hit is { Track.IsLocked: false, Clip.IsLocked: false } && hit.Value.Mode != "Move" ? hit.Value.Clip.Id : (Guid?)null;
         var nextMode = id is not null ? hit!.Value.Mode : "";
         Cursor = CursorAt(point);
@@ -1131,6 +1152,28 @@ public sealed partial class TimelineView : FrameworkElement
                 }
             }
         }
+        else if (mode == "Slip")
+        {
+            delta = Math.Clamp(delta, -dragging.SourceInFrame, long.MaxValue - dragging.SourceInFrame);
+        }
+        else if (mode == "Slide")
+        {
+            delta = Math.Clamp(delta, -dragging.StartFrame, long.MaxValue - dragging.StartFrame);
+        }
+        else if (mode is "TimeStretchLeft" or "TimeStretchRight")
+        {
+            if (mode == "TimeStretchRight")
+            {
+                var minDelta = 1 - dragging.DurationFrames;
+                var maxDelta = (long)(dragging.DurationFrames * 4.0) - dragging.DurationFrames;
+                delta = Math.Clamp(delta, minDelta, Math.Max(minDelta, maxDelta));
+            }
+            else
+            {
+                var maxDelta = dragging.DurationFrames - 1;
+                delta = Math.Clamp(delta, -dragging.StartFrame, maxDelta);
+            }
+        }
         else if (mode == "TrimLeft") delta = Math.Clamp(delta,
             dragging.VideoSourceMode == VideoSourceMode.Bounded ? Math.Max(-dragging.SourceInFrame, -dragging.StartFrame) : -dragging.StartFrame,
             dragging.DurationFrames - 1);
@@ -1240,6 +1283,54 @@ public sealed partial class TimelineView : FrameworkElement
                         "Move",
                         IgnoreGroups: commitIgnoreGroups));
                 }
+            }
+            else if (commitMode == "Slip")
+            {
+                var trackId = commitDestination >= 0 && commitDestination < Project.Tracks.Count
+                    ? Project.Tracks[commitDestination].Id
+                    : (commitDragTrack?.Id ?? Guid.Empty);
+                EditRequested?.Invoke(new ClipGesture(
+                    clip.Id,
+                    trackId,
+                    clip.StartFrame,
+                    clip.SourceInFrame + commitDelta,
+                    clip.DurationFrames,
+                    "Slip",
+                    IgnoreGroups: commitIgnoreGroups));
+            }
+            else if (commitMode == "Slide")
+            {
+                var trackId = commitDestination >= 0 && commitDestination < Project.Tracks.Count
+                    ? Project.Tracks[commitDestination].Id
+                    : (commitDragTrack?.Id ?? Guid.Empty);
+                EditRequested?.Invoke(new ClipGesture(
+                    clip.Id,
+                    trackId,
+                    clip.StartFrame + commitDelta,
+                    clip.SourceInFrame,
+                    clip.DurationFrames,
+                    "Slide",
+                    IgnoreGroups: commitIgnoreGroups));
+            }
+            else if (commitMode is "TimeStretchLeft" or "TimeStretchRight")
+            {
+                var trackId = commitDestination >= 0 && commitDestination < Project.Tracks.Count
+                    ? Project.Tracks[commitDestination].Id
+                    : (commitDragTrack?.Id ?? Guid.Empty);
+                var newDuration = commitMode == "TimeStretchRight"
+                    ? Math.Max(1L, clip.DurationFrames + commitDelta)
+                    : Math.Max(1L, clip.DurationFrames - commitDelta);
+                var stretchRatio = (double)clip.DurationFrames / newDuration;
+                var newRate = Math.Clamp(clip.PlaybackRate * stretchRatio, 0.25, 4.0);
+                EditRequested?.Invoke(new ClipGesture(
+                    clip.Id,
+                    trackId,
+                    commitMode == "TimeStretchLeft" ? clip.StartFrame + commitDelta : clip.StartFrame,
+                    clip.SourceInFrame,
+                    newDuration,
+                    commitMode,
+                    IgnoreGroups: commitIgnoreGroups,
+                    NewPlaybackRate: newRate));
             }
             else if (commitDelta != 0)
             {

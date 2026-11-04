@@ -1,4 +1,4 @@
-﻿using OpenRend.Core;
+using OpenRend.Core;
 
 namespace OpenRend.Timeline;
 
@@ -1319,7 +1319,7 @@ public sealed partial class TimelineEditor
     {
         if (clip.StartFrame < 0 || clip.DurationFrames <= 0 || clip.StartFrame > long.MaxValue - clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(clip), "Clip timeline range is invalid.");
     }
-    private (TimelineTrack Track, TimelineClip Clip) FindClip(Guid id)
+    public (TimelineTrack Track, TimelineClip Clip) FindClip(Guid id)
     {
         foreach (var track in Project.Tracks)
             foreach (var clip in track.Clips)

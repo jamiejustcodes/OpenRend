@@ -1061,7 +1061,36 @@ public partial class MainWindow : Window
         }
         else
         {
-            vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups, gesture.Ripple, gesture.RippleMode);
+            if (gesture.Mode == "Slip")
+            {
+                var (_, clip) = vm.Editor.FindClip(gesture.ClipId);
+                var delta = gesture.SourceIn - clip.SourceInFrame;
+                vm.Editor.SlipClip(gesture.ClipId, delta, ignoreGroups);
+                vm.Status = $"Slipped event media in-point to {TimelineView.FormatTimecode(gesture.SourceIn, vm.Project.FrameRate)}.";
+            }
+            else if (gesture.Mode == "Slide")
+            {
+                var (_, clip) = vm.Editor.FindClip(gesture.ClipId);
+                var delta = gesture.Start - clip.StartFrame;
+                vm.Editor.SlideClip(gesture.ClipId, delta, ignoreGroups);
+                vm.Status = $"Slid event to {TimelineView.FormatTimecode(gesture.Start, vm.Project.FrameRate)}.";
+            }
+            else if (gesture.Mode is "TimeStretchLeft" or "TimeStretchRight")
+            {
+                vm.Editor.TimeStretchClip(gesture.ClipId, gesture.Duration, gesture.NewPlaybackRate ?? 1.0, stretchFromLeft: gesture.Mode == "TimeStretchLeft", ignoreGroups);
+                vm.Status = $"Time-stretched event to {gesture.Duration} frames ({gesture.NewPlaybackRate:0.###}x playback rate).";
+            }
+            else if (gesture.Mode == "Roll" && gesture.RollAdjacentClipId is { } adjId)
+            {
+                var (_, clip) = vm.Editor.FindClip(gesture.ClipId);
+                var delta = gesture.Duration - clip.DurationFrames;
+                vm.Editor.RollEdit(gesture.ClipId, adjId, delta);
+                vm.Status = $"Rolled cut boundary by {delta} frames.";
+            }
+            else
+            {
+                vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups, gesture.Ripple, gesture.RippleMode);
+            }
             vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
         RequestPreview();
