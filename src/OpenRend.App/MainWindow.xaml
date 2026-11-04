@@ -783,7 +783,12 @@
             <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Copy preview snapshot" Click="CopySnapshotClick" ToolTip="Copy snapshot"><Image Source="{StaticResource Icon.Copy}"/></Button>
             <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Save preview snapshot" Click="SaveSnapshotClick" ToolTip="Save snapshot"><Image Source="{StaticResource Icon.Camera}"/></Button>
           </StackPanel>
-          <Border Grid.Row="1" Background="Black" Margin="0,4,0,0"><local:PreviewHost x:Name="Preview"/></Border>
+          <Border Grid.Row="1" Background="Black" Margin="0,4,0,0">
+            <Grid>
+              <local:PreviewHost x:Name="Preview"/>
+              <Image x:Name="PreviewImage" Stretch="Uniform" Visibility="Collapsed"/>
+            </Grid>
+          </Border>
           <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Center"><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Go to start" ToolTip="Go to start (Ctrl+Home)" Click="StartClick" ContentTemplate="{StaticResource ic_first}"/><Button x:Name="PreviewPlayButton" Style="{StaticResource IconButton}" AutomationProperties.Name="Play" ToolTip="Play / pause (Space)" Click="PlayClick" ContentTemplate="{StaticResource ic_play}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Pause" ToolTip="Pause (Enter)" Click="PauseClick" ContentTemplate="{StaticResource ic_pause}"/><Button Style="{StaticResource IconButton}" AutomationProperties.Name="Stop" ToolTip="Stop (Esc)" Click="StopClick" ContentTemplate="{StaticResource ic_stop}"/></StackPanel>
           <Border Grid.Row="3" Background="#242424" BorderBrush="#1C1C1C" BorderThickness="0,1,0,0">
             <TextBlock x:Name="PreviewInfo" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="6,2" Foreground="#C8C8C8" FontSize="11"/>

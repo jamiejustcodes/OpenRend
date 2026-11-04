@@ -34,6 +34,7 @@ desktop.ini
 *.avi
 *.mkv
 *.partial.mp4
+!assets/demo.mp4
 tests/native/fixture.*
 
 # AI & Agent artifacts

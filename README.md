@@ -18,6 +18,7 @@
 
 <p align="center">
   <a href="#-overview">Overview</a> •
+  <a href="#-screenshots">Screenshots</a> •
   <a href="#-core-capabilities">Capabilities</a> •
   <a href="#-quick-start--build">Quick Start</a> •
   <a href="#-keyboard-shortcuts">Shortcuts</a> •
@@ -32,6 +33,27 @@
 **OpenRend** is an open-source non-linear video editor designed for high-throughput Windows desktop workflows. It pairs a managed **WPF / .NET 10** studio interface with a native **C++20** media engine accelerated by **Direct3D 11** and the **FFmpeg SDK**.
 
 Unlike traditional editors that approximate preview quality or decouple the playback engine from final encoding, OpenRend evaluates timeline composition deterministically using rational arithmetic. What scrubs in the viewport matches final master exports frame-for-frame across colorspaces, velocity curves, and transition geometries.
+
+<p align="center">
+  <img src="assets/demo.gif" alt="OpenRend Studio in Action" width="100%" />
+</p>
+<p align="center">
+  <em>Live timeline scrubbing across automatic crossfades, multi-track audio waveforms, and GPU preview in OpenRend (<a href="assets/demo.mp4">Download MP4 video</a>).</em>
+</p>
+
+---
+
+## 📸 Screenshots
+
+| Studio Workspace & Multi-Track Timeline | 3-Way Color Grading Suite |
+| :---: | :---: |
+| [![OpenRend Studio Workspace](assets/screenshots/workspace.png)](assets/screenshots/workspace.png) | [![OpenRend Color Grading](assets/screenshots/color_grading.png)](assets/screenshots/color_grading.png) |
+| *Docked project media, 1080p preview, master audio bus dB meter, and multi-track timeline.* | *Interactive Lift, Gamma, Gain, and Offset color wheels with tone and level adjustments.* |
+
+| Video Event Pan / Crop & Keyframing | Pyramidal Lucas-Kanade Motion Tracking |
+| :---: | :---: |
+| [![Video Event Pan / Crop](assets/screenshots/pan_crop.png)](assets/screenshots/pan_crop.png) | [![Motion Tracking](assets/screenshots/motion_tracking.png)](assets/screenshots/motion_tracking.png) |
+| *Aspect ratio framing, keyframe interpolation curves, and Bézier masking tool.* | *Optical flow feature tracking, homography planar solver, and confidence scoring.* |
 
 ---
 

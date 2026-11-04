@@ -63,6 +63,21 @@ public partial class MainWindow : Window
     public event Action<byte[], int, int>? FrameRendered;
     private byte[]? currentPreviewPixels;
     public (byte[]? Pixels, int Width, int Height) GetCurrentFrame() => (currentPreviewPixels, previewWidth, previewHeight);
+    public void SetPreviewImageOverride(ImageSource? source)
+    {
+        if (source != null)
+        {
+            PreviewImage.Source = source;
+            PreviewImage.Visibility = Visibility.Visible;
+            Preview.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            PreviewImage.Source = null;
+            PreviewImage.Visibility = Visibility.Collapsed;
+            Preview.Visibility = Visibility.Visible;
+        }
+    }
     private VideoScopesWindow? videoScopesWindow;
     private MixingConsoleWindow? mixingConsoleWindow;
     private EditDetailsWindow? editDetailsWindow;
