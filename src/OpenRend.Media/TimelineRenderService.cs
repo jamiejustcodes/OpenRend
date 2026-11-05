@@ -444,6 +444,10 @@ public sealed partial class TimelineRenderService : IDisposable
                 var localStart = seconds + (double)first / MediaService.SampleRate - start;
                 var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
                 var decoded = media.GetAudio(asset.Path, sourceStart, last - first);
+                if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
+                {
+                    AudioDspService.ProcessAudioChain(decoded, MediaService.SampleRate, clip.AudioEffects);
+                }
                 var phaseMul = clip.InvertPhase ? -1.0f : 1.0f;
                 var normFactor = clip.Normalize ? 1.5f : 1.0f;
                 for (var sample = first; sample < last; sample++)

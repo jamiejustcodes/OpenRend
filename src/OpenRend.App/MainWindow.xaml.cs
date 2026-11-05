@@ -12,6 +12,7 @@ using Microsoft.Win32;
 using OpenRend.Core;
 using OpenRend.Media;
 using OpenRend.Project;
+using OpenRend.Timeline;
 using OpenRend.UI;
 
 namespace OpenRend.App;
@@ -446,6 +447,10 @@ public partial class MainWindow : Window
             Refresh();
         });
         Timeline.DeleteRequested += () => Guard(vm.Delete);
+        Timeline.CutRequested += () => CutClick(this, new RoutedEventArgs());
+        Timeline.CopyRequested += () => CopyClick(this, new RoutedEventArgs());
+        Timeline.PasteEventAttributesRequested += () => PasteEventAttributesClick(this, new RoutedEventArgs());
+        Timeline.SelectivelyPasteEventAttributesRequested += () => SelectivelyPasteEventAttributesClick(this, new RoutedEventArgs());
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
         Timeline.InsertAdjustmentTrackRequested += idx => Guard(() =>
@@ -1611,6 +1616,93 @@ public partial class MainWindow : Window
     private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);
     private void CutClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Cut(); });
     private void PasteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Paste(); });
+    private void PasteRepeatClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!vm.CanPaste)
+        {
+            vm.Status = "Clipboard is empty.";
+            return;
+        }
+        var defaultSpacing = vm.ClipboardSpanFrames > 0 ? vm.ClipboardSpanFrames : vm.Project.FrameRate.Frames(1.0);
+        var dlg = new PasteRepeatDialog(defaultSpacing, vm.Project.FrameRate, vm.Project.RulerFormat)
+        {
+            Owner = this
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            Pause();
+            vm.PasteRepeat(dlg.RepeatCount, dlg.IsEndToEnd ? null : dlg.SpacingFrames);
+            RequestPreview();
+            Timeline.InvalidateVisual();
+        }
+    });
+    private void PasteInsertClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!vm.CanPaste)
+        {
+            vm.Status = "Clipboard is empty.";
+            return;
+        }
+        Pause();
+        vm.PasteInsert();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
+    private void PasteEventAttributesClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!vm.CanPaste)
+        {
+            vm.Status = "Clipboard is empty.";
+            return;
+        }
+        if (Timeline.Selection.Count == 0)
+        {
+            vm.Status = "Select target event(s) to paste attributes into.";
+            return;
+        }
+        var count = vm.PasteEventAttributes(Timeline.Selection, new PasteEventAttributesOptions());
+        if (count > 0)
+        {
+            RequestPreview();
+            Timeline.InvalidateVisual();
+            vm.Status = $"Pasted attributes into {count} event(s).";
+        }
+        else
+        {
+            vm.Status = "No compatible events found to paste attributes.";
+        }
+    });
+    private void SelectivelyPasteEventAttributesClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (!vm.CanPaste)
+        {
+            vm.Status = "Clipboard is empty.";
+            return;
+        }
+        if (Timeline.Selection.Count == 0)
+        {
+            vm.Status = "Select target event(s) to paste attributes into.";
+            return;
+        }
+        var dlg = new SelectivePasteDialog(vm.PrimaryClipboardTrackKind)
+        {
+            Owner = this
+        };
+        if (dlg.ShowDialog() == true)
+        {
+            var count = vm.PasteEventAttributes(Timeline.Selection, dlg.Options);
+            if (count > 0)
+            {
+                RequestPreview();
+                Timeline.InvalidateVisual();
+                vm.Status = $"Selectively pasted attributes into {count} event(s).";
+            }
+            else
+            {
+                vm.Status = "No compatible events found to paste attributes.";
+            }
+        }
+    });
     private void ClipPropertiesClick(object sender, RoutedEventArgs e) { ClipPropertiesTab.IsSelected = true; UpdateInspector(); }
     private async void PanCropClick(object sender, RoutedEventArgs e) => await OpenPanCropAsync();
     private async Task OpenPanCropAsync(Guid? requestedClip = null) => await GuardAsync(async () =>
@@ -3091,8 +3183,12 @@ public partial class MainWindow : Window
             ,
             Key.Y when ctrl => () => RedoClick(this, e),
             Key.E when ctrl && shift => () => ExportClick(this, e),
+            Key.Q when ctrl && shift => () => VideoTrackClick(this, e),
+            Key.Q when ctrl && !shift && !alt => () => AudioTrackClick(this, e),
             Key.A when ctrl && shift => () => AudioTrackClick(this, e),
-            Key.V when ctrl && shift => () => VideoTrackClick(this, e),
+            Key.B when ctrl && shift => () => PasteEventAttributesClick(this, e),
+            Key.B when ctrl && !shift && !alt => () => PasteRepeatClick(this, e),
+            Key.V when ctrl && shift => () => PasteInsertClick(this, e),
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
             Key.T when !ctrl && !alt && !shift => () => NextTakeClick(this, e),
             Key.T when !ctrl && !alt && shift => () => PreviousTakeClick(this, e),

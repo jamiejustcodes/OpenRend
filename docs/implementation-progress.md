@@ -194,6 +194,28 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 paste repeat, paste insert, and selective paste event attributes suite` implemented 1:1 Vegas Pro Clipboard Paste Suite matching `vegas2027.exe` string tables and menu IDs (`Edit > Paste Repeat...` ID 32087 / `Ctrl+B`, `Edit > Paste Insert` ID 32086 / `Ctrl+Shift+V`, `Edit > Paste Event Attributes` ID 32328 / `Ctrl+Shift+B`, and `Edit > Selectively Paste Event Attributes...`), context menus, and `ScriptPortal.Vegas.dll` (`SelPastAttrConfig`, `PastePrefs`).
+  - Core Data Models & Validation:
+    - Added `AudioEffects` collection to `TimelineClip` in `OpenRend.Core/ProjectDocument.cs` matching `ScriptPortal.Vegas.AudioEvent.Effects`.
+    - Implemented deep cloning of clip `AudioEffects` and schema validation enforcing that clip audio effects only exist on audio tracks and have unique non-empty IDs.
+  - Media Audio DSP Pipeline:
+    - In `TimelineRenderService.cs`: integrated clip-level Audio FX processing in `RenderAudio`, processing decoded audio chunks via `AudioDspService.ProcessAudioChain` before applying envelope gains and channel mixing.
+  - Timeline Operations & Undo/Redo:
+    - In `TimelineEditor.Paste.cs`: defined `PasteEventAttributesOptions` modeling granular flags (`VideoEffects`, `PanCrop`, `VideoSwitches`, `VideoFadesAndOpacity`, `AudioEffects`, `AudioGainAndPan`, `AudioPitchAndChannels`, `AudioSwitches`, `AudioFades`, `ReplaceExistingFX`).
+    - Implemented `PasteEventAttributes` transferring attributes atomically with snapshot undo/redo, ignoring locked clips and locked tracks.
+  - Editor ViewModel & Clipboard Integration:
+    - Extended `EditorViewModel.cs` with `PrimaryClipboardClip`, `PrimaryClipboardTrackKind`, and `ClipboardSpanFrames`.
+    - Added parameterized and parameterless `Paste(bool forceInsertRipple = false, int repeatCount = 1, long? repeatSpacingFrames = null)` supporting multi-copy iteration with end-to-end or even-spacing spacing modes and downstream auto-ripple.
+    - Implemented `PasteInsert()`, `PasteRepeat()`, and `PasteEventAttributes()`.
+  - UI Implementation:
+    - Recreated 1:1 Vegas Pro "Paste Repeat" modal dialog (`PasteRepeatDialog.cs`) with repeat count spinner (1..999), `Paste spacing` radio options (`End to end`, `Even spacing`), and `Paste every:` timecode readout.
+    - Recreated 1:1 Vegas Pro "Selectively Paste Event Attributes" modal dialog (`SelectivePasteDialog.cs`) with prompt, Video Attributes, Audio Attributes, and Options group boxes, `Select All`/`Select None` actions, and clip kind auto-filtering.
+    - Added context menu items in `TimelineEventButtons.cs` and `TimelineView.cs` (`Cut` Ctrl+X, `Copy` Ctrl+C, `Paste Event Attributes`, `Selectively Paste Event Attributes…`).
+    - Added `Edit` menu items in `MainWindow.xaml` and `MainWindow.xaml.cs` (`Paste Repeat...`, `Paste Insert`, `Paste Event Attributes`, `Selectively Paste Event Attributes...`) with keyboard shortcuts `Ctrl+B`, `Ctrl+Shift+V`, and `Ctrl+Shift+B`. Corrected track shortcut mapping matching Vegas Pro verbatim (`Insert Video Track` Ctrl+Shift+Q, `Insert Audio Track` Ctrl+Q).
+  - Verification:
+    - Added 7 unit tests in `PasteAndEventAttributesTests.cs` (OpenRend.Editor.Tests) verifying video attribute transfer, audio attribute transfer, selective replacement/appending, locked event/track protection, paste insert downstream rippling, and paste repeat end-to-end and even-spacing modes.
+    - Full gate passed: 100% native integration tests (1/1), 1,090 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 video adjustment tracks and adjustment events suite` implemented 1:1 Vegas Pro Video Adjustment Tracks and Adjustment Events matching `ScriptPortal.Vegas.VideoAdjustmentTrack`, `VideoAdjustmentEvent`, and Vegas Pro menu/toolbar commands (`Insert > Adjustment Track` ID 32178, `Insert > Adjustment Event` ID 32503, `Edit > Resize selected Adjustment Events to Project` ID 44729, `Edit > Resize all Adjustment Events to Project` ID 44730, and Event context menu `Resize Adjustment Event to Project` ID 44731).
   - Core Data Models & Validation:
     - Extended `TimelineClip` in `OpenRend.Core/ProjectDocument.cs` with `IsAdjustmentEvent`, `FrameWidth`, `FrameHeight`, `PixelAspectRatio = 1.0`, and `UseAlternateAdjustmentEventBehavior`.

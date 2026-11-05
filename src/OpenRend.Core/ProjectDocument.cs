@@ -505,6 +505,14 @@ public sealed class ProjectDocument
                     if (effect == null || !effectIds.Add(effect.Id)) throw new InvalidDataException("Video effect IDs must be unique within a clip.");
                     effect.Validate();
                 }
+                if (clip.AudioEffects == null || track.Kind != TrackKind.Audio && clip.AudioEffects.Count != 0)
+                    throw new InvalidDataException("Audio effects require an audio clip.");
+                var audioEffectIds = new HashSet<Guid>();
+                foreach (var effect in clip.AudioEffects)
+                {
+                    if (effect == null || !audioEffectIds.Add(effect.Id)) throw new InvalidDataException("Audio effect IDs must be unique within a clip.");
+                    effect.Validate();
+                }
                 if (clip.MotionTracks != null)
                 {
                     var mtIds = new HashSet<Guid>();
@@ -843,6 +851,8 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public MaskAnimation? Mask { get; set; }
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<AudioEffect> AudioEffects { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<MotionTrackData> MotionTracks { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public ClipTranscript? Transcript { get; set; }
@@ -862,6 +872,9 @@ public sealed class TimelineClip
 
         clone.VideoEffects = new List<VideoEffect>(VideoEffects.Count);
         for (var i = 0; i < VideoEffects.Count; i++) clone.VideoEffects.Add(VideoEffects[i].DeepClone());
+
+        clone.AudioEffects = new List<AudioEffect>(AudioEffects.Count);
+        for (var i = 0; i < AudioEffects.Count; i++) clone.AudioEffects.Add(AudioEffects[i].DeepClone());
 
         clone.MotionTracks = new List<MotionTrackData>(MotionTracks.Count);
         for (var i = 0; i < MotionTracks.Count; i++) clone.MotionTracks.Add(MotionTracks[i].DeepClone());

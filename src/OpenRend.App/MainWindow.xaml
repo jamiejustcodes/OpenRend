@@ -44,6 +44,10 @@
         <MenuItem Header="Cut" InputGestureText="Ctrl+X" Click="CutClick"/>
         <MenuItem Header="Copy" InputGestureText="Ctrl+C" Click="CopyClick"/>
         <MenuItem Header="Paste" InputGestureText="Ctrl+V" Click="PasteClick"/>
+        <MenuItem x:Name="PasteRepeatMenu" Header="P&amp;aste Repeat..." InputGestureText="Ctrl+B" Click="PasteRepeatClick" AutomationProperties.AutomationId="PasteRepeatMenu"/>
+        <MenuItem x:Name="PasteInsertMenu" Header="Pa&amp;ste Insert" InputGestureText="Ctrl+Shift+V" Click="PasteInsertClick" AutomationProperties.AutomationId="PasteInsertMenu"/>
+        <MenuItem x:Name="PasteEventAttributesMenu" Header="Paste E&amp;vent Attributes" Click="PasteEventAttributesClick" AutomationProperties.AutomationId="PasteEventAttributesMenu"/>
+        <MenuItem x:Name="SelectivelyPasteEventAttributesMenu" Header="Selectively Paste Event Attributes..." Click="SelectivelyPasteEventAttributesClick" AutomationProperties.AutomationId="SelectivelyPasteEventAttributesMenu"/>
         <Separator/>
         <MenuItem Header="Split at cursor" InputGestureText="S" Click="SplitClick"/>
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
@@ -146,8 +150,8 @@
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
         <MenuItem x:Name="InsertAdjustmentEventMenu" Header="Adjustment event" Click="InsertAdjustmentEventClick" AutomationProperties.AutomationId="InsertAdjustmentEventMenu"/>
-        <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
-        <MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/>
+        <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+Q" Click="VideoTrackClick"/>
+        <MenuItem Header="Audio track" InputGestureText="Ctrl+Q" Click="AudioTrackClick"/>
         <MenuItem x:Name="InsertAdjustmentTrackMenu" Header="Adjustment track" Click="InsertAdjustmentTrackClick" AutomationProperties.AutomationId="InsertAdjustmentTrackMenu"/>
         <Separator/>
         <MenuItem Header="Audio Envelopes" SubmenuOpened="AudioEnvelopesMenu_SubmenuOpened">

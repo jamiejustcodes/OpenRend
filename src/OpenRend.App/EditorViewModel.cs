@@ -264,6 +264,9 @@ public sealed class EditorViewModel : ObservableObject
     private List<MediaAsset> clipboardMedia = [];
     private Rational clipboardRate = new(30, 1);
     public bool CanPaste => clipboard.Count > 0;
+    public TimelineClip? PrimaryClipboardClip => clipboard.FirstOrDefault()?.Clip;
+    public TrackKind? PrimaryClipboardTrackKind => clipboard.FirstOrDefault()?.Kind;
+    public long ClipboardSpanFrames => clipboard.Count > 0 ? clipboard.Max(c => c.Clip.EndFrame) - clipboard.Min(c => c.Clip.StartFrame) : 0;
     private sealed record CopiedClip(Guid TrackId, string TrackName, TrackKind Kind, TimelineClip Clip);
 
     public EditorViewModel(MediaService media, TimelineRenderService renderer, ExportService exporter)
@@ -610,9 +613,11 @@ public sealed class EditorViewModel : ObservableObject
             throw new InvalidOperationException("Unlock the selected tracks before cutting.");
         Copy(); Delete();
     }
-    public void Paste()
+    public void Paste() => Paste(forceInsertRipple: false, repeatCount: 1, repeatSpacingFrames: null);
+    public void Paste(bool forceInsertRipple = false, int repeatCount = 1, long? repeatSpacingFrames = null)
     {
         if (!CanPaste) return;
+        repeatCount = Math.Clamp(repeatCount, 1, 999);
         var origin = clipboard.Min(c => c.Clip.StartFrame);
         var at = Position; var pasted = new List<TimelineClip>();
         Editor.Execute(p =>
@@ -632,8 +637,6 @@ public sealed class EditorViewModel : ObservableObject
                 assets[source.Id] = existing.Id;
             }
             var destinations = new Dictionary<Guid, TimelineTrack>(); var used = new HashSet<Guid>();
-            var groups = new Dictionary<Guid, Guid>();
-            var copies = new Dictionary<Guid, TimelineClip>();
             foreach (var copied in clipboard)
             {
                 if (!destinations.TryGetValue(copied.TrackId, out var track))
@@ -650,106 +653,135 @@ public sealed class EditorViewModel : ObservableObject
                 }
             }
 
-            var pasteSpan = ConvertFrame(clipboard.Max(c => c.Clip.EndFrame) - origin);
-            if (Ripple && pasteSpan > 0)
+            var singlePasteSpan = ConvertFrame(clipboard.Max(c => c.Clip.EndFrame) - origin);
+            var spacingSpan = repeatSpacingFrames.HasValue ? ConvertFrame(repeatSpacingFrames.Value) : singlePasteSpan;
+            var totalPasteSpan = repeatCount > 1 && repeatSpacingFrames.HasValue
+                ? checked((repeatCount - 1) * spacingSpan + singlePasteSpan)
+                : checked(repeatCount * singlePasteSpan);
+
+            var shouldRipple = (forceInsertRipple || Ripple) && totalPasteSpan > 0;
+            if (shouldRipple)
             {
                 var destinationTrackIds = destinations.Values.Select(d => d.Id).ToHashSet();
-                if (RippleMode == AutoRippleMode.AffectedTracks)
+                var rippleMode = forceInsertRipple && !Ripple ? AutoRippleMode.AffectedTracks : RippleMode;
+                if (rippleMode == AutoRippleMode.AffectedTracks)
                 {
                     foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += pasteSpan;
+                            c.StartFrame += totalPasteSpan;
                 }
-                else if (RippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
                 {
                     foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
                     {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += pasteSpan;
+                            c.StartFrame += totalPasteSpan;
                         if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(at, pasteSpan);
+                            foreach (var env in t.Envelopes) env.ShiftPoints(at, totalPasteSpan);
                     }
                     if (p.AudioBuses != null)
                         foreach (var bus in p.AudioBuses)
                             if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, pasteSpan);
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
-                        m.Frame += pasteSpan;
+                        m.Frame += totalPasteSpan;
                 }
                 else // AllTracksAndMarkers
                 {
                     foreach (var t in p.Tracks)
                     {
                         foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += pasteSpan;
+                            c.StartFrame += totalPasteSpan;
                         if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(at, pasteSpan);
+                            foreach (var env in t.Envelopes) env.ShiftPoints(at, totalPasteSpan);
                     }
                     if (p.AudioBuses != null)
                         foreach (var bus in p.AudioBuses)
                             if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, pasteSpan);
+                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
                     if (p.MasterAudioEnvelopes != null)
-                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(at, pasteSpan);
+                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(at, totalPasteSpan);
                     foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
-                        m.Frame += pasteSpan;
+                        m.Frame += totalPasteSpan;
                 }
             }
 
-            foreach (var copied in clipboard)
+            for (int r = 0; r < repeatCount; r++)
             {
-                var track = destinations[copied.TrackId];
-                var clip = copied.Clip.DeepClone(); clip.Id = Guid.NewGuid(); clip.MediaId = assets[clip.MediaId];
-                var offset = ConvertFrame(clip.StartFrame - origin);
-                clip.DurationFrames = Math.Max(1, checked(ConvertFrame(clip.EndFrame - origin) - offset));
-                clip.StartFrame = checked(at + offset);
-                clip.SourceInFrame = ConvertFrame(copied.Clip.SourceInFrame);
-                var available = p.FrameRate.Frames(clipboardMedia.Single(m => m.Id == copied.Clip.MediaId).DurationSeconds);
-                if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0)
+                var iterationAt = at + (repeatSpacingFrames.HasValue ? r * spacingSpan : r * singlePasteSpan);
+                var groups = new Dictionary<Guid, Guid>();
+                var copies = new Dictionary<Guid, TimelineClip>();
+                foreach (var copied in clipboard)
                 {
-                    clip.DurationFrames = Math.Min(clip.DurationFrames, available);
-                    clip.SourceInFrame = Math.Min(clip.SourceInFrame, available - clip.DurationFrames);
+                    var track = destinations[copied.TrackId];
+                    var clip = copied.Clip.DeepClone(); clip.Id = Guid.NewGuid(); clip.MediaId = assets[clip.MediaId];
+                    var offset = ConvertFrame(clip.StartFrame - origin);
+                    clip.DurationFrames = Math.Max(1, checked(ConvertFrame(clip.EndFrame - origin) - offset));
+                    clip.StartFrame = checked(iterationAt + offset);
+                    clip.SourceInFrame = ConvertFrame(copied.Clip.SourceInFrame);
+                    var available = p.FrameRate.Frames(clipboardMedia.Single(m => m.Id == copied.Clip.MediaId).DurationSeconds);
+                    if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0)
+                    {
+                        clip.DurationFrames = Math.Min(clip.DurationFrames, available);
+                        clip.SourceInFrame = Math.Min(clip.SourceInFrame, available - clip.DurationFrames);
+                    }
+                    clip.FadeOffsetFrames = ConvertFrame(copied.Clip.FadeOffsetFrames);
+                    var envelope = copied.Clip.FadeDurationFrames is { } fadeDuration
+                        ? Math.Max(checked(clip.FadeOffsetFrames + clip.DurationFrames), ConvertFrame(fadeDuration)) : clip.DurationFrames;
+                    clip.FadeDurationFrames = copied.Clip.FadeDurationFrames.HasValue ? envelope : null;
+                    clip.FadeInFrames = Math.Min(envelope, ConvertFrame(copied.Clip.FadeInFrames));
+                    clip.FadeOutFrames = Math.Min(envelope - clip.FadeInFrames, ConvertFrame(copied.Clip.FadeOutFrames));
+                    clip.CropOffsetFrames = ConvertFrame(copied.Clip.CropOffsetFrames);
+                    if (clip.Crop is { } crop)
+                    {
+                        // A lower destination rate can collapse several keys onto one frame.
+                        crop.Keyframes = crop.Keyframes.Select(key => new CropKeyframe { Frame = ConvertFrame(key.Frame), State = key.State, Interpolation = key.Interpolation, Smoothness = key.Smoothness })
+                            .GroupBy(key => key.Frame).Select(group => group.Last()).OrderBy(key => key.Frame).ToList();
+                    }
+                    if (clip.GroupId is { } group)
+                    {
+                        if (!groups.TryGetValue(group, out var replacement)) groups[group] = replacement = Guid.NewGuid();
+                        clip.GroupId = replacement;
+                    }
+                    track.Clips.Add(clip); pasted.Add(clip);
+                    copies.Add(copied.Clip.Id, clip);
                 }
-                clip.FadeOffsetFrames = ConvertFrame(copied.Clip.FadeOffsetFrames);
-                var envelope = copied.Clip.FadeDurationFrames is { } fadeDuration
-                    ? Math.Max(checked(clip.FadeOffsetFrames + clip.DurationFrames), ConvertFrame(fadeDuration)) : clip.DurationFrames;
-                clip.FadeDurationFrames = copied.Clip.FadeDurationFrames.HasValue ? envelope : null;
-                clip.FadeInFrames = Math.Min(envelope, ConvertFrame(copied.Clip.FadeInFrames));
-                clip.FadeOutFrames = Math.Min(envelope - clip.FadeInFrames, ConvertFrame(copied.Clip.FadeOutFrames));
-                clip.CropOffsetFrames = ConvertFrame(copied.Clip.CropOffsetFrames);
-                if (clip.Crop is { } crop)
+                foreach (var incoming in clipboard.Where(item => item.Clip.FadeInTransition is not null &&
+                    item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null))
                 {
-                    // A lower destination rate can collapse several keys onto one frame.
-                    crop.Keyframes = crop.Keyframes.Select(key => new CropKeyframe { Frame = ConvertFrame(key.Frame), State = key.State, Interpolation = key.Interpolation, Smoothness = key.Smoothness })
-                        .GroupBy(key => key.Frame).Select(group => group.Last()).OrderBy(key => key.Frame).ToList();
+                    var source = incoming.Clip;
+                    var outgoing = clipboard.Where(item => item.TrackId == incoming.TrackId && item.Clip.Id != source.Id &&
+                        item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null &&
+                        item.Clip.StartFrame < source.StartFrame && item.Clip.EndFrame > source.StartFrame &&
+                        item.Clip.EndFrame <= source.EndFrame && item.Clip.FadeOutFrames == source.FadeInFrames &&
+                        item.Clip.EndFrame - source.StartFrame == source.FadeInFrames)
+                        .OrderByDescending(item => item.Clip.StartFrame).FirstOrDefault();
+                    if (outgoing is null) continue;
+                    var pastedOutgoing = copies[outgoing.Clip.Id];
+                    var pastedIncoming = copies[source.Id];
+                    // Rounding a duration alone can lose an overlap whose converted endpoints still differ.
+                    var overlap = Math.Max(0, pastedOutgoing.EndFrame - pastedIncoming.StartFrame);
+                    pastedOutgoing.FadeOutFrames = pastedIncoming.FadeInFrames = overlap;
                 }
-                if (clip.GroupId is { } group)
-                {
-                    if (!groups.TryGetValue(group, out var replacement)) groups[group] = replacement = Guid.NewGuid();
-                    clip.GroupId = replacement;
-                }
-                track.Clips.Add(clip); pasted.Add(clip);
-                copies.Add(copied.Clip.Id, clip);
-            }
-            foreach (var incoming in clipboard.Where(item => item.Clip.FadeInTransition is not null &&
-                item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null))
-            {
-                var source = incoming.Clip;
-                var outgoing = clipboard.Where(item => item.TrackId == incoming.TrackId && item.Clip.Id != source.Id &&
-                    item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null &&
-                    item.Clip.StartFrame < source.StartFrame && item.Clip.EndFrame > source.StartFrame &&
-                    item.Clip.EndFrame <= source.EndFrame && item.Clip.FadeOutFrames == source.FadeInFrames &&
-                    item.Clip.EndFrame - source.StartFrame == source.FadeInFrames)
-                    .OrderByDescending(item => item.Clip.StartFrame).FirstOrDefault();
-                if (outgoing is null) continue;
-                var pastedOutgoing = copies[outgoing.Clip.Id];
-                var pastedIncoming = copies[source.Id];
-                // Rounding a duration alone can lose an overlap whose converted endpoints still differ.
-                var overlap = Math.Max(0, pastedOutgoing.EndFrame - pastedIncoming.StartFrame);
-                pastedOutgoing.FadeOutFrames = pastedIncoming.FadeInFrames = overlap;
             }
         });
         Selection.Clear(); Selection.UnionWith(pasted.Select(c => c.Id));
-        Position = pasted.Max(c => c.EndFrame); Changed?.Invoke(); Status = $"Pasted {pasted.Count} clips.";
+        Position = pasted.Max(c => c.EndFrame); Changed?.Invoke();
+        Status = repeatCount > 1
+            ? $"Pasted {repeatCount} copies ({pasted.Count} clips)."
+            : (forceInsertRipple ? "Pasted insert at cursor." : $"Pasted {pasted.Count} clips.");
+    }
+    public void PasteInsert() => Paste(forceInsertRipple: true);
+    public void PasteRepeat(int repeatCount, long? repeatSpacingFrames = null) => Paste(repeatCount: repeatCount, repeatSpacingFrames: repeatSpacingFrames);
+    public int PasteEventAttributes(IEnumerable<Guid> targetClipIds, PasteEventAttributesOptions? options = null)
+    {
+        if (PrimaryClipboardClip == null) return 0;
+        var count = Editor.PasteEventAttributes(PrimaryClipboardClip, targetClipIds, options);
+        if (count > 0)
+        {
+            Changed?.Invoke();
+            Status = $"Pasted attributes into {count} event(s).";
+        }
+        return count;
     }
 }

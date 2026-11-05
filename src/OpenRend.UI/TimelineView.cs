@@ -93,6 +93,10 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<int>? InsertAudioTrackRequested;
     public event Action<int>? InsertAdjustmentTrackRequested;
     public event Action<Guid>? ResizeAdjustmentEventRequested;
+    public event Action? CutRequested;
+    public event Action? CopyRequested;
+    public event Action? PasteEventAttributesRequested;
+    public event Action? SelectivelyPasteEventAttributesRequested;
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;

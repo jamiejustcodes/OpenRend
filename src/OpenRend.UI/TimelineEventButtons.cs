@@ -558,6 +558,15 @@ public sealed partial class TimelineView
         groupMenu.Items.Add(selectAllInGroup);
         menu.Items.Add(groupMenu);
         menu.Items.Add(new Separator());
+        var cutItem = Add("Cut", () => CutRequested?.Invoke());
+        cutItem.InputGestureText = "Ctrl+X";
+        var copyItem = Add("Copy", () => CopyRequested?.Invoke());
+        copyItem.InputGestureText = "Ctrl+C";
+        var pasteAttrItem = Add("Paste Event Attributes", () => PasteEventAttributesRequested?.Invoke());
+        AutomationProperties.SetAutomationId(pasteAttrItem, "EventPasteAttributesMenu");
+        var selPasteAttrItem = Add("Selectively Paste Event Attributes…", () => SelectivelyPasteEventAttributesRequested?.Invoke());
+        AutomationProperties.SetAutomationId(selPasteAttrItem, "EventSelectivelyPasteAttributesMenu");
+        menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
         menu.Items.Add(new Separator());
@@ -572,6 +581,10 @@ public sealed partial class TimelineView
             var targetClips = selected.Where(item => clipId is null || item.Clip.Id == clipId).ToArray();
             var singleTarget = targetClips.Length == 1 ? targetClips[0] : (Track: (TimelineTrack?)null, Clip: (TimelineClip?)null);
             var isLocked = singleTarget.Clip?.IsLocked ?? false;
+            cutItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
+            copyItem.IsEnabled = IsEnabled && selected.Length > 0;
+            pasteAttrItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
+            selPasteAttrItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
             var video = selected.Where(item => item.Track.Kind == TrackKind.Video && (clipId is null || item.Clip.Id == clipId)).ToArray();
             crop.IsEnabled = fx.IsEnabled = grading.IsEnabled = tracking.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
