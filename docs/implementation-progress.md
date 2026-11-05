@@ -194,6 +194,20 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement smart split (Alt+S) and freeze frame at cursor suite` implemented the complete Smart Split and Freeze Frame at Cursor timeline editing suite:
+  - Smart Split (`Edit > Smart Split` / `Alt+S`, Event Context Menu):
+    - Cuts out marked time selection across selected events or active tracks, shifts downstream events leftward to close the gap, and applies configurable transition crossfade overlap (default 5 frames, smooth fade curves on video, linear on audio).
+    - Synchronously splits and dissolves grouped companion audio/video clips, preserving lock-step synchronization under shared `GroupId`.
+    - Ripples downstream timeline markers, regions, and track automation envelopes.
+  - Freeze Frame at Cursor (`Edit > Freeze Frame at Cursor`, `Insert > Video Envelopes > Freeze Frame at Cursor`, Event Context Menu):
+    - Inserts a velocity envelope point with 0% speed (`EnvelopeCurveType.Hold`) at the playhead position within video clips, holding the exact frame indefinitely for the remaining duration.
+    - Evaluates via piecewise analytical curve integration across Direct3D 11 preview and master export pipelines.
+    - Full atomic undo/redo support.
+  - Verification:
+    - 9 comprehensive unit tests added in `SmartSplitAndFreezeFrameTests.cs`.
+    - 100% native integration tests passed (1/1 in 2.21 sec).
+    - 1,108 managed tests passed cleanly across all test suites (0 failed, 0 warnings, 0 errors).
+
 - 2026-11-05: `feat: implement vegas pro 1:1 event heal, close gaps, and add missing stream suite` implemented 1:1 Vegas Pro Event Heal, Close Gaps, and Missing Stream tools matching `vegas2027.exe` command strings and IDs (`Edit > Event Heal` ID 44709, `Edit > Close Gaps` ID 44713, `Insert > Add Missing Stream for Selected Event` ID 44712, and Event context menu items):
   - Timeline Operations & Undo/Redo (`TimelineEditor.HealAndGaps.cs`):
     - `CanHeal`: checks timeline touching contiguity, source media asset ID, source frame advancement (with playback rate and velocity envelopes), and locked status.

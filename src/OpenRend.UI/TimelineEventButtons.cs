@@ -524,7 +524,10 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(velocityItem, "EnvelopeVelocity");
         var compositeItem = new MenuItem { Header = "Composite Level", IsCheckable = true };
         AutomationProperties.SetAutomationId(compositeItem, "EnvelopeComposite");
+        var freezeFrameEnvItem = new MenuItem { Header = "Freeze Frame at Cursor" };
+        AutomationProperties.SetAutomationId(freezeFrameEnvItem, "EnvelopeFreezeFrameAtCursor");
         envelopeMenu.Items.Add(velocityItem);
+        envelopeMenu.Items.Add(freezeFrameEnvItem);
         envelopeMenu.Items.Add(compositeItem);
         menu.Items.Add(envelopeMenu);
 
@@ -534,6 +537,13 @@ public sealed partial class TimelineView
                 .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
             if (IsEnabled && events.Length == 1)
                 ToggleEnvelopeRequested?.Invoke(events[0].Id, EnvelopeType.Velocity);
+        };
+        freezeFrameEnvItem.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+                FreezeFrameAtCursorRequested?.Invoke(events[0].Id);
         };
         compositeItem.Click += (_, _) =>
         {
@@ -568,12 +578,17 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(selPasteAttrItem, "EventSelectivelyPasteAttributesMenu");
         menu.Items.Add(new Separator());
         var split = Add("Split at cursor", () => SplitRequested?.Invoke());
+        var smartSplitItem = Add("Smart Split", () => SmartSplitRequested?.Invoke());
+        smartSplitItem.InputGestureText = "Alt+S";
+        AutomationProperties.SetAutomationId(smartSplitItem, "EventSmartSplitMenu");
         var healItem = Add("Event Heal", () => EventHealRequested?.Invoke());
         AutomationProperties.SetAutomationId(healItem, "EventHealMenu");
         var closeGapsItem = Add("Close Gaps", () => CloseGapsRequested?.Invoke());
         AutomationProperties.SetAutomationId(closeGapsItem, "CloseGapsMenu");
         var missingStreamItem = Add("Add Missing Stream for Selected Event", () => AddMissingStreamRequested?.Invoke());
         AutomationProperties.SetAutomationId(missingStreamItem, "AddMissingStreamMenu");
+        var freezeFrameItem = Add("Freeze Frame at Cursor", () => FreezeFrameAtCursorRequested?.Invoke(clipId));
+        AutomationProperties.SetAutomationId(freezeFrameItem, "EventFreezeFrameAtCursorMenu");
         var delete = Add("Delete selection", () => DeleteRequested?.Invoke());
         menu.Items.Add(new Separator());
         var headers = Add("Show event headers", () => { ShowEventHeaders = !ShowEventHeaders; InvalidateVisual(); });
@@ -591,10 +606,14 @@ public sealed partial class TimelineView
             copyItem.IsEnabled = IsEnabled && selected.Length > 0;
             pasteAttrItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
             selPasteAttrItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
+            smartSplitItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
             healItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.All(s => !s.Track.IsLocked && !s.Clip.IsLocked);
             closeGapsItem.IsEnabled = IsEnabled;
             missingStreamItem.IsEnabled = IsEnabled && selected.Length > 0 && selected.Any(s => !s.Track.IsLocked && !s.Clip.IsLocked && !s.Clip.IsAdjustmentEvent);
             var video = selected.Where(item => item.Track.Kind == TrackKind.Video && (clipId is null || item.Clip.Id == clipId)).ToArray();
+            freezeFrameItem.Visibility = video.Length == 1 ? Visibility.Visible : Visibility.Collapsed;
+            freezeFrameItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            freezeFrameEnvItem.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             crop.IsEnabled = fx.IsEnabled = grading.IsEnabled = tracking.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;

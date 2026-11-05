@@ -490,6 +490,44 @@ public sealed class EditorViewModel : ObservableObject
         Editor.SplitSelection(Selection, Position, IgnoreGroups);
         Status = "Split selection at cursor.";
     }
+    public void SmartSplit(long? startFrame = null, long? durationFrames = null, int? overlapFrames = null, AutoRippleMode? rippleMode = null)
+    {
+        var start = startFrame ?? LoopRegion?.StartFrame ?? 0;
+        var duration = durationFrames ?? LoopRegion?.FrameCount ?? 0;
+        if (duration <= 0)
+        {
+            Status = "Smart Split requires a time selection across the event(s).";
+            return;
+        }
+
+        var overlap = overlapFrames ?? 5;
+        var mode = rippleMode ?? RippleMode;
+        var resulting = Editor.SmartSplit(start, duration, overlap, Selection.Count > 0 ? Selection : null, IgnoreGroups, mode);
+        if (resulting.Count > 0)
+        {
+            Selection.Clear();
+            foreach (var clip in resulting) Selection.Add(clip.Id);
+            Status = $"Smart split removed {duration} frames with smooth transition.";
+        }
+        else
+        {
+            Status = "No events under time selection to smart split.";
+        }
+    }
+    public void FreezeFrameAtCursor(Guid? clipId = null, long? cursorFrame = null)
+    {
+        var cursor = cursorFrame ?? Position;
+        var targetId = clipId ?? (Selection.Count == 1 ? Selection.First() : null);
+        var success = Editor.FreezeFrameAtCursor(targetId, cursor);
+        if (success)
+        {
+            Status = $"Freeze frame inserted at frame {cursor} ({TimecodeFormatter.Format(cursor, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)}).";
+        }
+        else
+        {
+            Status = "Select a video event and place the cursor inside it to freeze frame.";
+        }
+    }
     public void HealEvents()
     {
         var healed = Editor.HealEvents(Selection, IgnoreGroups);

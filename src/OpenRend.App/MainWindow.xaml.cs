@@ -451,6 +451,14 @@ public partial class MainWindow : Window
         Timeline.CopyRequested += () => CopyClick(this, new RoutedEventArgs());
         Timeline.PasteEventAttributesRequested += () => PasteEventAttributesClick(this, new RoutedEventArgs());
         Timeline.SelectivelyPasteEventAttributesRequested += () => SelectivelyPasteEventAttributesClick(this, new RoutedEventArgs());
+        Timeline.SmartSplitRequested += () => SmartSplitClick(this, new RoutedEventArgs());
+        Timeline.FreezeFrameAtCursorRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.FreezeFrameAtCursor(id);
+            RequestPreview();
+            Timeline.InvalidateVisual();
+        });
         Timeline.EventHealRequested += () => EventHealClick(this, new RoutedEventArgs());
         Timeline.CloseGapsRequested += () => CloseGapsClick(this, new RoutedEventArgs());
         Timeline.AddMissingStreamRequested += () => AddMissingStreamClick(this, new RoutedEventArgs());
@@ -1614,6 +1622,20 @@ public partial class MainWindow : Window
     private void UndoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Undo(); });
     private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
     private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
+    private void SmartSplitClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.SmartSplit();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
+    private void FreezeFrameAtCursorClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.FreezeFrameAtCursor();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
     private void EventHealClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -3004,6 +3026,7 @@ public partial class MainWindow : Window
 
         var targetClips = GetTargetVideoClipsForEnvelopes();
         VideoEventVelocityEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Velocity));
+        VideoEventFreezeFrameEnvelopeMenu.IsEnabled = targetClips.Count > 0 && targetClips.Any(c => vm.Position >= c.StartFrame && vm.Position < c.EndFrame);
         VideoEventCompositeEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Composite));
     }
 
@@ -3199,6 +3222,7 @@ public partial class MainWindow : Window
             Key.NumPad8 when ctrl && alt => () => ActivateLayoutSlot(8),
             Key.D9 when ctrl && alt => () => ActivateLayoutSlot(9),
             Key.NumPad9 when ctrl && alt => () => ActivateLayoutSlot(9),
+            Key.S when alt && !ctrl && !shift => () => SmartSplitClick(this, e),
             Key.S when ctrl => () => { if (shift) SaveAsClick(this, e); else SaveClick(this, e); }
             ,
             Key.N when ctrl && shift => () => NewEmptyClick(this, e),

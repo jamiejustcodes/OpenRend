@@ -97,6 +97,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? CopyRequested;
     public event Action? PasteEventAttributesRequested;
     public event Action? SelectivelyPasteEventAttributesRequested;
+    public event Action? SmartSplitRequested;
+    public event Action<Guid?>? FreezeFrameAtCursorRequested;
     public event Action? EventHealRequested;
     public event Action? CloseGapsRequested;
     public event Action? AddMissingStreamRequested;

@@ -50,6 +50,8 @@
         <MenuItem x:Name="SelectivelyPasteEventAttributesMenu" Header="Selectively Paste Event Attributes..." Click="SelectivelyPasteEventAttributesClick" AutomationProperties.AutomationId="SelectivelyPasteEventAttributesMenu"/>
         <Separator/>
         <MenuItem Header="Split at cursor" InputGestureText="S" Click="SplitClick"/>
+        <MenuItem x:Name="SmartSplitMenu" Header="Smart Spl&amp;it" InputGestureText="Alt+S" Click="SmartSplitClick" AutomationProperties.AutomationId="SmartSplitMenu"/>
+        <MenuItem x:Name="FreezeFrameAtCursorMenu" Header="Freeze Frame at Cursor" Click="FreezeFrameAtCursorClick" AutomationProperties.AutomationId="FreezeFrameAtCursorMenu"/>
         <MenuItem x:Name="EventHealMenu" Header="Event Heal" Click="EventHealClick" AutomationProperties.AutomationId="EventHealMenu"/>
         <MenuItem x:Name="CloseGapsMenu" Header="Close Gaps" Click="CloseGapsClick" AutomationProperties.AutomationId="CloseGapsMenu"/>
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
@@ -168,6 +170,7 @@
           <MenuItem x:Name="VideoMuteEnvelopeMenu" Header="Mute" Click="ToggleTrackMuteEnvelopeClick"/>
           <Separator/>
           <MenuItem x:Name="VideoEventVelocityEnvelopeMenu" Header="Event Velocity" Click="ToggleEventVelocityEnvelopeClick" AutomationProperties.AutomationId="VideoEventVelocityEnvelopeMenu"/>
+          <MenuItem x:Name="VideoEventFreezeFrameEnvelopeMenu" Header="Freeze Frame at Cursor" Click="FreezeFrameAtCursorClick" AutomationProperties.AutomationId="VideoEventFreezeFrameEnvelopeMenu"/>
           <MenuItem x:Name="VideoEventCompositeEnvelopeMenu" Header="Event Composite Level" Click="ToggleEventCompositeEnvelopeClick" AutomationProperties.AutomationId="VideoEventCompositeEnvelopeMenu"/>
         </MenuItem>
       </MenuItem>
