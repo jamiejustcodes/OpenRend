@@ -10,11 +10,11 @@ public sealed class WorkspaceLayout
 {
     public string Name { get; set; } = string.Empty;
 
-    public double WorkspaceHeight { get; set; } = 340;
+    public double WorkspaceHeight { get; set; } = 520;
 
-    public double MediaWidth { get; set; } = 420;
+    public double MediaWidth { get; set; } = 360;
 
-    public double PreviewWidth { get; set; } = 880;
+    public double PreviewWidth { get; set; } = 980;
 
     /// <summary>
     /// Active tab in the tools deck: 0=Explorer, 1=Project Media, 2=Media Generator,

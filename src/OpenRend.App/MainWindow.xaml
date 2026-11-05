@@ -5,9 +5,9 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="32"/>
       <RowDefinition Height="34"/>
-      <RowDefinition x:Name="WorkspaceHeight" Height="0.85*" MinHeight="180"/>
+      <RowDefinition x:Name="WorkspaceHeight" Height="1.35*" MinHeight="280"/>
       <RowDefinition Height="5"/>
-      <RowDefinition x:Name="TimelineRowHeight" Height="1.25*" MinHeight="140"/>
+      <RowDefinition x:Name="TimelineRowHeight" Height="0.85*" MinHeight="140"/>
       <RowDefinition Height="34"/>
       <RowDefinition Height="20"/>
     </Grid.RowDefinitions>
@@ -235,9 +235,9 @@
     </Border>
     <Grid Grid.Row="2" x:Name="Workspace" Margin="4,0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="MediaWidth" Width="0.9*" MinWidth="260" MaxWidth="750"/>
+        <ColumnDefinition x:Name="MediaWidth" Width="0.65*" MinWidth="220" MaxWidth="600"/>
         <ColumnDefinition Width="5"/>
-        <ColumnDefinition x:Name="PreviewWidth" Width="1.5*" MinWidth="340"/>
+        <ColumnDefinition x:Name="PreviewWidth" Width="1.85*" MinWidth="480"/>
         <ColumnDefinition Width="5"/>
         <ColumnDefinition x:Name="MasterBusWidth" Width="80" MinWidth="65" MaxWidth="110"/>
       </Grid.ColumnDefinitions>

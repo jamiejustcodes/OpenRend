@@ -139,6 +139,45 @@ public partial class MainWindow : Window
             vm.Editor.SetTrackAutomationMode(id, mode);
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.FilesDropped += async (files, track, frame) =>
+        {
+            Pause();
+            await GuardAsync(async () =>
+            {
+                var beforeIds = vm.Project.Media.Select(m => m.Id).ToHashSet();
+                await ImportPathsAsync(files);
+                var newMedia = vm.Project.Media.Where(m => !beforeIds.Contains(m.Id)).ToList();
+                var insertFrame = frame;
+                foreach (var media in newMedia)
+                {
+                    vm.Place(media.Id, track, insertFrame, advanceCursor: false);
+                    insertFrame += Math.Max(1, vm.Project.FrameRate.Frames(media.DurationSeconds));
+                }
+                Refresh();
+            });
+        };
+        Timeline.ClipMoveHover += (clipId, newStart) =>
+        {
+            vm.Position = newStart;
+            UpdatePosition();
+            if (cachedPreviewProject is not null)
+            {
+                for (var tIdx = 0; tIdx < cachedPreviewProject.Tracks.Count; tIdx++)
+                {
+                    var track = cachedPreviewProject.Tracks[tIdx];
+                    for (var cIdx = 0; cIdx < track.Clips.Count; cIdx++)
+                    {
+                        var c = track.Clips[cIdx];
+                        if (c.Id == clipId)
+                        {
+                            c.StartFrame = newStart;
+                            break;
+                        }
+                    }
+                }
+            }
+            RequestPreview();
+        };
         Timeline.TransitionDropped += gesture => Guard(() =>
         {
             gesture.Transition.Validate();
@@ -1298,7 +1337,7 @@ public partial class MainWindow : Window
             }
             vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
-        RequestPreview();
+        Refresh();
     }
     private TimelineClip? SelectedClip => vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
     private void UpdateInspector()
@@ -2875,7 +2914,7 @@ public partial class MainWindow : Window
         if (ActualHeight > 0)
         {
             var totalNonWorkspaceHeight = 32 + 34 + 5 + 140 + 34 + 20; // 265px
-            var maxWorkspaceHeight = Math.Max(180, ActualHeight - totalNonWorkspaceHeight);
+            var maxWorkspaceHeight = Math.Max(280, ActualHeight - totalNonWorkspaceHeight);
             if (WorkspaceHeight.Height.IsAbsolute && WorkspaceHeight.Height.Value > maxWorkspaceHeight)
             {
                 WorkspaceHeight.Height = new GridLength(maxWorkspaceHeight);
@@ -2884,8 +2923,8 @@ public partial class MainWindow : Window
 
         if (ActualWidth > 0)
         {
-            var totalNonPreviewWidth = 240 + 10 + 80 + 16; // 346px
-            var maxPreviewWidth = Math.Max(280, ActualWidth - totalNonPreviewWidth);
+            var totalNonPreviewWidth = 220 + 10 + 80 + 16; // 326px
+            var maxPreviewWidth = Math.Max(480, ActualWidth - totalNonPreviewWidth);
             if (PreviewWidth.Width.IsAbsolute && PreviewWidth.Width.Value > maxPreviewWidth)
             {
                 PreviewWidth.Width = new GridLength(maxPreviewWidth);
@@ -2900,7 +2939,7 @@ public partial class MainWindow : Window
         var w = RestoreBounds.Width > 0 ? RestoreBounds.Width : (Width > 0 ? Width : 1400);
         var h = RestoreBounds.Height > 0 ? RestoreBounds.Height : (Height > 0 ? Height : 900);
         File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(
-            3,
+            4,
             w,
             h,
             PreviewWidth.ActualWidth,
@@ -2915,7 +2954,7 @@ public partial class MainWindow : Window
             if (!File.Exists(WorkspacePath)) return;
             var settings = System.Text.Json.JsonSerializer.Deserialize<WorkspaceSettings>(File.ReadAllText(WorkspacePath));
             if (settings is null) return;
-            if (settings.LayoutVersion != 3) return;
+            if (settings.LayoutVersion != 4) return;
             Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width);
             Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
             WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
@@ -2924,26 +2963,26 @@ public partial class MainWindow : Window
             var effWidth = ActualWidth > 0 ? ActualWidth : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Width : Width);
             var effHeight = ActualHeight > 0 ? ActualHeight : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Height : Height);
 
-            var maxAllowedPreview = Math.Max(280, effWidth - 346);
-            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.75)
+            var maxAllowedPreview = Math.Max(480, effWidth - 326);
+            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.85)
             {
-                PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 280, maxAllowedPreview));
+                PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 480, maxAllowedPreview));
             }
             else
             {
-                PreviewWidth.Width = new GridLength(1.5, GridUnitType.Star);
-                MediaWidth.Width = new GridLength(0.9, GridUnitType.Star);
+                PreviewWidth.Width = new GridLength(1.85, GridUnitType.Star);
+                MediaWidth.Width = new GridLength(0.65, GridUnitType.Star);
             }
 
-            var maxAllowedWorkspace = Math.Max(180, effHeight - 265);
-            if (settings.WorkspaceHeight > 0 && settings.WorkspaceHeight < effHeight * 0.65)
+            var maxAllowedWorkspace = Math.Max(280, effHeight - 265);
+            if (settings.WorkspaceHeight > 0 && settings.WorkspaceHeight < effHeight * 0.75)
             {
-                WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 180, maxAllowedWorkspace));
+                WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 280, maxAllowedWorkspace));
             }
             else
             {
-                WorkspaceHeight.Height = new GridLength(0.85, GridUnitType.Star);
-                TimelineRowHeight.Height = new GridLength(1.25, GridUnitType.Star);
+                WorkspaceHeight.Height = new GridLength(1.35, GridUnitType.Star);
+                TimelineRowHeight.Height = new GridLength(0.85, GridUnitType.Star);
             }
 
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);

@@ -25,9 +25,9 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Default Layout",
-            WorkspaceHeight = 340,
-            MediaWidth = 420,
-            PreviewWidth = 880,
+            WorkspaceHeight = 520,
+            MediaWidth = 360,
+            PreviewWidth = 980,
             ToolsTabIndex = 1, // Project Media
             PreviewDeckTabIndex = 0, // Video Preview
             TimelineOnTop = false,
@@ -53,9 +53,9 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Color Correction",
-            WorkspaceHeight = 420,
-            MediaWidth = 440,
-            PreviewWidth = 900,
+            WorkspaceHeight = 540,
+            MediaWidth = 380,
+            PreviewWidth = 1020,
             ToolsTabIndex = 5, // Color Grading tab
             PreviewDeckTabIndex = 0,
             TimelineOnTop = false,
@@ -67,9 +67,9 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Source Window Layout",
-            WorkspaceHeight = 340,
-            MediaWidth = 420,
-            PreviewWidth = 880,
+            WorkspaceHeight = 520,
+            MediaWidth = 360,
+            PreviewWidth = 980,
             ToolsTabIndex = 0, // Explorer
             PreviewDeckTabIndex = 1, // Trimmer deck
             TimelineOnTop = false,
@@ -81,9 +81,9 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Timeline Top Layout",
-            WorkspaceHeight = 340,
-            MediaWidth = 420,
-            PreviewWidth = 880,
+            WorkspaceHeight = 520,
+            MediaWidth = 360,
+            PreviewWidth = 980,
             ToolsTabIndex = 1,
             PreviewDeckTabIndex = 0,
             TimelineOnTop = true,

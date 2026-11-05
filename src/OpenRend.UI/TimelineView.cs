@@ -73,7 +73,9 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, string>? TrackAction;
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
+    public event Action<string[], Guid?, long>? FilesDropped;
     public event Action<TransitionGesture>? TransitionDropped;
+    public event Action<Guid, long>? ClipMoveHover;
     public event Action<Guid, Guid>? OverlapToCutRequested;
     public event Action? DeleteRequested;
     public event Action? SplitRequested;
@@ -180,6 +182,14 @@ public sealed partial class TimelineView : FrameworkElement
     private int destinationNewTrackIndex;
     private TrackKind destinationNewTrackKind;
     private long? snappedFrame;
+    private long? lastReportedMoveStart;
+    private bool hoverFileDropActive;
+    private Point hoverFileDropPoint;
+    private TimelineTrack? hoverFileDropTrack;
+    private long hoverFileDropFrame;
+    private string hoverFileDropName = string.Empty;
+    private bool hoverFileDropIsNewTrack;
+    private TrackKind hoverFileDropNewTrackKind = TrackKind.Video;
     private HashSet<Guid>? movingClipIds;
     private bool isDragging;
     private bool alreadySelectedOnDown;
@@ -209,6 +219,7 @@ public sealed partial class TimelineView : FrameworkElement
         isDragging = false; alreadySelectedOnDown = false;
         dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
         destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
+        lastReportedMoveStart = null; hoverFileDropActive = false;
         isMarqueeSelecting = false; marqueeRect = Rect.Empty;
         isZooming = false; zoomRect = Rect.Empty;
         CancelTrackLevelInput();
@@ -227,26 +238,98 @@ public sealed partial class TimelineView : FrameworkElement
         AllowDrop = true;
         AutomationProperties.SetName(this, "Timeline");
         AutomationProperties.SetHelpText(this, "Up and Down choose a track. Left and Right select clips. Shift extends the selection. I and O set loop in and out points. M mutes, Shift+M solos, L locks, and V changes video visibility. S splits at the cursor; Delete removes selected clips.");
+        DragEnter += (_, e) => HandleDragHover(e);
+        DragOver += (_, e) => HandleDragHover(e);
+        DragLeave += (_, _) =>
+        {
+            if (hoverFileDropActive)
+            {
+                hoverFileDropActive = false;
+                InvalidateVisual();
+            }
+        };
         Drop += (_, e) =>
         {
+            if (hoverFileDropActive)
+            {
+                hoverFileDropActive = false;
+                InvalidateVisual();
+            }
             if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
             {
                 if (TransitionAt(e.GetPosition(this), transition) is { } target) TransitionDropped?.Invoke(target);
                 e.Handled = true;
                 return;
             }
-            if (e.Data.GetData("OpenRend.Media") is not Guid media) return;
             var p = e.GetPosition(this);
             var track = TrackAt(p.Y);
-            if (track is not null) { MediaDropped?.Invoke(media, track.Id, FrameAt(p.X)); e.Handled = true; }
-        };
-        DragOver += (_, e) =>
-        {
-            if (e.Data.GetData(TransitionDataFormat) is not VideoTransition transition) return;
-            e.Effects = TransitionAt(e.GetPosition(this), transition) is null ? DragDropEffects.None : DragDropEffects.Copy;
-            e.Handled = true;
+            var frame = Math.Max(0, FrameAt(p.X));
+            if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+            {
+                FilesDropped?.Invoke(files, track?.Id, frame);
+                e.Handled = true;
+                return;
+            }
+            if (e.Data.GetData("OpenRend.Media") is Guid media)
+            {
+                if (track is not null) { MediaDropped?.Invoke(media, track.Id, frame); e.Handled = true; }
+            }
         };
         ContextMenu = CreateEventMenu();
+    }
+
+    private void HandleDragHover(DragEventArgs e)
+    {
+        if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
+        {
+            e.Effects = TransitionAt(e.GetPosition(this), transition) is null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
+            return;
+        }
+
+        var p = e.GetPosition(this);
+        if (p.X < HeaderWidth)
+        {
+            if (hoverFileDropActive) { hoverFileDropActive = false; InvalidateVisual(); }
+            e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+            hoverFileDropActive = true;
+            hoverFileDropPoint = p;
+            hoverFileDropFrame = Math.Max(0, FrameAt(p.X));
+            hoverFileDropTrack = TrackAt(p.Y);
+            var firstFile = files[0];
+            hoverFileDropName = System.IO.Path.GetFileName(firstFile);
+            var ext = System.IO.Path.GetExtension(firstFile).ToLowerInvariant();
+            var isAudioOnly = ext is ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".m4a" or ".wma";
+            hoverFileDropNewTrackKind = isAudioOnly ? TrackKind.Audio : TrackKind.Video;
+            hoverFileDropIsNewTrack = hoverFileDropTrack is null;
+            InvalidateVisual();
+            return;
+        }
+
+        if (e.Data.GetDataPresent("OpenRend.Media") && e.Data.GetData("OpenRend.Media") is Guid mediaId)
+        {
+            e.Effects = DragDropEffects.Copy;
+            e.Handled = true;
+            hoverFileDropActive = true;
+            hoverFileDropPoint = p;
+            hoverFileDropFrame = Math.Max(0, FrameAt(p.X));
+            hoverFileDropTrack = TrackAt(p.Y);
+            var asset = Project.Media.FirstOrDefault(m => m.Id == mediaId);
+            hoverFileDropName = asset?.Name ?? "Media";
+            hoverFileDropNewTrackKind = asset?.HasVideo == true ? TrackKind.Video : TrackKind.Audio;
+            hoverFileDropIsNewTrack = hoverFileDropTrack is null;
+            InvalidateVisual();
+            return;
+        }
+
+        if (hoverFileDropActive) { hoverFileDropActive = false; InvalidateVisual(); }
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
@@ -874,6 +957,35 @@ public sealed partial class TimelineView : FrameworkElement
             }
             DrawTrackEnvelopes(dc, track, new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
         }
+
+        if (hoverFileDropActive)
+        {
+            var ghostFrame = hoverFileDropFrame;
+            var ghostX = HeaderWidth + (ghostFrame - Offset) * PixelsPerSecond / Project.FrameRate.Value;
+            var ghostWidth = Math.Max(90.0, 5.0 * PixelsPerSecond);
+            double ghostY;
+            if (hoverFileDropTrack != null)
+            {
+                var tIdx = Project.Tracks.IndexOf(hoverFileDropTrack);
+                ghostY = RulerHeight + tIdx * TrackHeight - VerticalOffset;
+            }
+            else
+            {
+                var pSlot = Project.Tracks.Count;
+                ghostY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
+                var phantomTrackRect = new Rect(HeaderWidth, ghostY + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2);
+                dc.DrawRectangle(Brush(hoverFileDropNewTrackKind == TrackKind.Video ? "#152433" : "#132E2B"),
+                    FrozenDashedPen("#00D2FF", 1.5, [4, 4]), phantomTrackRect);
+                Text(dc, $"[Drop to place on new {hoverFileDropNewTrackKind.ToString().ToLowerInvariant()} track]",
+                    HeaderWidth + 20, ghostY + TrackHeight / 2 - 6, Brush("#4D7790"), 11);
+            }
+
+            var ghostRect = new Rect(ghostX, ghostY + 2, ghostWidth, TrackHeight - 4);
+            dc.DrawRoundedRectangle(Brush("#400078D4"), FrozenPen("#0078D4", 1.5), ghostRect, 2, 2);
+            var ghostBanner = new Rect(ghostX, ghostY + 2, ghostWidth, 18);
+            dc.DrawRoundedRectangle(Brush("#800078D4"), null, ghostBanner, 2, 2);
+            Text(dc, $"{hoverFileDropName} ({FormatTimecode(ghostFrame, Project.FrameRate)})", ghostX + 6, ghostY + 4, Brushes.White, 10.5, ghostWidth - 12);
+        }
         dc.Pop();
         dc.DrawRectangle(Brush("#242424"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
         // 1:1 Vegas Pro Sunken Timecode LCD box at top left of track headers
@@ -958,7 +1070,6 @@ public sealed partial class TimelineView : FrameworkElement
                 string panText = Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}";
                 Text(dc, panText, 31, y + 48, Brush("#B8B8B8"), 11, 75);
             }
-            if (t.Kind == TrackKind.Audio) Text(dc, Math.Abs(pan) < .005 ? "Center" : $"{Math.Abs(pan) * 100:0} % {(pan < 0 ? "L" : "R")}", 137, y + 28, Brush("#B8B8B8"), 11, 50);
             foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
             {
                 var bounds = TrackLevelBounds(t.Id, level); var center = bounds.Y + bounds.Height / 2;
@@ -1460,6 +1571,15 @@ public sealed partial class TimelineView : FrameworkElement
                 : long.MaxValue - dragging.StartFrame - dragging.DurationFrames;
             delta = Math.Clamp(delta, 1 - dragging.DurationFrames, maximum);
         }
+        if (mode == "Move" && isDragging && dragging is not null)
+        {
+            var curNewStart = Math.Max(0, dragging.StartFrame + delta);
+            if (!lastReportedMoveStart.HasValue || lastReportedMoveStart.Value != curNewStart)
+            {
+                lastReportedMoveStart = curNewStart;
+                ClipMoveHover?.Invoke(dragging.Id, curNewStart);
+            }
+        }
         InvalidateVisual();
     }
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
@@ -1643,6 +1763,7 @@ public sealed partial class TimelineView : FrameworkElement
         destinationIsNewTrack = false;
         movingClipIds = null;
         snappedFrame = null;
+        lastReportedMoveStart = null;
         alreadySelectedOnDown = false;
         seeking = false;
 
@@ -1818,6 +1939,7 @@ public sealed partial class TimelineView : FrameworkElement
             isDragging = false; alreadySelectedOnDown = false;
             dragging = null; dragTrack = null; mode = ""; delta = 0;
             destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
+        lastReportedMoveStart = null; hoverFileDropActive = false;
         }
         isMarqueeSelecting = false;
         marqueeRect = Rect.Empty;

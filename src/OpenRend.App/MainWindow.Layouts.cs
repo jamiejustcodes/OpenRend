@@ -114,9 +114,9 @@ public partial class MainWindow
         return new WorkspaceLayout
         {
             Name = name,
-            WorkspaceHeight = wsHeight > 50 ? wsHeight : 340,
-            MediaWidth = MediaWidth.Width.Value > 50 ? MediaWidth.Width.Value : 420,
-            PreviewWidth = PreviewWidth.Width.Value > 50 ? PreviewWidth.Width.Value : 880,
+            WorkspaceHeight = wsHeight > 50 ? wsHeight : 520,
+            MediaWidth = MediaWidth.Width.Value > 50 ? MediaWidth.Width.Value : 360,
+            PreviewWidth = PreviewWidth.Width.Value > 50 ? PreviewWidth.Width.Value : 980,
             ToolsTabIndex = ToolsTabs.SelectedIndex,
             PreviewDeckTabIndex = PreviewDeckTabs.SelectedIndex,
             TimelineOnTop = timelineOnTop,
