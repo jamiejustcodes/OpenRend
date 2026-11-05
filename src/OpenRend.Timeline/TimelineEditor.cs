@@ -1876,7 +1876,7 @@ public sealed partial class TimelineEditor
         Project.MasterAudioEffects = copy.MasterAudioEffects; Project.MasterAudioGain = copy.MasterAudioGain;
         Project.MasterAudioEnvelopes = copy.MasterAudioEnvelopes;
         Project.MasterAudioMute = copy.MasterAudioMute; Project.MasterAudioDim = copy.MasterAudioDim;
-        Project.Markers = copy.Markers; Project.Notes = copy.Notes;
+        Project.Markers = copy.Markers; Project.Regions = copy.Regions; Project.Notes = copy.Notes;
         Project.RulerFormat = copy.RulerFormat; Project.MediaBins = copy.MediaBins;
         Project.AudioBuses = copy.AudioBuses;
     }

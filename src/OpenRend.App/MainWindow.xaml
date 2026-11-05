@@ -130,6 +130,7 @@
       </MenuItem>
       <MenuItem Header="_Insert">
         <MenuItem x:Name="InsertMarkerMenu" Header="Marker" InputGestureText="M" Click="InsertMarkerClick" AutomationProperties.AutomationId="InsertMarkerMenu"/>
+        <MenuItem x:Name="InsertRegionMenu" Header="Region" InputGestureText="R" Click="InsertRegionClick" AutomationProperties.AutomationId="InsertRegionMenu"/>
         <MenuItem x:Name="InsertTimeMenu" Header="_Time…" Click="InsertTimeClick" AutomationProperties.AutomationId="InsertTimeMenu"/>
         <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" InputGestureText="Ctrl+Shift+N" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
         <Separator/>

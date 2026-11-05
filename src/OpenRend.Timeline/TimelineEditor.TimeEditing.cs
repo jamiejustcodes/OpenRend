@@ -123,6 +123,19 @@ public sealed partial class TimelineEditor
                         marker.Frame = checked(marker.Frame + durationFrames);
                     }
                 }
+
+                foreach (var region in project.Regions)
+                {
+                    if (region.StartFrame >= atFrame)
+                    {
+                        region.StartFrame = checked(region.StartFrame + durationFrames);
+                        region.EndFrame = checked(region.EndFrame + durationFrames);
+                    }
+                    else if (region.EndFrame > atFrame)
+                    {
+                        region.EndFrame = checked(region.EndFrame + durationFrames);
+                    }
+                }
             }
 
             if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
@@ -305,6 +318,20 @@ public sealed partial class TimelineEditor
                     if (marker.Frame >= endFrame)
                     {
                         marker.Frame = Math.Max(0, checked(marker.Frame - durationFrames));
+                    }
+                }
+
+                project.Regions.RemoveAll(r => r.StartFrame >= startFrame && r.EndFrame <= endFrame);
+                foreach (var region in project.Regions)
+                {
+                    if (region.StartFrame >= endFrame)
+                    {
+                        region.StartFrame = Math.Max(0, checked(region.StartFrame - durationFrames));
+                        region.EndFrame = Math.Max(region.StartFrame + 1, checked(region.EndFrame - durationFrames));
+                    }
+                    else if (region.EndFrame > startFrame)
+                    {
+                        region.EndFrame = Math.Max(region.StartFrame + 1, checked(region.EndFrame - durationFrames));
                     }
                 }
             }

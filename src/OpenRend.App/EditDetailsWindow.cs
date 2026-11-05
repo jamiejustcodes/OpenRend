@@ -30,19 +30,23 @@ public sealed class EditDetailsWindow : Window
 
     private readonly ListView eventsListView;
     private readonly ListView markersListView;
+    private readonly ListView regionsListView;
     private readonly TextBlock summaryText;
     private readonly TextBlock statusText;
 
     private readonly List<EditDetailsEventRow> currentEventRows = [];
     private readonly List<EditDetailsMarkerRow> currentMarkerRows = [];
+    private readonly List<EditDetailsRegionRow> currentRegionRows = [];
 
     public IReadOnlyList<EditDetailsEventRow> CurrentEventRows => currentEventRows;
     public IReadOnlyList<EditDetailsMarkerRow> CurrentMarkerRows => currentMarkerRows;
+    public IReadOnlyList<EditDetailsRegionRow> CurrentRegionRows => currentRegionRows;
     public ComboBox ShowComboBox => showCombo;
     public CheckBox SelectedTrackOnlyCheckBox => selectedTrackOnlyCheck;
     public TextBox SearchTextBox => searchBox;
     public ListView EventsListView => eventsListView;
     public ListView MarkersListView => markersListView;
+    public ListView RegionsListView => regionsListView;
     public TextBlock SummaryTextBlock => summaryText;
     public TextBlock StatusTextBlock => statusText;
 
@@ -124,6 +128,7 @@ public sealed class EditDetailsWindow : Window
         };
         showCombo.Items.Add(new ComboBoxItem { Content = "Events", IsSelected = true });
         showCombo.Items.Add(new ComboBoxItem { Content = "Markers" });
+        showCombo.Items.Add(new ComboBoxItem { Content = "Regions" });
         showCombo.Items.Add(new ComboBoxItem { Content = "Selected Events" });
         showCombo.SelectionChanged += (_, _) => RefreshGrid();
         leftStack.Children.Add(showCombo);
@@ -263,9 +268,37 @@ public sealed class EditDetailsWindow : Window
         markersListView.SelectionChanged += MarkersListView_SelectionChanged;
         markersListView.ContextMenu = CreateMarkersContextMenu();
 
+        // 3b. Regions ListView
+        regionsListView = new ListView
+        {
+            Background = bgBrush,
+            Foreground = textBrush,
+            BorderBrush = borderBrush,
+            BorderThickness = new Thickness(1),
+            SelectionMode = SelectionMode.Extended,
+            FontFamily = new FontFamily("Segoe UI"),
+            FontSize = 11,
+            ItemContainerStyle = itemStyle,
+            Visibility = Visibility.Collapsed
+        };
+
+        var regionsGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "Region", Width = 60, DisplayMemberBinding = new Binding("Index") });
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "Position", Width = 100, DisplayMemberBinding = new Binding("StartTimecode") });
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "End", Width = 100, DisplayMemberBinding = new Binding("EndTimecode") });
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "Length", Width = 100, DisplayMemberBinding = new Binding("LengthTimecode") });
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "Name", Width = 240, DisplayMemberBinding = new Binding("Label") });
+        regionsGridView.Columns.Add(new GridViewColumn { Header = "Color", Width = 90, DisplayMemberBinding = new Binding("ColorName") });
+        regionsListView.View = regionsGridView;
+
+        regionsListView.MouseDoubleClick += RegionsListView_MouseDoubleClick;
+        regionsListView.SelectionChanged += RegionsListView_SelectionChanged;
+        regionsListView.ContextMenu = CreateRegionsContextMenu();
+
         var gridContainer = new Grid();
         gridContainer.Children.Add(eventsListView);
         gridContainer.Children.Add(markersListView);
+        gridContainer.Children.Add(regionsListView);
         Grid.SetRow(gridContainer, 1);
         root.Children.Add(gridContainer);
 
@@ -397,6 +430,62 @@ public sealed class EditDetailsWindow : Window
         }
     }
 
+    private void RegionsListView_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+    {
+        NavigateSelectedRegion();
+    }
+
+    private void RegionsListView_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (regionsListView.SelectedItem is EditDetailsRegionRow row)
+        {
+            statusText.Text = $"Selected: Region {row.Index} \"{row.Label}\" ({row.StartTimecode} - {row.EndTimecode})";
+        }
+    }
+
+    private void NavigateSelectedRegion()
+    {
+        if (regionsListView.SelectedItem is not EditDetailsRegionRow row) return;
+        vm.Position = row.StartFrame;
+        vm.LoopRegion = new FrameRange(row.StartFrame, row.EndFrame);
+        onProjectChanged();
+        statusText.Text = $"Position: {row.StartTimecode} (Region {row.Index})";
+    }
+
+    private ContextMenu CreateRegionsContextMenu()
+    {
+        var menu = new ContextMenu();
+        var editItem = new MenuItem { Header = "Edit Region…" };
+        editItem.Click += (_, _) =>
+        {
+            if (regionsListView.SelectedItem is EditDetailsRegionRow row)
+            {
+                var region = vm.Project.Regions.FirstOrDefault(r => r.Id == row.RegionId);
+                if (region != null)
+                {
+                    var dlg = new RegionEditDialog(region, vm.Project.FrameRate) { Owner = this };
+                    if (dlg.ShowDialog() == true)
+                    {
+                        vm.Editor.SetRegion(region.Id, dlg.ResultStartFrame, dlg.ResultEndFrame, dlg.ResultLabel, dlg.ResultColorId);
+                        onProjectChanged();
+                        RefreshGrid();
+                    }
+                }
+            }
+        };
+        menu.Items.Add(editItem);
+
+        var selectItem = new MenuItem { Header = "Select Region Time Range" };
+        selectItem.Click += (_, _) => NavigateSelectedRegion();
+        menu.Items.Add(selectItem);
+
+        var delItem = new MenuItem { Header = "Delete Region" };
+        delItem.Click += (_, _) => DeleteSelectedItems();
+        menu.Items.Add(delItem);
+
+        return menu;
+    }
+
     private void NavigateSelectedEvent()
     {
         if (eventsListView.SelectedItem is not EditDetailsEventRow row) return;
@@ -435,6 +524,7 @@ public sealed class EditDetailsWindow : Window
         if (modeStr == "Markers")
         {
             if (eventsListView != null) eventsListView.Visibility = Visibility.Collapsed;
+            if (regionsListView != null) regionsListView.Visibility = Visibility.Collapsed;
             if (markersListView != null) markersListView.Visibility = Visibility.Visible;
 
             currentMarkerRows.Clear();
@@ -466,9 +556,49 @@ public sealed class EditDetailsWindow : Window
             }
             if (summaryText != null) summaryText.Text = $"{currentMarkerRows.Count} markers listed";
         }
+        else if (modeStr == "Regions")
+        {
+            if (eventsListView != null) eventsListView.Visibility = Visibility.Collapsed;
+            if (markersListView != null) markersListView.Visibility = Visibility.Collapsed;
+            if (regionsListView != null) regionsListView.Visibility = Visibility.Visible;
+
+            currentRegionRows.Clear();
+            var regions = vm.Project.Regions.OrderBy(r => r.StartFrame).ToList();
+            foreach (var r in regions)
+            {
+                if (!string.IsNullOrEmpty(filterText) &&
+                    !r.Label.Contains(filterText, StringComparison.OrdinalIgnoreCase) &&
+                    !r.Index.ToString().Contains(filterText))
+                {
+                    continue;
+                }
+
+                currentRegionRows.Add(new EditDetailsRegionRow
+                {
+                    RegionId = r.Id,
+                    Index = r.Index,
+                    StartFrame = r.StartFrame,
+                    StartTimecode = TimelineView.FormatTimecode(r.StartFrame, vm.Project.FrameRate),
+                    EndFrame = r.EndFrame,
+                    EndTimecode = TimelineView.FormatTimecode(r.EndFrame, vm.Project.FrameRate),
+                    LengthFrames = r.DurationFrames,
+                    LengthTimecode = TimelineView.FormatTimecode(r.DurationFrames, vm.Project.FrameRate),
+                    Label = r.Label,
+                    ColorId = r.ColorId
+                });
+            }
+
+            if (regionsListView != null)
+            {
+                regionsListView.ItemsSource = null;
+                regionsListView.ItemsSource = currentRegionRows;
+            }
+            if (summaryText != null) summaryText.Text = $"{currentRegionRows.Count} regions listed";
+        }
         else
         {
             if (markersListView != null) markersListView.Visibility = Visibility.Collapsed;
+            if (regionsListView != null) regionsListView.Visibility = Visibility.Collapsed;
             if (eventsListView != null) eventsListView.Visibility = Visibility.Visible;
 
             currentEventRows.Clear();
@@ -560,6 +690,18 @@ public sealed class EditDetailsWindow : Window
                 sb.AppendLine($"{m.Index}\t{m.Timecode}\t{m.Frame}\t{m.Label}\t{m.ColorName}");
             }
         }
+        else if (modeStr == "Regions")
+        {
+            sb.AppendLine("Region\tStart\tEnd\tLength\tName\tColor");
+            var rows = selectedOnly && regionsListView?.SelectedItems.Count > 0
+                ? regionsListView.SelectedItems.OfType<EditDetailsRegionRow>().ToList()
+                : currentRegionRows;
+
+            foreach (var r in rows)
+            {
+                sb.AppendLine($"{r.Index}\t{r.StartTimecode}\t{r.EndTimecode}\t{r.LengthTimecode}\t{r.Label}\t{r.ColorName}");
+            }
+        }
         else
         {
             sb.AppendLine("Track\tEvent\tStart\tEnd\tLength\tName\tActive Take\tSource In\tRate\tMute\tLock\tMedia File");
@@ -613,6 +755,19 @@ public sealed class EditDetailsWindow : Window
             onProjectChanged();
             RefreshGrid();
             statusText.Text = $"Deleted {selectedMarkers.Count} marker(s).";
+        }
+        else if (modeStr == "Regions")
+        {
+            var selectedRegions = regionsListView.SelectedItems.OfType<EditDetailsRegionRow>().ToList();
+            if (selectedRegions.Count == 0) return;
+
+            foreach (var sr in selectedRegions)
+            {
+                vm.Editor.RemoveRegion(sr.RegionId);
+            }
+            onProjectChanged();
+            RefreshGrid();
+            statusText.Text = $"Deleted {selectedRegions.Count} region(s).";
         }
         else
         {
@@ -670,6 +825,32 @@ public sealed class EditDetailsMarkerRow
     public int Index { get; set; }
     public long Frame { get; set; }
     public string Timecode { get; set; } = "";
+    public string Label { get; set; } = "";
+    public int ColorId { get; set; }
+    public string ColorName => ColorId switch
+    {
+        0 => "Blue",
+        1 => "Orange",
+        2 => "Green",
+        3 => "Red",
+        4 => "Yellow",
+        5 => "Cyan",
+        6 => "Magenta",
+        7 => "White",
+        _ => $"Color {ColorId}"
+    };
+}
+
+public sealed class EditDetailsRegionRow
+{
+    public Guid RegionId { get; set; }
+    public int Index { get; set; }
+    public long StartFrame { get; set; }
+    public string StartTimecode { get; set; } = "";
+    public long EndFrame { get; set; }
+    public string EndTimecode { get; set; } = "";
+    public long LengthFrames { get; set; }
+    public string LengthTimecode { get; set; } = "";
     public string Label { get; set; } = "";
     public int ColorId { get; set; }
     public string ColorName => ColorId switch

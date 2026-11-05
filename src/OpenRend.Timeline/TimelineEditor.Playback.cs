@@ -164,4 +164,79 @@ public partial class TimelineEditor
             }
         });
     }
+
+    public void SetClipChannelMode(Guid clipId, AudioChannelMode mode)
+    {
+        var clip = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        if (clip is null || clip.ChannelMode == mode) return;
+
+        Execute(_ =>
+        {
+            clip.ChannelMode = mode;
+            if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+            {
+                clip.Takes[clip.ActiveTakeIndex].ChannelMode = mode;
+            }
+        });
+    }
+
+    public void SetClipPitchSemis(Guid clipId, double pitchSemis)
+    {
+        var clip = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        var clamped = Math.Clamp(pitchSemis, -24.0, 24.0);
+        if (clip is null || Math.Abs(clip.PitchSemis - clamped) < 0.001) return;
+
+        Execute(_ =>
+        {
+            clip.PitchSemis = clamped;
+            if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+            {
+                clip.Takes[clip.ActiveTakeIndex].PitchSemis = clamped;
+            }
+        });
+    }
+
+    public void AdjustClipPitchSemis(IEnumerable<Guid> clipIds, double deltaSemis)
+    {
+        var ids = clipIds.ToHashSet();
+        var audioClips = Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips)
+            .Where(c => ids.Contains(c.Id))
+            .ToList();
+        if (audioClips.Count == 0) return;
+
+        Execute(_ =>
+        {
+            foreach (var clip in audioClips)
+            {
+                clip.PitchSemis = Math.Clamp(clip.PitchSemis + deltaSemis, -24.0, 24.0);
+                if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+                {
+                    clip.Takes[clip.ActiveTakeIndex].PitchSemis = clip.PitchSemis;
+                }
+            }
+        });
+    }
+
+    public void ResetClipPitchSemis(IEnumerable<Guid> clipIds)
+    {
+        var ids = clipIds.ToHashSet();
+        var audioClips = Project.Tracks.Where(t => t.Kind == TrackKind.Audio)
+            .SelectMany(t => t.Clips)
+            .Where(c => ids.Contains(c.Id) && c.PitchSemis != 0.0)
+            .ToList();
+        if (audioClips.Count == 0) return;
+
+        Execute(_ =>
+        {
+            foreach (var clip in audioClips)
+            {
+                clip.PitchSemis = 0.0;
+                if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+                {
+                    clip.Takes[clip.ActiveTakeIndex].PitchSemis = 0.0;
+                }
+            }
+        });
+    }
 }

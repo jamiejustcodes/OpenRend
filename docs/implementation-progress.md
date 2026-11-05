@@ -194,6 +194,31 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 timeline regions, audio channels remapping, and pitch shifting suite` implemented 1:1 Vegas Pro Timeline Regions and Audio Channels Remapping & Pitch Shifting matching `ScriptPortal.Vegas.Region`, `RegionList`, `ChannelRemapping`, `AudioEvent.PitchSemis`, `InvertPhase`, and `Normalize`.
+  - Core Data Models & Validation:
+    - Created `TimelineRegion.cs` in `OpenRend.Core`: modeled `Id`, `Index` (1-based int), `StartFrame`, `EndFrame`, `DurationFrames`, `Label`, `ColorId` (1..8), and `ColorHex`. Included schema validation, sorting by StartFrame, JSON serialization, and deep cloning.
+    - Created `AudioChannelMode.cs` enum in `OpenRend.Core`: `Both`, `LeftOnly`, `RightOnly`, and `Swap` matching Vegas Pro `ScriptPortal.Vegas.ChannelRemapping`.
+    - Extended `ProjectDocument.cs` with `Regions` collection, schema validation, and deep cloning.
+    - Extended `TimelineClip.cs` and `TimelineTake.cs` with `ChannelMode` (default `Both`), `PitchSemis` (-24.0 to +24.0 semitones), `InvertPhase`, and `Normalize` properties.
+  - Timeline Operations:
+    - Created `TimelineEditor.Regions.cs` with atomic undo/redo operations: `AddRegion`, `RemoveRegion`, `SetRegion`, `SetRegionLabel`, `SetRegionRange`, and `ClearRegions`.
+    - Enhanced `TimelineEditor.Playback.cs` with atomic operations: `SetClipChannelMode`, `SetClipPitchSemis`, `AdjustClipPitchSemis`, and `ResetClipPitchSemis`.
+    - Enhanced `TimelineEditor.TimeEditing.cs` (`InsertTime` and `DeleteTime`) to ripple and truncate project regions alongside markers and automation.
+    - Updated `TimelineEditor.Restore()` to preserve project regions across undo/redo.
+  - Media & Rendering Pipeline:
+    - In `TimelineRenderService.cs`: evaluated `clip.ChannelMode` (stereo routing for LeftOnly, RightOnly, Swap), `clip.InvertPhase` (waveform polarity inversion), and `clip.Normalize` across preview and export audio rendering.
+  - UI Implementation:
+    - Created `TimelineRegions.cs` in `OpenRend.UI`: interactive ruler rendering for regions (start right-pointing tag, end left-pointing tag, connecting span bar, semi-translucent fill, dashed track boundary guidelines, double-click seek/loop selection, and context menu).
+    - Created `RegionEditDialog.cs` in `OpenRend.App`: 1:1 modal dialog matching Vegas Pro region edit dialog for index, start, end, label, and 8-color palette.
+    - In `TimelineEventButtons.cs`: added `Channels` submenu (`Both`, `Left Only`, `Right Only`, `Swap`) and `Pitch Shift` submenu (`+12`, `+3`, `+2`, `+1`, `0`, `-1`, `-2`, `-3`, `-12`).
+    - In `TimelineView.cs`: rendered event header badges (`[LeftOnly]`, `[RightOnly]`, `[Swap]`, `[Phase Ø]`, `[+2 semis]`) and wired region hit testing.
+    - In `MainWindow.xaml` and `MainWindow.xaml.cs`: added `Insert > Region` (shortcut `R`), numeric keypad `+` / `-` semitone pitch shifts, and `Ctrl+0` pitch reset.
+    - In `EditDetailsWindow.cs`: added `Regions` mode to `Show:` selector, double-click seek, and TSV clipboard export.
+  - Verification:
+    - Added unit tests in `TimelineRegionEditorTests.cs` (OpenRend.Editor.Tests) verifying region auto-incrementing, frame sorting, undo/redo, JSON roundtrip, ripple editing, and Edit Details TSV generation.
+    - Added unit tests in `AudioChannelsAndPitchEditorTests.cs` (OpenRend.Editor.Tests) verifying channel mode switching, pitch adjustment and clamping, undo/redo, and JSON persistence.
+    - Full gate passed: 100% native integration tests, 1,053 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-04: `feat(color): implement Vegas-style HSL curves and interactive color grading canvas` implemented 1:1 Vegas Pro HSL curves architecture matching `ScriptPortal.Vegas.ColorGradingPanel.HSLCurves` in `ColorGradingPanel.dll`.
   - Data Models & Evaluation:
     - Created `HSLCurvesData.cs` in `OpenRend.Core`:

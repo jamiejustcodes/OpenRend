@@ -116,6 +116,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? ClipReduceInterlaceRequested;
     public event Action<Guid, bool>? ClipNormalizeRequested;
     public event Action<Guid, bool>? ClipInvertPhaseRequested;
+    public event Action<Guid, AudioChannelMode>? ClipChannelModeRequested;
+    public event Action<Guid, double>? ClipPitchSemisRequested;
     public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
@@ -804,6 +806,7 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawLine(pen, new Point(x + minor * step * PixelsPerSecond / 5, 40), new Point(x + minor * step * PixelsPerSecond / 5, RulerHeight));
         }
         DrawLoopRegion(dc);
+        DrawRegions(dc);
         DrawMarkers(dc);
         dc.PushClip(new RectangleGeometry(new Rect(HeaderWidth, RulerHeight, Math.Max(0, ActualWidth - HeaderWidth), Math.Max(0, ActualHeight - RulerHeight))));
         var insertionY = 0.0;
@@ -901,7 +904,9 @@ public sealed partial class TimelineView : FrameworkElement
                 var rateSuffix = Math.Abs(clip.PlaybackRate - 1.0) > 0.001 ? $" [{clip.PlaybackRate:0.##}x]" : "";
                 var mutedSuffix = clip.IsMuted ? " [Muted]" : "";
                 var phaseSuffix = clip.InvertPhase ? " [Phase \u00D8]" : "";
-                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{mutedSuffix}";
+                var channelSuffix = clip.ChannelMode != AudioChannelMode.Both ? $" [{clip.ChannelMode}]" : "";
+                var pitchSuffix = Math.Abs(clip.PitchSemis) > 0.001 ? $" [{(clip.PitchSemis > 0 ? "+" : "")}{clip.PitchSemis:0.#} semis]" : "";
+                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {
@@ -1266,6 +1271,14 @@ public sealed partial class TimelineView : FrameworkElement
         isDragging = false; alreadySelectedOnDown = false;
         if (BeginEventButton(origin)) { e.Handled = true; return; }
         if (HandleEnvelopeMouseDown(origin, e)) { e.Handled = true; return; }
+        if (HitRegion(origin) is { } hitRegion)
+        {
+            SeekRequested?.Invoke(hitRegion.StartFrame);
+            RegionSelected?.Invoke(hitRegion);
+            if (e.ClickCount == 2) RegionEditRequested?.Invoke(hitRegion);
+            e.Handled = true;
+            return;
+        }
         if (HitMarker(origin) is { } hitMarker)
         {
             SeekRequested?.Invoke(hitMarker.Frame);
@@ -2022,6 +2035,22 @@ public sealed partial class TimelineView : FrameworkElement
                 return;
             }
             if (HandleEnvelopeRightClick(p)) { e.Handled = true; return; }
+            if (HitRegion(p) is { } rightRegion)
+            {
+                var regionMenu = new ContextMenu();
+                var editItem = new MenuItem { Header = "Edit Region…" };
+                editItem.Click += (_, _) => RegionEditRequested?.Invoke(rightRegion);
+                regionMenu.Items.Add(editItem);
+                var selItem = new MenuItem { Header = "Select Region Time Range" };
+                selItem.Click += (_, _) => RegionSelected?.Invoke(rightRegion);
+                regionMenu.Items.Add(selItem);
+                var delItem = new MenuItem { Header = "Delete Region" };
+                delItem.Click += (_, _) => RegionDeleteRequested?.Invoke(rightRegion.Id);
+                regionMenu.Items.Add(delItem);
+                regionMenu.IsOpen = true;
+                e.Handled = true;
+                return;
+            }
             if (HitMarker(p) is { } rightMarker)
             {
                 var markerMenu = new ContextMenu();

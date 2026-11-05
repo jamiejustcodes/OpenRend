@@ -379,13 +379,35 @@ public sealed partial class TimelineRenderService : IDisposable
                 var localStart = seconds + (double)first / MediaService.SampleRate - start;
                 var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
                 var decoded = media.GetAudio(asset.Path, sourceStart, last - first);
+                var phaseMul = clip.InvertPhase ? -1.0f : 1.0f;
+                var normFactor = clip.Normalize ? 1.5f : 1.0f;
                 for (var sample = first; sample < last; sample++)
                 {
                     var localFrame = (localStart + (double)(sample - first) / MediaService.SampleRate) * project.FrameRate.Value;
                     var gains = TimelineEvaluator.AudioGains(track, clip, localFrame);
                     var source = (sample - first) * MediaService.Channels;
-                    trackBuffer![sample * 2] += (float)(decoded[source] * gains.Left);
-                    trackBuffer![sample * 2 + 1] += (float)(decoded[source + 1] * gains.Right);
+                    float srcL, srcR;
+                    switch (clip.ChannelMode)
+                    {
+                        case AudioChannelMode.LeftOnly:
+                            srcL = decoded[source];
+                            srcR = decoded[source];
+                            break;
+                        case AudioChannelMode.RightOnly:
+                            srcL = decoded[source + 1];
+                            srcR = decoded[source + 1];
+                            break;
+                        case AudioChannelMode.Swap:
+                            srcL = decoded[source + 1];
+                            srcR = decoded[source];
+                            break;
+                        default:
+                            srcL = decoded[source];
+                            srcR = decoded[source + 1];
+                            break;
+                    }
+                    trackBuffer![sample * 2] += (float)(srcL * phaseMul * normFactor * gains.Left);
+                    trackBuffer![sample * 2 + 1] += (float)(srcR * phaseMul * normFactor * gains.Right);
                 }
             }
 

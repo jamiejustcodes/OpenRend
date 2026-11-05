@@ -174,6 +174,8 @@ public sealed class ProjectDocument
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<TimelineMarker> Markers { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<TimelineRegion> Regions { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<ProjectNoteItem> Notes { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<MediaBin> MediaBins { get; set; } = [];
@@ -254,6 +256,9 @@ public sealed class ProjectDocument
         clone.Markers = new List<TimelineMarker>(Markers.Count);
         for (var i = 0; i < Markers.Count; i++) clone.Markers.Add(Markers[i].DeepClone());
 
+        clone.Regions = new List<TimelineRegion>(Regions.Count);
+        for (var i = 0; i < Regions.Count; i++) clone.Regions.Add(Regions[i].DeepClone());
+
         clone.Notes = new List<ProjectNoteItem>(Notes.Count);
         for (var i = 0; i < Notes.Count; i++) clone.Notes.Add(Notes[i].DeepClone());
 
@@ -314,6 +319,15 @@ public sealed class ProjectDocument
             {
                 if (marker == null || !markerIds.Add(marker.Id)) throw new InvalidDataException("Marker IDs must be unique.");
                 marker.Validate();
+            }
+        }
+        if (Regions != null)
+        {
+            var regionIds = new HashSet<Guid>();
+            foreach (var region in Regions)
+            {
+                if (region == null || !regionIds.Add(region.Id)) throw new InvalidDataException("Region IDs must be unique.");
+                region.Validate();
             }
         }
         if (Notes != null)
@@ -699,6 +713,8 @@ public sealed class TimelineTake
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool ReduceInterlace { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Normalize { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioChannelMode ChannelMode { get; set; } = AudioChannelMode.Both;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PitchSemis { get; set; }
 
     public TimelineTake DeepClone() => new()
     {
@@ -708,7 +724,15 @@ public sealed class TimelineTake
         SourceInFrame = SourceInFrame,
         VideoSourceMode = VideoSourceMode,
         IsReversed = IsReversed,
-        PlaybackRate = PlaybackRate
+        PlaybackRate = PlaybackRate,
+        UnderSampleRate = UnderSampleRate,
+        ResampleMode = ResampleMode,
+        MaintainAspectRatio = MaintainAspectRatio,
+        ReduceInterlace = ReduceInterlace,
+        Normalize = Normalize,
+        InvertPhase = InvertPhase,
+        ChannelMode = ChannelMode,
+        PitchSemis = PitchSemis
     };
 
     public void Validate()
@@ -736,6 +760,8 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool ReduceInterlace { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool Normalize { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioChannelMode ChannelMode { get; set; } = AudioChannelMode.Both;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PitchSemis { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsLocked { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsMuted { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);

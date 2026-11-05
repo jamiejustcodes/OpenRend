@@ -1,4 +1,4 @@
-﻿using System.Windows;
+using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
@@ -256,6 +256,59 @@ public sealed partial class TimelineView
             undersampleMenu.Items.Add(item);
         }
         menu.Items.Add(undersampleMenu);
+
+        var channelsMenu = new MenuItem { Header = "Channels" };
+        AutomationProperties.SetAutomationId(channelsMenu, "EventChannelsMenu");
+        var channelOptions = new (string Label, AudioChannelMode Mode)[]
+        {
+            ("Both", AudioChannelMode.Both),
+            ("Left Only", AudioChannelMode.LeftOnly),
+            ("Right Only", AudioChannelMode.RightOnly),
+            ("Swap", AudioChannelMode.Swap)
+        };
+        foreach (var (label, chMode) in channelOptions)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            var cm = chMode;
+            item.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Audio && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    ClipChannelModeRequested?.Invoke(events[0].Id, cm);
+            };
+            channelsMenu.Items.Add(item);
+        }
+        menu.Items.Add(channelsMenu);
+
+        var pitchMenu = new MenuItem { Header = "Pitch Shift" };
+        AutomationProperties.SetAutomationId(pitchMenu, "EventPitchShiftMenu");
+        var pitchOptions = new (string Label, double Semis)[]
+        {
+            ("+12 Semitones (Octave Up)", 12.0),
+            ("+3 Semitones", 3.0),
+            ("+2 Semitones", 2.0),
+            ("+1 Semitone (+)", 1.0),
+            ("0 (Original Pitch)", 0.0),
+            ("-1 Semitone (-)", -1.0),
+            ("-2 Semitones", -2.0),
+            ("-3 Semitones", -3.0),
+            ("-12 Semitones (Octave Down)", -12.0)
+        };
+        foreach (var (label, semis) in pitchOptions)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true };
+            var ps = semis;
+            item.Click += (_, _) =>
+            {
+                var events = Project.Tracks.Where(track => track.Kind == TrackKind.Audio && !track.IsLocked)
+                    .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+                if (IsEnabled && events.Length == 1)
+                    ClipPitchSemisRequested?.Invoke(events[0].Id, ps);
+            };
+            pitchMenu.Items.Add(item);
+        }
+        menu.Items.Add(pitchMenu);
 
         var takesMenu = new MenuItem { Header = "Take" };
         AutomationProperties.SetAutomationId(takesMenu, "EventTakesMenu");
@@ -525,6 +578,29 @@ public sealed partial class TimelineView
             invertPhaseItem.IsEnabled = IsEnabled && singleTarget.Track?.Kind == TrackKind.Audio && !isLocked;
             invertPhaseItem.IsChecked = singleTarget.Clip?.InvertPhase ?? false;
             invertPhaseItem.Visibility = singleTarget.Track?.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
+            channelsMenu.IsEnabled = IsEnabled && singleTarget.Track?.Kind == TrackKind.Audio && !isLocked;
+            channelsMenu.Visibility = singleTarget.Track?.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in channelsMenu.Items)
+            {
+                if (item.Header is string h)
+                {
+                    var clean = h.Replace(" ", "");
+                    if (Enum.TryParse<AudioChannelMode>(clean, out var cm))
+                        item.IsChecked = singleTarget.Clip != null && singleTarget.Clip.ChannelMode == cm;
+                }
+            }
+            pitchMenu.IsEnabled = IsEnabled && singleTarget.Track?.Kind == TrackKind.Audio && !isLocked;
+            pitchMenu.Visibility = singleTarget.Track?.Kind == TrackKind.Audio ? Visibility.Visible : Visibility.Collapsed;
+            foreach (MenuItem item in pitchMenu.Items)
+            {
+                if (item.Header is string h)
+                {
+                    if (h.StartsWith("0"))
+                        item.IsChecked = singleTarget.Clip != null && Math.Abs(singleTarget.Clip.PitchSemis) < 0.001;
+                    else if (double.TryParse(h.Split(' ')[0], System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var ps))
+                        item.IsChecked = singleTarget.Clip != null && Math.Abs(singleTarget.Clip.PitchSemis - ps) < 0.001;
+                }
+            }
             var singleClip = singleTarget.Clip;
             var hasTakes = singleClip?.Takes is { Count: > 1 };
             takesMenu.Visibility = hasTakes ? Visibility.Visible : Visibility.Collapsed;

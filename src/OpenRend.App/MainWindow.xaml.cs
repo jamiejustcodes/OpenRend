@@ -275,6 +275,23 @@ public partial class MainWindow : Window
             Timeline.InvalidateVisual();
             vm.Status = "Deleted marker.";
         });
+        Timeline.RegionSelected += region => Guard(() =>
+        {
+            Pause();
+            vm.LoopRegion = new FrameRange(region.StartFrame, region.EndFrame);
+            vm.Position = region.StartFrame;
+            UpdatePosition();
+            RequestPreview();
+            vm.Status = $"Region {region.Index}: {region.Label} ({TimelineView.FormatTimecode(region.StartFrame, vm.Project.FrameRate)} - {TimelineView.FormatTimecode(region.EndFrame, vm.Project.FrameRate)})";
+        });
+        Timeline.RegionEditRequested += region => OpenRegionEdit(region);
+        Timeline.RegionDeleteRequested += id => Guard(() =>
+        {
+            Pause();
+            vm.Editor.RemoveRegion(id);
+            Timeline.InvalidateVisual();
+            vm.Status = "Deleted region.";
+        });
         Timeline.TransitionPropertiesRequested += id => Guard(() =>
         {
             Pause();
@@ -390,6 +407,24 @@ public partial class MainWindow : Window
             Pause();
             vm.Editor.SetClipInvertPhase(id, inv);
             vm.Status = inv ? "Inverted audio event phase." : "Restored audio event phase.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipChannelModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipChannelMode(id, mode);
+            vm.Status = $"Set audio channel routing to {mode}.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
+        Timeline.ClipPitchSemisRequested += (id, semis) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetClipPitchSemis(id, semis);
+            vm.Status = $"Set audio pitch to {(semis > 0 ? "+" : "")}{semis:0.#} semitones.";
             UpdateInspector();
             RequestPreview();
             Refresh();
@@ -2099,6 +2134,56 @@ public partial class MainWindow : Window
         }
     });
 
+    private void InsertRegionClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        var startFrame = vm.Position;
+        var endFrame = vm.Position + (long)Math.Round(vm.Project.FrameRate.Value * 2);
+
+        if (vm.LoopRegion is { } loop && loop.EndFrame > loop.StartFrame)
+        {
+            startFrame = loop.StartFrame;
+            endFrame = loop.EndFrame;
+        }
+
+        var region = vm.Editor.AddRegion(startFrame, endFrame);
+        Timeline.InvalidateVisual();
+        vm.Status = $"Added Region {region.Index} ({TimelineView.FormatTimecode(region.StartFrame, vm.Project.FrameRate)} - {TimelineView.FormatTimecode(region.EndFrame, vm.Project.FrameRate)}).";
+        OpenRegionEdit(region);
+    });
+
+    private void OpenRegionEdit(TimelineRegion region) => Guard(() =>
+    {
+        Pause();
+        var dlg = new RegionEditDialog(region, vm.Project.FrameRate) { Owner = this };
+        if (dlg.ShowDialog() == true)
+        {
+            vm.Editor.SetRegion(region.Id, dlg.ResultStartFrame, dlg.ResultEndFrame, dlg.ResultLabel, dlg.ResultColorId);
+            Timeline.InvalidateVisual();
+            vm.Status = $"Updated Region {region.Index}.";
+        }
+    });
+
+    private void AdjustPitchClick(double deltaSemis) => Guard(() =>
+    {
+        if (Timeline.Selection.Count == 0) return;
+        vm.Editor.AdjustClipPitchSemis(Timeline.Selection, deltaSemis);
+        vm.Status = $"Shifted pitch by {(deltaSemis > 0 ? "+" : "")}{deltaSemis} semitone(s).";
+        Timeline.InvalidateVisual();
+        RequestPreview();
+        Refresh();
+    });
+
+    private void ResetPitchClick() => Guard(() =>
+    {
+        if (Timeline.Selection.Count == 0) return;
+        vm.Editor.ResetClipPitchSemis(Timeline.Selection);
+        vm.Status = "Reset pitch shift to 0 semitones.";
+        Timeline.InvalidateVisual();
+        RequestPreview();
+        Refresh();
+    });
+
     private void ProjectNotesClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -2838,6 +2923,10 @@ public partial class MainWindow : Window
             Key.T when !ctrl && !alt && shift => () => PreviousTakeClick(this, e),
             Key.N when ctrl && shift => () => ProjectNotesClick(this, e),
             Key.M when !ctrl && !shift && !alt => () => InsertMarkerClick(this, e),
+            Key.R when !ctrl && !shift && !alt => () => InsertRegionClick(this, e),
+            Key.OemPlus or Key.Add when !ctrl && !alt => () => AdjustPitchClick(1.0),
+            Key.OemMinus or Key.Subtract when !ctrl && !alt => () => AdjustPitchClick(-1.0),
+            Key.D0 or Key.NumPad0 when ctrl && !alt && !shift => () => ResetPitchClick(),
             Key.L when ctrl && shift => () => LockEventClick(this, e),
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),

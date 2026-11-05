@@ -13,6 +13,7 @@
     <Compile Include="../../src/OpenRend.App/CreateSubclipDialog.cs" Link="CreateSubclipDialog.cs" />
     <Compile Include="../../src/OpenRend.App/MediaPropertiesWindow.cs" Link="MediaPropertiesWindow.cs" />
     <Compile Include="../../src/OpenRend.App/EditDetailsWindow.cs" Link="EditDetailsWindow.cs" />
+    <Compile Include="../../src/OpenRend.App/RegionEditDialog.cs" Link="RegionEditDialog.cs" />
     <Compile Include="../../src/OpenRend.App/SessionRecoveryManager.cs" Link="SessionRecoveryManager.cs" />
     <Compile Include="../../src/OpenRend.App/CrashRecoveryWindow.cs" Link="CrashRecoveryWindow.cs" />
     <Compile Include="../../src/OpenRend.App/EditingPreferencesWindow.cs" Link="EditingPreferencesWindow.cs" />
