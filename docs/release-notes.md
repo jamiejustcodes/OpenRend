@@ -1,11 +1,14 @@
 # OpenRend Release Notes — v0.2.0
 
 **Release Tag:** `v0.2.0`  
+**Windows Setup Installer:** `dist/OpenRend-Setup-v0.2.0.exe` (and `dist/OpenRend-Setup.exe`)  
 **Bundle Archive:** `dist/OpenRend-win-x64.zip`  
 **Standalone Executable:** `dist/OpenRend/OpenRend.exe`  
 **Target Platform:** Windows x64 (.NET 10 WPF + Native C++20 Direct3D 11 / FFmpeg Engine)  
-**SHA256 Checksum:** `4D4BCEB3C0BAD02C0390F234F1AE43E5DA58AA2F4F9BA207FD03050557CD1CDA`  
-**Automated Verification:** 100% Native Tests Passed (1/1 in 2.23s), 1,099 Managed Tests Passed (0 failed, 0 warnings, 0 errors)
+**SHA256 Checksums:**
+- `2BAEC436D389525DB8297312023DEB2FC6595BBCDDE155BFE47BEF0D9F1972D2 *OpenRend-Setup-v0.2.0.exe`
+- `4D4BCEB3C0BAD02C0390F234F1AE43E5DA58AA2F4F9BA207FD03050557CD1CDA *OpenRend-win-x64.zip`  
+**Automated Verification:** 100% Native Tests Passed (1/1 in 2.23s), 1,108 Managed Tests Passed (0 failed, 0 warnings, 0 errors)
 
 ---
 
@@ -141,6 +144,12 @@ TOTAL: 1,099 Managed Tests Passed | 0 Failed | 0 Errors | 0 Warnings
 
 ## 📦 Distribution Artifacts
 
+- **Windows Setup Installer:** `dist/OpenRend-Setup-v0.2.0.exe` (and stable generic link `dist/OpenRend-Setup.exe`)
+  - Lightweight single-binary setup (~95.7 MB) compiled via Inno Setup 6 with ultra LZMA2 solid compression.
+  - Generates Desktop shortcut (`OpenRend.lnk`) with high-resolution vector application icon and Start Menu entry.
+  - Registers `.openrend` project file associations and Windows `App Paths`.
+  - Non-elevated per-user installation (`%LOCALAPPDATA%\Programs\OpenRend`) without requiring UAC admin rights.
+  - Full uninstaller support (`unins000.exe`) integrated into Windows Settings > Installed Apps.
 - **Standalone Directory:** `dist/OpenRend/`
   - `OpenRend.exe`: Primary WPF / .NET 10 application launcher
   - `OpenRend.Native.dll`: C++20 / Direct3D 11 timeline rendering and compositing engine
@@ -148,4 +157,6 @@ TOTAL: 1,099 Managed Tests Passed | 0 Failed | 0 Errors | 0 Warnings
   - Complete third-party licenses and attribution notices
 - **Zip Archive:** `dist/OpenRend-win-x64.zip`
 - **Checksum Manifest:** `dist/SHA256SUMS.txt`
+  - `2BAEC436D389525DB8297312023DEB2FC6595BBCDDE155BFE47BEF0D9F1972D2 *OpenRend-Setup-v0.2.0.exe`
+  - `2BAEC436D389525DB8297312023DEB2FC6595BBCDDE155BFE47BEF0D9F1972D2 *OpenRend-Setup.exe`
   - `4D4BCEB3C0BAD02C0390F234F1AE43E5DA58AA2F4F9BA207FD03050557CD1CDA *OpenRend-win-x64.zip`
