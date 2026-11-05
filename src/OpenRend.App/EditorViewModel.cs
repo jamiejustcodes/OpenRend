@@ -199,6 +199,65 @@ public sealed class EditorViewModel : ObservableObject
         Changed?.Invoke();
         Status = "Deleted audio bus.";
     }
+
+    public TrackGroup GroupSelectedTracks(IReadOnlyList<Guid> trackIds, string? name = null)
+    {
+        var group = Editor.GroupSelectedTracks(trackIds, name);
+        Changed?.Invoke();
+        Status = $"Grouped {trackIds.Count} tracks into {group.Name}.";
+        return group;
+    }
+
+    public void UngroupTracks(IReadOnlyList<Guid> trackIds)
+    {
+        Editor.UngroupTracks(trackIds);
+        Changed?.Invoke();
+        Status = "Ungrouped tracks.";
+    }
+
+    public void RemoveTrackFromGroup(Guid trackId)
+    {
+        Editor.RemoveTrackFromGroup(trackId);
+        Changed?.Invoke();
+        Status = "Removed track from group.";
+    }
+
+    public void SetTrackGroupCollapsed(Guid groupId, bool isCollapsed)
+    {
+        Editor.SetTrackGroupCollapsed(groupId, isCollapsed);
+        Changed?.Invoke();
+        Status = isCollapsed ? "Collapsed track group." : "Expanded track group.";
+    }
+
+    public void SetTrackGroupMute(Guid groupId, bool isMuted)
+    {
+        Editor.SetTrackGroupMute(groupId, isMuted);
+        Changed?.Invoke();
+        Status = isMuted ? "Muted track group." : "Unmuted track group.";
+    }
+
+    public void SetTrackGroupSolo(Guid groupId, bool isSolo)
+    {
+        Editor.SetTrackGroupSolo(groupId, isSolo);
+        Changed?.Invoke();
+        Status = isSolo ? "Soloed track group." : "Unsoloed track group.";
+    }
+
+    public void SetTrackGroupName(Guid groupId, string name)
+    {
+        Editor.SetTrackGroupName(groupId, name);
+        Changed?.Invoke();
+        Status = $"Renamed track group to {name}.";
+    }
+
+    public void SetTrackGroupColor(Guid groupId, string? colorHex)
+    {
+        Editor.SetTrackGroupColor(groupId, colorHex);
+        Changed?.Invoke();
+    }
+
+    public TrackGroup? GetTrackGroupOfTrack(Guid trackId) =>
+        Project.TrackGroups?.FirstOrDefault(g => g.TrackIds.Contains(trackId));
     private long editRevision;
     private readonly SemaphoreSlim saveGate = new(1, 1);
     private List<CopiedClip> clipboard = [];

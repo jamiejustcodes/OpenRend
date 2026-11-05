@@ -51,7 +51,8 @@ public static class TimelineEvaluator
         for (var i = 0; i < tracks.Count; i++)
         {
             var t = tracks[i];
-            if (t.IsSolo)
+            var isSolo = t.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(t.Id)));
+            if (isSolo)
             {
                 if (t.Kind == TrackKind.Video) soloVideo = true;
                 else if (t.Kind == TrackKind.Audio) soloAudio = true;
@@ -64,7 +65,7 @@ public static class TimelineEvaluator
             var track = tracks[i];
             if (IsTrackEffectivelyMuted(project, track, i)) continue;
             if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Mute) is { } trackMute && trackMute.ValueAt(frame) >= 0.5) continue;
-            if (track.Kind == TrackKind.Video ? (soloVideo && !IsTrackEffectivelySolo(project, track, i)) : (soloAudio && !track.IsSolo)) continue;
+            if (track.Kind == TrackKind.Video ? (soloVideo && !IsTrackEffectivelySolo(project, track, i)) : (soloAudio && !IsTrackEffectivelySolo(project, track, i))) continue;
 
             IReadOnlyList<TimelineClip> ordered = track.Clips;
             Dictionary<Guid, double>? transitionOpacity = null;
@@ -309,6 +310,14 @@ public static class TimelineEvaluator
     private static bool IsTrackEffectivelyMuted(ProjectDocument project, TimelineTrack track, int trackIndex)
     {
         if (track.IsMuted) return true;
+        if (project.TrackGroups != null)
+        {
+            for (var g = 0; g < project.TrackGroups.Count; g++)
+            {
+                var group = project.TrackGroups[g];
+                if (group.IsMuted && group.TrackIds.Contains(track.Id)) return true;
+            }
+        }
         if (track.Kind == TrackKind.Video && !track.IsVisible) return true;
         if (track.Kind == TrackKind.Video && track.CompositeNestingLevel > 0)
         {
@@ -331,6 +340,14 @@ public static class TimelineEvaluator
     private static bool IsTrackEffectivelySolo(ProjectDocument project, TimelineTrack track, int trackIndex)
     {
         if (track.IsSolo) return true;
+        if (project.TrackGroups != null)
+        {
+            for (var g = 0; g < project.TrackGroups.Count; g++)
+            {
+                var group = project.TrackGroups[g];
+                if (group.IsSolo && group.TrackIds.Contains(track.Id)) return true;
+            }
+        }
         if (track.Kind == TrackKind.Video)
         {
             for (var i = trackIndex + 1; i < project.Tracks.Count; i++)

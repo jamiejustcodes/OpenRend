@@ -342,7 +342,7 @@ public sealed partial class TimelineRenderService : IDisposable
         if (project.MasterAudioMute) return output;
 
         var assets = project.Media.ToDictionary(asset => asset.Id);
-        var solo = project.Tracks.Any(track => track.Kind == TrackKind.Audio && track.IsSolo);
+        var solo = project.Tracks.Any(track => track.Kind == TrackKind.Audio && (track.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(track.Id)))));
         var projectFrame = (long)Math.Round(seconds * project.FrameRate.Value);
         float[]? trackBuffer = null;
         var busBuffers = new Dictionary<Guid, float[]>();
@@ -356,7 +356,9 @@ public sealed partial class TimelineRenderService : IDisposable
 
         foreach (var track in project.Tracks)
         {
-            if (track.Kind != TrackKind.Audio || track.IsMuted || (solo && !track.IsSolo)) continue;
+            var isTrackMuted = track.IsMuted || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsMuted && g.TrackIds.Contains(track.Id)));
+            var isTrackSolo = track.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(track.Id)));
+            if (track.Kind != TrackKind.Audio || isTrackMuted || (solo && !isTrackSolo)) continue;
 
             bool hasClipsInWindow = false;
             foreach (var clip in track.Clips)

@@ -181,6 +181,8 @@ public sealed class ProjectDocument
     public List<MediaBin> MediaBins { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<AudioBusTrack> AudioBuses { get; set; } = [];
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public List<TrackGroup> TrackGroups { get; set; } = [];
     [JsonIgnore]
     public long DurationFrames
     {
@@ -267,6 +269,9 @@ public sealed class ProjectDocument
 
         clone.AudioBuses = new List<AudioBusTrack>(AudioBuses.Count);
         for (var i = 0; i < AudioBuses.Count; i++) clone.AudioBuses.Add(AudioBuses[i].DeepClone());
+
+        clone.TrackGroups = new List<TrackGroup>(TrackGroups.Count);
+        for (var i = 0; i < TrackGroups.Count; i++) clone.TrackGroups.Add(TrackGroups[i].DeepClone());
 
         return clone;
     }
@@ -534,6 +539,36 @@ public sealed class ProjectDocument
                         throw new InvalidDataException("Active take index is out of bounds.");
                 }
                 clip.Transcript?.Validate();
+            }
+        }
+        if (TrackGroups != null)
+        {
+            var groupIds = new HashSet<Guid>();
+            var groupedTrackIds = new HashSet<Guid>();
+            foreach (var group in TrackGroups)
+            {
+                if (group == null || !groupIds.Add(group.Id))
+                    throw new InvalidDataException("Track group IDs must be unique.");
+                group.Validate();
+
+                var indices = new List<int>();
+                foreach (var trackId in group.TrackIds)
+                {
+                    if (!trackIds.Contains(trackId))
+                        throw new InvalidDataException($"Track group '{group.Name}' references non-existent track ID {trackId}.");
+                    if (!groupedTrackIds.Add(trackId))
+                        throw new InvalidDataException($"Track {trackId} belongs to more than one track group.");
+
+                    var idx = Tracks.FindIndex(t => t.Id == trackId);
+                    indices.Add(idx);
+                }
+
+                indices.Sort();
+                for (var i = 1; i < indices.Count; i++)
+                {
+                    if (indices[i] != indices[i - 1] + 1)
+                        throw new InvalidDataException($"Track grouping requires contiguous tracks to be selected (group '{group.Name}').");
+                }
             }
         }
     }

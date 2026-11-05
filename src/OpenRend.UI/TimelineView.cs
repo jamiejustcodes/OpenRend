@@ -33,6 +33,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
     }
     public int ActiveTrackIndex { get; private set; }
+    public HashSet<int> SelectedTrackIndices { get; } = [];
     public long Position { get; set; }
     public HashSet<Guid> Selection { get; } = [];
     public Dictionary<Guid, float[]> Waveforms { get; } = [];
@@ -133,6 +134,13 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? TrackArmRequested;
     public event Action<Guid, string?>? TrackColorRequested;
     public event Action<Guid, TrackAutomationMode>? TrackAutomationModeRequested;
+    public event Action<IReadOnlyList<Guid>, string?>? GroupTracksRequested;
+    public event Action<IReadOnlyList<Guid>>? UngroupTracksRequested;
+    public event Action<Guid>? RemoveTrackFromGroupRequested;
+    public event Action<Guid, bool>? TrackGroupCollapsedRequested;
+    public event Action<Guid, bool>? TrackGroupMuteRequested;
+    public event Action<Guid, bool>? TrackGroupSoloRequested;
+    public event Action<Guid>? RenameTrackGroupRequested;
     public RulerFormat RulerFormat
     {
         get => Project.RulerFormat;
@@ -512,17 +520,198 @@ public sealed partial class TimelineView : FrameworkElement
         (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
     }
 
+    public readonly struct TrackLayoutItem
+    {
+        public int Index { get; init; }
+        public Guid TrackId { get; init; }
+        public double Y { get; init; }
+        public double Height { get; init; }
+        public bool IsCollapsed { get; init; }
+        public TrackGroup? Group { get; init; }
+    }
+
+    public readonly struct TrackGroupLayoutItem
+    {
+        public TrackGroup Group { get; init; }
+        public double Y { get; init; }
+        public double Height { get; init; }
+        public int FirstTrackIndex { get; init; }
+        public int LastTrackIndex { get; init; }
+        public Rect HeaderBounds { get; init; }
+        public Rect ChevronBounds { get; init; }
+        public Rect MuteBounds { get; init; }
+        public Rect SoloBounds { get; init; }
+    }
+
+    public sealed class TimelineTrackLayout
+    {
+        public TrackLayoutItem[] Tracks { get; init; } = [];
+        public List<TrackGroupLayoutItem> Groups { get; init; } = [];
+        public double TotalHeight { get; init; }
+    }
+
+    public TimelineTrackLayout ComputeTrackLayout()
+    {
+        var tracks = Project.Tracks;
+        var count = tracks.Count;
+        var trackItems = new TrackLayoutItem[count];
+        var groupItems = new List<TrackGroupLayoutItem>();
+
+        if (count == 0)
+        {
+            return new TimelineTrackLayout { Tracks = trackItems, Groups = groupItems, TotalHeight = 0 };
+        }
+
+        var groups = Project.TrackGroups;
+        var trackToGroup = new Dictionary<Guid, TrackGroup>();
+        if (groups != null)
+        {
+            foreach (var g in groups)
+            {
+                foreach (var tid in g.TrackIds)
+                {
+                    trackToGroup[tid] = g;
+                }
+            }
+        }
+
+        var currentY = RulerHeight - VerticalOffset;
+        var startY = currentY;
+
+        var i = 0;
+        while (i < count)
+        {
+            var track = tracks[i];
+            if (trackToGroup.TryGetValue(track.Id, out var group))
+            {
+                var firstIdx = i;
+                var lastIdx = i;
+                while (lastIdx + 1 < count && trackToGroup.TryGetValue(tracks[lastIdx + 1].Id, out var nextG) && nextG.Id == group.Id)
+                {
+                    lastIdx++;
+                }
+
+                if (group.IsCollapsed)
+                {
+                    const double groupH = 26.0;
+                    var groupY = currentY;
+                    var grpLayout = new TrackGroupLayoutItem
+                    {
+                        Group = group,
+                        Y = groupY,
+                        Height = groupH,
+                        FirstTrackIndex = firstIdx,
+                        LastTrackIndex = lastIdx,
+                        HeaderBounds = new Rect(0, groupY, HeaderWidth, groupH),
+                        ChevronBounds = new Rect(6, groupY + 4, 16, 18),
+                        MuteBounds = new Rect(HeaderWidth - 48, groupY + 3, 20, 20),
+                        SoloBounds = new Rect(HeaderWidth - 26, groupY + 3, 20, 20)
+                    };
+                    groupItems.Add(grpLayout);
+
+                    for (var k = firstIdx; k <= lastIdx; k++)
+                    {
+                        trackItems[k] = new TrackLayoutItem
+                        {
+                            Index = k,
+                            TrackId = tracks[k].Id,
+                            Y = groupY,
+                            Height = 0,
+                            IsCollapsed = true,
+                            Group = group
+                        };
+                    }
+                    currentY += groupH;
+                }
+                else
+                {
+                    var groupTopY = currentY;
+                    for (var k = firstIdx; k <= lastIdx; k++)
+                    {
+                        trackItems[k] = new TrackLayoutItem
+                        {
+                            Index = k,
+                            TrackId = tracks[k].Id,
+                            Y = currentY,
+                            Height = TrackHeight,
+                            IsCollapsed = false,
+                            Group = group
+                        };
+                        currentY += TrackHeight;
+                    }
+                    var groupTotalH = currentY - groupTopY;
+                    var grpLayout = new TrackGroupLayoutItem
+                    {
+                        Group = group,
+                        Y = groupTopY,
+                        Height = groupTotalH,
+                        FirstTrackIndex = firstIdx,
+                        LastTrackIndex = lastIdx,
+                        HeaderBounds = new Rect(0, groupTopY, HeaderWidth, groupTotalH),
+                        ChevronBounds = new Rect(24, groupTopY + 4, 16, 18),
+                        MuteBounds = new Rect(HeaderWidth - 48, groupTopY + 3, 20, 20),
+                        SoloBounds = new Rect(HeaderWidth - 26, groupTopY + 3, 20, 20)
+                    };
+                    groupItems.Add(grpLayout);
+                }
+
+                i = lastIdx + 1;
+            }
+            else
+            {
+                trackItems[i] = new TrackLayoutItem
+                {
+                    Index = i,
+                    TrackId = track.Id,
+                    Y = currentY,
+                    Height = TrackHeight,
+                    IsCollapsed = false,
+                    Group = null
+                };
+                currentY += TrackHeight;
+                i++;
+            }
+        }
+
+        return new TimelineTrackLayout
+        {
+            Tracks = trackItems,
+            Groups = groupItems,
+            TotalHeight = currentY - startY
+        };
+    }
+
+    internal double TotalTimelineContentHeight => ComputeTrackLayout().TotalHeight;
+
+    internal double GetTrackY(int index)
+    {
+        if (index < 0 || index >= Project.Tracks.Count) return RulerHeight + index * TrackHeight - VerticalOffset;
+        var layout = ComputeTrackLayout();
+        return layout.Tracks.Length > index ? layout.Tracks[index].Y : RulerHeight + index * TrackHeight - VerticalOffset;
+    }
+
+    internal double GetTrackHeight(int index)
+    {
+        if (index < 0 || index >= Project.Tracks.Count) return TrackHeight;
+        var layout = ComputeTrackLayout();
+        return layout.Tracks.Length > index ? layout.Tracks[index].Height : TrackHeight;
+    }
+
     internal Rect ClipBounds(Guid trackId, TimelineClip clip)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        return new Rect(X(clip.StartFrame), RulerHeight + index * TrackHeight - VerticalOffset + 1,
-            Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), TrackHeight - 2);
+        if (index < 0) return Rect.Empty;
+        var h = GetTrackHeight(index);
+        if (h <= 0) return Rect.Empty;
+        var y = GetTrackY(index);
+        return new Rect(X(clip.StartFrame), y + 1,
+            Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), h - 2);
     }
 
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var y = RulerHeight + index * TrackHeight - VerticalOffset;
+        var y = GetTrackY(index);
         return action switch
         {
             "Automation" => new Rect(138, y + 4, 21, 20),
@@ -542,7 +731,7 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackLevelBounds(Guid trackId, string level)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
-        var y = RulerHeight + index * TrackHeight - VerticalOffset;
+        var y = GetTrackY(index);
         return level switch { "Opacity" => new Rect(116, y + 25, 124, 20), "Gain" => new Rect(108, y + 25, 90, 20), _ => new Rect(108, y + 46, 90, 18) };
     }
     internal double ReadTrackLevel(Guid trackId, string level)
@@ -630,14 +819,22 @@ public sealed partial class TimelineView : FrameworkElement
     private long FrameAt(double x) => Math.Max(0, Project.FrameRate.Frames((x - HeaderWidth + Offset) / PixelsPerSecond));
     private TimelineTrack? TrackAt(double y)
     {
-        var index = (int)Math.Floor((y - RulerHeight + VerticalOffset) / TrackHeight);
-        return index >= 0 && index < Project.Tracks.Count ? Project.Tracks[index] : null;
+        var layout = ComputeTrackLayout();
+        for (var i = 0; i < layout.Tracks.Length; i++)
+        {
+            var item = layout.Tracks[i];
+            if (!item.IsCollapsed && y >= item.Y && y < item.Y + item.Height)
+            {
+                return Project.Tracks[i];
+            }
+        }
+        return null;
     }
     internal (bool IsNewTrack, int TrackIndex, TrackKind NewTrackKind) EvaluateDragTarget(double y, TrackKind sourceTrackKind, int? sourceTrackIndex = null)
     {
         const double boundaryThreshold = 18.0;
         var timelineTop = RulerHeight - VerticalOffset;
-        var timelineBottom = RulerHeight + Project.Tracks.Count * TrackHeight - VerticalOffset;
+        var timelineBottom = RulerHeight + TotalTimelineContentHeight - VerticalOffset;
 
         if (Project.Tracks.Count == 0)
         {
@@ -798,6 +995,7 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnRender(DrawingContext dc)
     {
         base.OnRender(dc);
+        var layout = ComputeTrackLayout();
         dc.DrawRectangle(BackgroundBrush, null, new Rect(RenderSize));
 
         // 1:1 Vegas Pro Ruler background surface (#242424) and dividing line
@@ -851,7 +1049,9 @@ public sealed partial class TimelineView : FrameworkElement
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var track = Project.Tracks[i];
-            var y = RulerHeight + i * TrackHeight - VerticalOffset;
+            var item = layout.Tracks[i];
+            if (item.IsCollapsed || item.Height <= 0) continue;
+            var y = item.Y;
             if (y + TrackHeight < RulerHeight || y > ActualHeight) continue;
             dc.DrawLine(FrozenPen("#111111", 3), new Point(HeaderWidth, y + TrackHeight), new Point(ActualWidth, y + TrackHeight));
 
@@ -1025,6 +1225,17 @@ public sealed partial class TimelineView : FrameworkElement
             dc.DrawRoundedRectangle(Brush("#800078D4"), null, ghostBanner, 2, 2);
             Text(dc, $"{hoverFileDropName} ({FormatTimecode(ghostFrame, Project.FrameRate)})", ghostX + 6, ghostY + 4, Brushes.White, 10.5, ghostWidth - 12);
         }
+        foreach (var grp in layout.Groups)
+        {
+            if (grp.Group.IsCollapsed)
+            {
+                var gy = grp.Y;
+                if (gy + grp.Height < RulerHeight || gy > ActualHeight) continue;
+                var collapsedBody = new Rect(HeaderWidth, gy + 1, Math.Max(0, ActualWidth - HeaderWidth), grp.Height - 1);
+                dc.DrawRectangle(Brush("#16191D"), FrozenPen("#111111", 1), collapsedBody);
+                Text(dc, $"Collapsed Track Group: {grp.Group.Name} ({grp.Group.TrackIds.Count} tracks)", HeaderWidth + 14, gy + 5, Brush("#555555"), 10.5);
+            }
+        }
         dc.Pop();
         dc.DrawRectangle(Brush("#242424"), null, new Rect(0, 0, HeaderWidth, ActualHeight));
         // 1:1 Vegas Pro Sunken Timecode LCD box at top left of track headers
@@ -1032,26 +1243,93 @@ public sealed partial class TimelineView : FrameworkElement
         dc.DrawRectangle(Brush("#0E0E0E"), FrozenPen("#2E2E2E", 1), tcBox);
         Text(dc, TimecodeFormatter.Format(Position, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames), tcBox.X + 8, tcBox.Y + 4, Brush("#FFFFFF"), 14, tcBox.Width - 16);
         dc.PushClip(new RectangleGeometry(new Rect(0, RulerHeight, HeaderWidth, Math.Max(0, ActualHeight - RulerHeight))));
+
+        var drawnGroups = new HashSet<Guid>();
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
-            var t = Project.Tracks[i]; var y = RulerHeight + i * TrackHeight - VerticalOffset;
+            var t = Project.Tracks[i];
+            var item = layout.Tracks[i];
+            if (item.IsCollapsed)
+            {
+                if (item.Group != null && drawnGroups.Add(item.Group.Id))
+                {
+                    var grpLayout = layout.Groups.FirstOrDefault(g => g.Group.Id == item.Group.Id);
+                    var gy = grpLayout.Y;
+                    var gh = grpLayout.Height;
+                    var grpRect = new Rect(0, gy + 1, HeaderWidth - 3, gh - 1);
+                    var groupColor = !string.IsNullOrEmpty(item.Group.ColorHex) ? item.Group.ColorHex : "#00D2FF";
+                    dc.DrawRectangle(Brush("#1F242A"), FrozenPen("#161616", 1), grpRect);
+                    dc.DrawRectangle(Brush(groupColor), null, new Rect(0, gy + 1, 4, gh - 1));
+
+                    // Expand Chevron [▶] at x = 7, gy + 5
+                    var chevronPen = new Pen(Brush("#B8B8B8"), 1.5);
+                    var chX = 10.0; var chY = gy + 8.0;
+                    dc.DrawLine(chevronPen, new Point(chX, chY), new Point(chX + 5, chY + 5));
+                    dc.DrawLine(chevronPen, new Point(chX + 5, chY + 5), new Point(chX, chY + 10));
+
+                    // Group Name & Track count
+                    Text(dc, $"{item.Group.Name} ({item.Group.TrackIds.Count} tracks)", 24, gy + 6, Brush("#E0E0E0"), 11, HeaderWidth - 80);
+
+                    // Group Mute button [M] at HeaderWidth - 48, gy + 3
+                    var muteBrush = item.Group.IsMuted ? Brush("#2B6CB0") : Brush("#242424");
+                    dc.DrawRoundedRectangle(muteBrush, FrozenPen("#383838", 1), grpLayout.MuteBounds, 1, 1);
+                    Text(dc, "M", grpLayout.MuteBounds.X + 5, grpLayout.MuteBounds.Y + 2, item.Group.IsMuted ? Brushes.White : Brush("#888888"), 10.5);
+
+                    // Group Solo button [S] at HeaderWidth - 26, gy + 3
+                    var soloBrush = item.Group.IsSolo ? Brush("#C89000") : Brush("#242424");
+                    dc.DrawRoundedRectangle(soloBrush, FrozenPen("#383838", 1), grpLayout.SoloBounds, 1, 1);
+                    Text(dc, "S", grpLayout.SoloBounds.X + 5, grpLayout.SoloBounds.Y + 2, item.Group.IsSolo ? Brushes.White : Brush("#888888"), 10.5);
+                }
+                continue;
+            }
+
+            var y = item.Y;
             var trackAccentColor = !string.IsNullOrEmpty(t.TrackColor) ? t.TrackColor : VegasTrackColors.Palette[(i % 8) + 1].Hex;
-            var isTrackActive = IsKeyboardFocusWithin && i == ActiveTrackIndex;
+            var isTrackActive = IsKeyboardFocusWithin && (i == ActiveTrackIndex || SelectedTrackIndices.Contains(i));
             var trackBg = t.IsLocked ? "#202020" : isTrackActive ? "#333333" : "#2A2A2A";
             dc.DrawRectangle(Brush(trackBg), FrozenPen("#161616", 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
             // 1:1 Vegas Pro 4px color accent bar on far left
             dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 4, TrackHeight - 1));
             if (isTrackActive)
                 dc.DrawRectangle(null, FrozenPen("#83C9FF", 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
+
+            // If track is in a group, draw grouping bracket on left edge
+            if (item.Group != null)
+            {
+                var groupColor = !string.IsNullOrEmpty(item.Group.ColorHex) ? item.Group.ColorHex : "#00D2FF";
+                var bracketPen = FrozenPen(groupColor, 2.5);
+                var grpLayout = layout.Groups.FirstOrDefault(g => g.Group.Id == item.Group.Id);
+
+                // Vertical bracket line at x = 2
+                dc.DrawLine(bracketPen, new Point(2, y + 1), new Point(2, y + TrackHeight));
+
+                if (i == grpLayout.FirstTrackIndex)
+                {
+                    // Top hook ┌
+                    dc.DrawLine(bracketPen, new Point(2, y + 1), new Point(8, y + 1));
+
+                    // Collapse Chevron [▼] next to track number
+                    var chevronPen = new Pen(Brush("#B8B8B8"), 1.5);
+                    var chX = 6.0; var chY = y + 9.0;
+                    dc.DrawLine(chevronPen, new Point(chX, chY), new Point(chX + 4, chY + 4));
+                    dc.DrawLine(chevronPen, new Point(chX + 4, chY + 4), new Point(chX + 8, chY));
+                }
+                if (i == grpLayout.LastTrackIndex)
+                {
+                    // Bottom hook └
+                    dc.DrawLine(bracketPen, new Point(2, y + TrackHeight - 1), new Point(8, y + TrackHeight - 1));
+                }
+            }
+
             // Track number badge
-            var numRect = new Rect(7, y + 4, 18, 18);
+            var numRect = new Rect(item.Group != null ? 18 : 7, y + 4, 18, 18);
             dc.DrawRectangle(Brush("#1E1E1E"), FrozenPen(trackAccentColor, 1), numRect);
             Text(dc, $"{i + 1}", numRect.X + (i + 1 < 10 ? 5 : 2), numRect.Y + 2, Brush("#EEEEEE"), 10.5);
-            var indent = t.Kind == TrackKind.Video ? t.CompositeNestingLevel * 14 : 0;
+            var indent = (t.Kind == TrackKind.Video ? t.CompositeNestingLevel * 14 : 0) + (item.Group != null ? 12 : 0);
             if (t.CompositeNestingLevel > 0)
             {
                 var branchPen = FrozenPen("#666666", 1.2);
-                var branchX = 24 + (t.CompositeNestingLevel - 1) * 14 + 7;
+                var branchX = 24 + (t.CompositeNestingLevel - 1) * 14 + 7 + (item.Group != null ? 12 : 0);
                 dc.DrawLine(branchPen, new Point(branchX, y), new Point(branchX, y + TrackHeight / 2));
                 dc.DrawLine(branchPen, new Point(branchX, y + TrackHeight / 2), new Point(branchX + 7, y + TrackHeight / 2));
             }
@@ -1331,10 +1609,73 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (origin.X < HeaderWidth)
         {
+            var layout = ComputeTrackLayout();
+            foreach (var grp in layout.Groups)
+            {
+                if (grp.Group.IsCollapsed && grp.HeaderBounds.Contains(origin))
+                {
+                    if (grp.ChevronBounds.Contains(origin) || e.ClickCount == 2)
+                    {
+                        TrackGroupCollapsedRequested?.Invoke(grp.Group.Id, false);
+                        InvalidateVisual();
+                        e.Handled = true;
+                        return;
+                    }
+                    if (grp.MuteBounds.Contains(origin))
+                    {
+                        TrackGroupMuteRequested?.Invoke(grp.Group.Id, !grp.Group.IsMuted);
+                        InvalidateVisual();
+                        e.Handled = true;
+                        return;
+                    }
+                    if (grp.SoloBounds.Contains(origin))
+                    {
+                        TrackGroupSoloRequested?.Invoke(grp.Group.Id, !grp.Group.IsSolo);
+                        InvalidateVisual();
+                        e.Handled = true;
+                        return;
+                    }
+                    e.Handled = true;
+                    return;
+                }
+                else if (!grp.Group.IsCollapsed)
+                {
+                    var chevronRect = new Rect(4, grp.Y + 2, 16, 18);
+                    if (chevronRect.Contains(origin))
+                    {
+                        TrackGroupCollapsedRequested?.Invoke(grp.Group.Id, true);
+                        InvalidateVisual();
+                        e.Handled = true;
+                        return;
+                    }
+                }
+            }
+
             var track = TrackAt(origin.Y);
             if (track is not null)
             {
-                ActivateTrack(Project.Tracks.IndexOf(track));
+                var tIdx = Project.Tracks.IndexOf(track);
+                if (Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+                {
+                    if (SelectedTrackIndices.Contains(tIdx)) SelectedTrackIndices.Remove(tIdx);
+                    else SelectedTrackIndices.Add(tIdx);
+                    ActiveTrackIndex = tIdx;
+                    InvalidateVisual();
+                }
+                else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift))
+                {
+                    var s = Math.Min(ActiveTrackIndex, tIdx);
+                    var end = Math.Max(ActiveTrackIndex, tIdx);
+                    for (var k = s; k <= end; k++) SelectedTrackIndices.Add(k);
+                    ActiveTrackIndex = tIdx;
+                    InvalidateVisual();
+                }
+                else
+                {
+                    SelectedTrackIndices.Clear();
+                    SelectedTrackIndices.Add(tIdx);
+                    ActivateTrack(tIdx);
+                }
                 foreach (var level in track.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
                 {
                     if (!TrackLevelBounds(track.Id, level).Contains(origin)) continue;
@@ -2158,6 +2499,39 @@ public sealed partial class TimelineView : FrameworkElement
             }
             return;
         }
+        var layout = ComputeTrackLayout();
+        foreach (var grp in layout.Groups)
+        {
+            if (grp.Group.IsCollapsed && p.Y >= grp.Y && p.Y < grp.Y + grp.Height && p.X < HeaderWidth)
+            {
+                var gMenu = new ContextMenu();
+                var expandItem = new MenuItem { Header = "Expand Track Group" };
+                expandItem.Click += (_, _) => TrackGroupCollapsedRequested?.Invoke(grp.Group.Id, false);
+                gMenu.Items.Add(expandItem);
+
+                var gMute = new MenuItem { Header = "Mute Track Group", IsCheckable = true, IsChecked = grp.Group.IsMuted };
+                gMute.Click += (_, _) => TrackGroupMuteRequested?.Invoke(grp.Group.Id, !grp.Group.IsMuted);
+                gMenu.Items.Add(gMute);
+
+                var gSolo = new MenuItem { Header = "Solo Track Group", IsCheckable = true, IsChecked = grp.Group.IsSolo };
+                gSolo.Click += (_, _) => TrackGroupSoloRequested?.Invoke(grp.Group.Id, !grp.Group.IsSolo);
+                gMenu.Items.Add(gSolo);
+
+                var gRename = new MenuItem { Header = "Rename Track Group…" };
+                gRename.Click += (_, _) => RenameTrackGroupRequested?.Invoke(grp.Group.Id);
+                gMenu.Items.Add(gRename);
+
+                var gUngroup = new MenuItem { Header = "Ungroup Selected Tracks", InputGestureText = "Ctrl+Shift+U" };
+                gUngroup.Click += (_, _) => UngroupTracksRequested?.Invoke(grp.Group.TrackIds);
+                gMenu.Items.Add(gUngroup);
+
+                gMenu.PlacementTarget = this;
+                gMenu.Placement = PlacementMode.MousePoint;
+                gMenu.IsOpen = true;
+                e.Handled = true;
+                return;
+            }
+        }
         var track = TrackAt(p.Y);
         var trackIndex = track is not null ? Project.Tracks.IndexOf(track) : 0;
         var menu = new ContextMenu();
@@ -2375,6 +2749,54 @@ public sealed partial class TimelineView : FrameworkElement
                     colorMenu.Items.Add(colorItem);
                 }
                 menu.Items.Add(colorMenu);
+
+                var currentGroup = Project.TrackGroups?.FirstOrDefault(g => g.TrackIds.Contains(track.Id));
+                var selectedTracks = SelectedTrackIndices
+                    .Where(idx => idx >= 0 && idx < Project.Tracks.Count)
+                    .Select(idx => Project.Tracks[idx])
+                    .ToList();
+                if (!selectedTracks.Contains(track)) selectedTracks.Add(track);
+
+                menu.Items.Add(new Separator());
+
+                var groupTracksItem = new MenuItem
+                {
+                    Header = "Group Selected Tracks",
+                    InputGestureText = "Ctrl+Shift+G"
+                };
+                groupTracksItem.Click += (_, _) =>
+                {
+                    var ids = selectedTracks.Select(t => t.Id).ToList();
+                    GroupTracksRequested?.Invoke(ids, null);
+                };
+                menu.Items.Add(groupTracksItem);
+
+                if (currentGroup != null)
+                {
+                    var removeGroupItem = new MenuItem { Header = "Remove from Track Group" };
+                    removeGroupItem.Click += (_, _) => RemoveTrackFromGroupRequested?.Invoke(track.Id);
+                    menu.Items.Add(removeGroupItem);
+
+                    var toggleCollapseItem = new MenuItem { Header = currentGroup.IsCollapsed ? "Expand Track Group" : "Collapse Track Group" };
+                    toggleCollapseItem.Click += (_, _) => TrackGroupCollapsedRequested?.Invoke(currentGroup.Id, !currentGroup.IsCollapsed);
+                    menu.Items.Add(toggleCollapseItem);
+
+                    var groupMuteItem = new MenuItem { Header = "Mute Track Group", IsCheckable = true, IsChecked = currentGroup.IsMuted };
+                    groupMuteItem.Click += (_, _) => TrackGroupMuteRequested?.Invoke(currentGroup.Id, !currentGroup.IsMuted);
+                    menu.Items.Add(groupMuteItem);
+
+                    var groupSoloItem = new MenuItem { Header = "Solo Track Group", IsCheckable = true, IsChecked = currentGroup.IsSolo };
+                    groupSoloItem.Click += (_, _) => TrackGroupSoloRequested?.Invoke(currentGroup.Id, !currentGroup.IsSolo);
+                    menu.Items.Add(groupSoloItem);
+
+                    var renameGroupItem = new MenuItem { Header = "Rename Track Group…" };
+                    renameGroupItem.Click += (_, _) => RenameTrackGroupRequested?.Invoke(currentGroup.Id);
+                    menu.Items.Add(renameGroupItem);
+
+                    var ungroupItem = new MenuItem { Header = "Ungroup Selected Tracks", InputGestureText = "Ctrl+Shift+U" };
+                    ungroupItem.Click += (_, _) => UngroupTracksRequested?.Invoke(currentGroup.TrackIds);
+                    menu.Items.Add(ungroupItem);
+                }
             }
 
             menu.PlacementTarget = this;

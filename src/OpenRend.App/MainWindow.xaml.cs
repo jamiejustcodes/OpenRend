@@ -454,6 +454,60 @@ public partial class MainWindow : Window
         Timeline.LinkRequested += () => GroupCreateClick(this, new RoutedEventArgs());
         Timeline.ClearGroupRequested += () => GroupClearClick(this, new RoutedEventArgs());
         Timeline.SelectAllInGroupRequested += id => GroupSelectAllInClipGroup(id);
+        Timeline.GroupTracksRequested += (trackIds, name) => Guard(() =>
+        {
+            try
+            {
+                var group = vm.GroupSelectedTracks(trackIds, name);
+                Timeline.InvalidateVisual();
+                vm.Status = $"Grouped tracks into {group.Name}.";
+            }
+            catch (InvalidOperationException ex)
+            {
+                MessageBox.Show(ex.Message, "Track Grouping", MessageBoxButton.OK, MessageBoxImage.Warning);
+                vm.Status = ex.Message;
+            }
+        });
+        Timeline.UngroupTracksRequested += trackIds => Guard(() =>
+        {
+            vm.UngroupTracks(trackIds);
+            Timeline.InvalidateVisual();
+            vm.Status = "Ungrouped tracks.";
+        });
+        Timeline.RemoveTrackFromGroupRequested += trackId => Guard(() =>
+        {
+            vm.RemoveTrackFromGroup(trackId);
+            Timeline.InvalidateVisual();
+            vm.Status = "Removed track from group.";
+        });
+        Timeline.TrackGroupCollapsedRequested += (groupId, collapsed) => Guard(() =>
+        {
+            vm.SetTrackGroupCollapsed(groupId, collapsed);
+            Timeline.InvalidateVisual();
+        });
+        Timeline.TrackGroupMuteRequested += (groupId, muted) => Guard(() =>
+        {
+            vm.SetTrackGroupMute(groupId, muted);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        });
+        Timeline.TrackGroupSoloRequested += (groupId, soloed) => Guard(() =>
+        {
+            vm.SetTrackGroupSolo(groupId, soloed);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        });
+        Timeline.RenameTrackGroupRequested += groupId =>
+        {
+            var grp = vm.Project.TrackGroups?.FirstOrDefault(g => g.Id == groupId);
+            if (grp == null) return;
+            var dlg = new TrackGroupNameDialog(grp.Name, this);
+            if (dlg.ShowDialog() == true && !string.IsNullOrWhiteSpace(dlg.GroupName))
+            {
+                vm.SetTrackGroupName(groupId, dlg.GroupName);
+                Timeline.InvalidateVisual();
+            }
+        };
         Timeline.ToggleEnvelopeRequested += (id, type) => Guard(() =>
         {
             Pause();
@@ -2296,6 +2350,57 @@ public partial class MainWindow : Window
         Timeline.IgnoreGroups = vm.IgnoreGroups;
         vm.Status = vm.IgnoreGroups ? "Ignore event grouping enabled." : "Ignore event grouping disabled.";
     }
+    private void GroupTracksClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selectedTracks = Timeline.SelectedTrackIndices
+            .Where(idx => idx >= 0 && idx < vm.Project.Tracks.Count)
+            .Select(idx => vm.Project.Tracks[idx])
+            .ToList();
+        if (selectedTracks.Count < 2 && Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count)
+        {
+            var activeTr = vm.Project.Tracks[Timeline.ActiveTrackIndex];
+            if (!selectedTracks.Contains(activeTr)) selectedTracks.Add(activeTr);
+        }
+        if (selectedTracks.Count < 2)
+        {
+            vm.Status = "Track grouping requires at least two contiguous tracks to be selected.";
+            return;
+        }
+        try
+        {
+            var group = vm.GroupSelectedTracks(selectedTracks.Select(t => t.Id).ToList());
+            Timeline.InvalidateVisual();
+            vm.Status = $"Grouped tracks into {group.Name}.";
+        }
+        catch (InvalidOperationException ex)
+        {
+            MessageBox.Show(ex.Message, "Track Grouping", MessageBoxButton.OK, MessageBoxImage.Warning);
+            vm.Status = ex.Message;
+        }
+    });
+    private void UngroupTracksClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var selectedTracks = Timeline.SelectedTrackIndices
+            .Where(idx => idx >= 0 && idx < vm.Project.Tracks.Count)
+            .Select(idx => vm.Project.Tracks[idx])
+            .ToList();
+        if (selectedTracks.Count == 0 && Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count)
+        {
+            selectedTracks.Add(vm.Project.Tracks[Timeline.ActiveTrackIndex]);
+        }
+        if (selectedTracks.Count == 0) return;
+        vm.UngroupTracks(selectedTracks.Select(t => t.Id).ToList());
+        Timeline.InvalidateVisual();
+        vm.Status = "Ungrouped tracks.";
+    });
+    private void RemoveFromTrackGroupClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (Timeline.ActiveTrackIndex < 0 || Timeline.ActiveTrackIndex >= vm.Project.Tracks.Count) return;
+        var track = vm.Project.Tracks[Timeline.ActiveTrackIndex];
+        vm.RemoveTrackFromGroup(track.Id);
+        Timeline.InvalidateVisual();
+        vm.Status = "Removed track from group.";
+    });
     private void VideoTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p => p.Tracks.Insert(0, new TimelineTrack
     { Kind = TrackKind.Video, Name = $"Video {p.Tracks.Count(t => t.Kind == TrackKind.Video) + 1}" })));
     private void AudioTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.AddTrack(TrackKind.Audio));

@@ -41,14 +41,19 @@ public sealed class EditDetailsWindow : Window
     public IReadOnlyList<EditDetailsEventRow> CurrentEventRows => currentEventRows;
     public IReadOnlyList<EditDetailsMarkerRow> CurrentMarkerRows => currentMarkerRows;
     public IReadOnlyList<EditDetailsRegionRow> CurrentRegionRows => currentRegionRows;
+    public IReadOnlyList<EditDetailsTrackGroupRow> CurrentTrackGroupRows => currentTrackGroupRows;
     public ComboBox ShowComboBox => showCombo;
     public CheckBox SelectedTrackOnlyCheckBox => selectedTrackOnlyCheck;
     public TextBox SearchTextBox => searchBox;
     public ListView EventsListView => eventsListView;
     public ListView MarkersListView => markersListView;
     public ListView RegionsListView => regionsListView;
+    public ListView TrackGroupsListView => trackGroupsListView;
     public TextBlock SummaryTextBlock => summaryText;
     public TextBlock StatusTextBlock => statusText;
+
+    private readonly List<EditDetailsTrackGroupRow> currentTrackGroupRows = [];
+    private readonly ListView trackGroupsListView;
 
     public EditDetailsWindow(EditorViewModel viewModel, Action projectChanged, Window? owner = null)
     {
@@ -129,6 +134,7 @@ public sealed class EditDetailsWindow : Window
         showCombo.Items.Add(new ComboBoxItem { Content = "Events", IsSelected = true });
         showCombo.Items.Add(new ComboBoxItem { Content = "Markers" });
         showCombo.Items.Add(new ComboBoxItem { Content = "Regions" });
+        showCombo.Items.Add(new ComboBoxItem { Content = "Track Groups" });
         showCombo.Items.Add(new ComboBoxItem { Content = "Selected Events" });
         showCombo.SelectionChanged += (_, _) => RefreshGrid();
         leftStack.Children.Add(showCombo);
@@ -296,10 +302,34 @@ public sealed class EditDetailsWindow : Window
         regionsListView.SelectionChanged += RegionsListView_SelectionChanged;
         regionsListView.ContextMenu = CreateRegionsContextMenu();
 
+        // 3c. Track Groups ListView
+        trackGroupsListView = new ListView
+        {
+            Background = bgBrush,
+            Foreground = textBrush,
+            BorderBrush = borderBrush,
+            BorderThickness = new Thickness(1),
+            SelectionMode = SelectionMode.Extended,
+            FontFamily = new FontFamily("Segoe UI"),
+            FontSize = 11,
+            ItemContainerStyle = itemStyle,
+            Visibility = Visibility.Collapsed
+        };
+
+        var trackGroupsGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Group", Width = 60, DisplayMemberBinding = new Binding("GroupIndex") });
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Name", Width = 180, DisplayMemberBinding = new Binding("Name") });
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Tracks", Width = 160, DisplayMemberBinding = new Binding("TracksDisplay") });
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Mute", Width = 60, DisplayMemberBinding = new Binding("MuteText") });
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Solo", Width = 60, DisplayMemberBinding = new Binding("SoloText") });
+        trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Collapsed", Width = 70, DisplayMemberBinding = new Binding("CollapsedText") });
+        trackGroupsListView.View = trackGroupsGridView;
+
         var gridContainer = new Grid();
         gridContainer.Children.Add(eventsListView);
         gridContainer.Children.Add(markersListView);
         gridContainer.Children.Add(regionsListView);
+        gridContainer.Children.Add(trackGroupsListView);
         Grid.SetRow(gridContainer, 1);
         root.Children.Add(gridContainer);
 
@@ -526,6 +556,7 @@ public sealed class EditDetailsWindow : Window
         {
             if (eventsListView != null) eventsListView.Visibility = Visibility.Collapsed;
             if (regionsListView != null) regionsListView.Visibility = Visibility.Collapsed;
+            if (trackGroupsListView != null) trackGroupsListView.Visibility = Visibility.Collapsed;
             if (markersListView != null) markersListView.Visibility = Visibility.Visible;
 
             currentMarkerRows.Clear();
@@ -561,6 +592,7 @@ public sealed class EditDetailsWindow : Window
         {
             if (eventsListView != null) eventsListView.Visibility = Visibility.Collapsed;
             if (markersListView != null) markersListView.Visibility = Visibility.Collapsed;
+            if (trackGroupsListView != null) trackGroupsListView.Visibility = Visibility.Collapsed;
             if (regionsListView != null) regionsListView.Visibility = Visibility.Visible;
 
             currentRegionRows.Clear();
@@ -596,10 +628,55 @@ public sealed class EditDetailsWindow : Window
             }
             if (summaryText != null) summaryText.Text = $"{currentRegionRows.Count} regions listed";
         }
+        else if (modeStr == "Track Groups")
+        {
+            if (eventsListView != null) eventsListView.Visibility = Visibility.Collapsed;
+            if (markersListView != null) markersListView.Visibility = Visibility.Collapsed;
+            if (regionsListView != null) regionsListView.Visibility = Visibility.Collapsed;
+            if (trackGroupsListView != null) trackGroupsListView.Visibility = Visibility.Visible;
+
+            currentTrackGroupRows.Clear();
+            var groups = vm.Project.TrackGroups ?? [];
+            for (var gIdx = 0; gIdx < groups.Count; gIdx++)
+            {
+                var g = groups[gIdx];
+                if (!string.IsNullOrEmpty(filterText) &&
+                    !g.Name.Contains(filterText, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var trackNames = g.TrackIds
+                    .Select(tid => vm.Project.Tracks.FindIndex(t => t.Id == tid))
+                    .Where(idx => idx >= 0)
+                    .Select(idx => $"Track {idx + 1}")
+                    .ToList();
+
+                currentTrackGroupRows.Add(new EditDetailsTrackGroupRow
+                {
+                    GroupId = g.Id,
+                    GroupIndex = gIdx + 1,
+                    Name = g.Name,
+                    TrackCount = g.TrackIds.Count,
+                    TracksDisplay = string.Join(", ", trackNames),
+                    MuteText = g.IsMuted ? "Yes" : "No",
+                    SoloText = g.IsSolo ? "Yes" : "No",
+                    CollapsedText = g.IsCollapsed ? "Yes" : "No"
+                });
+            }
+
+            if (trackGroupsListView != null)
+            {
+                trackGroupsListView.ItemsSource = null;
+                trackGroupsListView.ItemsSource = currentTrackGroupRows;
+            }
+            if (summaryText != null) summaryText.Text = $"{currentTrackGroupRows.Count} track groups listed";
+        }
         else
         {
             if (markersListView != null) markersListView.Visibility = Visibility.Collapsed;
             if (regionsListView != null) regionsListView.Visibility = Visibility.Collapsed;
+            if (trackGroupsListView != null) trackGroupsListView.Visibility = Visibility.Collapsed;
             if (eventsListView != null) eventsListView.Visibility = Visibility.Visible;
 
             currentEventRows.Clear();
@@ -705,6 +782,18 @@ public sealed class EditDetailsWindow : Window
                 sb.AppendLine($"{r.Index}\t{r.StartTimecode}\t{r.EndTimecode}\t{r.LengthTimecode}\t{r.Label}\t{r.ColorName}");
             }
         }
+        else if (modeStr == "Track Groups")
+        {
+            sb.AppendLine("Group\tName\tTracks\tMute\tSolo\tCollapsed");
+            var rows = selectedOnly && trackGroupsListView?.SelectedItems.Count > 0
+                ? trackGroupsListView.SelectedItems.OfType<EditDetailsTrackGroupRow>().ToList()
+                : currentTrackGroupRows;
+
+            foreach (var g in rows)
+            {
+                sb.AppendLine($"{g.GroupIndex}\t{g.Name}\t{g.TracksDisplay}\t{g.MuteText}\t{g.SoloText}\t{g.CollapsedText}");
+            }
+        }
         else
         {
             sb.AppendLine("Track\tEvent\tStart\tEnd\tLength\tName\tActive Take\tSource In\tRate\tMute\tLock\tMedia File\tSnap Offset");
@@ -771,6 +860,23 @@ public sealed class EditDetailsWindow : Window
             onProjectChanged();
             RefreshGrid();
             statusText.Text = $"Deleted {selectedRegions.Count} region(s).";
+        }
+        else if (modeStr == "Track Groups")
+        {
+            var selectedGroups = trackGroupsListView.SelectedItems.OfType<EditDetailsTrackGroupRow>().ToList();
+            if (selectedGroups.Count == 0) return;
+
+            foreach (var sg in selectedGroups)
+            {
+                var group = vm.Project.TrackGroups?.FirstOrDefault(g => g.Id == sg.GroupId);
+                if (group != null)
+                {
+                    vm.UngroupTracks(group.TrackIds);
+                }
+            }
+            onProjectChanged();
+            RefreshGrid();
+            statusText.Text = $"Deleted {selectedGroups.Count} track group(s).";
         }
         else
         {
@@ -871,3 +977,16 @@ public sealed class EditDetailsRegionRow
         _ => $"Color {ColorId}"
     };
 }
+
+public sealed class EditDetailsTrackGroupRow
+{
+    public Guid GroupId { get; set; }
+    public int GroupIndex { get; set; }
+    public string Name { get; set; } = "";
+    public int TrackCount { get; set; }
+    public string TracksDisplay { get; set; } = "";
+    public string MuteText { get; set; } = "No";
+    public string SoloText { get; set; } = "No";
+    public string CollapsedText { get; set; } = "No";
+}
+

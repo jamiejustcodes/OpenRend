@@ -194,6 +194,28 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 track groups architecture, collapse/expand layout, and mute/solo suite` implemented 1:1 Vegas Pro Track Groups matching `ScriptPortal.Vegas.TrackGroup`, `TrackGroups`, `Project.GroupSelectedTracks`, and `Project.UngroupSelectedTracks`.
+  - Core Data Models & Validation:
+    - Created `TrackGroup.cs` in `OpenRend.Core`: modeled `Id`, `Name` ("Track Group 1"), `ColorHex`, `IsCollapsed`, `IsMuted`, `IsSolo`, `TrackIds`, deep cloning, and schema validation.
+    - Extended `ProjectDocument.cs` with `TrackGroups` collection, JSON serialization, and deep validation enforcing Vegas Pro contiguity rule: `"Track grouping requires contiguous tracks to be selected."`, track existence, and mutual exclusivity across groups.
+  - Timeline Operations & Cascaded DSP Evaluation:
+    - Created `TimelineEditor.TrackGroups.cs` providing atomic undo/redo operations: `GroupSelectedTracks`, `UngroupTracks`, `RemoveTrackFromGroup`, `SetTrackGroupCollapsed`, `SetTrackGroupMute`, `SetTrackGroupSolo`, `SetTrackGroupName`, and `SetTrackGroupColor`.
+    - In `TimelineEditor.cs`: updated `DeleteTrack` to clean up member track IDs from enclosing groups (auto-pruning empty groups), and `Restore` to snapshot `TrackGroups`.
+    - In `TimelineEvaluator.cs`: cascaded group mute (`IsTrackEffectivelyMuted`) and solo (`IsTrackEffectivelySolo`) across audio and video tracks.
+    - In `TimelineRenderService.cs`: integrated cascaded group mute and solo into audio bus accumulation and track rendering for identical preview and export evaluation.
+  - UI Implementation:
+    - In `TimelineView.cs`:
+      - Dynamic track layout calculation (`ComputeTrackLayout`) mapping track visual Y and height depending on group collapse state.
+      - Collapsed groups fold member tracks to height 0 and render a 26px compact group header bar with expand chevron (`▶`), group name, track count, Mute (`M`), and Solo (`S`) toggle buttons.
+      - Expanded groups render an authentic colored vertical grouping bracket down the left edge of track headers with top (`┌`) and bottom (`└`) ticks, alongside collapse chevron (`▼`), group Mute, and Solo buttons.
+      - Added multi-track header selection (`SelectedTrackIndices`) and track header context menu actions: `Group Selected Tracks`, `Ungroup Tracks`, `Remove from Track Group`, `Toggle Group Collapse`, `Group Mute`, `Group Solo`, and `Rename Group...`.
+    - Created `TrackGroupNameDialog.cs` in `OpenRend.App`: authentic modal dialog matching Vegas Pro for renaming track groups.
+    - In `MainWindow.xaml` and `MainWindow.xaml.cs`: added `Edit > Track Grouping` menu (`Group Selected Tracks` Ctrl+Shift+G, `Ungroup Selected Tracks`, `Remove from Track Group`), wired rename dialog, and refreshed timeline and audio preview.
+    - In `EditDetailsWindow.cs`: added `Track Groups` view mode to `Show:` dropdown, `trackGroupsListView` with columns (`Group`, `Name`, `Tracks`, `Mute`, `Solo`, `Collapsed`), double-click seek, and TSV clipboard export.
+  - Verification:
+    - Added 7 unit tests in `TrackGroupsEditorTests.cs` (OpenRend.Editor.Tests) verifying contiguous track grouping, non-contiguous selection rejection, group mute and solo cascading, collapsed layout folding, undo/redo, track deletion pruning, and Edit Details TSV export.
+    - Full gate passed: 100% native integration tests (1/1), 1,071 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 audio pan laws and timeline event snap offset suite` implemented 1:1 Vegas Pro Audio Pan Laws and Timeline Event Snap Offset matching `ScriptPortal.Vegas.PanType` (`Add`, `ConstantPower`, `Balance`, `Notch3Db`, `Notch6Db`) and `TrackEvent.SnapOffset`.
   - Core Data Models & DSP Evaluation:
     - Created `AudioPanMode.cs` enum in `OpenRend.Core`: `Balance` (0 dB center, linear), `ConstantPower` (-3.01 dB center, sine-cosine equal power $L^2 + R^2 = 1.0$), `AddChannels` (0 dB center, additive), `Notch3Db` (-3.0 dB center notch), and `Notch6Db` (-6.0 dB center notch).

@@ -105,7 +105,22 @@ public sealed partial class TimelineEditor
         Execute(p =>
         {
             var idx = p.Tracks.FindIndex(t => t.Id == trackId);
-            if (idx >= 0) p.Tracks.RemoveAt(idx);
+            if (idx >= 0)
+            {
+                p.Tracks.RemoveAt(idx);
+                if (p.TrackGroups != null)
+                {
+                    for (var g = p.TrackGroups.Count - 1; g >= 0; g--)
+                    {
+                        var group = p.TrackGroups[g];
+                        group.TrackIds.Remove(trackId);
+                        if (group.TrackIds.Count == 0)
+                        {
+                            p.TrackGroups.RemoveAt(g);
+                        }
+                    }
+                }
+            }
         });
     }
 
@@ -1895,5 +1910,6 @@ public sealed partial class TimelineEditor
         Project.Markers = copy.Markers; Project.Regions = copy.Regions; Project.Notes = copy.Notes;
         Project.RulerFormat = copy.RulerFormat; Project.MediaBins = copy.MediaBins;
         Project.AudioBuses = copy.AudioBuses;
+        Project.TrackGroups = copy.TrackGroups;
     }
 }
