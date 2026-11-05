@@ -75,6 +75,17 @@ public sealed partial class TimelineEditor
         });
     }
 
+    public void SetAudioBusPanMode(Guid busId, AudioPanMode panMode)
+    {
+        if (!Enum.IsDefined(panMode)) throw new ArgumentOutOfRangeException(nameof(panMode));
+        Execute(p =>
+        {
+            var bus = p.AudioBuses.FirstOrDefault(b => b.Id == busId);
+            if (bus == null) return;
+            bus.PanMode = panMode;
+        });
+    }
+
     public void SetAudioBusMute(Guid busId, bool isMuted)
     {
         Execute(p =>

@@ -496,7 +496,7 @@ public sealed class MixingConsoleWindow : Window
         var panPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
         var panText = new TextBlock
         {
-            Text = FormatPan(track.Pan),
+            Text = FormatPan(track.Pan, track.PanMode),
             FontSize = 9,
             Foreground = Brushes.Silver,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -509,11 +509,14 @@ public sealed class MixingConsoleWindow : Window
             Value = track.Pan,
             Height = 18,
             TickFrequency = 0.1,
-            ToolTip = "Pan (Left / Right) - Double click to center"
+            ToolTip = "Pan (Left / Right) - Double click to center, Right click for Pan Type"
         };
+        var panCtxMenu = CreateTrackPanContextMenu(track);
+        panSlider.ContextMenu = panCtxMenu;
+        panText.ContextMenu = panCtxMenu;
         panSlider.ValueChanged += (_, e) =>
         {
-            panText.Text = FormatPan(e.NewValue);
+            panText.Text = FormatPan(e.NewValue, track.PanMode);
             track.Pan = e.NewValue;
             onProjectChanged();
         };
@@ -778,7 +781,7 @@ public sealed class MixingConsoleWindow : Window
         var panPanel = new StackPanel { Margin = new Thickness(0, 0, 0, 6) };
         var panText = new TextBlock
         {
-            Text = FormatPan(bus.Pan),
+            Text = FormatPan(bus.Pan, bus.PanMode),
             FontSize = 9,
             Foreground = Brushes.Silver,
             HorizontalAlignment = HorizontalAlignment.Center,
@@ -791,11 +794,14 @@ public sealed class MixingConsoleWindow : Window
             Value = bus.Pan,
             Height = 18,
             TickFrequency = 0.1,
-            ToolTip = $"{bus.Name} Pan (Left / Right) - Double click to center"
+            ToolTip = $"{bus.Name} Pan (Left / Right) - Double click to center, Right click for Pan Type"
         };
+        var busPanCtxMenu = CreateBusPanContextMenu(bus);
+        panSlider.ContextMenu = busPanCtxMenu;
+        panText.ContextMenu = busPanCtxMenu;
         panSlider.ValueChanged += (_, e) =>
         {
-            panText.Text = FormatPan(e.NewValue);
+            panText.Text = FormatPan(e.NewValue, bus.PanMode);
             vm.Editor.SetAudioBusPan(bus.Id, e.NewValue);
             onProjectChanged();
         };
@@ -1198,11 +1204,75 @@ public sealed class MixingConsoleWindow : Window
         return grad;
     }
 
-    private static string FormatPan(double pan)
+    private ContextMenu CreateTrackPanContextMenu(TimelineTrack track)
     {
-        if (Math.Abs(pan) < 0.01) return "Center";
-        if (pan < 0) return $"{Math.Abs(pan) * 100:0}% L";
-        return $"{pan * 100:0}% R";
+        var menu = new ContextMenu();
+        var panTypeMenu = new MenuItem { Header = "Pan Type" };
+        var panModes = new (AudioPanMode Mode, string Label)[]
+        {
+            (AudioPanMode.AddChannels, "Add Channels (0 dB Center)"),
+            (AudioPanMode.Balance, "Balance (0 dB Center)"),
+            (AudioPanMode.Notch3Db, "Balance (-3 dB Center)"),
+            (AudioPanMode.Notch6Db, "Balance (-6 dB Center)"),
+            (AudioPanMode.ConstantPower, "Constant Power")
+        };
+        foreach (var (mode, label) in panModes)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = track.PanMode == mode };
+            var targetMode = mode;
+            item.Click += (_, _) =>
+            {
+                vm.Editor.SetTrackPanMode(track.Id, targetMode);
+                onProjectChanged();
+                RefreshTracks();
+            };
+            panTypeMenu.Items.Add(item);
+        }
+        menu.Items.Add(panTypeMenu);
+        return menu;
+    }
+
+    private ContextMenu CreateBusPanContextMenu(AudioBusTrack bus)
+    {
+        var menu = new ContextMenu();
+        var panTypeMenu = new MenuItem { Header = "Pan Type" };
+        var panModes = new (AudioPanMode Mode, string Label)[]
+        {
+            (AudioPanMode.AddChannels, "Add Channels (0 dB Center)"),
+            (AudioPanMode.Balance, "Balance (0 dB Center)"),
+            (AudioPanMode.Notch3Db, "Balance (-3 dB Center)"),
+            (AudioPanMode.Notch6Db, "Balance (-6 dB Center)"),
+            (AudioPanMode.ConstantPower, "Constant Power")
+        };
+        foreach (var (mode, label) in panModes)
+        {
+            var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = bus.PanMode == mode };
+            var targetMode = mode;
+            item.Click += (_, _) =>
+            {
+                vm.Editor.SetAudioBusPanMode(bus.Id, targetMode);
+                onProjectChanged();
+                RefreshTracks();
+            };
+            panTypeMenu.Items.Add(item);
+        }
+        menu.Items.Add(panTypeMenu);
+        return menu;
+    }
+
+    private static string FormatPan(double pan, AudioPanMode mode = AudioPanMode.Balance)
+    {
+        var suffix = mode switch
+        {
+            AudioPanMode.ConstantPower => " [CP]",
+            AudioPanMode.AddChannels => " [Add]",
+            AudioPanMode.Notch3Db => " [-3dB]",
+            AudioPanMode.Notch6Db => " [-6dB]",
+            _ => ""
+        };
+        if (Math.Abs(pan) < 0.01) return "Center" + suffix;
+        if (pan < 0) return $"{Math.Abs(pan) * 100:0}% L" + suffix;
+        return $"{pan * 100:0}% R" + suffix;
     }
 
     private static double LinearToDb(double linear)

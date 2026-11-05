@@ -239,4 +239,34 @@ public partial class TimelineEditor
             }
         });
     }
+
+    public void SetClipSnapOffset(Guid clipId, long snapOffsetFrames)
+    {
+        var clip = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == clipId);
+        if (clip is null) return;
+
+        var clamped = Math.Clamp(snapOffsetFrames, 0, Math.Max(0, clip.DurationFrames - 1));
+        if (clip.SnapOffsetFrames == clamped) return;
+
+        Execute(_ =>
+        {
+            clip.SnapOffsetFrames = clamped;
+            if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+            {
+                clip.Takes[clip.ActiveTakeIndex].SnapOffsetFrames = clamped;
+            }
+        });
+    }
+
+    public void SetTrackPanMode(Guid trackId, AudioPanMode panMode)
+    {
+        if (!Enum.IsDefined(panMode)) throw new ArgumentOutOfRangeException(nameof(panMode));
+        var track = Project.Tracks.FirstOrDefault(t => t.Id == trackId);
+        if (track is null || track.PanMode == panMode) return;
+
+        Execute(_ =>
+        {
+            track.PanMode = panMode;
+        });
+    }
 }

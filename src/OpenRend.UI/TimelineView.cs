@@ -118,6 +118,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? ClipInvertPhaseRequested;
     public event Action<Guid, AudioChannelMode>? ClipChannelModeRequested;
     public event Action<Guid, double>? ClipPitchSemisRequested;
+    public event Action<Guid, long>? ClipSnapOffsetRequested;
+    public event Action<Guid, AudioPanMode>? TrackPanModeRequested;
     public event Action<Guid, EnvelopeType>? ToggleEnvelopeRequested;
     public event Action<Guid, EnvelopeType, long, double, EnvelopeCurveType>? SetEnvelopePointRequested;
     public event Action<Guid, EnvelopeType, long>? RemoveEnvelopePointRequested;
@@ -715,6 +717,13 @@ public sealed partial class TimelineView : FrameworkElement
         var inside = track.Clips.LastOrDefault(clip => X(clip.StartFrame) <= point.X && X(clip.EndFrame) >= point.X);
         if (inside is not null)
         {
+            var bounds = ClipBounds(track.Id, inside);
+            var snapOffsetPx = Project.FrameRate.Seconds(inside.SnapOffsetFrames) * PixelsPerSecond;
+            var snapX = bounds.Left + snapOffsetPx;
+            if (point.Y >= bounds.Bottom - 14 && point.Y <= bounds.Bottom && Math.Abs(point.X - snapX) <= 6)
+            {
+                return (track, inside, "SnapOffset");
+            }
             var left = X(inside.StartFrame); var right = X(inside.EndFrame);
             // Keep a usable middle on short events while enlarging normal trim targets.
             var reach = Math.Min(10, Math.Max(2, (right - left) / 3));
@@ -758,6 +767,7 @@ public sealed partial class TimelineView : FrameworkElement
         {
             "Slip" => Cursors.ScrollWE,
             "Slide" => Cursors.SizeWE,
+            "SnapOffset" => Cursors.Cross,
             "Move" => Cursors.Arrow,
             _ => Cursors.SizeWE
         };
@@ -906,7 +916,8 @@ public sealed partial class TimelineView : FrameworkElement
                 var phaseSuffix = clip.InvertPhase ? " [Phase \u00D8]" : "";
                 var channelSuffix = clip.ChannelMode != AudioChannelMode.Both ? $" [{clip.ChannelMode}]" : "";
                 var pitchSuffix = Math.Abs(clip.PitchSemis) > 0.001 ? $" [{(clip.PitchSemis > 0 ? "+" : "")}{clip.PitchSemis:0.#} semis]" : "";
-                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{mutedSuffix}";
+                var snapSuffix = clip.SnapOffsetFrames > 0 ? $" [Snap: +{clip.SnapOffsetFrames}]" : "";
+                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{snapSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {
@@ -950,6 +961,29 @@ public sealed partial class TimelineView : FrameworkElement
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
                 DrawEnvelopes(dc, track, clip, rect);
+
+                // 1:1 Vegas Pro Snap Offset Handle & Indicator
+                if (clip.SnapOffsetFrames >= 0 && clip.SnapOffsetFrames < clip.DurationFrames)
+                {
+                    var snapOffsetSec = Project.FrameRate.Seconds(clip.SnapOffsetFrames);
+                    var snapHandleX = rect.Left + snapOffsetSec * PixelsPerSecond;
+                    if (snapHandleX >= rect.Left && snapHandleX <= rect.Right)
+                    {
+                        var isSnapHover = hoverClipId == clip.Id && hoverMode == "SnapOffset";
+                        var snapColor = isSnapHover ? "#FFD700" : clip.SnapOffsetFrames > 0 ? "#00E5FF" : "#7090A0";
+                        var snapPen = FrozenPen(snapColor, 1.5);
+                        dc.DrawLine(snapPen, new Point(snapHandleX, rect.Bottom - 8), new Point(snapHandleX, rect.Bottom));
+                        var triGeo = new StreamGeometry();
+                        using (var tgc = triGeo.Open())
+                        {
+                            tgc.BeginFigure(new Point(snapHandleX - 3.5, rect.Bottom), true, true);
+                            tgc.LineTo(new Point(snapHandleX + 3.5, rect.Bottom), true, false);
+                            tgc.LineTo(new Point(snapHandleX, rect.Bottom - 5), true, false);
+                        }
+                        triGeo.Freeze();
+                        dc.DrawGeometry(Brush(snapColor), null, triGeo);
+                    }
+                }
                 var edgeMode = isDragging && dragging?.Id == clip.Id ? mode : hoverClipId == clip.Id ? hoverMode : "";
                 if (edgeMode is "TrimLeft" or "TrimRight")
                 {
@@ -1072,7 +1106,15 @@ public sealed partial class TimelineView : FrameworkElement
             {
                 string volText = gain <= 0 ? "Vol: −∞ dB" : (20 * Math.Log10(gain)) is var db && db > 0.05 ? $"Vol: +{db:0.0} dB" : $"Vol: {db:0.0} dB";
                 Text(dc, volText, 31, y + 28, Brush("#B8B8B8"), 11, 75);
-                string panText = Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}";
+                var panSuffix = t.PanMode switch
+                {
+                    AudioPanMode.ConstantPower => " [CP]",
+                    AudioPanMode.AddChannels => " [Add]",
+                    AudioPanMode.Notch3Db => " [-3dB]",
+                    AudioPanMode.Notch6Db => " [-6dB]",
+                    _ => ""
+                };
+                string panText = (Math.Abs(pan) < .005 ? "Pan: Center" : $"Pan: {Math.Abs(pan) * 100:0}% {(pan < 0 ? "L" : "R")}") + panSuffix;
                 Text(dc, panText, 31, y + 48, Brush("#B8B8B8"), 11, 75);
             }
             foreach (var level in t.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
@@ -1404,6 +1446,12 @@ public sealed partial class TimelineView : FrameworkElement
             return;
         }
         var hit = HitClip(origin);
+        if (e.ClickCount == 2 && hit?.Mode == "SnapOffset")
+        {
+            ClipSnapOffsetRequested?.Invoke(hit.Value.Clip.Id, 0);
+            e.Handled = true;
+            return;
+        }
         dragTrack = hit?.Track; dragging = hit?.Clip;
         if (dragging is null)
         {
@@ -1542,6 +1590,17 @@ public sealed partial class TimelineView : FrameworkElement
                         bestSnapDelta = distEnd;
                         bestSnapPoint = pt;
                     }
+                    if (dragging.SnapOffsetFrames > 0)
+                    {
+                        var snapAnchor = start + dragging.SnapOffsetFrames;
+                        var distSnap = pt - snapAnchor;
+                        if (Math.Abs(distSnap) <= threshold && Math.Abs(distSnap) < minDistance)
+                        {
+                            minDistance = Math.Abs(distSnap);
+                            bestSnapDelta = distSnap;
+                            bestSnapPoint = pt;
+                        }
+                    }
                 }
 
                 if (bestSnapPoint.HasValue)
@@ -1550,6 +1609,16 @@ public sealed partial class TimelineView : FrameworkElement
                     snappedFrame = bestSnapPoint.Value;
                 }
             }
+        }
+        else if (mode == "SnapOffset")
+        {
+            var targetFrame = FrameAt(p.X);
+            var newOffset = Math.Clamp(targetFrame - dragging.StartFrame, 0, Math.Max(0, dragging.DurationFrames - 1));
+            dragging.SnapOffsetFrames = newOffset;
+            var formatted = TimecodeFormatter.Format(newOffset, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames);
+            ToolTip = $"Snap Offset: {newOffset} frames ({formatted})";
+            InvalidateVisual();
+            return;
         }
         else if (mode == "Slip")
         {
@@ -1784,11 +1853,23 @@ public sealed partial class TimelineView : FrameworkElement
         {
             if (!wasDragging)
             {
-                if (commitAlreadySelected && !modifiers.HasFlag(ModifierKeys.Control))
+                if (commitMode == "SnapOffset")
+                {
+                    SeekRequested?.Invoke(clip.StartFrame + clip.SnapOffsetFrames);
+                }
+                else if (commitAlreadySelected && !modifiers.HasFlag(ModifierKeys.Control))
                 {
                     SelectClip(clip.Id, false, ensureVisible: false);
+                    SeekRequested?.Invoke(FrameAt(commitOrigin.X));
                 }
-                SeekRequested?.Invoke(FrameAt(commitOrigin.X));
+                else
+                {
+                    SeekRequested?.Invoke(FrameAt(commitOrigin.X));
+                }
+            }
+            else if (commitMode == "SnapOffset")
+            {
+                ClipSnapOffsetRequested?.Invoke(clip.Id, clip.SnapOffsetFrames);
             }
             else if (commitMode == "Move")
             {
@@ -2172,6 +2253,24 @@ public sealed partial class TimelineView : FrameworkElement
                         }
                     }
                     menu.Items.Add(busSubmenu);
+
+                    var panTypeMenu = new MenuItem { Header = "Pan Type" };
+                    var panModes = new (AudioPanMode Mode, string Label)[]
+                    {
+                        (AudioPanMode.AddChannels, "Add Channels (0 dB Center)"),
+                        (AudioPanMode.Balance, "Balance (0 dB Center)"),
+                        (AudioPanMode.Notch3Db, "Balance (-3 dB Center)"),
+                        (AudioPanMode.Notch6Db, "Balance (-6 dB Center)"),
+                        (AudioPanMode.ConstantPower, "Constant Power")
+                    };
+                    foreach (var (pm, label) in panModes)
+                    {
+                        var item = new MenuItem { Header = label, IsCheckable = true, IsChecked = track.PanMode == pm };
+                        var targetMode = pm;
+                        item.Click += (_, _) => TrackPanModeRequested?.Invoke(track.Id, targetMode);
+                        panTypeMenu.Items.Add(item);
+                    }
+                    menu.Items.Add(panTypeMenu);
                 }
 
 

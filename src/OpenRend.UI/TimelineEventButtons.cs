@@ -310,6 +310,36 @@ public sealed partial class TimelineView
         }
         menu.Items.Add(pitchMenu);
 
+        var snapOffsetMenu = new MenuItem { Header = "Snap Offset" };
+        AutomationProperties.SetAutomationId(snapOffsetMenu, "EventSnapOffsetMenu");
+        var setSnapToCursor = new MenuItem { Header = "Set Snap Offset to Cursor" };
+        AutomationProperties.SetAutomationId(setSnapToCursor, "SetSnapOffsetToCursorItem");
+        setSnapToCursor.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+            {
+                var targetClip = events[0];
+                var offset = Math.Clamp(Position - targetClip.StartFrame, 0, Math.Max(0, targetClip.DurationFrames - 1));
+                ClipSnapOffsetRequested?.Invoke(targetClip.Id, offset);
+            }
+        };
+        var resetSnapOffset = new MenuItem { Header = "Reset Snap Offset" };
+        AutomationProperties.SetAutomationId(resetSnapOffset, "ResetSnapOffsetItem");
+        resetSnapOffset.Click += (_, _) =>
+        {
+            var events = Project.Tracks.Where(track => !track.IsLocked)
+                .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
+            if (IsEnabled && events.Length == 1)
+            {
+                ClipSnapOffsetRequested?.Invoke(events[0].Id, 0);
+            }
+        };
+        snapOffsetMenu.Items.Add(setSnapToCursor);
+        snapOffsetMenu.Items.Add(resetSnapOffset);
+        menu.Items.Add(snapOffsetMenu);
+
         var takesMenu = new MenuItem { Header = "Take" };
         AutomationProperties.SetAutomationId(takesMenu, "EventTakesMenu");
         var nextTake = new MenuItem { Header = "Next Take", InputGestureText = "T" };
@@ -602,6 +632,9 @@ public sealed partial class TimelineView
                 }
             }
             var singleClip = singleTarget.Clip;
+            snapOffsetMenu.Visibility = singleClip != null ? Visibility.Visible : Visibility.Collapsed;
+            snapOffsetMenu.IsEnabled = IsEnabled && singleClip != null && !singleTarget.Track!.IsLocked && !isLocked;
+            resetSnapOffset.IsEnabled = singleClip != null && singleClip.SnapOffsetFrames > 0;
             var hasTakes = singleClip?.Takes is { Count: > 1 };
             takesMenu.Visibility = hasTakes ? Visibility.Visible : Visibility.Collapsed;
             takesMenu.IsEnabled = IsEnabled && hasTakes && !singleTarget.Track!.IsLocked && !isLocked;

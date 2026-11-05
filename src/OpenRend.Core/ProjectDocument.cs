@@ -416,6 +416,7 @@ public sealed class ProjectDocument
                 }
             }
             if (!double.IsFinite(track.Gain) || track.Gain < 0 || !double.IsFinite(track.Opacity) || track.Opacity is < 0 or > 1 || !double.IsFinite(track.Pan) || track.Pan is < -1 or > 1) throw new InvalidDataException("Track levels are invalid.");
+            if (!Enum.IsDefined(track.PanMode)) throw new InvalidDataException("Track pan mode is invalid.");
             if (track.VideoEffects != null)
             {
                 if (track.Kind != TrackKind.Video && track.VideoEffects.Count != 0)
@@ -464,6 +465,7 @@ public sealed class ProjectDocument
                 var available = FrameRate.Frames(source.DurationSeconds);
                 if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
+                if (clip.SnapOffsetFrames < 0 || (clip.DurationFrames > 0 && clip.SnapOffsetFrames >= clip.DurationFrames)) throw new InvalidDataException("Clip snap offset must be within clip duration.");
                 if (!double.IsFinite(clip.PlaybackRate) || Math.Abs(clip.PlaybackRate) < 0.05 || Math.Abs(clip.PlaybackRate) > 10.0) throw new InvalidDataException("Clip playback rate must be between 0.05 and 10.0.");
                 if (!double.IsFinite(clip.UnderSampleRate) || clip.UnderSampleRate < 0.001 || clip.UnderSampleRate > 1.0) throw new InvalidDataException("Clip undersample rate must be between 0.001 and 1.0.");
                 if (!Enum.IsDefined(clip.ResampleMode)) throw new InvalidDataException("Clip resample mode is invalid.");
@@ -621,6 +623,8 @@ public sealed class TimelineTrack
     public double Opacity { get; set; } = 1;
     public double Pan { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public AudioPanMode PanMode { get; set; } = AudioPanMode.Balance;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public TrackCompositeMode CompositeMode { get; set; } = TrackCompositeMode.SourceAlpha;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int CompositeNestingLevel { get; set; }
@@ -661,6 +665,7 @@ public sealed class TimelineTrack
             Gain = Gain,
             Opacity = Opacity,
             Pan = Pan,
+            PanMode = PanMode,
             CompositeMode = CompositeMode,
             CompositeNestingLevel = CompositeNestingLevel,
             IsAdjustmentTrack = IsAdjustmentTrack,
@@ -715,6 +720,7 @@ public sealed class TimelineTake
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioChannelMode ChannelMode { get; set; } = AudioChannelMode.Both;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PitchSemis { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long SnapOffsetFrames { get; set; }
 
     public TimelineTake DeepClone() => new()
     {
@@ -732,13 +738,16 @@ public sealed class TimelineTake
         Normalize = Normalize,
         InvertPhase = InvertPhase,
         ChannelMode = ChannelMode,
-        PitchSemis = PitchSemis
+        PitchSemis = PitchSemis,
+        SnapOffsetFrames = SnapOffsetFrames
     };
 
     public void Validate()
     {
         if (Id == Guid.Empty || MediaId == Guid.Empty)
             throw new InvalidDataException("Take IDs must be non-empty.");
+        if (SnapOffsetFrames < 0)
+            throw new InvalidDataException("Take snap offset must be non-negative.");
     }
 }
 
@@ -762,6 +771,7 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool InvertPhase { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioChannelMode ChannelMode { get; set; } = AudioChannelMode.Both;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PitchSemis { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long SnapOffsetFrames { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsLocked { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsMuted { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);

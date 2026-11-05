@@ -194,6 +194,35 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 audio pan laws and timeline event snap offset suite` implemented 1:1 Vegas Pro Audio Pan Laws and Timeline Event Snap Offset matching `ScriptPortal.Vegas.PanType` (`Add`, `ConstantPower`, `Balance`, `Notch3Db`, `Notch6Db`) and `TrackEvent.SnapOffset`.
+  - Core Data Models & DSP Evaluation:
+    - Created `AudioPanMode.cs` enum in `OpenRend.Core`: `Balance` (0 dB center, linear), `ConstantPower` (-3.01 dB center, sine-cosine equal power $L^2 + R^2 = 1.0$), `AddChannels` (0 dB center, additive), `Notch3Db` (-3.0 dB center notch), and `Notch6Db` (-6.0 dB center notch).
+    - Implemented `AudioPanLaw.CalculateGains(panMode, pan)` providing exact left and right linear amplitude gains for each pan law.
+    - Extended `TimelineTrack` and `AudioBusTrack` with `PanMode` property, deep cloning, and schema validation.
+    - Extended `TimelineTake` and `TimelineClip` with `SnapOffsetFrames` property, non-negative validation, and duration bounds clamping.
+  - Timeline & DSP Pipeline:
+    - In `TimelineEvaluator.cs`, updated `BalanceStages()` to evaluate track pan using `AudioPanLaw.CalculateGains(track.PanMode, track.Pan)`.
+    - In `TimelineRenderService.cs`, updated audio bus sub-mix accumulation to evaluate bus pan and pan automation envelopes using `AudioPanLaw.CalculateGains(bus.PanMode, bus.Pan)`.
+    - In `TimelineEditor.Playback.cs`, implemented `SetTrackPanMode` and `SetClipSnapOffset` with atomic undo/redo.
+    - In `TimelineEditor.AudioBuses.cs`, implemented `SetAudioBusPanMode` with atomic undo/redo.
+    - In `TimelineEditor.cs`, updated `SplitClip()` to preserve timeline snap anchor coordinates, shifting the offset into the right slice when split past the anchor.
+  - UI Implementation:
+    - In `TimelineView.cs`:
+      - Defined events `TrackPanModeRequested` and `ClipSnapOffsetRequested`.
+      - Added `Pan Type >` submenu with checkmarks to audio track header context menu.
+      - Added pan mode indicator badges (`[CP]`, `[Add]`, `[-3dB]`, `[-6dB]`) to track header pan readouts.
+      - Implemented snap offset handle rendering: cyan vertical tick and upward triangle anchor cap at `StartFrame + SnapOffsetFrames`.
+      - Implemented drag hit testing (`"SnapOffset"` mode) and double-click reset to 0.
+      - Updated magnetic snapping in `"Move"` mode to test `start + SnapOffsetFrames` against snap targets so events snap by their anchor.
+    - In `TimelineEventButtons.cs`: added `Snap Offset` submenu (`Set Snap Offset to Cursor`, `Reset Snap Offset`) to event context menu.
+    - In `MixingConsoleWindow.cs`: added right-click context menu (`Pan Type >`) to Track and Bus Pan sliders and labels; updated `FormatPan()` to reflect pan law mode badges.
+    - In `MainWindow.xaml.cs`: wired `Timeline.TrackPanModeRequested` and `Timeline.ClipSnapOffsetRequested` to editor and status bar.
+    - In `EditDetailsWindow.cs`: added `Snap Offset` column to `eventsGridView`, populated `SnapOffsetTimecode`, and included `Snap Offset` in TSV clipboard export after `Media File`.
+  - Verification:
+    - Added 5 unit tests in `AudioPanLawsEditorTests.cs` (OpenRend.Editor.Tests) verifying all 5 pan models, power conservation ($L^2 + R^2 = 1.0$), notch levels, `SetTrackPanMode`, `SetAudioBusPanMode`, undo/redo, and JSON/clone preservation.
+    - Added 5 unit tests in `ClipSnapOffsetEditorTests.cs` (OpenRend.Editor.Tests) verifying `SetClipSnapOffset`, duration clamping, split preservation/shifting across slices, undo/redo, JSON validation, and Edit Details TSV export.
+    - Full gate passed: 100% native integration tests (1/1), 1,063 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 timeline regions, audio channels remapping, and pitch shifting suite` implemented 1:1 Vegas Pro Timeline Regions and Audio Channels Remapping & Pitch Shifting matching `ScriptPortal.Vegas.Region`, `RegionList`, `ChannelRemapping`, `AudioEvent.PitchSemis`, `InvertPhase`, and `Normalize`.
   - Core Data Models & Validation:
     - Created `TimelineRegion.cs` in `OpenRend.Core`: modeled `Id`, `Index` (1-based int), `StartFrame`, `EndFrame`, `DurationFrames`, `Label`, `ColorId` (1..8), and `ColorHex`. Included schema validation, sorting by StartFrame, JSON serialization, and deep cloning.

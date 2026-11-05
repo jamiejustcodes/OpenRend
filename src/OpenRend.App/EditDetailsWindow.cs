@@ -236,6 +236,7 @@ public sealed class EditDetailsWindow : Window
         eventsGridView.Columns.Add(new GridViewColumn { Header = "Mute", Width = 50, DisplayMemberBinding = new Binding("MuteText") });
         eventsGridView.Columns.Add(new GridViewColumn { Header = "Lock", Width = 50, DisplayMemberBinding = new Binding("LockText") });
         eventsGridView.Columns.Add(new GridViewColumn { Header = "Media File", Width = 220, DisplayMemberBinding = new Binding("MediaFile") });
+        eventsGridView.Columns.Add(new GridViewColumn { Header = "Snap Offset", Width = 90, DisplayMemberBinding = new Binding("SnapOffsetTimecode") });
         eventsListView.View = eventsGridView;
 
         eventsListView.MouseDoubleClick += EventsListView_MouseDoubleClick;
@@ -649,6 +650,8 @@ public sealed class EditDetailsWindow : Window
                         EndTimecode = TimelineView.FormatTimecode(clip.EndFrame, vm.Project.FrameRate),
                         LengthFrames = clip.DurationFrames,
                         LengthTimecode = TimelineView.FormatTimecode(clip.DurationFrames, vm.Project.FrameRate),
+                        SnapOffsetFrames = clip.SnapOffsetFrames,
+                        SnapOffsetTimecode = TimelineView.FormatTimecode(clip.SnapOffsetFrames, vm.Project.FrameRate),
                         Name = clip.Name,
                         ActiveTake = activeTakeName,
                         SourceInFrame = clip.SourceInFrame,
@@ -704,14 +707,14 @@ public sealed class EditDetailsWindow : Window
         }
         else
         {
-            sb.AppendLine("Track\tEvent\tStart\tEnd\tLength\tName\tActive Take\tSource In\tRate\tMute\tLock\tMedia File");
+            sb.AppendLine("Track\tEvent\tStart\tEnd\tLength\tName\tActive Take\tSource In\tRate\tMute\tLock\tMedia File\tSnap Offset");
             var rows = selectedOnly && eventsListView?.SelectedItems.Count > 0
                 ? eventsListView.SelectedItems.OfType<EditDetailsEventRow>().ToList()
                 : currentEventRows;
 
             foreach (var r in rows)
             {
-                sb.AppendLine($"{r.TrackDisplay}\t{r.EventIndex}\t{r.StartTimecode}\t{r.EndTimecode}\t{r.LengthTimecode}\t{r.Name}\t{r.ActiveTake}\t{r.SourceInTimecode}\t{r.PlaybackRateText}\t{r.MuteText}\t{r.LockText}\t{r.MediaFile}");
+                sb.AppendLine($"{r.TrackDisplay}\t{r.EventIndex}\t{r.StartTimecode}\t{r.EndTimecode}\t{r.LengthTimecode}\t{r.Name}\t{r.ActiveTake}\t{r.SourceInTimecode}\t{r.PlaybackRateText}\t{r.MuteText}\t{r.LockText}\t{r.MediaFile}\t{r.SnapOffsetTimecode}");
             }
         }
 
@@ -806,6 +809,8 @@ public sealed class EditDetailsEventRow
     public string EndTimecode { get; set; } = "";
     public long LengthFrames { get; set; }
     public string LengthTimecode { get; set; } = "";
+    public long SnapOffsetFrames { get; set; }
+    public string SnapOffsetTimecode { get; set; } = "";
     public string Name { get; set; } = "";
     public string ActiveTake { get; set; } = "";
     public long SourceInFrame { get; set; }

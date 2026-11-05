@@ -358,8 +358,9 @@ public static class TimelineEvaluator
 
     private static (double Left, double Right) BalanceStages(TimelineTrack track, TimelineClip clip)
     {
+        var (tLeft, tRight) = AudioPanLaw.CalculateGains(track.PanMode, track.Pan);
+        var (cLeft, cRight) = AudioPanLaw.CalculateGains(AudioPanMode.Balance, clip.Pan);
         // Opposing balance stages attenuate both channels rather than cancelling their pans.
-        return ((clip.Pan <= 0 ? 1 : 1 - clip.Pan) * (track.Pan <= 0 ? 1 : 1 - track.Pan),
-            (clip.Pan >= 0 ? 1 : 1 + clip.Pan) * (track.Pan >= 0 ? 1 : 1 + track.Pan));
+        return (cLeft * tLeft, cRight * tRight);
     }
 }

@@ -429,6 +429,22 @@ public partial class MainWindow : Window
             RequestPreview();
             Refresh();
         });
+        Timeline.ClipSnapOffsetRequested += (id, snapOffset) => Guard(() =>
+        {
+            vm.Editor.SetClipSnapOffset(id, snapOffset);
+            vm.Status = $"Set event snap offset to {snapOffset} frames.";
+            UpdateInspector();
+            Refresh();
+        });
+        Timeline.TrackPanModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetTrackPanMode(id, mode);
+            vm.Status = $"Set track pan law to {mode}.";
+            UpdateInspector();
+            RequestPreview();
+            Refresh();
+        });
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));

@@ -458,11 +458,18 @@ public sealed partial class TimelineRenderService : IDisposable
                 }
 
                 var busGain = (float)bus.Gain;
-                var leftPan = (float)Math.Clamp(1.0 - bus.Pan, 0.0, 1.0);
-                var rightPan = (float)Math.Clamp(1.0 + bus.Pan, 0.0, 1.0);
+                var (busPanL, busPanR) = AudioPanLaw.CalculateGains(bus.PanMode, bus.Pan);
+                var leftPan = (float)busPanL;
+                var rightPan = (float)busPanR;
                 if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } busMuteEnv && busMuteEnv.ValueAt(projectFrame) >= 0.5) continue;
                 if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } busVolEnv) busGain *= (float)busVolEnv.ValueAt(projectFrame);
-                if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Pan && e.IsEnabled) is { } busPanEnv) { var pVal = busPanEnv.ValueAt(projectFrame); leftPan = (float)Math.Clamp(1.0 - pVal, 0.0, 1.0); rightPan = (float)Math.Clamp(1.0 + pVal, 0.0, 1.0); }
+                if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Pan && e.IsEnabled) is { } busPanEnv)
+                {
+                    var pVal = busPanEnv.ValueAt(projectFrame);
+                    var (envPanL, envPanR) = AudioPanLaw.CalculateGains(bus.PanMode, pVal);
+                    leftPan = (float)envPanL;
+                    rightPan = (float)envPanR;
+                }
 
                 for (var s = 0; s < frames; s++)
                 {

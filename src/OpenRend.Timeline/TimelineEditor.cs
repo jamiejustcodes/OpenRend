@@ -550,6 +550,22 @@ public sealed partial class TimelineEditor
         right.FadeOffsetFrames += leftDuration;
         right.FadeDurationFrames = envelope;
 
+        if (clip.SnapOffsetFrames >= leftDuration)
+        {
+            right.SnapOffsetFrames = clip.SnapOffsetFrames - leftDuration;
+            if (right.Takes != null && right.ActiveTakeIndex >= 0 && right.ActiveTakeIndex < right.Takes.Count)
+                right.Takes[right.ActiveTakeIndex].SnapOffsetFrames = right.SnapOffsetFrames;
+            clip.SnapOffsetFrames = 0;
+            if (clip.Takes != null && clip.ActiveTakeIndex >= 0 && clip.ActiveTakeIndex < clip.Takes.Count)
+                clip.Takes[clip.ActiveTakeIndex].SnapOffsetFrames = 0;
+        }
+        else
+        {
+            right.SnapOffsetFrames = 0;
+            if (right.Takes != null && right.ActiveTakeIndex >= 0 && right.ActiveTakeIndex < right.Takes.Count)
+                right.Takes[right.ActiveTakeIndex].SnapOffsetFrames = 0;
+        }
+
         if (clip.Transcript is not null)
         {
             var origWords = clip.Transcript.Words;

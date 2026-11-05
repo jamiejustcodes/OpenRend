@@ -8,6 +8,8 @@ public sealed class AudioBusTrack
     public string Name { get; set; } = "Bus A";
     public double Gain { get; set; } = 1.0;
     public double Pan { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public AudioPanMode PanMode { get; set; } = AudioPanMode.Balance;
     public bool IsMuted { get; set; }
     public bool IsSolo { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -21,6 +23,7 @@ public sealed class AudioBusTrack
         Name = Name,
         Gain = Gain,
         Pan = Pan,
+        PanMode = PanMode,
         IsMuted = IsMuted,
         IsSolo = IsSolo,
         AudioEffects = AudioEffects.Select(e => e.DeepClone()).ToList(),
@@ -33,6 +36,8 @@ public sealed class AudioBusTrack
         if (string.IsNullOrWhiteSpace(Name)) throw new InvalidDataException("Audio bus name cannot be empty.");
         if (!double.IsFinite(Gain) || Gain < 0 || !double.IsFinite(Pan) || Pan is < -1 or > 1)
             throw new InvalidDataException("Audio bus levels are invalid.");
+        if (!Enum.IsDefined(PanMode))
+            throw new InvalidDataException("Audio bus pan mode is invalid.");
         if (AudioEffects != null)
         {
             var fxIds = new HashSet<Guid>();
