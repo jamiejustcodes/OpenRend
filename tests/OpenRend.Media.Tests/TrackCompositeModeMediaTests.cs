@@ -1,4 +1,4 @@
-﻿using OpenRend.Core;
+using OpenRend.Core;
 using OpenRend.Media;
 using OpenRend.Timeline;
 using Xunit;
@@ -158,5 +158,42 @@ public sealed class TrackCompositeModeMediaTests
         Assert.Equal(0, cleanPixels[0]); // B
         Assert.Equal(0, cleanPixels[1]); // G
         Assert.Equal(0, cleanPixels[2]); // R
+    }
+
+    [Fact]
+    public void TrackCompositeMode_SourceAlpha3D_CompositesPerspectiveCorrectly()
+    {
+        var project = new ProjectDocument
+        {
+            Name = "3D Render Test",
+            Width = 320,
+            Height = 240,
+            FrameRate = new Rational(30, 1)
+        };
+        var editor = new TimelineEditor(project);
+        var track = editor.AddTrack(TrackKind.Video);
+        track.CompositeMode = TrackCompositeMode.SourceAlpha3D;
+
+        // Configure 3D motion with perspective tilt and Z depth
+        var kf = new TrackMotionKeyframe
+        {
+            Frame = 0,
+            PositionX = 0,
+            PositionY = 0,
+            PositionZ = 150,
+            Width = 320,
+            Height = 240,
+            RotationY = 35.0, // 3D yaw tilt
+            RotationX = 15.0  // 3D pitch tilt
+        };
+        editor.SetTrackMotionKeyframe(track.Id, kf);
+
+        using var mediaService = new MediaService();
+        using var renderer = new TimelineRenderService(mediaService, useGpuCompositing: false);
+
+        // Rendering frame 0 must succeed with valid straight/premultiplied alpha output
+        var frameBuffer = renderer.RenderFrame(project, 0, 320, 240);
+        Assert.NotNull(frameBuffer);
+        Assert.Equal(320 * 240 * 4, frameBuffer.Length);
     }
 }

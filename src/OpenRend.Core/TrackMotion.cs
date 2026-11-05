@@ -13,14 +13,31 @@ public sealed class TrackMotionKeyframe
     public double PositionZ { get; set; }
     public double Width { get; set; }
     public double Height { get; set; }
+    public double Depth { get; set; }
     public double RotationZ { get; set; }
     public double RotationX { get; set; }
     public double RotationY { get; set; }
     public double OrientationX { get; set; }
     public double OrientationY { get; set; }
     public double OrientationZ { get; set; }
+    public double RotationOffsetX { get; set; }
+    public double RotationOffsetY { get; set; }
+    public double RotationOffsetZ { get; set; }
+    public double PivotX { get => RotationOffsetX; set => RotationOffsetX = value; }
+    public double PivotY { get => RotationOffsetY; set => RotationOffsetY = value; }
+    public double PivotZ { get => RotationOffsetZ; set => RotationOffsetZ = value; }
     public CropInterpolation Interpolation { get; set; } = CropInterpolation.Linear;
     public double Smoothness { get; set; } = 100.0;
+
+    public bool Is3D() =>
+        Math.Abs(PositionZ) >= 0.001 ||
+        Math.Abs(RotationX) >= 0.001 ||
+        Math.Abs(RotationY) >= 0.001 ||
+        Math.Abs(OrientationX) >= 0.001 ||
+        Math.Abs(OrientationY) >= 0.001 ||
+        Math.Abs(OrientationZ) >= 0.001 ||
+        Math.Abs(RotationOffsetZ) >= 0.001 ||
+        Math.Abs(Depth) >= 0.001;
 
     public static TrackMotionKeyframe Identity(int width, int height) => new()
     {
@@ -30,12 +47,16 @@ public sealed class TrackMotionKeyframe
         PositionZ = 0,
         Width = Math.Max(1, width),
         Height = Math.Max(1, height),
+        Depth = 0,
         RotationZ = 0,
         RotationX = 0,
         RotationY = 0,
         OrientationX = 0,
         OrientationY = 0,
         OrientationZ = 0,
+        RotationOffsetX = 0,
+        RotationOffsetY = 0,
+        RotationOffsetZ = 0,
         Interpolation = CropInterpolation.Linear,
         Smoothness = 100.0
     };
@@ -46,23 +67,32 @@ public sealed class TrackMotionKeyframe
         Math.Abs(PositionZ) < 0.001 &&
         Math.Abs(Width - defaultWidth) < 0.001 &&
         Math.Abs(Height - defaultHeight) < 0.001 &&
+        Math.Abs(Depth) < 0.001 &&
         Math.Abs(RotationZ % 360) < 0.001 &&
         Math.Abs(RotationX % 360) < 0.001 &&
         Math.Abs(RotationY % 360) < 0.001 &&
         Math.Abs(OrientationX % 360) < 0.001 &&
         Math.Abs(OrientationY % 360) < 0.001 &&
-        Math.Abs(OrientationZ % 360) < 0.001;
+        Math.Abs(OrientationZ % 360) < 0.001 &&
+        Math.Abs(RotationOffsetX) < 0.001 &&
+        Math.Abs(RotationOffsetY) < 0.001 &&
+        Math.Abs(RotationOffsetZ) < 0.001;
 
     public void Validate()
     {
         const double limit = 1_000_000_000;
         if (Frame < 0 || !double.IsFinite(Width) || !double.IsFinite(Height) || Width < 0.0001 || Height < 0.0001 || Width > limit || Height > limit)
             throw new InvalidDataException("Track motion dimensions are invalid.");
+        if (!double.IsFinite(Depth) || Math.Abs(Depth) > limit)
+            throw new InvalidDataException("Track motion depth is invalid.");
         if (!double.IsFinite(PositionX) || Math.Abs(PositionX) > limit ||
             !double.IsFinite(PositionY) || Math.Abs(PositionY) > limit ||
             !double.IsFinite(PositionZ) || Math.Abs(PositionZ) > limit ||
             !double.IsFinite(RotationZ) || !double.IsFinite(RotationX) || !double.IsFinite(RotationY) ||
-            !double.IsFinite(OrientationX) || !double.IsFinite(OrientationY) || !double.IsFinite(OrientationZ))
+            !double.IsFinite(OrientationX) || !double.IsFinite(OrientationY) || !double.IsFinite(OrientationZ) ||
+            !double.IsFinite(RotationOffsetX) || Math.Abs(RotationOffsetX) > limit ||
+            !double.IsFinite(RotationOffsetY) || Math.Abs(RotationOffsetY) > limit ||
+            !double.IsFinite(RotationOffsetZ) || Math.Abs(RotationOffsetZ) > limit)
             throw new InvalidDataException("Track motion coordinates are invalid.");
         if (!Enum.IsDefined(Interpolation)) throw new InvalidDataException("Track motion interpolation is undefined.");
         if (!double.IsFinite(Smoothness) || Smoothness is < 0 or > 100) throw new InvalidDataException("Track motion smoothness must be between 0 and 100.");
@@ -79,12 +109,16 @@ public sealed class TrackMotionKeyframe
             PositionZ = Mix(a.PositionZ, b.PositionZ, amount),
             Width = Mix(a.Width, b.Width, amount),
             Height = Mix(a.Height, b.Height, amount),
+            Depth = Mix(a.Depth, b.Depth, amount),
             RotationZ = Mix(a.RotationZ, b.RotationZ, amount),
             RotationX = Mix(a.RotationX, b.RotationX, amount),
             RotationY = Mix(a.RotationY, b.RotationY, amount),
             OrientationX = Mix(a.OrientationX, b.OrientationX, amount),
             OrientationY = Mix(a.OrientationY, b.OrientationY, amount),
             OrientationZ = Mix(a.OrientationZ, b.OrientationZ, amount),
+            RotationOffsetX = Mix(a.RotationOffsetX, b.RotationOffsetX, amount),
+            RotationOffsetY = Mix(a.RotationOffsetY, b.RotationOffsetY, amount),
+            RotationOffsetZ = Mix(a.RotationOffsetZ, b.RotationOffsetZ, amount),
             Interpolation = a.Interpolation,
             Smoothness = a.Smoothness
         };

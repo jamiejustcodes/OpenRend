@@ -78,15 +78,16 @@ public sealed partial class TimelineRenderService : IDisposable
                 }
 
                 var trackMotion = trackGroup[0].TrackMotion;
+                var is3D = track.CompositeMode == TrackCompositeMode.SourceAlpha3D || (trackMotion != null && trackMotion.Is3D());
                 var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
                 var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
-                var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha;
+                var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha && track.CompositeMode != TrackCompositeMode.SourceAlpha3D;
                 var isChild = track.CompositeNestingLevel > 0;
                 if (isChild && branchBuffer == null)
                 {
                     branchBuffer = new byte[checked(width * height * 4)];
                 }
-                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion || isChild || branchBuffer != null;
+                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion || is3D || isChild || branchBuffer != null;
                 var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
                 var currentCompositor = needsOwnBuffer ? null : compositor;
 
@@ -215,27 +216,34 @@ public sealed partial class TimelineRenderService : IDisposable
                     }
                     if (hasMotion && trackMotion != null)
                     {
-                        var motionCrop = new CropState(
-                            Width: Math.Max(0.001, trackMotion.Width * width / project.Width),
-                            Height: Math.Max(0.001, trackMotion.Height * height / project.Height),
-                            CenterX: width / 2.0 - trackMotion.PositionX * width / project.Width,
-                            CenterY: height / 2.0 - trackMotion.PositionY * height / project.Height,
-                            RotationDegrees: trackMotion.RotationZ,
-                            PivotX: width / 2.0,
-                            PivotY: height / 2.0
-                        );
-                        motionCrop.Validate();
-                        var transform = SamplingTransform(motionCrop, width, height, width, height);
-                        if (compositor != null && !customBlend)
+                        if (is3D)
                         {
-                            if (NativeMethods.CompositorLayerTransform(compositor, trackBuffer, width, height, checked(width * 4), track.Opacity, in transform) < 0)
-                                throw NativeMethods.Error("Could not composite track motion layer");
+                            CompositeTransformedPerspective(output, width, height, trackBuffer, width, height, track.Opacity, trackMotion, project.Width, project.Height, track.CompositeMode);
                         }
                         else
                         {
-                            var transformedTrack = new byte[trackBuffer.Length];
-                            CompositeTransformed(transformedTrack, width, height, trackBuffer, width, height, 1.0, transform);
-                            Composite(output, width, height, transformedTrack, width, height, track.Opacity, track.CompositeMode);
+                            var motionCrop = new CropState(
+                                Width: Math.Max(0.001, trackMotion.Width * width / project.Width),
+                                Height: Math.Max(0.001, trackMotion.Height * height / project.Height),
+                                CenterX: width / 2.0 - trackMotion.PositionX * width / project.Width,
+                                CenterY: height / 2.0 - trackMotion.PositionY * height / project.Height,
+                                RotationDegrees: trackMotion.RotationZ,
+                                PivotX: width / 2.0 + trackMotion.RotationOffsetX * width / project.Width,
+                                PivotY: height / 2.0 - trackMotion.RotationOffsetY * height / project.Height
+                            );
+                            motionCrop.Validate();
+                            var transform = SamplingTransform(motionCrop, width, height, width, height);
+                            if (compositor != null && !customBlend)
+                            {
+                                if (NativeMethods.CompositorLayerTransform(compositor, trackBuffer, width, height, checked(width * 4), track.Opacity, in transform) < 0)
+                                    throw NativeMethods.Error("Could not composite track motion layer");
+                            }
+                            else
+                            {
+                                var transformedTrack = new byte[trackBuffer.Length];
+                                CompositeTransformed(transformedTrack, width, height, trackBuffer, width, height, 1.0, transform);
+                                Composite(output, width, height, transformedTrack, width, height, track.Opacity, track.CompositeMode);
+                            }
                         }
                     }
                     else if (compositor != null && !customBlend)
@@ -524,7 +532,7 @@ public sealed partial class TimelineRenderService : IDisposable
                     continue;
                 }
 
-                if (mode == TrackCompositeMode.SourceAlpha)
+                if (mode == TrackCompositeMode.SourceAlpha || mode == TrackCompositeMode.SourceAlpha3D)
                 {
                     if (alpha >= 1)
                     {
@@ -631,6 +639,177 @@ public sealed partial class TimelineRenderService : IDisposable
                 for (var channel = 0; channel < 3; channel++)
                     output[target + channel] = (byte)Math.Clamp((int)Math.Round(SampleColor(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
                 output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
+            }
+        }
+    }
+
+    private static void CompositeTransformedPerspective(byte[] output, int width, int height, byte[] layer, int layerWidth, int layerHeight, double opacity, TrackMotionKeyframe motion, int projectWidth, int projectHeight, TrackCompositeMode mode)
+    {
+        var pWidth = Math.Max(1, projectWidth);
+        var pHeight = Math.Max(1, projectHeight);
+
+        var px = motion.RotationOffsetX * width / pWidth;
+        var py = motion.RotationOffsetY * height / pHeight;
+        var pz = motion.RotationOffsetZ * width / pWidth;
+
+        var lw = motion.Width * width / pWidth;
+        var lh = motion.Height * height / pHeight;
+
+        var posX = motion.PositionX * width / pWidth;
+        var posY = motion.PositionY * height / pHeight;
+        var posZ = motion.PositionZ * width / pWidth;
+
+        var angleX = (motion.RotationX + motion.OrientationX) * Math.PI / 180.0;
+        var angleY = (motion.RotationY + motion.OrientationY) * Math.PI / 180.0;
+        var angleZ = (motion.RotationZ + motion.OrientationZ) * Math.PI / 180.0;
+
+        var cosX = Math.Cos(angleX); var sinX = Math.Sin(angleX);
+        var cosY = Math.Cos(angleY); var sinY = Math.Sin(angleY);
+        var cosZ = Math.Cos(angleZ); var sinZ = Math.Sin(angleZ);
+
+        var f = Math.Max(width, height) * 1.25;
+
+        // 4 corners of plane: TL, TR, BR, BL
+        double[] localX = [ -lw / 2.0,  lw / 2.0,  lw / 2.0, -lw / 2.0 ];
+        double[] localY = [  lh / 2.0,  lh / 2.0, -lh / 2.0, -lh / 2.0 ];
+
+        double[] sx = new double[4];
+        double[] sy = new double[4];
+
+        for (var i = 0; i < 4; i++)
+        {
+            var dx = localX[i] - px;
+            var dy = localY[i] - py;
+            var dz = 0.0 - pz;
+
+            // Rotate X
+            var y1 = dy * cosX - dz * sinX;
+            var z1 = dy * sinX + dz * cosX;
+            var x1 = dx;
+
+            // Rotate Y
+            var x2 = x1 * cosY + z1 * sinY;
+            var z2 = -x1 * sinY + z1 * cosY;
+            var y2 = y1;
+
+            // Rotate Z
+            var x3 = x2 * cosZ - y2 * sinZ;
+            var y3 = x2 * sinZ + y2 * cosZ;
+            var z3 = z2;
+
+            var x3d = x3 + px + posX;
+            var y3d = y3 + py + posY;
+            var z3d = z3 + pz + posZ;
+
+            var denom = f + z3d;
+            if (denom <= 1.0) denom = 1.0;
+            var scale = f / denom;
+
+            sx[i] = width / 2.0 + x3d * scale;
+            sy[i] = height / 2.0 - y3d * scale;
+        }
+
+        // Homography mapping screen quad (sx, sy) to unit square (0..1, 0..1)
+        var dx1 = sx[1] - sx[2];
+        var dx2 = sx[3] - sx[2];
+        var sumX = sx[0] - sx[1] + sx[2] - sx[3];
+        var dy1 = sy[1] - sy[2];
+        var dy2 = sy[3] - sy[2];
+        var sumY = sy[0] - sy[1] + sy[2] - sy[3];
+
+        var det = dx1 * dy2 - dx2 * dy1;
+        if (Math.Abs(det) < 1e-9) return; // Degenerate plane (edge on or off screen)
+
+        var g = (sumX * dy2 - sumY * dx2) / det;
+        var h = (dx1 * sumY - dy1 * sumX) / det;
+
+        var m00 = sx[1] - sx[0] + g * sx[1];
+        var m01 = sx[3] - sx[0] + h * sx[3];
+        var m02 = sx[0];
+        var m10 = sy[1] - sy[0] + g * sy[1];
+        var m11 = sy[3] - sy[0] + h * sy[3];
+        var m12 = sy[0];
+        var m20 = g;
+        var m21 = h;
+        var m22 = 1.0;
+
+        // Invert 3x3 matrix to map screen (x, y) to (u, v)
+        var i00 = m11 * m22 - m12 * m21;
+        var i01 = m02 * m21 - m01 * m22;
+        var i02 = m01 * m12 - m02 * m11;
+        var i10 = m12 * m20 - m10 * m22;
+        var i11 = m00 * m22 - m02 * m20;
+        var i12 = m02 * m10 - m00 * m12;
+        var i20 = m10 * m21 - m11 * m20;
+        var i21 = m01 * m20 - m00 * m21;
+        var i22 = m00 * m11 - m01 * m10;
+
+        var minX = Math.Clamp((int)Math.Floor(Math.Min(Math.Min(sx[0], sx[1]), Math.Min(sx[2], sx[3]))), 0, width - 1);
+        var maxX = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Max(sx[0], sx[1]), Math.Max(sx[2], sx[3]))), 0, width - 1);
+        var minY = Math.Clamp((int)Math.Floor(Math.Min(Math.Min(sy[0], sy[1]), Math.Min(sy[2], sy[3]))), 0, height - 1);
+        var maxY = Math.Clamp((int)Math.Ceiling(Math.Max(Math.Max(sy[0], sy[1]), Math.Max(sy[2], sy[3]))), 0, height - 1);
+
+        for (var y = minY; y <= maxY; y++)
+        {
+            var outRow = y * width * 4;
+            for (var x = minX; x <= maxX; x++)
+            {
+                var w = i20 * x + i21 * y + i22;
+                if (w <= 0.0) continue;
+
+                var u = (i00 * x + i01 * y + i02) / w;
+                var v = (i10 * x + i11 * y + i12) / w;
+
+                if (u < 0.0 || u > 1.0 || v < 0.0 || v > 1.0) continue;
+
+                var sxTex = Math.Clamp(u * layerWidth - 0.5, 0.0, layerWidth - 1);
+                var syTex = Math.Clamp(v * layerHeight - 0.5, 0.0, layerHeight - 1);
+                var x0 = (int)sxTex;
+                var y0 = (int)syTex;
+                var x1 = Math.Min(x0 + 1, layerWidth - 1);
+                var y1 = Math.Min(y0 + 1, layerHeight - 1);
+                var wx = sxTex - x0;
+                var wy = syTex - y0;
+
+                var p00 = (y0 * layerWidth + x0) * 4;
+                var p01 = (y0 * layerWidth + x1) * 4;
+                var p10 = (y1 * layerWidth + x0) * 4;
+                var p11 = (y1 * layerWidth + x1) * 4;
+
+                var a00 = layer[p00 + 3] * (1.0 - wx) * (1.0 - wy);
+                var a01 = layer[p01 + 3] * wx * (1.0 - wy);
+                var a10 = layer[p10 + 3] * (1.0 - wx) * wy;
+                var a11 = layer[p11 + 3] * wx * wy;
+                var sa = (a00 + a01 + a10 + a11) / 255.0 * opacity;
+                if (sa <= 0.001) continue;
+
+                var sr = ((layer[p00] * a00 + layer[p01] * a01 + layer[p10] * a10 + layer[p11] * a11) / (a00 + a01 + a10 + a11));
+                var sg = ((layer[p00 + 1] * a00 + layer[p01 + 1] * a01 + layer[p10 + 1] * a10 + layer[p11 + 1] * a11) / (a00 + a01 + a10 + a11));
+                var sb = ((layer[p00 + 2] * a00 + layer[p01 + 2] * a01 + layer[p10 + 2] * a10 + layer[p11 + 2] * a11) / (a00 + a01 + a10 + a11));
+
+                var outIdx = outRow + x * 4;
+                var dr = output[outIdx];
+                var dg = output[outIdx + 1];
+                var db = output[outIdx + 2];
+                var da = output[outIdx + 3] / 255.0;
+
+                if (mode == TrackCompositeMode.SourceAlpha || mode == TrackCompositeMode.SourceAlpha3D)
+                {
+                    output[outIdx] = (byte)Math.Clamp((int)Math.Round(sr * sa + dr * (1.0 - sa)), 0, 255);
+                    output[outIdx + 1] = (byte)Math.Clamp((int)Math.Round(sg * sa + dg * (1.0 - sa)), 0, 255);
+                    output[outIdx + 2] = (byte)Math.Clamp((int)Math.Round(sb * sa + db * (1.0 - sa)), 0, 255);
+                    output[outIdx + 3] = (byte)Math.Clamp((int)Math.Round((sa + da * (1.0 - sa)) * 255.0), 0, 255);
+                }
+                else
+                {
+                    var blendR = BlendChannel(mode, sr / 255.0, dr / 255.0) * 255.0;
+                    var blendG = BlendChannel(mode, sg / 255.0, dg / 255.0) * 255.0;
+                    var blendB = BlendChannel(mode, sb / 255.0, db / 255.0) * 255.0;
+                    output[outIdx] = (byte)Math.Clamp((int)Math.Round(blendR * sa + dr * (1.0 - sa)), 0, 255);
+                    output[outIdx + 1] = (byte)Math.Clamp((int)Math.Round(blendG * sa + dg * (1.0 - sa)), 0, 255);
+                    output[outIdx + 2] = (byte)Math.Clamp((int)Math.Round(blendB * sa + db * (1.0 - sa)), 0, 255);
+                    output[outIdx + 3] = (byte)Math.Clamp((int)Math.Round((sa + da * (1.0 - sa)) * 255.0), 0, 255);
+                }
             }
         }
     }

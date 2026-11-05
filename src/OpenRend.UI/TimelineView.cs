@@ -1354,7 +1354,11 @@ public sealed partial class TimelineView : FrameworkElement
             };
             dc.DrawRoundedRectangle(autoBrush, FrozenPen("#383838", 1), autoBounds, 1, 1);
             Text(dc, "A", autoBounds.X + 6, autoBounds.Y + 2, t.AutomationMode == TrackAutomationMode.AutomationOff ? Brush("#888888") : Brush("#FFFFFF"), 10.5);
-            if (t.Kind == TrackKind.Video && t.CompositeMode != TrackCompositeMode.SourceAlpha) Text(dc, $"[{t.CompositeMode}]", 180, y + 5, Brush("#00D2FF"), 10);
+            if (t.Kind == TrackKind.Video && t.CompositeMode != TrackCompositeMode.SourceAlpha)
+            {
+                var modeLabel = t.CompositeMode == TrackCompositeMode.SourceAlpha3D ? "[3D]" : $"[{t.CompositeMode}]";
+                Text(dc, modeLabel, 180, y + 5, Brush("#00D2FF"), 10);
+            }
             foreach (var (label, action, on) in new[] { ("M", "Mute", t.IsMuted), ("S", "Solo", t.IsSolo), ("L", "Lock", t.IsLocked) })
             {
                 var bounds = TrackButtonBounds(t.Id, action);
@@ -2573,6 +2577,7 @@ public sealed partial class TimelineView : FrameworkElement
                     var modes = new (TrackCompositeMode Mode, string Label)[]
                     {
                         (TrackCompositeMode.SourceAlpha, "Source Alpha"),
+                        (TrackCompositeMode.SourceAlpha3D, "3D Source Alpha"),
                         (TrackCompositeMode.Add, "Add"),
                         (TrackCompositeMode.Subtract, "Subtract"),
                         (TrackCompositeMode.Multiply, "Multiply"),

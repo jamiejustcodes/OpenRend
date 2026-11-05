@@ -97,7 +97,7 @@ public sealed partial class TimelineEditor
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Compositing modes are only available for video tracks.");
         if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
         if (track.CompositeMode == mode) return;
-        Execute(_ => track.CompositeMode = mode);
+        Execute(p => p.Tracks.First(t => t.Id == trackId).CompositeMode = mode);
     }
 
     public void DeleteTrack(Guid trackId)

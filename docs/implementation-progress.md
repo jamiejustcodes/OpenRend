@@ -216,6 +216,27 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added 7 unit tests in `TrackGroupsEditorTests.cs` (OpenRend.Editor.Tests) verifying contiguous track grouping, non-contiguous selection rejection, group mute and solo cascading, collapsed layout folding, undo/redo, track deletion pruning, and Edit Details TSV export.
     - Full gate passed: 100% native integration tests (1/1), 1,071 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 track motion 3d source alpha and perspective keyframing suite` implemented 1:1 Vegas Pro Track Motion 3D Source Alpha mode and perspective keyframe orientation matching `ScriptPortal.Vegas.CompositeMode.SrcAlpha3D`, `TrackMotionKeyframe`, `TrackMotion`, and `TrackMotionWindow`.
+  - Core Data Models & Validation:
+    - Extended `TrackCompositeMode` in `OpenRend.Core/ProjectDocument.cs` with `SourceAlpha3D = 3` (matching Vegas Pro underlying enum integer value 3).
+    - Extended `TrackMotionKeyframe` in `OpenRend.Core/TrackMotion.cs` with 3D camera and orientation properties: `Depth`, `RotationOffsetX`, `RotationOffsetY`, `RotationOffsetZ`, and aliases `PivotX`/`PivotY`/`PivotZ`.
+    - Added `Is3D()` predicate, 3D deep cloning, and 3D Lerp spherical/linear interpolation between keyframes.
+  - Video Compositing & Perspective Projection:
+    - In `TimelineRenderService.cs`, implemented `CompositeTransformedPerspective` performing 3D camera perspective projection (53.13° FOV camera focal length $f = \max(W, H) \cdot 1.25$, corner scaling $scale = f / (f + Z_{3D})$) and 3x3 projective homography matrix inversion for exact subpixel bilinear sampling.
+    - Integrated with preview playback and video export pipelines with fallback and boundary clamping.
+  - Timeline & Editor Controls:
+    - In `TimelineEditor.cs`, updated `SetTrackCompositeMode` to execute atomic undo/redo snapshots with track persistence.
+    - In `TimelineView.cs`, added `3D Source Alpha` to track compositing mode context menu and rendered `[3D]` badge on track headers when in 3D mode.
+    - In `TrackMotionWindow.cs`:
+      - Added Compositing Mode dropdown (`Source Alpha ▾` / `3D Source Alpha`) switching the track between 2D and 3D modes with live preview updates.
+      - Implemented dynamic parameter tree panel: switches between 2D (Position, 2D Shadow, 2D Glow) and 3D (3D Position X/Y/Z, 3D Rotation X/Y/Z, 3D Orientation X/Y/Z, 3D Center/Pivot X/Y/Z, Depth).
+      - Added 3D presets: `3D Left Perspective Wall`, `3D Right Perspective Wall`, `3D Overhead Tilt`, and `3D Distance Fly In`.
+      - Extended `TrackMotionWorkspace` interactive canvas: renders 3D perspective quad wireframe, diagonal corner guidelines, 3D axes at pivot (Crimson X, LimeGreen Y, DodgerBlue Z), Shift+drag orbit rotation, and mouse wheel Z-depth translation.
+  - Verification:
+    - Added 4 unit tests in `TrackMotion3DEditorTests.cs` (OpenRend.Editor.Tests) verifying 3D serialization, 3D lerp math, undo/redo, and STA window mode switching.
+    - Added `TrackCompositeMode_SourceAlpha3D_CompositesPerspectiveCorrectly` in `TrackCompositeModeMediaTests.cs` (OpenRend.Media.Tests) verifying perspective frame rendering.
+    - Gate passed: 100% native integration tests (1/1), 1,076 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 audio pan laws and timeline event snap offset suite` implemented 1:1 Vegas Pro Audio Pan Laws and Timeline Event Snap Offset matching `ScriptPortal.Vegas.PanType` (`Add`, `ConstantPower`, `Balance`, `Notch3Db`, `Notch6Db`) and `TrackEvent.SnapOffset`.
   - Core Data Models & DSP Evaluation:
     - Created `AudioPanMode.cs` enum in `OpenRend.Core`: `Balance` (0 dB center, linear), `ConstantPower` (-3.01 dB center, sine-cosine equal power $L^2 + R^2 = 1.0$), `AddChannels` (0 dB center, additive), `Notch3Db` (-3.0 dB center notch), and `Notch6Db` (-6.0 dB center notch).

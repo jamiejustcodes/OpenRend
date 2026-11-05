@@ -23,5 +23,6 @@
     <Compile Include="../../src/OpenRend.App/WorkspaceLayoutManager.cs" Link="WorkspaceLayoutManager.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingWheelControl.cs" Link="ColorGradingWheelControl.cs" />
     <Compile Include="../../src/OpenRend.App/InsertTimeDialog.cs" Link="InsertTimeDialog.cs" />
+    <Compile Include="../../src/OpenRend.App/TrackMotionWindow.cs" Link="TrackMotionWindow.cs" />
   </ItemGroup>
 </Project>

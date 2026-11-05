@@ -35,6 +35,7 @@ public enum TrackKind { Video, Audio }
 public enum TrackCompositeMode
 {
     SourceAlpha = 2,
+    SourceAlpha3D = 3,
     Add = 4,
     Subtract = 5,
     Multiply = 6,
