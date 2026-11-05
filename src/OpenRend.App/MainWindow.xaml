@@ -90,6 +90,9 @@
           <MenuItem Header="Next Take" InputGestureText="T" Click="NextTakeClick"/>
           <MenuItem Header="Previous Take" InputGestureText="Shift+T" Click="PreviousTakeClick"/>
         </MenuItem>
+        <Separator/>
+        <MenuItem x:Name="ResizeSelectedAdjustmentEventsMenu" Header="Resize selected Adjustment Events to Project" Click="ResizeSelectedAdjustmentEventsClick" AutomationProperties.AutomationId="ResizeSelectedAdjustmentEventsMenu"/>
+        <MenuItem x:Name="ResizeAllAdjustmentEventsMenu" Header="Resize all Adjustment Events to Project" Click="ResizeAllAdjustmentEventsClick" AutomationProperties.AutomationId="ResizeAllAdjustmentEventsMenu"/>
       </MenuItem>
       <MenuItem Header="_View">
         <MenuItem x:Name="WindowLayoutsMenu" Header="Window La_youts">
@@ -142,8 +145,10 @@
         <MenuItem Header="Slideshow…" Click="CreateSlideshowClick"/>
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
+        <MenuItem x:Name="InsertAdjustmentEventMenu" Header="Adjustment event" Click="InsertAdjustmentEventClick" AutomationProperties.AutomationId="InsertAdjustmentEventMenu"/>
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+V" Click="VideoTrackClick"/>
         <MenuItem Header="Audio track" InputGestureText="Ctrl+Shift+A" Click="AudioTrackClick"/>
+        <MenuItem x:Name="InsertAdjustmentTrackMenu" Header="Adjustment track" Click="InsertAdjustmentTrackClick" AutomationProperties.AutomationId="InsertAdjustmentTrackMenu"/>
         <Separator/>
         <MenuItem Header="Audio Envelopes" SubmenuOpened="AudioEnvelopesMenu_SubmenuOpened">
           <MenuItem x:Name="AudioVolumeEnvelopeMenu" Header="Volume" InputGestureText="Shift+V" Click="ToggleTrackVolumeEnvelopeClick"/>

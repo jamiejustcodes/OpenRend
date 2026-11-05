@@ -448,6 +448,19 @@ public partial class MainWindow : Window
         Timeline.DeleteRequested += () => Guard(vm.Delete);
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
+        Timeline.InsertAdjustmentTrackRequested += idx => Guard(() =>
+        {
+            var track = vm.Editor.AddAdjustmentTrack(idx);
+            vm.Status = $"Inserted {track.Name}.";
+            Timeline.InvalidateVisual();
+        });
+        Timeline.ResizeAdjustmentEventRequested += clipId => Guard(() =>
+        {
+            vm.Editor.ResizeAdjustmentEventToProject(clipId);
+            Timeline.InvalidateVisual();
+            RequestPreview();
+            vm.Status = "Resized Adjustment Event to project.";
+        });
         Timeline.DuplicateTrackRequested += id => Guard(() => vm.Editor.DuplicateTrack(id));
         Timeline.DeleteTrackRequested += id => Guard(() => vm.Editor.DeleteTrack(id));
         Timeline.UnlinkRequested += () => GroupRemoveClick(this, new RoutedEventArgs());
@@ -2404,6 +2417,47 @@ public partial class MainWindow : Window
     private void VideoTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p => p.Tracks.Insert(0, new TimelineTrack
     { Kind = TrackKind.Video, Name = $"Video {p.Tracks.Count(t => t.Kind == TrackKind.Video) + 1}" })));
     private void AudioTrackClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.AddTrack(TrackKind.Audio));
+    private void InsertAdjustmentTrackClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var track = vm.Editor.AddAdjustmentTrack(0);
+        vm.Status = $"Inserted {track.Name}.";
+        Timeline.InvalidateVisual();
+    });
+    private void InsertAdjustmentEventClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var targetTrack = vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex);
+        if (targetTrack == null || targetTrack.Kind != TrackKind.Video)
+        {
+            targetTrack = vm.Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
+        }
+        if (targetTrack == null)
+        {
+            targetTrack = vm.Editor.AddAdjustmentTrack(0);
+        }
+
+        var startFrame = Math.Max(0, vm.Position);
+        var duration = Math.Max(1, vm.Project.FrameRate.Frames(5.0));
+        var clip = vm.Editor.InsertAdjustmentEvent(targetTrack.Id, startFrame, duration);
+        Timeline.Selection.Clear();
+        Timeline.Selection.Add(clip.Id);
+        Timeline.InvalidateVisual();
+        RequestPreview();
+        vm.Status = "Inserted adjustment event.";
+    });
+    private void ResizeSelectedAdjustmentEventsClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var count = vm.Editor.ResizeSelectedAdjustmentEventsToProject(Timeline.Selection);
+        Timeline.InvalidateVisual();
+        RequestPreview();
+        vm.Status = count > 0 ? $"Resized {count} selected Adjustment Event(s) to project." : "No selected Adjustment Events to resize.";
+    });
+    private void ResizeAllAdjustmentEventsClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        var count = vm.Editor.ResizeAllAdjustmentEventsToProject();
+        Timeline.InvalidateVisual();
+        RequestPreview();
+        vm.Status = count > 0 ? $"Resized {count} Adjustment Event(s) to project." : "No Adjustment Events to resize.";
+    });
     private void SnapClick(object sender, RoutedEventArgs e) { Timeline.Snapping = SnapToggle.IsChecked == true; SnappingMenu.IsChecked = Timeline.Snapping; }
     private void SnapMenuClick(object sender, RoutedEventArgs e) { SnapToggle.IsChecked = SnappingMenu.IsChecked; SnapClick(sender, e); }
     private void RippleClick(object sender, RoutedEventArgs e)

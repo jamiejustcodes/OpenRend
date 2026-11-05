@@ -144,6 +144,61 @@ public sealed partial class TimelineRenderService : IDisposable
                         else Composite(trackBuffer, width, height, colorPixels, width, height, effOpacity);
                         continue;
                     }
+                    if (IsAdjustmentLayer(layer))
+                    {
+                        var adjW = layer.Clip.FrameWidth > 0 ? layer.Clip.FrameWidth : width;
+                        var adjH = layer.Clip.FrameHeight > 0 ? layer.Clip.FrameHeight : height;
+                        byte[] sourcePixels;
+                        if (adjW == width && adjH == height)
+                        {
+                            sourcePixels = (byte[])output.Clone();
+                        }
+                        else
+                        {
+                            sourcePixels = ResampleBilinear(output, width, height, adjW, adjH);
+                        }
+
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        {
+                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, adjW, adjH, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+                        }
+
+                        if (layer.Clip.Mask?.IsEnabled == true)
+                        {
+                            var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));
+                            MaskRasterizer.ApplyMask(sourcePixels, adjW, adjH, maskShape);
+                        }
+
+                        var adjCrop = layer.Clip.Crop is null ? CropState.Identity(adjW, adjH) : layer.Crop ?? CropState.Identity(adjW, adjH);
+                        adjCrop.Validate();
+                        var adjTransformed = adjCrop.Width != adjW || adjCrop.Height != adjH ||
+                            adjCrop.CenterX != adjW / 2.0 || adjCrop.CenterY != adjH / 2.0 || adjCrop.RotationDegrees % 360 != 0;
+
+                        if (adjTransformed)
+                        {
+                            var transform = SamplingTransform(adjCrop, adjW, adjH, width, height);
+                            if (currentCompositor != null)
+                            {
+                                if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, adjW, adjH, checked(adjW * 4), effOpacity, in transform) < 0)
+                                    throw NativeMethods.Error("Could not composite transformed adjustment timeline layer");
+                            }
+                            else CompositeTransformed(trackBuffer, width, height, sourcePixels, adjW, adjH, effOpacity, transform);
+                        }
+                        else
+                        {
+                            if (adjW != width || adjH != height)
+                            {
+                                sourcePixels = ResampleBilinear(sourcePixels, adjW, adjH, width, height);
+                            }
+                            if (currentCompositor != null)
+                            {
+                                if (NativeMethods.CompositorLayer(currentCompositor, sourcePixels, width, height, width * 4, effOpacity) < 0)
+                                    throw NativeMethods.Error("Could not composite adjustment timeline layer");
+                            }
+                            else Composite(trackBuffer, width, height, sourcePixels, width, height, effOpacity);
+                        }
+                        continue;
+                    }
                     var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
                     var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
                     crop.Validate();
@@ -891,6 +946,51 @@ public sealed partial class TimelineRenderService : IDisposable
         }
 
         return style;
+    }
+
+    private static bool IsAdjustmentLayer(EvaluatedClip layer)
+    {
+        return layer.Clip.IsAdjustmentEvent
+            || (layer.Media is not null && layer.Media.Path.StartsWith("openrend://adjustment", StringComparison.OrdinalIgnoreCase))
+            || layer.Track.IsAdjustmentTrack;
+    }
+
+    private static byte[] ResampleBilinear(byte[] src, int srcW, int srcH, int dstW, int dstH)
+    {
+        if (srcW == dstW && srcH == dstH) return (byte[])src.Clone();
+        var dst = new byte[dstW * dstH * 4];
+        for (var y = 0; y < dstH; y++)
+        {
+            var v = (y + 0.5) / dstH;
+            var sy = Math.Clamp(v * srcH - 0.5, 0, srcH - 1);
+            var y0 = (int)sy;
+            var y1 = Math.Min(y0 + 1, srcH - 1);
+            var wy = sy - y0;
+            for (var x = 0; x < dstW; x++)
+            {
+                var u = (x + 0.5) / dstW;
+                var sx = Math.Clamp(u * srcW - 0.5, 0, srcW - 1);
+                var x0 = (int)sx;
+                var x1 = Math.Min(x0 + 1, srcW - 1);
+                var wx = sx - x0;
+
+                var p00 = (y0 * srcW + x0) * 4;
+                var p01 = (y0 * srcW + x1) * 4;
+                var p10 = (y1 * srcW + x0) * 4;
+                var p11 = (y1 * srcW + x1) * 4;
+
+                var target = (y * dstW + x) * 4;
+                for (var c = 0; c < 4; c++)
+                {
+                    var val = src[p00 + c] * (1 - wx) * (1 - wy)
+                            + src[p01 + c] * wx * (1 - wy)
+                            + src[p10 + c] * (1 - wx) * wy
+                            + src[p11 + c] * wx * wy;
+                    dst[target + c] = (byte)Math.Clamp((int)Math.Round(val), 0, 255);
+                }
+            }
+        }
+        return dst;
     }
 
     private static bool IsGeneratorLayer(EvaluatedClip layer)

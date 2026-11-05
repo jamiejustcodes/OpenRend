@@ -194,6 +194,28 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 video adjustment tracks and adjustment events suite` implemented 1:1 Vegas Pro Video Adjustment Tracks and Adjustment Events matching `ScriptPortal.Vegas.VideoAdjustmentTrack`, `VideoAdjustmentEvent`, and Vegas Pro menu/toolbar commands (`Insert > Adjustment Track` ID 32178, `Insert > Adjustment Event` ID 32503, `Edit > Resize selected Adjustment Events to Project` ID 44729, `Edit > Resize all Adjustment Events to Project` ID 44730, and Event context menu `Resize Adjustment Event to Project` ID 44731).
+  - Core Data Models & Validation:
+    - Extended `TimelineClip` in `OpenRend.Core/ProjectDocument.cs` with `IsAdjustmentEvent`, `FrameWidth`, `FrameHeight`, `PixelAspectRatio = 1.0`, and `UseAlternateAdjustmentEventBehavior`.
+    - Added schema validation ensuring adjustment events only exist on video tracks, have non-negative dimensions, and have finite positive pixel aspect ratios.
+  - Timeline Operations & Undo/Redo:
+    - In `TimelineEditor.Compositing.cs`, implemented atomic undo/redo operations: `AddAdjustmentTrack(int? index = null)` (creates synthetic media asset `"openrend://adjustment"`), `InsertAdjustmentEvent(Guid trackId, long startFrame, long durationFrames)`, `ResizeAdjustmentEventToProject(Guid clipId)`, `ResizeSelectedAdjustmentEventsToProject(IEnumerable<Guid> clipIds)`, and `ResizeAllAdjustmentEventsToProject()`.
+  - Preview & Export Compositing Pipeline:
+    - In `TimelineRenderService.cs`, integrated adjustment layer rendering (`IsAdjustmentLayer`): captures the accumulated lower-track composite buffer (`output`) as source frame, resamples bilinearly if event dimensions differ, applies clip video effects chains (Invert, Color Grading, Blur, etc.), applies event mask, pan/crop sampling transforms, and blends into the track/output buffer with clip opacity.
+  - UI Implementation:
+    - In `TimelineView.cs`:
+      - Rendered adjustment events in authentic Vegas Pro purple palette (`#3E244B`, header `#5D2F6E`, border `#AB47BC`) with `[ADJ]` tag.
+      - Added `Insert Adjustment Track` to track header context menu and defined `InsertAdjustmentTrackRequested` / `ResizeAdjustmentEventRequested` events.
+    - In `TimelineEventButtons.cs`: added `Resize Adjustment Event to Project` command to event context menu, dynamically visible and enabled for adjustment events.
+    - In `MainWindow.xaml` and `MainWindow.xaml.cs`:
+      - Added `Adjustment track` and `Adjustment event` to `Insert` menu.
+      - Added `Resize selected Adjustment Events to Project` and `Resize all Adjustment Events to Project` to `Edit` menu.
+      - Wired timeline context menu events and status feedback.
+  - Verification:
+    - Added 5 unit tests in `AdjustmentEventEditorTests.cs` (OpenRend.Editor.Tests) verifying track creation, event insertion, undo/redo, dimension resizing, batch resizing, audio track validation rejection, and JSON serialization.
+    - Added `AdjustmentEvent_AppliesEffectsToUnderlyingTracksAndRespectsBypass` in `TrackCompositeModeMediaTests.cs` (OpenRend.Media.Tests) verifying that an adjustment event applies video effects to accumulated lower tracks and bypasses accurately.
+    - Full gate passed: 100% native integration tests (1/1), 1,083 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 track groups architecture, collapse/expand layout, and mute/solo suite` implemented 1:1 Vegas Pro Track Groups matching `ScriptPortal.Vegas.TrackGroup`, `TrackGroups`, `Project.GroupSelectedTracks`, and `Project.UngroupSelectedTracks`.
   - Core Data Models & Validation:
     - Created `TrackGroup.cs` in `OpenRend.Core`: modeled `Id`, `Name` ("Track Group 1"), `ColorHex`, `IsCollapsed`, `IsMuted`, `IsSolo`, `TrackIds`, deep cloning, and schema validation.

@@ -540,6 +540,15 @@ public sealed class ProjectDocument
                         throw new InvalidDataException("Active take index is out of bounds.");
                 }
                 clip.Transcript?.Validate();
+                if (clip.IsAdjustmentEvent)
+                {
+                    if (track.Kind != TrackKind.Video)
+                        throw new InvalidDataException("Adjustment events are only supported on video tracks.");
+                    if (clip.FrameWidth < 0 || clip.FrameHeight < 0)
+                        throw new InvalidDataException("Adjustment event dimensions cannot be negative.");
+                    if (!double.IsFinite(clip.PixelAspectRatio) || clip.PixelAspectRatio <= 0 || clip.PixelAspectRatio > 4.0)
+                        throw new InvalidDataException("Adjustment event pixel aspect ratio is invalid.");
+                }
             }
         }
         if (TrackGroups != null)
@@ -808,6 +817,11 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioChannelMode ChannelMode { get; set; } = AudioChannelMode.Both;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PitchSemis { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long SnapOffsetFrames { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsAdjustmentEvent { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int FrameWidth { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public int FrameHeight { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PixelAspectRatio { get; set; } = 1.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool UseAlternateAdjustmentEventBehavior { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsLocked { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsMuted { get; set; }
     [JsonIgnore] public long EndFrame => checked(StartFrame + DurationFrames);

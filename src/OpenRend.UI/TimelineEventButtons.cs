@@ -145,6 +145,19 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(tracking, "MotionTrackingEventMenu");
         var tbe = Add("Text-Based Editing…", () => { if (clipId is { } id) InvokeEventAction(id, "TextBasedEditing"); else TextBasedEditingRequested?.Invoke(clipId ?? Guid.Empty); });
         AutomationProperties.SetAutomationId(tbe, "TextBasedEditingEventMenu");
+        MenuItem? resizeAdj = null;
+        if (clipId is { } adjId && Project.Tracks.SelectMany(t => t.Clips).Any(c => c.Id == adjId && c.IsAdjustmentEvent))
+        {
+            resizeAdj = Add("Resize Adjustment Event to Project", () => ResizeAdjustmentEventRequested?.Invoke(adjId));
+        }
+        else if (Selection.Count > 0 && Project.Tracks.SelectMany(t => t.Clips).Any(c => Selection.Contains(c.Id) && c.IsAdjustmentEvent))
+        {
+            resizeAdj = Add("Resize Adjustment Event to Project", () =>
+            {
+                var sel = Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => Selection.Contains(c.Id) && c.IsAdjustmentEvent);
+                if (sel != null) ResizeAdjustmentEventRequested?.Invoke(sel.Id);
+            });
+        }
         var transition = Add("Transition Properties…", () =>
         {
             var id = clipId ?? Project.Tracks.Where(track => track.Kind == TrackKind.Video)
@@ -564,6 +577,12 @@ public sealed partial class TimelineView
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;
             transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            if (resizeAdj != null)
+            {
+                var isAdj = singleTarget.Clip?.IsAdjustmentEvent == true || (video.Length == 1 && video[0].Clip.IsAdjustmentEvent);
+                resizeAdj.Visibility = isAdj ? Visibility.Visible : Visibility.Collapsed;
+                resizeAdj.IsEnabled = isAdj && !isLocked && (singleTarget.Track == null || !singleTarget.Track.IsLocked);
+            }
             var source = video.Length == 1 ? Project.Media.SingleOrDefault(media => media.Id == video[0].Clip.MediaId) : null;
             switches.Visibility = source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)
                 ? Visibility.Visible : Visibility.Collapsed;

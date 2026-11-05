@@ -196,4 +196,61 @@ public sealed class TrackCompositeModeMediaTests
         Assert.NotNull(frameBuffer);
         Assert.Equal(320 * 240 * 4, frameBuffer.Length);
     }
+
+    [Fact]
+    public void AdjustmentEvent_AppliesEffectsToUnderlyingTracksAndRespectsBypass()
+    {
+        var project = new ProjectDocument { Width = 32, Height = 24 };
+        var editor = new TimelineEditor(project);
+
+        // Lower Track: Solid pure Green (#00FF00) -> B=0, G=255, R=0
+        var lowerAsset = new MediaAsset { Path = "openrend://color?hex=#00FF00", DurationSeconds = 3, HasVideo = true };
+        project.Media.Add(lowerAsset);
+        var lowerTrack = new TimelineTrack
+        {
+            Kind = TrackKind.Video,
+            Name = "Video 2",
+            Clips = [new TimelineClip { MediaId = lowerAsset.Id, DurationFrames = 30 }]
+        };
+
+        // Upper Track: Adjustment Event with Invert video effect
+        var upperTrack = new TimelineTrack
+        {
+            Kind = TrackKind.Video,
+            Name = "Video 1"
+        };
+        var adjAsset = TimelineEditor.EnsureAdjustmentMediaAsset(project);
+        var adjClip = new TimelineClip
+        {
+            MediaId = adjAsset.Id,
+            DurationFrames = 30,
+            IsAdjustmentEvent = true,
+            FrameWidth = 32,
+            FrameHeight = 24,
+            VideoEffects = [VideoEffect.Create(VideoEffectKind.Invert)]
+        };
+        upperTrack.Clips.Add(adjClip);
+
+        // Track 0 is on top of Track 1
+        project.Tracks.Add(upperTrack);
+        project.Tracks.Add(lowerTrack);
+        project.Validate();
+
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, useGpuCompositing: false);
+
+        // Frame 0 with active Invert effect: Green (B=0, G=255, R=0) inverted becomes Magenta (B=255, G=0, R=255)
+        var fxPixels = renderer.RenderFrame(project, 0, 32, 24, bypassVideoEffects: false);
+        Assert.Equal(255, fxPixels[0]); // B
+        Assert.Equal(0, fxPixels[1]);   // G
+        Assert.Equal(255, fxPixels[2]); // R
+        Assert.Equal(255, fxPixels[3]); // A
+
+        // When bypassVideoEffects is true: Invert is bypassed, original Green is returned
+        var cleanPixels = renderer.RenderFrame(project, 0, 32, 24, bypassVideoEffects: true);
+        Assert.Equal(0, cleanPixels[0]);   // B
+        Assert.Equal(255, cleanPixels[1]); // G
+        Assert.Equal(0, cleanPixels[2]);   // R
+        Assert.Equal(255, cleanPixels[3]); // A
+    }
 }

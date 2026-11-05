@@ -91,6 +91,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? ClipMuteRequested;
     public event Action<int>? InsertVideoTrackRequested;
     public event Action<int>? InsertAudioTrackRequested;
+    public event Action<int>? InsertAdjustmentTrackRequested;
+    public event Action<Guid>? ResizeAdjustmentEventRequested;
     public event Action<Guid>? DuplicateTrackRequested;
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
@@ -1087,10 +1089,13 @@ public sealed partial class TimelineView : FrameworkElement
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
                 var isMuted = clip.IsMuted || track.IsMuted;
                 var selected = Selection.Contains(clip.Id);
-                dc.DrawRectangle(Brush(isMuted ? "#2D2D2D" : track.Kind == TrackKind.Video ? "#233442" : "#365D61"),
-                    FrozenPen(isPrimaryDragged ? "#00E5FF" : selected ? "#E4DF8F" : "#5E737C", isPrimaryDragged ? 1.5 : 1), rect);
+                var isAdj = clip.IsAdjustmentEvent || track.IsAdjustmentTrack;
+                var clipFill = isMuted ? "#2D2D2D" : isAdj ? "#3E244B" : track.Kind == TrackKind.Video ? "#233442" : "#365D61";
+                var headerFill = selected ? "#4D5356" : isMuted ? "#383838" : isAdj ? "#5D2F6E" : "#30383C";
+                dc.DrawRectangle(Brush(clipFill),
+                    FrozenPen(isPrimaryDragged ? "#00E5FF" : selected ? "#E4DF8F" : isAdj ? "#AB47BC" : "#5E737C", isPrimaryDragged ? 1.5 : 1), rect);
                 dc.PushClip(new RectangleGeometry(rect));
-                if (ShowEventHeaders) dc.DrawRectangle(Brush(selected ? "#4D5356" : isMuted ? "#383838" : "#30383C"), null, new Rect(rect.X, rect.Y, rect.Width, 18));
+                if (ShowEventHeaders) dc.DrawRectangle(Brush(headerFill), null, new Rect(rect.X, rect.Y, rect.Width, 18));
                 var headerOffset = 3.0;
                 if (clip.IsLocked)
                 {
@@ -1108,6 +1113,7 @@ public sealed partial class TimelineView : FrameworkElement
                     dc.DrawRectangle(Brush("#E0A020"), null, new Rect(lockX + 1, lockY + 5, 8, 6));
                     headerOffset = 13.0;
                 }
+                var adjPrefix = isAdj ? "[ADJ] " : "";
                 var groupPrefix = clip.GroupId.HasValue ? "[G] " : "";
                 var takePrefix = clip.Takes is { Count: > 1 } ? $"[Take {clip.ActiveTakeIndex + 1}/{clip.Takes.Count}] " : "";
                 var reversePrefix = clip.IsReversed ? "[Reverse] " : "";
@@ -1117,7 +1123,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var channelSuffix = clip.ChannelMode != AudioChannelMode.Both ? $" [{clip.ChannelMode}]" : "";
                 var pitchSuffix = Math.Abs(clip.PitchSemis) > 0.001 ? $" [{(clip.PitchSemis > 0 ? "+" : "")}{clip.PitchSemis:0.#} semis]" : "";
                 var snapSuffix = clip.SnapOffsetFrames > 0 ? $" [Snap: +{clip.SnapOffsetFrames}]" : "";
-                var displayName = $"{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{snapSuffix}{mutedSuffix}";
+                var displayName = $"{adjPrefix}{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{snapSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
                 {
@@ -2547,6 +2553,10 @@ public sealed partial class TimelineView : FrameworkElement
             var insertAudio = new MenuItem { Header = "Insert Audio Track", InputGestureText = "Ctrl+Q" };
             insertAudio.Click += (_, _) => InsertAudioTrackRequested?.Invoke(trackIndex >= 0 ? trackIndex + 1 : Project.Tracks.Count);
             menu.Items.Add(insertAudio);
+
+            var insertAdjTrack = new MenuItem { Header = "Insert Adjustment Track" };
+            insertAdjTrack.Click += (_, _) => InsertAdjustmentTrackRequested?.Invoke(trackIndex);
+            menu.Items.Add(insertAdjTrack);
 
             if (track is not null)
             {
