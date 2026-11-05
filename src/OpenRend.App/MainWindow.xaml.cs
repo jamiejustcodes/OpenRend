@@ -451,6 +451,9 @@ public partial class MainWindow : Window
         Timeline.CopyRequested += () => CopyClick(this, new RoutedEventArgs());
         Timeline.PasteEventAttributesRequested += () => PasteEventAttributesClick(this, new RoutedEventArgs());
         Timeline.SelectivelyPasteEventAttributesRequested += () => SelectivelyPasteEventAttributesClick(this, new RoutedEventArgs());
+        Timeline.EventHealRequested += () => EventHealClick(this, new RoutedEventArgs());
+        Timeline.CloseGapsRequested += () => CloseGapsClick(this, new RoutedEventArgs());
+        Timeline.AddMissingStreamRequested += () => AddMissingStreamClick(this, new RoutedEventArgs());
         Timeline.InsertVideoTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Video));
         Timeline.InsertAudioTrackRequested += idx => Guard(() => vm.Editor.InsertTrack(idx, TrackKind.Audio));
         Timeline.InsertAdjustmentTrackRequested += idx => Guard(() =>
@@ -1611,6 +1614,27 @@ public partial class MainWindow : Window
     private void UndoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Undo(); });
     private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
     private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
+    private void EventHealClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.HealEvents();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
+    private void CloseGapsClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.CloseGaps();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
+    private void AddMissingStreamClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        Pause();
+        vm.AddMissingStream();
+        RequestPreview();
+        Timeline.InvalidateVisual();
+    });
     private void DeleteClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Delete(); });
     private void DeleteTimeClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.DeleteTime(); });
     private void CopyClick(object sender, RoutedEventArgs e) => Guard(vm.Copy);

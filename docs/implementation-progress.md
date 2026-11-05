@@ -194,6 +194,23 @@ Status: complete. 1:1 Vegas Pro Slideshow Creator dialog (`SlideshowWindow.cs`) 
     - Added unit test in `PanCropAspectAndAudioMeterTests.cs` (`PanCrop_LaneKeyframeCopyPasteAndWorkspaceCommands_ExecuteAccurately`).
     - Full gate passed: 100% native integration tests, 987 managed tests passed cleanly with 0 warnings and 0 errors.
 
+- 2026-11-05: `feat: implement vegas pro 1:1 event heal, close gaps, and add missing stream suite` implemented 1:1 Vegas Pro Event Heal, Close Gaps, and Missing Stream tools matching `vegas2027.exe` command strings and IDs (`Edit > Event Heal` ID 44709, `Edit > Close Gaps` ID 44713, `Insert > Add Missing Stream for Selected Event` ID 44712, and Event context menu items):
+  - Timeline Operations & Undo/Redo (`TimelineEditor.HealAndGaps.cs`):
+    - `CanHeal`: checks timeline touching contiguity, source media asset ID, source frame advancement (with playback rate and velocity envelopes), and locked status.
+    - `HealEvents`: merges contiguous split event slices into a unified event, consolidating fades, envelopes, crop/mask keyframes, and transcript words across the healed boundary, iteratively healing chains of split slices, with group synchronization and atomic undo/redo snapshots.
+    - `CloseGaps`: shifts downstream events leftward to eliminate timeline gaps between selected events (multi-event mode) or across all events on a single track (single-track mode), maintaining audio/video group sync and full undo/redo.
+    - `CanAddMissingStream`: checks if selected events have missing complementary streams in their source media assets.
+    - `AddMissingStream`: detects missing video or audio streams, finds or creates complementary tracks, instantiates paired clips matching exact source in/out and timeline ranges, and groups them with the source event under atomic undo/redo.
+  - Editor ViewModel Integration (`EditorViewModel.cs`):
+    - Added `HealEvents()`, `CloseGaps()`, and `AddMissingStream()` actions with status feedback and selection updates.
+  - UI Implementation:
+    - In `TimelineView.cs`: exposed `EventHealRequested`, `CloseGapsRequested`, and `AddMissingStreamRequested` events.
+    - In `TimelineEventButtons.cs`: added `Event Heal`, `Close Gaps`, and `Add Missing Stream for Selected Event` to event context menus with dynamic enable states in `menu.Opened`.
+    - In `MainWindow.xaml` and `MainWindow.xaml.cs`: added `Event Heal` and `Close Gaps` to `Edit` menu, added `Add Missing Stream for Selected Event` to `Insert` menu, and wired timeline events and keyboard routing.
+  - Verification:
+    - Added 9 unit tests in `HealAndGapsTests.cs` (OpenRend.Editor.Tests) verifying contiguous media healing, multi-slice chain healing, single-event neighbor healing, gap/media rejection, adjustment event healing, multi-event gap closure, single-track gap closure, missing audio stream reconstruction, and missing video stream reconstruction.
+    - Full gate passed: 100% native integration tests (1/1), 1,099 managed tests passed cleanly with 0 warnings and 0 errors.
+
 - 2026-11-05: `feat: implement vegas pro 1:1 paste repeat, paste insert, and selective paste event attributes suite` implemented 1:1 Vegas Pro Clipboard Paste Suite matching `vegas2027.exe` string tables and menu IDs (`Edit > Paste Repeat...` ID 32087 / `Ctrl+B`, `Edit > Paste Insert` ID 32086 / `Ctrl+Shift+V`, `Edit > Paste Event Attributes` ID 32328 / `Ctrl+Shift+B`, and `Edit > Selectively Paste Event Attributes...`), context menus, and `ScriptPortal.Vegas.dll` (`SelPastAttrConfig`, `PastePrefs`).
   - Core Data Models & Validation:
     - Added `AudioEffects` collection to `TimelineClip` in `OpenRend.Core/ProjectDocument.cs` matching `ScriptPortal.Vegas.AudioEvent.Effects`.

@@ -490,6 +490,38 @@ public sealed class EditorViewModel : ObservableObject
         Editor.SplitSelection(Selection, Position, IgnoreGroups);
         Status = "Split selection at cursor.";
     }
+    public void HealEvents()
+    {
+        var healed = Editor.HealEvents(Selection, IgnoreGroups);
+        if (healed.Count > 0)
+        {
+            Selection.Clear();
+            foreach (var clip in healed) Selection.Add(clip.Id);
+            Status = $"Healed {healed.Count} split event(s).";
+        }
+        else
+        {
+            Status = "No split events eligible to heal.";
+        }
+    }
+    public void CloseGaps()
+    {
+        Editor.CloseGaps(Selection.Count > 0 ? Selection : null, ActiveTrackIndex);
+        Status = "Closed timeline gap(s).";
+    }
+    public void AddMissingStream()
+    {
+        var created = Editor.AddMissingStream(Selection);
+        if (created.Count > 0)
+        {
+            foreach (var c in created) Selection.Add(c.Id);
+            Status = $"Added {created.Count} missing stream(s).";
+        }
+        else
+        {
+            Status = "No missing streams found for selection.";
+        }
+    }
     public void Delete()
     {
         if (Selection.Count == 0) return;

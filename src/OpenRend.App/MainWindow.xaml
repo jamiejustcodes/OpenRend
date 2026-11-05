@@ -50,6 +50,8 @@
         <MenuItem x:Name="SelectivelyPasteEventAttributesMenu" Header="Selectively Paste Event Attributes..." Click="SelectivelyPasteEventAttributesClick" AutomationProperties.AutomationId="SelectivelyPasteEventAttributesMenu"/>
         <Separator/>
         <MenuItem Header="Split at cursor" InputGestureText="S" Click="SplitClick"/>
+        <MenuItem x:Name="EventHealMenu" Header="Event Heal" Click="EventHealClick" AutomationProperties.AutomationId="EventHealMenu"/>
+        <MenuItem x:Name="CloseGapsMenu" Header="Close Gaps" Click="CloseGapsClick" AutomationProperties.AutomationId="CloseGapsMenu"/>
         <MenuItem Header="Delete selection" InputGestureText="Delete" Click="DeleteClick"/>
         <MenuItem x:Name="DeleteTimeMenu" Header="Delete _Time" InputGestureText="Ctrl+Shift+Delete" Click="DeleteTimeClick" AutomationProperties.AutomationId="DeleteTimeMenu"/>
         <MenuItem Header="Select all clips" InputGestureText="Ctrl+A" Click="SelectAllClick"/>
@@ -150,6 +152,7 @@
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
         <MenuItem Header="Solid color…" Click="InsertSolidColorClick"/>
         <MenuItem x:Name="InsertAdjustmentEventMenu" Header="Adjustment event" Click="InsertAdjustmentEventClick" AutomationProperties.AutomationId="InsertAdjustmentEventMenu"/>
+        <MenuItem x:Name="AddMissingStreamMenu" Header="Add Missing Stream for Selected Event" Click="AddMissingStreamClick" AutomationProperties.AutomationId="AddMissingStreamMenu"/>
         <MenuItem Header="Video track" InputGestureText="Ctrl+Shift+Q" Click="VideoTrackClick"/>
         <MenuItem Header="Audio track" InputGestureText="Ctrl+Q" Click="AudioTrackClick"/>
         <MenuItem x:Name="InsertAdjustmentTrackMenu" Header="Adjustment track" Click="InsertAdjustmentTrackClick" AutomationProperties.AutomationId="InsertAdjustmentTrackMenu"/>
