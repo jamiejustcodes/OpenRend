@@ -28,7 +28,7 @@ public sealed partial class TimelineView
     {
         if (Project.Regions.Count == 0) return;
         var whiteBrush = Brush("#FFFFFF");
-        var darkBorderPen = new Pen(Brush("#181818"), 1);
+        var darkBorderPen = FrozenPen("#181818", 1);
 
         foreach (var region in Project.Regions)
         {
@@ -42,19 +42,19 @@ public sealed partial class TimelineView
             // Vertical guidelines down through tracks for start and end
             if (sx >= HeaderWidth)
             {
-                dc.DrawLine(new Pen(regionBrush, 1) { DashStyle = new DashStyle([3, 3], 0) },
+                dc.DrawLine(FrozenDashedPen(region.ColorHex, 1, [3, 3], 0),
                     new Point(sx, RulerHeight), new Point(sx, ActualHeight));
             }
             if (ex >= HeaderWidth && ex <= ActualWidth)
             {
-                dc.DrawLine(new Pen(regionBrush, 1) { DashStyle = new DashStyle([3, 3], 0) },
+                dc.DrawLine(FrozenDashedPen(region.ColorHex, 1, [3, 3], 0),
                     new Point(ex, RulerHeight), new Point(ex, ActualHeight));
             }
 
             // Top connecting bar across the region span
             var fillBrush = Brush(region.ColorHex.Length == 7 ? "#40" + region.ColorHex.Substring(1) : region.ColorHex);
             dc.DrawRectangle(fillBrush, null, new Rect(Math.Max(HeaderWidth, sx), 1, Math.Min(ex, ActualWidth) - Math.Max(HeaderWidth, sx), 10));
-            dc.DrawLine(new Pen(regionBrush, 2), new Point(Math.Max(HeaderWidth, sx), 1), new Point(Math.Min(ex, ActualWidth), 1));
+            dc.DrawLine(FrozenPen(region.ColorHex, 2), new Point(Math.Max(HeaderWidth, sx), 1), new Point(Math.Min(ex, ActualWidth), 1));
 
             // Start flag (pointing right)
             if (sx >= HeaderWidth - 10)

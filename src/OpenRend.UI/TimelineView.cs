@@ -1278,7 +1278,7 @@ public sealed partial class TimelineView : FrameworkElement
                     dc.DrawRectangle(Brush(groupColor), null, new Rect(0, gy + 1, 4, gh - 1));
 
                     // Expand Chevron [▶] at x = 7, gy + 5
-                    var chevronPen = new Pen(Brush("#B8B8B8"), 1.5);
+                    var chevronPen = FrozenPen("#B8B8B8", 1.5);
                     var chX = 10.0; var chY = gy + 8.0;
                     dc.DrawLine(chevronPen, new Point(chX, chY), new Point(chX + 5, chY + 5));
                     dc.DrawLine(chevronPen, new Point(chX + 5, chY + 5), new Point(chX, chY + 10));
@@ -1325,7 +1325,7 @@ public sealed partial class TimelineView : FrameworkElement
                     dc.DrawLine(bracketPen, new Point(2, y + 1), new Point(8, y + 1));
 
                     // Collapse Chevron [▼] next to track number
-                    var chevronPen = new Pen(Brush("#B8B8B8"), 1.5);
+                    var chevronPen = FrozenPen("#B8B8B8", 1.5);
                     var chX = 6.0; var chY = y + 9.0;
                     dc.DrawLine(chevronPen, new Point(chX, chY), new Point(chX + 4, chY + 4));
                     dc.DrawLine(chevronPen, new Point(chX + 4, chY + 4), new Point(chX + 8, chY));
@@ -1451,7 +1451,7 @@ public sealed partial class TimelineView : FrameworkElement
                 {
                     dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), motionBounds, 1, 1);
                 }
-                var mPen = new Pen(hasMotion ? Brush("#FFFFFF") : Brush("#C4C4C4"), 1.2);
+                var mPen = FrozenPen(hasMotion ? "#FFFFFF" : "#C4C4C4", 1.2);
                 var mx = motionBounds.X + 4.5;
                 var my = motionBounds.Y + 4.5;
                 dc.DrawRectangle(null, mPen, new Rect(mx, my, 11, 10));
@@ -1477,8 +1477,8 @@ public sealed partial class TimelineView : FrameworkElement
                 var canIndent = i > 0 && Project.Tracks.Take(i).Any(tr => tr.Kind == TrackKind.Video);
                 if (isChild || canIndent)
                 {
-                    dc.DrawRectangle(Brush("#2A2A2A"), new Pen(Brush("#383838"), 1), compBounds);
-                    var btnPen = new Pen(Brush(isChild ? "#E0E0E0" : "#888888"), 1.2);
+                    dc.DrawRectangle(Brush("#2A2A2A"), FrozenPen("#383838", 1), compBounds);
+                    var btnPen = FrozenPen(isChild ? "#E0E0E0" : "#888888", 1.2);
                     var cx = compBounds.X + 10.5; var cy = compBounds.Y + 10;
                     if (isChild)
                     {
@@ -1529,7 +1529,7 @@ public sealed partial class TimelineView : FrameworkElement
                 else
                 {
                     dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), armBounds, 1, 1);
-                    dc.DrawEllipse(null, new Pen(Brush("#888888"), 1.2), new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
+                    dc.DrawEllipse(null, FrozenPen("#888888", 1.2), new Point(armBounds.X + 10.5, armBounds.Y + 10), 4, 4);
                     dc.DrawEllipse(Brush("#AA3333"), null, new Point(armBounds.X + 10.5, armBounds.Y + 10), 2, 2);
                 }
 
@@ -1554,7 +1554,7 @@ public sealed partial class TimelineView : FrameworkElement
             if (pSlot == Project.Tracks.Count)
             {
                 var headerRect = new Rect(0, headerY + 1, HeaderWidth - 3, TrackHeight - 1);
-                dc.DrawRectangle(Brush("#1B232A"), new Pen(Brush("#00D2FF"), 1.5) { DashStyle = new DashStyle([4, 4], 0) }, headerRect);
+                dc.DrawRectangle(Brush("#1B232A"), FrozenDashedPen("#00D2FF", 1.5, [4, 4], 0), headerRect);
                 dc.DrawRectangle(Brush(destinationNewTrackKind == TrackKind.Video ? "#448DBD" : "#65BECE"), null, new Rect(1, headerY + 1, 23, TrackHeight - 2));
                 Text(dc, "+", 6, headerY + 24, Brush("#00D2FF"), 14);
                 Text(dc, $"[New {destinationNewTrackKind} Layer]", 30, headerY + 8, Brush("#00D2FF"), 11, maxWidth: 200);

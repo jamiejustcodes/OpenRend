@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Runtime.Versioning;
 using OpenRend.Core;
 using OpenRend.Timeline;
@@ -33,297 +34,364 @@ public sealed partial class TimelineRenderService : IDisposable
     public byte[] RenderFrame(ProjectDocument project, long frame, int width, int height, bool bypassVideoEffects = false)
     {
         if (width <= 0 || height <= 0 || width > 16384 || height > 16384 || (long)width * height * 4 > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(width));
+        var output = new byte[checked(width * height * 4)];
+        RenderFrame(project, frame, width, height, output, bypassVideoEffects);
+        return output;
+    }
+
+    public void RenderFrame(ProjectDocument project, long frame, int width, int height, byte[] output, bool bypassVideoEffects = false)
+    {
+        if (width <= 0 || height <= 0 || width > 16384 || height > 16384 || (long)width * height * 4 > int.MaxValue) throw new ArgumentOutOfRangeException(nameof(width));
+        ArgumentNullException.ThrowIfNull(output);
+        var bufferSize = checked(width * height * 4);
+        if (output.Length < bufferSize) throw new ArgumentException("Output buffer is too small.", nameof(output));
+
         lock (compositorGate)
         {
             ObjectDisposedException.ThrowIf(disposed, this);
-            var output = new byte[checked(width * height * 4)];
             var compositor = GetCompositor(width, height);
             if (compositor != null)
             {
                 if (NativeMethods.CompositorBegin(compositor) < 0) throw NativeMethods.Error("Could not begin timeline composition");
             }
-            else for (var i = 3; i < output.Length; i += 4) output[i] = 255;
+            else
+            {
+                Array.Clear(output, 0, bufferSize);
+                for (var i = 3; i < bufferSize; i += 4) output[i] = 255;
+            }
+
             var layers = TimelineEvaluator.Evaluate(project, frame).Video;
-            var trackGroups = GroupLayersByTrack(layers);
+            byte[]? rentedBranchBuffer = null;
+            byte[]? rentedTrackBuffer = null;
+            byte[]? rentedTransformedTrack = null;
+            byte[]? rentedAdjustedBuffer = null;
             byte[]? branchBuffer = null;
 
-            foreach (var trackGroup in trackGroups)
+            try
             {
-                var track = trackGroup[0].Track;
-                if (track.IsAdjustmentTrack)
+                var layerCount = layers.Count;
+                var layerIdx = 0;
+                while (layerIdx < layerCount)
                 {
-                    var adjustedBuffer = (byte[])output.Clone();
-                    for (var lIdx = 0; lIdx < trackGroup.Count; lIdx++)
+                    var groupStart = layerIdx;
+                    var trackId = layers[groupStart].Track.Id;
+                    while (layerIdx < layerCount && layers[layerIdx].Track.Id == trackId)
                     {
-                        var layer = trackGroup[lIdx];
-                        if (layer.Opacity <= 0) continue;
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                        {
-                            adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
-                        }
+                        layerIdx++;
                     }
-                    if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects))
-                    {
-                        adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, track.VideoEffects, frame);
-                    }
-                    if (track.Opacity >= 0.9999 && track.CompositeMode == TrackCompositeMode.SourceAlpha)
-                    {
-                        Array.Copy(adjustedBuffer, output, output.Length);
-                    }
-                    else
-                    {
-                        Composite(output, width, height, adjustedBuffer, width, height, track.Opacity, track.CompositeMode);
-                    }
-                    continue;
-                }
+                    var groupCount = layerIdx - groupStart;
 
-                var trackMotion = trackGroup[0].TrackMotion;
-                var is3D = track.CompositeMode == TrackCompositeMode.SourceAlpha3D || (trackMotion != null && trackMotion.Is3D());
-                var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
-                var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
-                var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha && track.CompositeMode != TrackCompositeMode.SourceAlpha3D;
-                var isChild = track.CompositeNestingLevel > 0;
-                if (isChild && branchBuffer == null)
-                {
-                    branchBuffer = new byte[checked(width * height * 4)];
-                }
-                var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion || is3D || isChild || branchBuffer != null;
-                var trackBuffer = needsOwnBuffer ? new byte[checked(width * height * 4)] : output;
-                var currentCompositor = needsOwnBuffer ? null : compositor;
-
-                foreach (var layer in trackGroup)
-                {
-                    var effOpacity = needsOwnBuffer ? (track.Opacity > 0 ? layer.Opacity / track.Opacity : layer.Opacity) : layer.Opacity;
-                    if (layer.Dissolve is { } dissolve)
+                    var track = layers[groupStart].Track;
+                    if (track.IsAdjustmentTrack)
                     {
-                        if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
-                        var incoming = layers.FirstOrDefault(candidate => candidate.Clip.Id == dissolve.IncomingClipId);
-                        if (incoming is not null)
+                        rentedAdjustedBuffer ??= ExactBufferPool.RentBytes(bufferSize);
+                        Buffer.BlockCopy(output, 0, rentedAdjustedBuffer, 0, bufferSize);
+                        var adjustedBuffer = rentedAdjustedBuffer;
+                        for (var lIdx = 0; lIdx < groupCount; lIdx++)
                         {
-                            var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve, width, height);
-                            if (currentCompositor is not null)
+                            var layer = layers[groupStart + lIdx];
+                            if (layer.Opacity <= 0) continue;
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                             {
-                                if (NativeMethods.CompositorLayer(currentCompositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
-                                    throw NativeMethods.Error("Could not composite dissolve timeline layer");
+                                adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                             }
-                            else Composite(trackBuffer, width, height, dissolvePixels, width, height, needsOwnBuffer ? 1.0 : layer.Track.Opacity);
+                        }
+                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects))
+                        {
+                            adjustedBuffer = VideoEffectProcessor.Apply(adjustedBuffer, width, height, track.VideoEffects, frame);
+                        }
+                        if (track.Opacity >= 0.9999 && track.CompositeMode == TrackCompositeMode.SourceAlpha)
+                        {
+                            Buffer.BlockCopy(adjustedBuffer, 0, output, 0, bufferSize);
+                        }
+                        else
+                        {
+                            Composite(output, width, height, adjustedBuffer, width, height, track.Opacity, track.CompositeMode);
+                        }
+                        continue;
+                    }
+
+                    var trackMotion = layers[groupStart].TrackMotion;
+                    var is3D = track.CompositeMode == TrackCompositeMode.SourceAlpha3D || (trackMotion != null && trackMotion.Is3D());
+                    var hasMotion = trackMotion is not null && !trackMotion.IsIdentity(project.Width, project.Height);
+                    var hasTrackEffects = !bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(track.VideoEffects);
+                    var customBlend = track.CompositeMode != TrackCompositeMode.SourceAlpha && track.CompositeMode != TrackCompositeMode.SourceAlpha3D;
+                    var isChild = track.CompositeNestingLevel > 0;
+                    if (isChild && branchBuffer == null)
+                    {
+                        rentedBranchBuffer ??= ExactBufferPool.RentBytes(bufferSize);
+                        Array.Clear(rentedBranchBuffer, 0, bufferSize);
+                        branchBuffer = rentedBranchBuffer;
+                    }
+                    var needsOwnBuffer = hasTrackEffects || customBlend || hasMotion || is3D || isChild || branchBuffer != null;
+                    if (needsOwnBuffer && rentedTrackBuffer == null)
+                    {
+                        rentedTrackBuffer = ExactBufferPool.RentBytes(bufferSize);
+                    }
+                    if (needsOwnBuffer)
+                    {
+                        Array.Clear(rentedTrackBuffer!, 0, bufferSize);
+                    }
+                    var trackBuffer = needsOwnBuffer ? rentedTrackBuffer! : output;
+                    var currentCompositor = needsOwnBuffer ? null : compositor;
+
+                    for (var lIdx = 0; lIdx < groupCount; lIdx++)
+                    {
+                        var layer = layers[groupStart + lIdx];
+                        var effOpacity = needsOwnBuffer ? (track.Opacity > 0 ? layer.Opacity / track.Opacity : layer.Opacity) : layer.Opacity;
+                        if (layer.Dissolve is { } dissolve)
+                        {
+                            if (layer.Clip.Id != dissolve.OutgoingClipId) continue;
+                            EvaluatedClip? incoming = null;
+                            for (var cScan = 0; cScan < layers.Count; cScan++)
+                            {
+                                if (layers[cScan].Clip.Id == dissolve.IncomingClipId)
+                                {
+                                    incoming = layers[cScan];
+                                    break;
+                                }
+                            }
+                            if (incoming is not null)
+                            {
+                                var dissolvePixels = RenderDissolve(project, frame, layer, incoming, dissolve, width, height);
+                                if (currentCompositor is not null)
+                                {
+                                    if (NativeMethods.CompositorLayer(currentCompositor, dissolvePixels, width, height, width * 4, layer.Track.Opacity) < 0)
+                                        throw NativeMethods.Error("Could not composite dissolve timeline layer");
+                                }
+                                else Composite(trackBuffer, width, height, dissolvePixels, width, height, needsOwnBuffer ? 1.0 : layer.Track.Opacity);
+                                continue;
+                            }
+                        }
+                        if (layer.Opacity <= 0) continue;
+                        if (IsSubtitleLayer(layer))
+                        {
+                            if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;
+                            var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
+                            var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
+                            var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                            {
+                                subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+                            }
+                            if (currentCompositor != null)
+                            {
+                                if (NativeMethods.CompositorLayer(currentCompositor, subtitlePixels, width, height, width * 4, effOpacity) < 0)
+                                    throw NativeMethods.Error("Could not composite subtitle timeline layer");
+                            }
+                            else Composite(trackBuffer, width, height, subtitlePixels, width, height, effOpacity);
                             continue;
                         }
-                    }
-                    if (layer.Opacity <= 0) continue;
-                    if (IsSubtitleLayer(layer))
-                    {
-                        if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;
-                        var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
-                        var renderHandles = ActiveSubtitleClipId.HasValue && ActiveSubtitleClipId.Value == layer.Clip.Id;
-                        var subtitlePixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, renderHandles, out _);
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                        if (IsGeneratorLayer(layer))
                         {
-                            subtitlePixels = VideoEffectProcessor.Apply(subtitlePixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
-                        }
-                        if (currentCompositor != null)
-                        {
-                            if (NativeMethods.CompositorLayer(currentCompositor, subtitlePixels, width, height, width * 4, effOpacity) < 0)
-                                throw NativeMethods.Error("Could not composite subtitle timeline layer");
-                        }
-                        else Composite(trackBuffer, width, height, subtitlePixels, width, height, effOpacity);
-                        continue;
-                    }
-                    if (IsGeneratorLayer(layer))
-                    {
-                        var colorPixels = MediaGeneratorSynthesizer.Render(layer.Media, width, height, frame);
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                        {
-                            colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
-                        }
-                        if (currentCompositor != null)
-                        {
-                            if (NativeMethods.CompositorLayer(currentCompositor, colorPixels, width, height, width * 4, effOpacity) < 0)
-                                throw NativeMethods.Error("Could not composite color generator timeline layer");
-                        }
-                        else Composite(trackBuffer, width, height, colorPixels, width, height, effOpacity);
-                        continue;
-                    }
-                    if (IsAdjustmentLayer(layer))
-                    {
-                        var adjW = layer.Clip.FrameWidth > 0 ? layer.Clip.FrameWidth : width;
-                        var adjH = layer.Clip.FrameHeight > 0 ? layer.Clip.FrameHeight : height;
-                        byte[] sourcePixels;
-                        if (adjW == width && adjH == height)
-                        {
-                            sourcePixels = (byte[])output.Clone();
-                        }
-                        else
-                        {
-                            sourcePixels = ResampleBilinear(output, width, height, adjW, adjH);
-                        }
-
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                        {
-                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, adjW, adjH, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
-                        }
-
-                        if (layer.Clip.Mask?.IsEnabled == true)
-                        {
-                            var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));
-                            MaskRasterizer.ApplyMask(sourcePixels, adjW, adjH, maskShape);
-                        }
-
-                        var adjCrop = layer.Clip.Crop is null ? CropState.Identity(adjW, adjH) : layer.Crop ?? CropState.Identity(adjW, adjH);
-                        adjCrop.Validate();
-                        var adjTransformed = adjCrop.Width != adjW || adjCrop.Height != adjH ||
-                            adjCrop.CenterX != adjW / 2.0 || adjCrop.CenterY != adjH / 2.0 || adjCrop.RotationDegrees % 360 != 0;
-
-                        if (adjTransformed)
-                        {
-                            var transform = SamplingTransform(adjCrop, adjW, adjH, width, height);
-                            if (currentCompositor != null)
+                            var colorPixels = MediaGeneratorSynthesizer.Render(layer.Media, width, height, frame);
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
                             {
-                                if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, adjW, adjH, checked(adjW * 4), effOpacity, in transform) < 0)
-                                    throw NativeMethods.Error("Could not composite transformed adjustment timeline layer");
-                            }
-                            else CompositeTransformed(trackBuffer, width, height, sourcePixels, adjW, adjH, effOpacity, transform);
-                        }
-                        else
-                        {
-                            if (adjW != width || adjH != height)
-                            {
-                                sourcePixels = ResampleBilinear(sourcePixels, adjW, adjH, width, height);
+                                colorPixels = VideoEffectProcessor.Apply(colorPixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
                             }
                             if (currentCompositor != null)
                             {
-                                if (NativeMethods.CompositorLayer(currentCompositor, sourcePixels, width, height, width * 4, effOpacity) < 0)
-                                    throw NativeMethods.Error("Could not composite adjustment timeline layer");
+                                if (NativeMethods.CompositorLayer(currentCompositor, colorPixels, width, height, width * 4, effOpacity) < 0)
+                                    throw NativeMethods.Error("Could not composite color generator timeline layer");
                             }
-                            else Composite(trackBuffer, width, height, sourcePixels, width, height, effOpacity);
+                            else Composite(trackBuffer, width, height, colorPixels, width, height, effOpacity);
+                            continue;
                         }
-                        continue;
-                    }
-                    var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
-                    var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
-                    crop.Validate();
-                    var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
-                        crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
-                    var hasMask = layer.Clip.Mask?.IsEnabled == true;
-                    if (transformed || hasMask || (!bypassVideoEffects && (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))))
-                    {
-                        if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
-                            throw new MediaException("Source dimensions exceed video processing limits.");
-                        // Effects precede resampling, so preview size cannot change their source pixels.
-                        // Decode honors display rotation before sampling.
-                        var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                        if (IsAdjustmentLayer(layer))
                         {
-                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
+                            var adjW = layer.Clip.FrameWidth > 0 ? layer.Clip.FrameWidth : width;
+                            var adjH = layer.Clip.FrameHeight > 0 ? layer.Clip.FrameHeight : height;
+                            byte[] sourcePixels;
+                            if (adjW == width && adjH == height)
+                            {
+                                sourcePixels = new byte[bufferSize];
+                                Buffer.BlockCopy(output, 0, sourcePixels, 0, bufferSize);
+                            }
+                            else
+                            {
+                                sourcePixels = ResampleBilinear(output, width, height, adjW, adjH);
+                            }
+
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                            {
+                                sourcePixels = VideoEffectProcessor.Apply(sourcePixels, adjW, adjH, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+                            }
+
+                            if (layer.Clip.Mask?.IsEnabled == true)
+                            {
+                                var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));
+                                MaskRasterizer.ApplyMask(sourcePixels, adjW, adjH, maskShape);
+                            }
+
+                            var adjCrop = layer.Clip.Crop is null ? CropState.Identity(adjW, adjH) : layer.Crop ?? CropState.Identity(adjW, adjH);
+                            adjCrop.Validate();
+                            var adjTransformed = adjCrop.Width != adjW || adjCrop.Height != adjH ||
+                                adjCrop.CenterX != adjW / 2.0 || adjCrop.CenterY != adjH / 2.0 || adjCrop.RotationDegrees % 360 != 0;
+
+                            if (adjTransformed)
+                            {
+                                var transform = SamplingTransform(adjCrop, adjW, adjH, width, height);
+                                if (currentCompositor != null)
+                                {
+                                    if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, adjW, adjH, checked(adjW * 4), effOpacity, in transform) < 0)
+                                        throw NativeMethods.Error("Could not composite transformed adjustment timeline layer");
+                                }
+                                else CompositeTransformed(trackBuffer, width, height, sourcePixels, adjW, adjH, effOpacity, transform);
+                            }
+                            else
+                            {
+                                if (adjW != width || adjH != height)
+                                {
+                                    sourcePixels = ResampleBilinear(sourcePixels, adjW, adjH, width, height);
+                                }
+                                if (currentCompositor != null)
+                                {
+                                    if (NativeMethods.CompositorLayer(currentCompositor, sourcePixels, width, height, width * 4, effOpacity) < 0)
+                                        throw NativeMethods.Error("Could not composite adjustment timeline layer");
+                                }
+                                else Composite(trackBuffer, width, height, sourcePixels, width, height, effOpacity);
+                            }
+                            continue;
                         }
-                        if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+
+                        var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
+                        var crop = layer.Clip.Crop is null ? CropState.Identity(sourceWidth, sourceHeight) : layer.Crop ?? CropState.Identity(sourceWidth, sourceHeight);
+                        crop.Validate();
+                        var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
+                            crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
+                        var hasMask = layer.Clip.Mask?.IsEnabled == true;
+                        if (transformed || hasMask || (!bypassVideoEffects && (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))))
                         {
-                            sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+                            if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
+                                throw new MediaException("Source dimensions exceed video processing limits.");
+                            var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+                            {
+                                sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
+                            }
+                            if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
+                            {
+                                sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+                            }
+                            if (hasMask)
+                            {
+                                var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));
+                                MaskRasterizer.ApplyMask(sourcePixels, sourceWidth, sourceHeight, maskShape);
+                            }
+                            var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
+                            if (currentCompositor != null)
+                            {
+                                if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, sourceWidth, sourceHeight, checked(sourceWidth * 4), effOpacity, in transform) < 0)
+                                    throw NativeMethods.Error("Could not composite cropped timeline layer");
+                            }
+                            else CompositeTransformed(trackBuffer, width, height, sourcePixels, sourceWidth, sourceHeight, effOpacity, transform);
+                            continue;
                         }
-                        if (hasMask)
-                        {
-                            var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));
-                            MaskRasterizer.ApplyMask(sourcePixels, sourceWidth, sourceHeight, maskShape);
-                        }
-                        var transform = SamplingTransform(crop, sourceWidth, sourceHeight, width, height);
+                        var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
+                        var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
+                        var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
+                        var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
                         if (currentCompositor != null)
                         {
-                            if (NativeMethods.CompositorLayerTransform(currentCompositor, sourcePixels, sourceWidth, sourceHeight, checked(sourceWidth * 4), effOpacity, in transform) < 0)
-                                throw NativeMethods.Error("Could not composite cropped timeline layer");
+                            if (NativeMethods.CompositorLayer(currentCompositor, pixels, layerWidth, layerHeight, layerWidth * 4, effOpacity) < 0)
+                                throw NativeMethods.Error("Could not composite timeline layer");
                         }
-                        else CompositeTransformed(trackBuffer, width, height, sourcePixels, sourceWidth, sourceHeight, effOpacity, transform);
-                        continue;
+                        else Composite(trackBuffer, width, height, pixels, layerWidth, layerHeight, effOpacity);
                     }
-                    var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
-                    var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
-                    var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
-                    var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
-                    if (currentCompositor != null)
-                    {
-                        if (NativeMethods.CompositorLayer(currentCompositor, pixels, layerWidth, layerHeight, layerWidth * 4, effOpacity) < 0)
-                            throw NativeMethods.Error("Could not composite timeline layer");
-                    }
-                    else Composite(trackBuffer, width, height, pixels, layerWidth, layerHeight, effOpacity);
-                }
 
-                if (needsOwnBuffer)
-                {
-                    if (isChild)
+                    if (needsOwnBuffer)
                     {
+                        if (isChild)
+                        {
+                            if (hasTrackEffects)
+                            {
+                                trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
+                            }
+                            Composite(branchBuffer!, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
+                            continue;
+                        }
+
+                        if (branchBuffer != null)
+                        {
+                            Composite(branchBuffer, width, height, trackBuffer, width, height, 1.0);
+                            trackBuffer = branchBuffer;
+                            branchBuffer = null;
+                        }
+
                         if (hasTrackEffects)
                         {
                             trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
                         }
-                        Composite(branchBuffer!, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
-                        continue;
-                    }
-
-                    if (branchBuffer != null)
-                    {
-                        Composite(branchBuffer, width, height, trackBuffer, width, height, 1.0);
-                        trackBuffer = branchBuffer;
-                        branchBuffer = null;
-                    }
-
-                    if (hasTrackEffects)
-                    {
-                        trackBuffer = VideoEffectProcessor.Apply(trackBuffer, width, height, track.VideoEffects, frame);
-                    }
-                    if (hasMotion && trackMotion != null)
-                    {
-                        if (is3D)
+                        if (hasMotion && trackMotion != null)
                         {
-                            CompositeTransformedPerspective(output, width, height, trackBuffer, width, height, track.Opacity, trackMotion, project.Width, project.Height, track.CompositeMode);
-                        }
-                        else
-                        {
-                            var motionCrop = new CropState(
-                                Width: Math.Max(0.001, trackMotion.Width * width / project.Width),
-                                Height: Math.Max(0.001, trackMotion.Height * height / project.Height),
-                                CenterX: width / 2.0 - trackMotion.PositionX * width / project.Width,
-                                CenterY: height / 2.0 - trackMotion.PositionY * height / project.Height,
-                                RotationDegrees: trackMotion.RotationZ,
-                                PivotX: width / 2.0 + trackMotion.RotationOffsetX * width / project.Width,
-                                PivotY: height / 2.0 - trackMotion.RotationOffsetY * height / project.Height
-                            );
-                            motionCrop.Validate();
-                            var transform = SamplingTransform(motionCrop, width, height, width, height);
-                            if (compositor != null && !customBlend)
+                            if (is3D)
                             {
-                                if (NativeMethods.CompositorLayerTransform(compositor, trackBuffer, width, height, checked(width * 4), track.Opacity, in transform) < 0)
-                                    throw NativeMethods.Error("Could not composite track motion layer");
+                                CompositeTransformedPerspective(output, width, height, trackBuffer, width, height, track.Opacity, trackMotion, project.Width, project.Height, track.CompositeMode);
                             }
                             else
                             {
-                                var transformedTrack = new byte[trackBuffer.Length];
-                                CompositeTransformed(transformedTrack, width, height, trackBuffer, width, height, 1.0, transform);
-                                Composite(output, width, height, transformedTrack, width, height, track.Opacity, track.CompositeMode);
+                                var motionCrop = new CropState(
+                                    Width: Math.Max(0.001, trackMotion.Width * width / project.Width),
+                                    Height: Math.Max(0.001, trackMotion.Height * height / project.Height),
+                                    CenterX: width / 2.0 - trackMotion.PositionX * width / project.Width,
+                                    CenterY: height / 2.0 - trackMotion.PositionY * height / project.Height,
+                                    RotationDegrees: trackMotion.RotationZ,
+                                    PivotX: width / 2.0 + trackMotion.RotationOffsetX * width / project.Width,
+                                    PivotY: height / 2.0 - trackMotion.RotationOffsetY * height / project.Height
+                                );
+                                motionCrop.Validate();
+                                var transform = SamplingTransform(motionCrop, width, height, width, height);
+                                if (compositor != null && !customBlend)
+                                {
+                                    if (NativeMethods.CompositorLayerTransform(compositor, trackBuffer, width, height, checked(width * 4), track.Opacity, in transform) < 0)
+                                        throw NativeMethods.Error("Could not composite track motion layer");
+                                }
+                                else
+                                {
+                                    rentedTransformedTrack ??= ExactBufferPool.RentBytes(bufferSize);
+                                    Array.Clear(rentedTransformedTrack, 0, bufferSize);
+                                    CompositeTransformed(rentedTransformedTrack, width, height, trackBuffer, width, height, 1.0, transform);
+                                    Composite(output, width, height, rentedTransformedTrack, width, height, track.Opacity, track.CompositeMode);
+                                }
                             }
                         }
+                        else if (compositor != null && !customBlend)
+                        {
+                            if (NativeMethods.CompositorLayer(compositor, trackBuffer, width, height, width * 4, track.Opacity) < 0)
+                                throw NativeMethods.Error("Could not composite track FX layer");
+                        }
+                        else
+                        {
+                            Composite(output, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
+                        }
                     }
-                    else if (compositor != null && !customBlend)
+                }
+
+                if (branchBuffer != null)
+                {
+                    Composite(output, width, height, branchBuffer, width, height, 1.0);
+                    branchBuffer = null;
+                }
+
+                if (compositor != null && NativeMethods.CompositorReadback(compositor, output, bufferSize) < 0)
+                    throw NativeMethods.Error("Could not read composited timeline frame");
+
+                if (VideoEffectProcessor.HasActiveEffects(project.VideoOutputEffects))
+                {
+                    var fxResult = VideoEffectProcessor.Apply(output, width, height, project.VideoOutputEffects, frame);
+                    if (!ReferenceEquals(fxResult, output))
                     {
-                        if (NativeMethods.CompositorLayer(compositor, trackBuffer, width, height, width * 4, track.Opacity) < 0)
-                            throw NativeMethods.Error("Could not composite track FX layer");
-                    }
-                    else
-                    {
-                        Composite(output, width, height, trackBuffer, width, height, track.Opacity, track.CompositeMode);
+                        Buffer.BlockCopy(fxResult, 0, output, 0, bufferSize);
                     }
                 }
             }
-            if (branchBuffer != null)
+            finally
             {
-                Composite(output, width, height, branchBuffer, width, height, 1.0);
+                ExactBufferPool.ReturnBytes(rentedBranchBuffer);
+                ExactBufferPool.ReturnBytes(rentedTrackBuffer);
+                ExactBufferPool.ReturnBytes(rentedTransformedTrack);
+                ExactBufferPool.ReturnBytes(rentedAdjustedBuffer);
             }
-            if (compositor != null && NativeMethods.CompositorReadback(compositor, output, output.Length) < 0)
-                throw NativeMethods.Error("Could not read composited timeline frame");
-
-            if (VideoEffectProcessor.HasActiveEffects(project.VideoOutputEffects))
-            {
-                output = VideoEffectProcessor.Apply(output, width, height, project.VideoOutputEffects, frame);
-            }
-            return output;
         }
     }
 
@@ -397,202 +465,310 @@ public sealed partial class TimelineRenderService : IDisposable
 
     public float[] RenderAudio(ProjectDocument project, double seconds, int frames)
     {
+        var output = new float[checked(frames * MediaService.Channels)];
+        RenderAudio(project, seconds, frames, output);
+        return output;
+    }
+
+    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output)
+    {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed), this);
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
         if (frames < 0) throw new ArgumentOutOfRangeException(nameof(frames));
-        var output = new float[checked(frames * MediaService.Channels)];
-        if (frames == 0) return output;
-        if (project.MasterAudioMute) return output;
+        ArgumentNullException.ThrowIfNull(output);
+        var totalSamples = checked(frames * MediaService.Channels);
+        if (output.Length < totalSamples) throw new ArgumentException("Output buffer is too small.", nameof(output));
+        Array.Clear(output, 0, totalSamples);
+        if (frames == 0 || project.MasterAudioMute) return;
 
-        var assets = project.Media.ToDictionary(asset => asset.Id);
-        var solo = project.Tracks.Any(track => track.Kind == TrackKind.Audio && (track.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(track.Id)))));
+        var solo = false;
+        var tracks = project.Tracks;
+        for (var tIdx = 0; tIdx < tracks.Count; tIdx++)
+        {
+            var t = tracks[tIdx];
+            if (t.Kind == TrackKind.Audio && (t.IsSolo || IsTrackSoloInGroups(project.TrackGroups, t.Id)))
+            {
+                solo = true;
+                break;
+            }
+        }
+
         var projectFrame = (long)Math.Round(seconds * project.FrameRate.Value);
-        float[]? trackBuffer = null;
-        var busBuffers = new Dictionary<Guid, float[]>();
-        if (project.AudioBuses != null)
+        float[]? rentedTrackBuffer = null;
+        Dictionary<Guid, float[]>? busBuffers = null;
+        List<float[]>? rentedBusBuffers = null;
+
+        try
         {
-            foreach (var bus in project.AudioBuses)
+            if (project.AudioBuses != null && project.AudioBuses.Count > 0)
             {
-                busBuffers[bus.Id] = new float[output.Length];
-            }
-        }
-
-        foreach (var track in project.Tracks)
-        {
-            var isTrackMuted = track.IsMuted || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsMuted && g.TrackIds.Contains(track.Id)));
-            var isTrackSolo = track.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(track.Id)));
-            if (track.Kind != TrackKind.Audio || isTrackMuted || (solo && !isTrackSolo)) continue;
-
-            bool hasClipsInWindow = false;
-            foreach (var clip in track.Clips)
-            {
-                if (clip.IsMuted || !assets.TryGetValue(clip.MediaId, out var asset) || !asset.HasAudio || clip.Gain <= 0 || track.Gain <= 0) continue;
-                var start = project.FrameRate.Seconds(clip.StartFrame);
-                var end = project.FrameRate.Seconds(clip.EndFrame);
-                // Include only sample instants inside the clip's half-open range.
-                var first = (int)Math.Clamp(Math.Ceiling((start - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
-                var last = (int)Math.Clamp(Math.Ceiling((end - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
-                if (last <= first) continue;
-
-                if (!hasClipsInWindow)
+                busBuffers = new Dictionary<Guid, float[]>(project.AudioBuses.Count);
+                rentedBusBuffers = new List<float[]>(project.AudioBuses.Count);
+                for (var bIdx = 0; bIdx < project.AudioBuses.Count; bIdx++)
                 {
-                    hasClipsInWindow = true;
-                    trackBuffer ??= new float[output.Length];
-                    Array.Clear(trackBuffer, 0, trackBuffer.Length);
-                }
-
-                var localStart = seconds + (double)first / MediaService.SampleRate - start;
-                var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
-                var decoded = media.GetAudio(asset.Path, sourceStart, last - first);
-                if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
-                {
-                    AudioDspService.ProcessAudioChain(decoded, MediaService.SampleRate, clip.AudioEffects);
-                }
-                var phaseMul = clip.InvertPhase ? -1.0f : 1.0f;
-                var normFactor = clip.Normalize ? 1.5f : 1.0f;
-                for (var sample = first; sample < last; sample++)
-                {
-                    var localFrame = (localStart + (double)(sample - first) / MediaService.SampleRate) * project.FrameRate.Value;
-                    var gains = TimelineEvaluator.AudioGains(track, clip, localFrame);
-                    var source = (sample - first) * MediaService.Channels;
-                    float srcL, srcR;
-                    switch (clip.ChannelMode)
-                    {
-                        case AudioChannelMode.LeftOnly:
-                            srcL = decoded[source];
-                            srcR = decoded[source];
-                            break;
-                        case AudioChannelMode.RightOnly:
-                            srcL = decoded[source + 1];
-                            srcR = decoded[source + 1];
-                            break;
-                        case AudioChannelMode.Swap:
-                            srcL = decoded[source + 1];
-                            srcR = decoded[source];
-                            break;
-                        default:
-                            srcL = decoded[source];
-                            srcR = decoded[source + 1];
-                            break;
-                    }
-                    trackBuffer![sample * 2] += (float)(srcL * phaseMul * normFactor * gains.Left);
-                    trackBuffer![sample * 2 + 1] += (float)(srcR * phaseMul * normFactor * gains.Right);
+                    var bus = project.AudioBuses[bIdx];
+                    var rentedBus = ExactBufferPool.RentFloats(totalSamples);
+                    Array.Clear(rentedBus, 0, totalSamples);
+                    busBuffers[bus.Id] = rentedBus;
+                    rentedBusBuffers.Add(rentedBus);
                 }
             }
 
-            if (hasClipsInWindow && trackBuffer != null)
+            for (var tIdx = 0; tIdx < tracks.Count; tIdx++)
             {
-                // 1. Track Phase Inversion
-                if (track.InvertPhase)
-                {
-                    AudioDspService.InvertPhase(trackBuffer);
-                }
+                var track = tracks[tIdx];
+                var isTrackMuted = track.IsMuted || IsTrackMutedInGroups(project.TrackGroups, track.Id);
+                var isTrackSolo = track.IsSolo || IsTrackSoloInGroups(project.TrackGroups, track.Id);
+                if (track.Kind != TrackKind.Audio || isTrackMuted || (solo && !isTrackSolo)) continue;
 
-                // 2. Track Audio FX Chain (Track EQ, Track Compressor, Track Noise Gate)
-                if (track.AudioEffects != null && track.AudioEffects.Count > 0)
+                var hasClipsInWindow = false;
+                for (var cIdx = 0; cIdx < track.Clips.Count; cIdx++)
                 {
-                    AudioDspService.ProcessAudioChain(trackBuffer, MediaService.SampleRate, track.AudioEffects);
-                }
+                    var clip = track.Clips[cIdx];
+                    if (clip.IsMuted || clip.Gain <= 0 || track.Gain <= 0) continue;
+                    var asset = FindMediaAsset(project.Media, clip.MediaId);
+                    if (asset == null || !asset.HasAudio) continue;
 
-                // 2b. Track Envelopes and Auto Ducking Sidechain
-                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } trackMuteEnv && trackMuteEnv.ValueAt(projectFrame) >= 0.5)
-                {
-                    // Track is envelope-muted at this project frame
-                    continue;
-                }
+                    var start = project.FrameRate.Seconds(clip.StartFrame);
+                    var end = project.FrameRate.Seconds(clip.EndFrame);
+                    // Include only sample instants inside the clip's half-open range.
+                    var first = (int)Math.Clamp(Math.Ceiling((start - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
+                    var last = (int)Math.Clamp(Math.Ceiling((end - seconds) * MediaService.SampleRate - 1e-7), 0, frames);
+                    if (last <= first) continue;
 
-                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } trackVolEnv)
-                {
-                    var volMul = (float)trackVolEnv.ValueAt(projectFrame);
-                    if (Math.Abs(volMul - 1.0f) > 1e-4)
+                    if (!hasClipsInWindow)
                     {
-                        for (var i = 0; i < trackBuffer.Length; i++) trackBuffer[i] *= volMul;
+                        hasClipsInWindow = true;
+                        rentedTrackBuffer ??= ExactBufferPool.RentFloats(totalSamples);
+                        Array.Clear(rentedTrackBuffer, 0, totalSamples);
+                    }
+
+                    var localStart = seconds + (double)first / MediaService.SampleRate - start;
+                    var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
+                    var sampleCount = (last - first);
+                    var decodedSamples = sampleCount * MediaService.Channels;
+                    var rentedDecoded = ExactBufferPool.RentFloats(decodedSamples);
+                    try
+                    {
+                        media.GetAudio(asset.Path, sourceStart, sampleCount, rentedDecoded);
+                        if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
+                        {
+                            AudioDspService.ProcessAudioChain(rentedDecoded, MediaService.SampleRate, clip.AudioEffects);
+                        }
+                        var phaseMul = clip.InvertPhase ? -1.0f : 1.0f;
+                        var normFactor = clip.Normalize ? 1.5f : 1.0f;
+                        var trackBuf = rentedTrackBuffer!;
+                        for (var sample = first; sample < last; sample++)
+                        {
+                            var localFrame = (localStart + (double)(sample - first) / MediaService.SampleRate) * project.FrameRate.Value;
+                            var gains = TimelineEvaluator.AudioGains(track, clip, localFrame);
+                            var source = (sample - first) * MediaService.Channels;
+                            float srcL, srcR;
+                            switch (clip.ChannelMode)
+                            {
+                                case AudioChannelMode.LeftOnly:
+                                    srcL = rentedDecoded[source];
+                                    srcR = rentedDecoded[source];
+                                    break;
+                                case AudioChannelMode.RightOnly:
+                                    srcL = rentedDecoded[source + 1];
+                                    srcR = rentedDecoded[source + 1];
+                                    break;
+                                case AudioChannelMode.Swap:
+                                    srcL = rentedDecoded[source + 1];
+                                    srcR = rentedDecoded[source];
+                                    break;
+                                default:
+                                    srcL = rentedDecoded[source];
+                                    srcR = rentedDecoded[source + 1];
+                                    break;
+                            }
+                            trackBuf[sample * 2] += (float)(srcL * phaseMul * normFactor * gains.Left);
+                            trackBuf[sample * 2 + 1] += (float)(srcR * phaseMul * normFactor * gains.Right);
+                        }
+                    }
+                    finally
+                    {
+                        ExactBufferPool.ReturnFloats(rentedDecoded);
                     }
                 }
-                else if (track.DuckingRole == AudioDuckingRole.Listener && track.DuckingSettings?.IsEnabled == true)
-                {
-                    // Realtime dynamic sidechain ducking when no baked envelope overrides it
-                    var duckGain = (float)AudioDuckingEngine.EvaluateDuckingGain(project, track, projectFrame);
-                    if (Math.Abs(duckGain - 1.0f) > 1e-4)
-                    {
-                        for (var i = 0; i < trackBuffer.Length; i++) trackBuffer[i] *= duckGain;
-                    }
-                }
 
-                // 3. Accumulate track into assigned sub-bus or master bus
-                if (track.BusTrackId.HasValue && busBuffers.TryGetValue(track.BusTrackId.Value, out var busBuf))
+                if (hasClipsInWindow && rentedTrackBuffer != null)
                 {
-                    for (var i = 0; i < busBuf.Length; i++)
+                    var trackBuf = rentedTrackBuffer;
+                    // 1. Track Phase Inversion
+                    if (track.InvertPhase)
                     {
-                        busBuf[i] += trackBuffer[i];
+                        AudioDspService.InvertPhase(trackBuf);
                     }
-                }
-                else
-                {
-                    for (var i = 0; i < output.Length; i++)
+
+                    // 2. Track Audio FX Chain (Track EQ, Track Compressor, Track Noise Gate)
+                    if (track.AudioEffects != null && track.AudioEffects.Count > 0)
                     {
-                        output[i] += trackBuffer[i];
+                        AudioDspService.ProcessAudioChain(trackBuf, MediaService.SampleRate, track.AudioEffects);
+                    }
+
+                    // 2b. Track Envelopes and Auto Ducking Sidechain
+                    var isMutedByEnv = false;
+                    if (track.Envelopes != null)
+                    {
+                        for (var eIdx = 0; eIdx < track.Envelopes.Count; eIdx++)
+                        {
+                            var env = track.Envelopes[eIdx];
+                            if (env.Type == EnvelopeType.Mute && env.IsEnabled && env.ValueAt(projectFrame) >= 0.5)
+                            {
+                                isMutedByEnv = true;
+                                break;
+                            }
+                        }
+                    }
+                    if (isMutedByEnv) continue;
+
+                    ClipEnvelope? trackVolEnv = null;
+                    if (track.Envelopes != null)
+                    {
+                        for (var eIdx = 0; eIdx < track.Envelopes.Count; eIdx++)
+                        {
+                            var env = track.Envelopes[eIdx];
+                            if (env.Type == EnvelopeType.Volume && env.IsEnabled)
+                            {
+                                trackVolEnv = env;
+                                break;
+                            }
+                        }
+                    }
+
+                    if (trackVolEnv != null)
+                    {
+                        var volMul = (float)trackVolEnv.ValueAt(projectFrame);
+                        if (Math.Abs(volMul - 1.0f) > 1e-4)
+                        {
+                            for (var i = 0; i < totalSamples; i++) trackBuf[i] *= volMul;
+                        }
+                    }
+                    else if (track.DuckingRole == AudioDuckingRole.Listener && track.DuckingSettings?.IsEnabled == true)
+                    {
+                        // Realtime dynamic sidechain ducking when no baked envelope overrides it
+                        var duckGain = (float)AudioDuckingEngine.EvaluateDuckingGain(project, track, projectFrame);
+                        if (Math.Abs(duckGain - 1.0f) > 1e-4)
+                        {
+                            for (var i = 0; i < totalSamples; i++) trackBuf[i] *= duckGain;
+                        }
+                    }
+
+                    // 3. Accumulate track into assigned sub-bus or master bus
+                    if (track.BusTrackId.HasValue && busBuffers != null && busBuffers.TryGetValue(track.BusTrackId.Value, out var busBuf))
+                    {
+                        for (var i = 0; i < totalSamples; i++)
+                        {
+                            busBuf[i] += trackBuf[i];
+                        }
+                    }
+                    else
+                    {
+                        for (var i = 0; i < totalSamples; i++)
+                        {
+                            output[i] += trackBuf[i];
+                        }
                     }
                 }
             }
-        }
 
-        // 3b. Process and accumulate Audio Sub-Busses into Master Bus
-        if (project.AudioBuses != null && project.AudioBuses.Count > 0)
-        {
-            var busSolo = project.AudioBuses.Any(b => b.IsSolo);
-            foreach (var bus in project.AudioBuses)
+            // 3b. Process and accumulate Audio Sub-Busses into Master Bus
+            if (project.AudioBuses != null && project.AudioBuses.Count > 0 && busBuffers != null)
             {
-                if (bus.IsMuted || (busSolo && !bus.IsSolo)) continue;
-                if (!busBuffers.TryGetValue(bus.Id, out var busBuf)) continue;
-
-                if (bus.AudioEffects != null && bus.AudioEffects.Count > 0)
+                var busSolo = false;
+                for (var bIdx = 0; bIdx < project.AudioBuses.Count; bIdx++)
                 {
-                    AudioDspService.ProcessAudioChain(busBuf, MediaService.SampleRate, bus.AudioEffects);
+                    if (project.AudioBuses[bIdx].IsSolo) { busSolo = true; break; }
                 }
 
-                var busGain = (float)bus.Gain;
-                var (busPanL, busPanR) = AudioPanLaw.CalculateGains(bus.PanMode, bus.Pan);
-                var leftPan = (float)busPanL;
-                var rightPan = (float)busPanR;
-                if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } busMuteEnv && busMuteEnv.ValueAt(projectFrame) >= 0.5) continue;
-                if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } busVolEnv) busGain *= (float)busVolEnv.ValueAt(projectFrame);
-                if (bus.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Pan && e.IsEnabled) is { } busPanEnv)
+                for (var bIdx = 0; bIdx < project.AudioBuses.Count; bIdx++)
                 {
-                    var pVal = busPanEnv.ValueAt(projectFrame);
-                    var (envPanL, envPanR) = AudioPanLaw.CalculateGains(bus.PanMode, pVal);
-                    leftPan = (float)envPanL;
-                    rightPan = (float)envPanR;
-                }
+                    var bus = project.AudioBuses[bIdx];
+                    if (bus.IsMuted || (busSolo && !bus.IsSolo)) continue;
+                    if (!busBuffers.TryGetValue(bus.Id, out var busBuf)) continue;
 
-                for (var s = 0; s < frames; s++)
-                {
-                    output[s * 2] += busBuf[s * 2] * busGain * leftPan;
-                    output[s * 2 + 1] += busBuf[s * 2 + 1] * busGain * rightPan;
+                    if (bus.AudioEffects != null && bus.AudioEffects.Count > 0)
+                    {
+                        AudioDspService.ProcessAudioChain(busBuf, MediaService.SampleRate, bus.AudioEffects);
+                    }
+
+                    var busGain = (float)bus.Gain;
+                    var (busPanL, busPanR) = AudioPanLaw.CalculateGains(bus.PanMode, bus.Pan);
+                    var leftPan = (float)busPanL;
+                    var rightPan = (float)busPanR;
+                    var isBusMuted = false;
+                    if (bus.Envelopes != null)
+                    {
+                        for (var eIdx = 0; eIdx < bus.Envelopes.Count; eIdx++)
+                        {
+                            var env = bus.Envelopes[eIdx];
+                            if (env.Type == EnvelopeType.Mute && env.IsEnabled && env.ValueAt(projectFrame) >= 0.5)
+                            {
+                                isBusMuted = true;
+                                break;
+                            }
+                            if (env.Type == EnvelopeType.Volume && env.IsEnabled)
+                            {
+                                busGain *= (float)env.ValueAt(projectFrame);
+                            }
+                            if (env.Type == EnvelopeType.Pan && env.IsEnabled)
+                            {
+                                var pVal = env.ValueAt(projectFrame);
+                                var (envPanL, envPanR) = AudioPanLaw.CalculateGains(bus.PanMode, pVal);
+                                leftPan = (float)envPanL;
+                                rightPan = (float)envPanR;
+                            }
+                        }
+                    }
+                    if (isBusMuted) continue;
+
+                    for (var s = 0; s < frames; s++)
+                    {
+                        output[s * 2] += busBuf[s * 2] * busGain * leftPan;
+                        output[s * 2 + 1] += busBuf[s * 2 + 1] * busGain * rightPan;
+                    }
                 }
             }
-        }
 
-        // 4. Master Audio FX Chain
-        if (project.MasterAudioEffects != null && project.MasterAudioEffects.Count > 0)
-        {
-            AudioDspService.ProcessAudioChain(output, MediaService.SampleRate, project.MasterAudioEffects);
-        }
-
-        // 5. Master Gain & Dim (-20 dB = 0.1)
-        var masterGain = (float)(project.MasterAudioGain * (project.MasterAudioDim ? 0.1 : 1.0));
-        if (project.MasterAudioEnvelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } masterVol) masterGain *= (float)masterVol.ValueAt(projectFrame);
-        if (project.MasterAudioEnvelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } masterMute && masterMute.ValueAt(projectFrame) >= 0.5) masterGain = 0f;
-        if (Math.Abs(masterGain - 1.0f) > 1e-4f)
-        {
-            for (var i = 0; i < output.Length; i++)
+            // 4. Master Audio FX Chain
+            if (project.MasterAudioEffects != null && project.MasterAudioEffects.Count > 0)
             {
-                output[i] *= masterGain;
+                AudioDspService.ProcessAudioChain(output, MediaService.SampleRate, project.MasterAudioEffects);
+            }
+
+            // 5. Master Gain & Dim (-20 dB = 0.1)
+            var masterGain = (float)(project.MasterAudioGain * (project.MasterAudioDim ? 0.1 : 1.0));
+            if (project.MasterAudioEnvelopes != null)
+            {
+                for (var eIdx = 0; eIdx < project.MasterAudioEnvelopes.Count; eIdx++)
+                {
+                    var env = project.MasterAudioEnvelopes[eIdx];
+                    if (env.Type == EnvelopeType.Volume && env.IsEnabled) masterGain *= (float)env.ValueAt(projectFrame);
+                    if (env.Type == EnvelopeType.Mute && env.IsEnabled && env.ValueAt(projectFrame) >= 0.5) masterGain = 0f;
+                }
+            }
+
+            if (Math.Abs(masterGain - 1.0f) > 1e-4f)
+            {
+                for (var i = 0; i < totalSamples; i++)
+                {
+                    output[i] *= masterGain;
+                }
+            }
+
+            for (var i = 0; i < totalSamples; i++) output[i] = Math.Clamp(output[i], -1f, 1f);
+        }
+        finally
+        {
+            ExactBufferPool.ReturnFloats(rentedTrackBuffer);
+            if (rentedBusBuffers != null)
+            {
+                for (var b = 0; b < rentedBusBuffers.Count; b++)
+                    ExactBufferPool.ReturnFloats(rentedBusBuffers[b]);
             }
         }
-
-        for (var i = 0; i < output.Length; i++) output[i] = Math.Clamp(output[i], -1, 1);
-        return output;
     }
 
     private static void Composite(byte[] output, int width, int height, byte[] layer, int layerWidth, int layerHeight, double opacity, TrackCompositeMode mode = TrackCompositeMode.SourceAlpha)
@@ -715,14 +891,17 @@ public sealed partial class TimelineRenderService : IDisposable
                 var a11 = layer[p11 + 3] * wx * wy;
                 var coverage = a00 + a01 + a10 + a11;
                 if (coverage <= 0) continue;
-                // Filtering coverage and premultiplied color together prevents keyed-away RGB from creating fringes.
-                double SampleColor(int channel) => (layer[p00 + channel] * a00 + layer[p01 + channel] * a01 +
-                    layer[p10 + channel] * a10 + layer[p11 + channel] * a11) / coverage;
-                var alpha = opacity * coverage / 255;
+                var invCoverage = 1.0 / coverage;
+                var sampleB = (layer[p00] * a00 + layer[p01] * a01 + layer[p10] * a10 + layer[p11] * a11) * invCoverage;
+                var sampleG = (layer[p00 + 1] * a00 + layer[p01 + 1] * a01 + layer[p10 + 1] * a10 + layer[p11 + 1] * a11) * invCoverage;
+                var sampleR = (layer[p00 + 2] * a00 + layer[p01 + 2] * a01 + layer[p10 + 2] * a10 + layer[p11 + 2] * a11) * invCoverage;
+                var alpha = opacity * coverage / 255.0;
+                var invAlpha = 1.0 - alpha;
                 var target = ((y + top) * width + x + left) * 4;
-                for (var channel = 0; channel < 3; channel++)
-                    output[target + channel] = (byte)Math.Clamp((int)Math.Round(SampleColor(channel) * alpha + output[target + channel] * (1 - alpha)), 0, 255);
-                output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255 + output[target + 3] * (1 - alpha)), 0, 255);
+                output[target] = (byte)Math.Clamp((int)Math.Round(sampleB * alpha + output[target] * invAlpha), 0, 255);
+                output[target + 1] = (byte)Math.Clamp((int)Math.Round(sampleG * alpha + output[target + 1] * invAlpha), 0, 255);
+                output[target + 2] = (byte)Math.Clamp((int)Math.Round(sampleR * alpha + output[target + 2] * invAlpha), 0, 255);
+                output[target + 3] = (byte)Math.Clamp((int)Math.Round(alpha * 255.0 + output[target + 3] * invAlpha), 0, 255);
             }
         }
     }
@@ -754,11 +933,11 @@ public sealed partial class TimelineRenderService : IDisposable
         var f = Math.Max(width, height) * 1.25;
 
         // 4 corners of plane: TL, TR, BR, BL
-        double[] localX = [ -lw / 2.0,  lw / 2.0,  lw / 2.0, -lw / 2.0 ];
-        double[] localY = [  lh / 2.0,  lh / 2.0, -lh / 2.0, -lh / 2.0 ];
+        Span<double> localX = stackalloc double[4] { -lw / 2.0,  lw / 2.0,  lw / 2.0, -lw / 2.0 };
+        Span<double> localY = stackalloc double[4] {  lh / 2.0,  lh / 2.0, -lh / 2.0, -lh / 2.0 };
 
-        double[] sx = new double[4];
-        double[] sy = new double[4];
+        Span<double> sx = stackalloc double[4];
+        Span<double> sy = stackalloc double[4];
 
         for (var i = 0; i < 4; i++)
         {
@@ -986,40 +1165,84 @@ public sealed partial class TimelineRenderService : IDisposable
 
     private static byte[] ResampleBilinear(byte[] src, int srcW, int srcH, int dstW, int dstH)
     {
-        if (srcW == dstW && srcH == dstH) return (byte[])src.Clone();
-        var dst = new byte[dstW * dstH * 4];
-        for (var y = 0; y < dstH; y++)
+        if (srcW == dstW && srcH == dstH)
         {
-            var v = (y + 0.5) / dstH;
-            var sy = Math.Clamp(v * srcH - 0.5, 0, srcH - 1);
-            var y0 = (int)sy;
-            var y1 = Math.Min(y0 + 1, srcH - 1);
-            var wy = sy - y0;
-            for (var x = 0; x < dstW; x++)
+            var copy = new byte[checked(srcW * srcH * 4)];
+            Buffer.BlockCopy(src, 0, copy, 0, copy.Length);
+            return copy;
+        }
+        var dst = new byte[checked(dstW * dstH * 4)];
+        ResampleBilinear(src, srcW, srcH, dst, dstW, dstH);
+        return dst;
+    }
+
+    private static void ResampleBilinear(byte[] src, int srcW, int srcH, byte[] dst, int dstW, int dstH)
+    {
+        if (srcW == dstW && srcH == dstH)
+        {
+            Buffer.BlockCopy(src, 0, dst, 0, checked(dstW * dstH * 4));
+            return;
+        }
+
+        if (dstH >= 128 && Environment.ProcessorCount > 1)
+        {
+            Parallel.For(0, dstH, y =>
             {
-                var u = (x + 0.5) / dstW;
-                var sx = Math.Clamp(u * srcW - 0.5, 0, srcW - 1);
-                var x0 = (int)sx;
-                var x1 = Math.Min(x0 + 1, srcW - 1);
-                var wx = sx - x0;
-
-                var p00 = (y0 * srcW + x0) * 4;
-                var p01 = (y0 * srcW + x1) * 4;
-                var p10 = (y1 * srcW + x0) * 4;
-                var p11 = (y1 * srcW + x1) * 4;
-
-                var target = (y * dstW + x) * 4;
-                for (var c = 0; c < 4; c++)
-                {
-                    var val = src[p00 + c] * (1 - wx) * (1 - wy)
-                            + src[p01 + c] * wx * (1 - wy)
-                            + src[p10 + c] * (1 - wx) * wy
-                            + src[p11 + c] * wx * wy;
-                    dst[target + c] = (byte)Math.Clamp((int)Math.Round(val), 0, 255);
-                }
+                ResampleRow(src, srcW, srcH, dst, dstW, dstH, y);
+            });
+        }
+        else
+        {
+            for (var y = 0; y < dstH; y++)
+            {
+                ResampleRow(src, srcW, srcH, dst, dstW, dstH, y);
             }
         }
-        return dst;
+    }
+
+    private static void ResampleRow(byte[] src, int srcW, int srcH, byte[] dst, int dstW, int dstH, int y)
+    {
+        var v = (y + 0.5) / dstH;
+        var sy = Math.Clamp(v * srcH - 0.5, 0, srcH - 1);
+        var y0 = (int)sy;
+        var y1 = Math.Min(y0 + 1, srcH - 1);
+        var wy = sy - y0;
+        var invWy = 1.0 - wy;
+
+        var row0 = y0 * srcW * 4;
+        var row1 = y1 * srcW * 4;
+        var targetRow = y * dstW * 4;
+
+        for (var x = 0; x < dstW; x++)
+        {
+            var u = (x + 0.5) / dstW;
+            var sx = Math.Clamp(u * srcW - 0.5, 0, srcW - 1);
+            var x0 = (int)sx;
+            var x1 = Math.Min(x0 + 1, srcW - 1);
+            var wx = sx - x0;
+            var invWx = 1.0 - wx;
+
+            var w00 = invWx * invWy;
+            var w01 = wx * invWy;
+            var w10 = invWx * wy;
+            var w11 = wx * wy;
+
+            var p00 = row0 + x0 * 4;
+            var p01 = row0 + x1 * 4;
+            var p10 = row1 + x0 * 4;
+            var p11 = row1 + x1 * 4;
+
+            var target = targetRow + x * 4;
+
+            for (var c = 0; c < 4; c++)
+            {
+                var val = src[p00 + c] * w00
+                        + src[p01 + c] * w01
+                        + src[p10 + c] * w10
+                        + src[p11 + c] * w11;
+                dst[target + c] = (byte)Math.Clamp((int)Math.Round(val), 0, 255);
+            }
+        }
     }
 
     private static bool IsGeneratorLayer(EvaluatedClip layer)
@@ -1057,23 +1280,44 @@ public sealed partial class TimelineRenderService : IDisposable
         return pixels;
     }
 
-    private static List<List<EvaluatedClip>> GroupLayersByTrack(IReadOnlyList<EvaluatedClip> layers)
+    private static MediaAsset? FindMediaAsset(IReadOnlyList<MediaAsset> media, Guid id)
     {
-        var groups = new List<List<EvaluatedClip>>();
-        if (layers.Count == 0) return groups;
-        List<EvaluatedClip>? currentGroup = null;
-        Guid currentTrackId = Guid.Empty;
-        for (var i = 0; i < layers.Count; i++)
+        for (var i = 0; i < media.Count; i++)
         {
-            var layer = layers[i];
-            if (currentGroup == null || layer.Track.Id != currentTrackId)
-            {
-                currentGroup = new List<EvaluatedClip>();
-                groups.Add(currentGroup);
-                currentTrackId = layer.Track.Id;
-            }
-            currentGroup.Add(layer);
+            if (media[i].Id == id) return media[i];
         }
-        return groups;
+        return null;
+    }
+
+    private static bool IsTrackSoloInGroups(IReadOnlyList<TrackGroup>? groups, Guid trackId)
+    {
+        if (groups == null || groups.Count == 0) return false;
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var group = groups[g];
+            if (!group.IsSolo) continue;
+            var ids = group.TrackIds;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == trackId) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsTrackMutedInGroups(IReadOnlyList<TrackGroup>? groups, Guid trackId)
+    {
+        if (groups == null || groups.Count == 0) return false;
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var group = groups[g];
+            if (!group.IsMuted) continue;
+            var ids = group.TrackIds;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == trackId) return true;
+            }
+        }
+        return false;
     }
 }

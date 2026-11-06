@@ -32,19 +32,13 @@ public partial class TimelineView
             if (!env.IsEnabled) continue;
 
             var isVelocity = env.Type == EnvelopeType.Velocity;
-            var strokeColor = isVelocity ? Color.FromRgb(50, 205, 50) : Color.FromRgb(0, 162, 232); // Vegas Green or Blue
-            var strokeBrush = new SolidColorBrush(strokeColor);
-            var strokePen = new Pen(strokeBrush, 1.5);
-            strokePen.Freeze();
+            var strokeHex = isVelocity ? "#32CD32" : "#00A2E8"; // Vegas Green or Blue
+            var strokePen = FrozenPen(strokeHex, 1.5);
 
             // 1. Draw 100% neutral baseline
             var uNeutral = Math.Clamp((env.DefaultValue - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
             var baselineY = bottom - uNeutral * height;
-            var baselinePen = new Pen(new SolidColorBrush(Color.FromArgb(90, strokeColor.R, strokeColor.G, strokeColor.B)), 1.0)
-            {
-                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
-            };
-            baselinePen.Freeze();
+            var baselinePen = FrozenDashedPen(isVelocity ? "#5A32CD32" : "#5A00A2E8", 1.0, [3, 3], 0);
             dc.DrawLine(baselinePen, new Point(rect.Left, baselineY), new Point(rect.Right, baselineY));
 
             if (isVelocity)
@@ -57,11 +51,7 @@ public partial class TimelineView
                 // Draw 0% freeze-frame baseline
                 var uZero = Math.Clamp((0.0 - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
                 var zeroY = bottom - uZero * height;
-                var zeroPen = new Pen(new SolidColorBrush(Color.FromArgb(70, 200, 200, 200)), 1.0)
-                {
-                    DashStyle = new DashStyle(new double[] { 2, 4 }, 0)
-                };
-                zeroPen.Freeze();
+                var zeroPen = FrozenDashedPen("#46C8C8C8", 1.0, [2, 4], 0);
                 dc.DrawLine(zeroPen, new Point(rect.Left, zeroY), new Point(rect.Right, zeroY));
                 if (rect.Width > 80)
                 {
@@ -103,8 +93,7 @@ public partial class TimelineView
 
             // 3. Draw Envelope Point Handles
             var handleFill = Brushes.White;
-            var handleStroke = new Pen(Brush("#111111"), 1.0);
-            handleStroke.Freeze();
+            var handleStroke = FrozenPen("#111111", 1.0);
             var activeFill = Brush("#FFAA00");
 
             foreach (var pt in env.Points)
@@ -159,27 +148,21 @@ public partial class TimelineView
         {
             if (!env.IsEnabled) continue;
 
-            var strokeColor = env.Type switch
+            var (strokeHex, baselineHex, labelHex) = env.Type switch
             {
-                EnvelopeType.Composite => Color.FromRgb(0, 162, 232), // Vegas Pro Blue
-                EnvelopeType.Volume => Color.FromRgb(212, 175, 55),    // Vegas Pro Gold
-                EnvelopeType.Pan => Color.FromRgb(255, 127, 39),       // Vegas Pro Orange
-                EnvelopeType.Mute => Color.FromRgb(232, 17, 35),       // Vegas Pro Red
-                _ => Color.FromRgb(150, 150, 255)
+                EnvelopeType.Composite => ("#00A2E8", "#5000A2E8", "#A000A2E8"), // Vegas Pro Blue
+                EnvelopeType.Volume => ("#D4AF37", "#50D4AF37", "#A0D4AF37"),    // Vegas Pro Gold
+                EnvelopeType.Pan => ("#FF7F27", "#50FF7F27", "#A0FF7F27"),       // Vegas Pro Orange
+                EnvelopeType.Mute => ("#E81123", "#50E81123", "#A0E81123"),       // Vegas Pro Red
+                _ => ("#9696FF", "#509696FF", "#A09696FF")
             };
 
-            var strokeBrush = new SolidColorBrush(strokeColor);
-            var strokePen = new Pen(strokeBrush, 1.5);
-            strokePen.Freeze();
+            var strokePen = FrozenPen(strokeHex, 1.5);
 
             // Baseline
             var uNeutral = Math.Clamp((env.DefaultValue - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
             var baselineY = bottom - uNeutral * height;
-            var baselinePen = new Pen(new SolidColorBrush(Color.FromArgb(80, strokeColor.R, strokeColor.G, strokeColor.B)), 1.0)
-            {
-                DashStyle = new DashStyle(new double[] { 3, 3 }, 0)
-            };
-            baselinePen.Freeze();
+            var baselinePen = FrozenDashedPen(baselineHex, 1.0, [3, 3], 0);
             dc.DrawLine(baselinePen, new Point(rect.Left, baselineY), new Point(rect.Right, baselineY));
 
             var baselineLabel = env.Type switch
@@ -192,7 +175,7 @@ public partial class TimelineView
             };
             if (!string.IsNullOrEmpty(baselineLabel))
             {
-                Text(dc, baselineLabel, rect.Left + 6, baselineY - 11, new SolidColorBrush(Color.FromArgb(160, strokeColor.R, strokeColor.G, strokeColor.B)), 8);
+                Text(dc, baselineLabel, rect.Left + 6, baselineY - 11, Brush(labelHex), 8);
             }
 
             // Curve across visible window
@@ -228,8 +211,7 @@ public partial class TimelineView
 
             // Handle points
             var handleFill = Brushes.White;
-            var handleStroke = new Pen(Brush("#111111"), 1.0);
-            handleStroke.Freeze();
+            var handleStroke = FrozenPen("#111111", 1.0);
             var activeFill = Brush("#FFAA00");
 
             foreach (var pt in env.Points)

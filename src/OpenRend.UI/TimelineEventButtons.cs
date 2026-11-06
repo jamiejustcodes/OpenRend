@@ -773,9 +773,10 @@ public sealed partial class TimelineView
             var hovered = hoverEventButton == (clip.Id, action);
             var effectsActive = action == "VideoEffects" && clip.VideoEffects.Any(effect => effect.IsEnabled);
             var fill = hovered && !track.IsLocked ? "#59636A" : effectsActive && !track.IsLocked ? "#3D663D" : "#293137";
-            dc.DrawRectangle(Brush(fill), new Pen(Brush("#819099"), .5), bounds);
-            var ink = track.IsLocked ? Brush("#80858A") : Brushes.WhiteSmoke;
-            var pen = new Pen(ink, 1);
+            dc.DrawRectangle(Brush(fill), FrozenPen("#819099", .5), bounds);
+            var inkHex = track.IsLocked ? "#80858A" : "#F5F5F5";
+            var ink = Brush(inkHex);
+            var pen = FrozenPen(inkHex, 1);
             var x = bounds.X; var y = bounds.Y;
             if (action == "PanCrop")
             {
@@ -787,7 +788,7 @@ public sealed partial class TimelineView
             }
             else if (action == "VideoEffects") Text(dc, "fx", x + 2, y, ink, 13, 16);
             else foreach (var dx in new[] { 5, 9, 13 }) dc.DrawEllipse(ink, null, new Point(x + dx, y + 9), 1, 1);
-            if (pressedEventButton == (clip.Id, action)) dc.DrawRectangle(null, new Pen(Brushes.WhiteSmoke, 1), bounds);
+            if (pressedEventButton == (clip.Id, action)) dc.DrawRectangle(null, FrozenPen("#F5F5F5", 1), bounds);
         }
     }
 
@@ -807,14 +808,14 @@ public sealed partial class TimelineView
     {
         var strip = TransitionStripBounds(track.Id, clip);
         if (strip.IsEmpty) return;
-        dc.DrawRectangle(Brush(track.IsLocked ? "#485B69" : "#438AC8"), new Pen(Brush("#84BBE4"), .5), strip);
+        dc.DrawRectangle(Brush(track.IsLocked ? "#485B69" : "#438AC8"), FrozenPen("#84BBE4", .5), strip);
         var button = EventButtonBounds(track.Id, clip, "Transition");
         var labelWidth = strip.Width - (button.IsEmpty ? 0 : EventButtonSize);
         if (labelWidth > 24) Text(dc, "Dissolve", strip.Left + 2, strip.Top + 1, Brushes.WhiteSmoke, 10, labelWidth - 4, TextAlignment.Center);
         if (button.IsEmpty) return;
         var hovered = hoverEventButton == (clip.Id, "Transition");
-        dc.DrawRectangle(Brush(hovered && !track.IsLocked ? "#C2DDF1" : "#95BBD8"), new Pen(Brush("#1D3F59"), .5), button);
-        var pen = new Pen(Brush("#183448"), 1);
+        dc.DrawRectangle(Brush(hovered && !track.IsLocked ? "#C2DDF1" : "#95BBD8"), FrozenPen("#1D3F59", .5), button);
+        var pen = FrozenPen("#183448", 1);
         var x = button.Left + 3; var y = button.Top + 4;
         dc.DrawLine(pen, new Point(x, y), new Point(x + 12, y + 10));
         dc.DrawLine(pen, new Point(x, y + 10), new Point(x + 12, y));

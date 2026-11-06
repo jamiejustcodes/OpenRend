@@ -49,31 +49,48 @@ public sealed class MediaService : IDisposable
 
     public byte[] GetFrame(string path, double seconds, int width, int height)
     {
+        var result = new byte[checked(width * height * 4)];
+        GetFrame(path, seconds, width, height, result);
+        return result;
+    }
+
+    public void GetFrame(string path, double seconds, int width, int height, byte[] destination)
+    {
         if (width <= 0 || height <= 0) throw new ArgumentOutOfRangeException(nameof(width));
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
-        var result = new byte[checked(width * height * 4)];
+        ArgumentNullException.ThrowIfNull(destination);
+        var requiredBytes = checked(width * height * 4);
+        if (destination.Length < requiredBytes) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
         lock (gate)
         {
             var decoder = GetDecoder(path, width, height);
-            if (NativeMethods.DecoderFrame(decoder, seconds, result, result.Length) < 0) throw NativeMethods.Error("Could not decode video frame");
+            if (NativeMethods.DecoderFrame(decoder, seconds, destination, requiredBytes) < 0) throw NativeMethods.Error("Could not decode video frame");
         }
-        return result;
     }
 
     public float[] GetAudio(string path, double seconds, int frames)
     {
-        if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
-        if (frames < 0) throw new ArgumentOutOfRangeException(nameof(frames));
         var result = new float[checked(frames * Channels)];
         if (frames == 0) return result;
+        GetAudio(path, seconds, frames, result);
+        return result;
+    }
+
+    public void GetAudio(string path, double seconds, int frames, float[] destination)
+    {
+        if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
+        if (frames < 0) throw new ArgumentOutOfRangeException(nameof(frames));
+        ArgumentNullException.ThrowIfNull(destination);
+        var requiredSamples = checked(frames * Channels);
+        if (destination.Length < requiredSamples) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
+        if (frames == 0) return;
         lock (gate)
         {
             var decoder = GetDecoder(path, 1, 1);
-            var read = NativeMethods.DecoderAudio(decoder, seconds, frames, result, result.Length);
+            var read = NativeMethods.DecoderAudio(decoder, seconds, frames, destination, requiredSamples);
             if (read < 0) throw NativeMethods.Error("Could not decode audio samples");
-            if (read < frames) Array.Clear(result, read * Channels, (frames - read) * Channels);
+            if (read < frames) Array.Clear(destination, read * Channels, (frames - read) * Channels);
         }
-        return result;
     }
 
     public async Task<float[]> GetWaveformAsync(string path, int bins = 256, CancellationToken cancellationToken = default)

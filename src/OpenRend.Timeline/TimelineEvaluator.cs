@@ -15,6 +15,49 @@ public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnl
 
 public static class TimelineEvaluator
 {
+    private static readonly Comparison<TimelineClip> ClipFadeOrderComparison = static (a, b) =>
+    {
+        var offsetA = a.StartFrame - a.FadeOffsetFrames;
+        var offsetB = b.StartFrame - b.FadeOffsetFrames;
+        var cmp = offsetA.CompareTo(offsetB);
+        if (cmp != 0) return cmp;
+        cmp = a.StartFrame.CompareTo(b.StartFrame);
+        if (cmp != 0) return cmp;
+        return a.Id.CompareTo(b.Id);
+    };
+
+    private static bool IsTrackSoloInGroups(IReadOnlyList<TrackGroup>? groups, Guid trackId)
+    {
+        if (groups is null || groups.Count == 0) return false;
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var group = groups[g];
+            if (!group.IsSolo) continue;
+            var ids = group.TrackIds;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == trackId) return true;
+            }
+        }
+        return false;
+    }
+
+    private static bool IsTrackMutedInGroups(IReadOnlyList<TrackGroup>? groups, Guid trackId)
+    {
+        if (groups is null || groups.Count == 0) return false;
+        for (var g = 0; g < groups.Count; g++)
+        {
+            var group = groups[g];
+            if (!group.IsMuted) continue;
+            var ids = group.TrackIds;
+            for (var i = 0; i < ids.Count; i++)
+            {
+                if (ids[i] == trackId) return true;
+            }
+        }
+        return false;
+    }
+
     private static ClipEnvelope? FindEnabledEnvelope(IReadOnlyList<ClipEnvelope>? envelopes, EnvelopeType type)
     {
         if (envelopes is null) return null;
@@ -51,7 +94,7 @@ public static class TimelineEvaluator
         for (var i = 0; i < tracks.Count; i++)
         {
             var t = tracks[i];
-            var isSolo = t.IsSolo || (project.TrackGroups != null && project.TrackGroups.Any(g => g.IsSolo && g.TrackIds.Contains(t.Id)));
+            var isSolo = t.IsSolo || IsTrackSoloInGroups(project.TrackGroups, t.Id);
             if (isSolo)
             {
                 if (t.Kind == TrackKind.Video) soloVideo = true;
@@ -86,7 +129,10 @@ public static class TimelineEvaluator
 
                 if (hasActiveFadeIn)
                 {
-                    ordered = track.Clips.OrderBy(c => c.StartFrame - c.FadeOffsetFrames).ThenBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray();
+                    var sortedClips = new TimelineClip[track.Clips.Count];
+                    for (var k = 0; k < track.Clips.Count; k++) sortedClips[k] = track.Clips[k];
+                    Array.Sort(sortedClips, ClipFadeOrderComparison);
+                    ordered = sortedClips;
                     for (var cIdx = 0; cIdx < ordered.Count; cIdx++)
                     {
                         var incoming = ordered[cIdx];
@@ -310,14 +356,7 @@ public static class TimelineEvaluator
     private static bool IsTrackEffectivelyMuted(ProjectDocument project, TimelineTrack track, int trackIndex)
     {
         if (track.IsMuted) return true;
-        if (project.TrackGroups != null)
-        {
-            for (var g = 0; g < project.TrackGroups.Count; g++)
-            {
-                var group = project.TrackGroups[g];
-                if (group.IsMuted && group.TrackIds.Contains(track.Id)) return true;
-            }
-        }
+        if (IsTrackMutedInGroups(project.TrackGroups, track.Id)) return true;
         if (track.Kind == TrackKind.Video && !track.IsVisible) return true;
         if (track.Kind == TrackKind.Video && track.CompositeNestingLevel > 0)
         {
@@ -340,14 +379,7 @@ public static class TimelineEvaluator
     private static bool IsTrackEffectivelySolo(ProjectDocument project, TimelineTrack track, int trackIndex)
     {
         if (track.IsSolo) return true;
-        if (project.TrackGroups != null)
-        {
-            for (var g = 0; g < project.TrackGroups.Count; g++)
-            {
-                var group = project.TrackGroups[g];
-                if (group.IsSolo && group.TrackIds.Contains(track.Id)) return true;
-            }
-        }
+        if (IsTrackSoloInGroups(project.TrackGroups, track.Id)) return true;
         if (track.Kind == TrackKind.Video)
         {
             for (var i = trackIndex + 1; i < project.Tracks.Count; i++)

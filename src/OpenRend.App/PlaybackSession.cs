@@ -21,6 +21,8 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     private double masterGain;
     private int disposed;
     private Exception? outputError;
+    private readonly float[] playbackAudioBuffer = new float[BlockFrames * MediaService.Channels];
+    private readonly byte[] playbackByteBuffer = new byte[BlockFrames * MediaService.Channels * sizeof(float)];
 
     public float PeakLeft => buffer.PeakLeft;
     public float PeakRight => buffer.PeakRight;
@@ -118,11 +120,11 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     {
         cancellation.Token.ThrowIfCancellationRequested();
         var seconds = project.FrameRate.Seconds(startFrame) + (double)submittedSamples / MediaService.SampleRate;
-        var samples = renderer.RenderAudio(project, seconds, count);
+        renderer.RenderAudio(project, seconds, count, playbackAudioBuffer);
         cancellation.Token.ThrowIfCancellationRequested();
-        var bytes = new byte[count * 8];
-        Buffer.BlockCopy(samples, 0, bytes, 0, bytes.Length);
-        buffer.AddSamples(bytes);
+        var byteCount = count * MediaService.Channels * sizeof(float);
+        Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, 0, byteCount);
+        buffer.AddSamples(playbackByteBuffer, 0, byteCount);
         submittedSamples += count;
     }
 
@@ -181,6 +183,7 @@ internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
     public float PeakRight { get; private set; }
 
     public void AddSamples(byte[] bytes) => buffer.AddSamples(bytes, 0, bytes.Length);
+    public void AddSamples(byte[] bytes, int offset, int count) => buffer.AddSamples(bytes, offset, count);
 
     public int Read(byte[] destination, int offset, int count)
     {

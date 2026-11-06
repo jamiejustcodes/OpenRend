@@ -26,7 +26,7 @@ public sealed partial class TimelineView
     {
         if (Project.Markers.Count == 0) return;
         var whiteBrush = Brush("#FFFFFF");
-        var darkBorderPen = new Pen(Brush("#181818"), 1);
+        var darkBorderPen = FrozenPen("#181818", 1);
 
         foreach (var marker in Project.Markers)
         {
@@ -36,7 +36,7 @@ public sealed partial class TimelineView
             var markerBrush = Brush(marker.ColorHex);
 
             // Vertical guideline down through tracks
-            dc.DrawLine(new Pen(markerBrush, 1) { DashStyle = new DashStyle([4, 4], 0) },
+            dc.DrawLine(FrozenDashedPen(marker.ColorHex, 1, [4, 4], 0),
                 new Point(mx, RulerHeight), new Point(mx, ActualHeight));
 
             // Ruler marker tag (inverted house / pin shape)

@@ -1,3 +1,4 @@
+using System.Buffers;
 using System.Diagnostics;
 using System.Globalization;
 using System.Runtime.InteropServices;
@@ -86,29 +87,41 @@ public sealed class ExportService(TimelineRenderService renderer)
             await using (var audioFile = new FileStream(temporaryAudio, FileMode.CreateNew, FileAccess.Write, FileShare.None, 64 * 1024, FileOptions.Asynchronous | FileOptions.SequentialScan))
             {
                 const int blockSize = 8192;
-                for (long sample = 0; sample < totalSamples; sample += blockSize)
+                var rentedAudioBuffer = ExactBufferPool.RentFloats(blockSize * MediaService.Channels);
+                var rentedAudioBytes = ExactBufferPool.RentBytes(blockSize * MediaService.Channels * sizeof(float));
+                try
                 {
-                    cancellationToken.ThrowIfCancellationRequested();
-                    var count = (int)Math.Min(blockSize, totalSamples - sample);
-                    var samples = renderer.RenderAudio(project, startSeconds + (double)sample / MediaService.SampleRate, count);
-                    if (options.ChannelMapping != ChannelRemapping.None)
-                        ApplyChannelRemapping(samples, options.ChannelMapping);
-
-                    if (options.GenerateLoudnessLog)
+                    for (long sample = 0; sample < totalSamples; sample += blockSize)
                     {
-                        for (int i = 0; i < samples.Length; i++)
-                        {
-                            var val = samples[i];
-                            sumSquares += (double)val * val;
-                            var abs = Math.Abs(val);
-                            if (abs > maxPeak) maxPeak = abs;
-                        }
-                        analyzedCount += samples.Length;
-                    }
+                        cancellationToken.ThrowIfCancellationRequested();
+                        var count = (int)Math.Min(blockSize, totalSamples - sample);
+                        renderer.RenderAudio(project, startSeconds + (double)sample / MediaService.SampleRate, count, rentedAudioBuffer);
+                        var sampleSpan = rentedAudioBuffer.AsSpan(0, count * MediaService.Channels);
+                        if (options.ChannelMapping != ChannelRemapping.None)
+                            ApplyChannelRemapping(rentedAudioBuffer, options.ChannelMapping);
 
-                    var bytes = MemoryMarshal.AsBytes(samples.AsSpan()).ToArray();
-                    await audioFile.WriteAsync(bytes, cancellationToken).ConfigureAwait(false);
-                    progress?.Report((template.IsAudioOnly ? 0.8 : 0.2) * (sample + count) / totalSamples);
+                        if (options.GenerateLoudnessLog)
+                        {
+                            for (int i = 0; i < sampleSpan.Length; i++)
+                            {
+                                var val = sampleSpan[i];
+                                sumSquares += (double)val * val;
+                                var abs = Math.Abs(val);
+                                if (abs > maxPeak) maxPeak = abs;
+                            }
+                            analyzedCount += sampleSpan.Length;
+                        }
+
+                        var byteSpan = MemoryMarshal.AsBytes(sampleSpan);
+                        byteSpan.CopyTo(rentedAudioBytes);
+                        await audioFile.WriteAsync(rentedAudioBytes.AsMemory(0, byteSpan.Length), cancellationToken).ConfigureAwait(false);
+                        progress?.Report((template.IsAudioOnly ? 0.8 : 0.2) * (sample + count) / totalSamples);
+                    }
+                }
+                finally
+                {
+                    ExactBufferPool.ReturnFloats(rentedAudioBuffer);
+                    ExactBufferPool.ReturnBytes(rentedAudioBytes);
                 }
             }
 
@@ -310,13 +323,15 @@ public sealed class ExportService(TimelineRenderService renderer)
                 var errors = process.StandardError.ReadToEndAsync(cancellationToken);
                 var standardOutput = process.StandardOutput.ReadToEndAsync(cancellationToken);
                 Exception? streamError = null;
+                var frameBytes = checked(project.Width * project.Height * 4);
+                var rentedFrameBuffer = ExactBufferPool.RentBytes(frameBytes);
                 try
                 {
                     for (long frame = 0; frame < totalFrames; frame++)
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        var pixels = renderer.RenderFrame(project, range.StartFrame + frame, project.Width, project.Height);
-                        await process.StandardInput.BaseStream.WriteAsync(pixels, cancellationToken).ConfigureAwait(false);
+                        renderer.RenderFrame(project, range.StartFrame + frame, project.Width, project.Height, rentedFrameBuffer);
+                        await process.StandardInput.BaseStream.WriteAsync(rentedFrameBuffer.AsMemory(0, frameBytes), cancellationToken).ConfigureAwait(false);
                         progress?.Report(0.2 + 0.75 * (frame + 1) / totalFrames);
                     }
                     await process.StandardInput.BaseStream.FlushAsync(cancellationToken).ConfigureAwait(false);
@@ -328,6 +343,7 @@ public sealed class ExportService(TimelineRenderService renderer)
                 }
                 finally
                 {
+                    ExactBufferPool.ReturnBytes(rentedFrameBuffer);
                     process.StandardInput.Close();
                 }
                 try
