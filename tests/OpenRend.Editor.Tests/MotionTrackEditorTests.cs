@@ -111,4 +111,70 @@ public sealed class MotionTrackEditorTests
         currentClip = GetClip(editor, clip.Id);
         Assert.Null(currentClip.Crop);
     }
+
+    [Fact]
+    public void TransferMotionToMask_GeneratesAnimatedBezierMaskKeyframes_AndSurvivesUndoRedo()
+    {
+        var (editor, clip) = Create();
+        var region = new MotionTrackData
+        {
+            Name = "Face Tracker",
+            Shape = TrackingShape.Oval,
+            IsInverted = false
+        };
+        region.Keyframes.Add(new TrackingKeyframe(0, 0.40, 0.40, 0.20, 0.20));
+        region.Keyframes.Add(new TrackingKeyframe(20, 0.45, 0.42, 0.22, 0.22, angle: 10));
+        region.Keyframes.Add(new TrackingKeyframe(40, 0.50, 0.45, 0.25, 0.25, angle: 20));
+        editor.AddMotionTrack(clip.Id, region);
+
+        editor.TransferMotionToMask(clip.Id, region.Id, clip.Id);
+
+        var currentClip = GetClip(editor, clip.Id);
+        Assert.NotNull(currentClip.Mask);
+        Assert.True(currentClip.Mask.IsEnabled);
+        Assert.Equal(3, currentClip.Mask.Keyframes.Count);
+
+        // Check relative frame positioning
+        Assert.Equal(0, currentClip.Mask.Keyframes[0].Frame);
+        Assert.Equal(20, currentClip.Mask.Keyframes[1].Frame);
+        Assert.Equal(40, currentClip.Mask.Keyframes[2].Frame);
+
+        // Verify mask paths exist and are shaped correctly
+        var kf0Shape = currentClip.Mask.Keyframes[0].Shape;
+        Assert.Single(kf0Shape.Paths);
+        Assert.True(kf0Shape.Paths[0].IsClosed);
+        Assert.Equal(MaskMode.Positive, kf0Shape.Paths[0].Mode);
+        Assert.True(kf0Shape.Paths[0].Points.Count >= 4);
+
+        // Verify Undo removes mask
+        editor.Undo();
+        currentClip = GetClip(editor, clip.Id);
+        Assert.Null(currentClip.Mask);
+
+        // Verify Redo restores mask
+        editor.Redo();
+        currentClip = GetClip(editor, clip.Id);
+        Assert.NotNull(currentClip.Mask);
+        Assert.Equal(3, currentClip.Mask.Keyframes.Count);
+    }
+
+    [Fact]
+    public void GetMotionTrackParametricKeyframes_ReturnsOrderedTrajectoryParameters()
+    {
+        var (editor, clip) = Create();
+        var region = new MotionTrackData { Name = "Tracker" };
+        region.Keyframes.Add(new TrackingKeyframe(15, 0.60, 0.40, 0.2, 0.2, angle: 5, scaleX: 1.1, scaleY: 1.1));
+        region.Keyframes.Add(new TrackingKeyframe(5, 0.50, 0.30, 0.2, 0.2));
+        editor.AddMotionTrack(clip.Id, region);
+
+        var keyframes = editor.GetMotionTrackParametricKeyframes(clip.Id, region.Id);
+        Assert.Equal(2, keyframes.Count);
+        // Verified ordered by frame ascending
+        Assert.Equal(5, keyframes[0].Frame);
+        Assert.Equal(0.50, keyframes[0].CenterX, 2);
+        Assert.Equal(15, keyframes[1].Frame);
+        Assert.Equal(0.60, keyframes[1].CenterX, 2);
+        Assert.Equal(5.0, keyframes[1].Angle, 2);
+        Assert.Equal(1.1, keyframes[1].ScaleX, 2);
+    }
 }
