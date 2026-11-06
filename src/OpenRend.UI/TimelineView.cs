@@ -106,6 +106,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? DeleteTrackRequested;
     public event Action<Guid>? TrackFxRequested;
     public event Action<Guid>? TrackAudioFxRequested;
+    public event Action<Guid>? TrackAutoDuckingRequested;
     public event Action<Guid>? TrackPhaseInvertRequested;
     public event Action<Guid>? TrackMotionRequested;
     public event Action<Guid>? TrackColorGradingRequested;
@@ -1354,8 +1355,18 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawRoundedRectangle(Brush("#6A1B9A"), null, adjRect, 2, 2);
                 Text(dc, "ADJ", adjRect.X + 3, adjRect.Y + 2, Brushes.White, 9.5);
             }
-            var nameX = 30 + indent + (t.IsAdjustmentTrack ? 30 : 0);
-            Text(dc, t.Name, nameX, y + 5, size: 11, maxWidth: Math.Max(20, 104 - indent - (t.IsAdjustmentTrack ? 30 : 0)));
+            else if (t.Kind == TrackKind.Audio && t.DuckingRole != AudioDuckingRole.None)
+            {
+                var isController = t.DuckingRole == AudioDuckingRole.Controller;
+                var tagText = isController ? "VOX" : "DUCK";
+                var tagColor = isController ? "#2E7D32" : "#1565C0";
+                var duckRect = new Rect(28 + indent, y + 4, 34, 16);
+                dc.DrawRoundedRectangle(Brush(tagColor), null, duckRect, 2, 2);
+                Text(dc, tagText, duckRect.X + 3, duckRect.Y + 2, Brushes.White, 9.0);
+            }
+            var badgeOffset = t.IsAdjustmentTrack ? 30 : (t.Kind == TrackKind.Audio && t.DuckingRole != AudioDuckingRole.None ? 36 : 0);
+            var nameX = 30 + indent + badgeOffset;
+            Text(dc, t.Name, nameX, y + 5, size: 11, maxWidth: Math.Max(20, 104 - indent - badgeOffset));
 
             // Track Automation mode button [A] at x = 138, y + 4
             var autoBounds = TrackButtonBounds(t.Id, "Automation");
@@ -2669,6 +2680,10 @@ public sealed partial class TimelineView : FrameworkElement
                         panTypeMenu.Items.Add(item);
                     }
                     menu.Items.Add(panTypeMenu);
+
+                    var autoDuckingItem = new MenuItem { Header = "Auto Ducking Controls…" };
+                    autoDuckingItem.Click += (_, _) => TrackAutoDuckingRequested?.Invoke(track.Id);
+                    menu.Items.Add(autoDuckingItem);
                 }
 
 

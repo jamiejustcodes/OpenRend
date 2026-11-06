@@ -190,6 +190,7 @@
         <Separator/>
         <MenuItem Header="Scene Detection…" Click="SceneDetectionClick"/>
         <MenuItem x:Name="CreateSlideshowMenu" Header="Create Slideshow…" Click="CreateSlideshowClick" AutomationProperties.AutomationId="CreateSlideshowMenu"/>
+        <MenuItem x:Name="AutoDuckingMenu" Header="Auto Ducking…" Click="AutoDuckingClick" AutomationProperties.AutomationId="AutoDuckingMenu"/>
         <Separator/>
         <MenuItem x:Name="AiTextToSpeechMenu" Header="AI Text to S_peech" InputGestureText="Ctrl+Shift+P" Click="AiTextToSpeechClick"/>
         <MenuItem x:Name="AiSpeechToTextMenu" Header="AI Speech to Tex_t" Click="AiSpeechToTextClick"/>

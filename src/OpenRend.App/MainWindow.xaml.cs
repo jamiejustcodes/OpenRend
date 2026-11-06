@@ -210,6 +210,7 @@ public partial class MainWindow : Window
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.TrackAudioFxRequested += id => OpenTrackAudioEffects(id);
+        Timeline.TrackAutoDuckingRequested += id => OpenAutoDucking(id);
         Timeline.TrackPhaseInvertRequested += id => Guard(() =>
         {
             var t = vm.Project.Tracks.FirstOrDefault(track => track.Id == id);
@@ -1811,6 +1812,27 @@ public partial class MainWindow : Window
         if (track.IsLocked) { vm.Status = "Unlock the audio track before editing its audio effects."; return; }
         Pause();
         new AudioTrackFxWindow(vm, track.Id) { Owner = this }.ShowDialog();
+        Timeline.InvalidateVisual();
+    });
+
+    private void AutoDuckingClick(object sender, RoutedEventArgs e) => OpenAutoDucking();
+    private void OpenAutoDucking(Guid? requestedTrack = null) => Guard(() =>
+    {
+        var tracks = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Audio).ToArray();
+        if (tracks.Length == 0) { vm.Status = "Project has no audio tracks."; return; }
+        var track = requestedTrack is { } id
+            ? tracks.FirstOrDefault(t => t.Id == id)
+            : (Timeline.ActiveTrackIndex >= 0 && Timeline.ActiveTrackIndex < vm.Project.Tracks.Count && vm.Project.Tracks[Timeline.ActiveTrackIndex].Kind == TrackKind.Audio
+                ? vm.Project.Tracks[Timeline.ActiveTrackIndex]
+                : tracks.FirstOrDefault());
+        if (track is null) { vm.Status = "Select an audio track to configure auto ducking."; return; }
+        if (track.IsLocked) { vm.Status = "Unlock the audio track before configuring auto ducking."; return; }
+        Pause();
+        new AutoDuckingWindow(vm, track.Id, () =>
+        {
+            Timeline.InvalidateVisual();
+            RequestPreview();
+        }, this).ShowDialog();
         Timeline.InvalidateVisual();
     });
 

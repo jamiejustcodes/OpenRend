@@ -704,6 +704,10 @@ public sealed class TimelineTrack
     public string? TrackColor { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public TrackAutomationMode AutomationMode { get; set; } = TrackAutomationMode.AutomationRead;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public AudioDuckingRole DuckingRole { get; set; } = AudioDuckingRole.None;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public AudioDuckingSettings? DuckingSettings { get; set; }
     public TimelineTrack DeepClone()
     {
         var clone = new TimelineTrack
@@ -727,7 +731,9 @@ public sealed class TimelineTrack
             InvertPhase = InvertPhase,
             ArmRecord = ArmRecord,
             TrackColor = TrackColor,
-            AutomationMode = AutomationMode
+            AutomationMode = AutomationMode,
+            DuckingRole = DuckingRole,
+            DuckingSettings = DuckingSettings?.DeepClone()
         };
 
         clone.Clips = new List<TimelineClip>(Clips.Count);

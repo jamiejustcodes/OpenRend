@@ -494,6 +494,31 @@ public sealed partial class TimelineRenderService : IDisposable
                     AudioDspService.ProcessAudioChain(trackBuffer, MediaService.SampleRate, track.AudioEffects);
                 }
 
+                // 2b. Track Envelopes and Auto Ducking Sidechain
+                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Mute && e.IsEnabled) is { } trackMuteEnv && trackMuteEnv.ValueAt(projectFrame) >= 0.5)
+                {
+                    // Track is envelope-muted at this project frame
+                    continue;
+                }
+
+                if (track.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Volume && e.IsEnabled) is { } trackVolEnv)
+                {
+                    var volMul = (float)trackVolEnv.ValueAt(projectFrame);
+                    if (Math.Abs(volMul - 1.0f) > 1e-4)
+                    {
+                        for (var i = 0; i < trackBuffer.Length; i++) trackBuffer[i] *= volMul;
+                    }
+                }
+                else if (track.DuckingRole == AudioDuckingRole.Listener && track.DuckingSettings?.IsEnabled == true)
+                {
+                    // Realtime dynamic sidechain ducking when no baked envelope overrides it
+                    var duckGain = (float)AudioDuckingEngine.EvaluateDuckingGain(project, track, projectFrame);
+                    if (Math.Abs(duckGain - 1.0f) > 1e-4)
+                    {
+                        for (var i = 0; i < trackBuffer.Length; i++) trackBuffer[i] *= duckGain;
+                    }
+                }
+
                 // 3. Accumulate track into assigned sub-bus or master bus
                 if (track.BusTrackId.HasValue && busBuffers.TryGetValue(track.BusTrackId.Value, out var busBuf))
                 {
