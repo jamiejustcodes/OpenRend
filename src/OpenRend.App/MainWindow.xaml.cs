@@ -2441,7 +2441,8 @@ public partial class MainWindow : Window
     private void SceneDetectionClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
-        if (new SceneDetectionWindow(vm) { Owner = this }.ShowDialog() == true)
+        var selectedClip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
+        if (new SceneDetectionWindow(vm, selectedClip) { Owner = this }.ShowDialog() == true)
         {
             Refresh();
             RequestPreview();
