@@ -265,15 +265,17 @@ public sealed class AutoSaveAndRecoveryEditorTests
         var win = new EditingPreferencesWindow(editing, general);
         var dock = Assert.IsType<DockPanel>(win.Content);
 
-        // TabControl has General and Editing
+        // TabControl has General, Editing, and Updates
         var tabControl = Assert.IsType<TabControl>(dock.Children[2]);
-        Assert.Equal(2, tabControl.Items.Count);
+        Assert.Equal(3, tabControl.Items.Count);
 
         var tab0 = Assert.IsType<TabItem>(tabControl.Items[0]);
         var tab1 = Assert.IsType<TabItem>(tabControl.Items[1]);
+        var tab2 = Assert.IsType<TabItem>(tabControl.Items[2]);
 
         Assert.Equal("General", tab0.Header);
         Assert.Equal("Editing", tab1.Header);
+        Assert.Equal("Updates", tab2.Header);
 
         // Verify General Tab elements
         var generalGroup = Assert.IsType<GroupBox>(tab0.Content);
@@ -287,6 +289,12 @@ public sealed class AutoSaveAndRecoveryEditorTests
 
         var useProjectDirCheck = Assert.IsType<CheckBox>(generalGrid.Children[4]);
         Assert.False(useProjectDirCheck.IsChecked);
+
+        // Verify Updates Tab elements
+        var updateGroup = Assert.IsType<GroupBox>(tab2.Content);
+        var updateStack = Assert.IsType<StackPanel>(updateGroup.Content);
+        var startupUpdatesCheck = Assert.IsType<CheckBox>(updateStack.Children[0]);
+        Assert.True(startupUpdatesCheck.IsChecked);
     });
 }
 

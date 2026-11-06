@@ -31,6 +31,14 @@ jobs:
         shell: pwsh
         run: ./tools/build.ps1 -Package
 
+      - name: Build Inno Setup Installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            & $iscc installer/OpenRend.iss
+          }
+
       - name: Create release zip & checksums
         shell: pwsh
         run: |
@@ -44,5 +52,6 @@ jobs:
           name: OpenRend ${{ github.ref_name }}
           files: |
             dist/OpenRend-win-x64.zip
+            dist/OpenRend-Setup-*.exe
             dist/SHA256SUMS.txt
           generate_release_notes: true

@@ -1,4 +1,6 @@
+using System.Diagnostics;
 using System.Globalization;
+using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
@@ -18,12 +20,16 @@ public sealed class EditingPreferencesWindow : Window
     private readonly TextBox autoSaveInterval;
     private readonly CheckBox createProjectBackups;
     private readonly CheckBox useProjectDirForAutoSave;
+    private readonly CheckBox checkUpdatesOnStartup;
     private readonly TextBlock error = new() { Margin = new Thickness(8, 0, 8, 0), TextWrapping = TextWrapping.Wrap };
 
     public EditingPreferences Result { get; private set; }
     public GeneralPreferences GeneralResult { get; private set; }
 
-    public EditingPreferencesWindow(EditingPreferences settings, GeneralPreferences? generalSettings = null)
+    public EditingPreferencesWindow(
+        EditingPreferences settings,
+        GeneralPreferences? generalSettings = null,
+        IUpdateService? updateService = null)
     {
         Result = settings;
         var gen = generalSettings ?? new GeneralPreferences();
@@ -34,7 +40,7 @@ public sealed class EditingPreferencesWindow : Window
         Style? FindStyle(object key) => TryFindResource(key) as Style;
 
         if (FindStyle(typeof(Window)) is { } winStyle) Style = winStyle;
-        Title = "Preferences"; Width = 590; Height = 340; MinWidth = 480; MinHeight = 300;
+        Title = "Preferences"; Width = 600; Height = 390; MinWidth = 500; MinHeight = 340;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         SourceInitialized += (_, _) =>
         {
@@ -187,6 +193,192 @@ public sealed class EditingPreferencesWindow : Window
         };
         tabs.Items.Add(editingTab);
 
+        // 3. Updates Tab (Automatic Startup Check & Manual Scan)
+        var updateStack = new StackPanel { Margin = new Thickness(12) };
+
+        checkUpdatesOnStartup = new CheckBox
+        {
+            Content = "_Check for updates automatically on startup",
+            IsChecked = gen.CheckForUpdatesOnStartup,
+            Foreground = TextBrush(),
+            Margin = new Thickness(0, 4, 0, 10)
+        };
+        AutomationProperties.SetAutomationId(checkUpdatesOnStartup, "CheckForUpdatesOnStartup");
+        updateStack.Children.Add(checkUpdatesOnStartup);
+
+        var verText = new TextBlock
+        {
+            Text = $"Current version: OpenRend v{AppVersion.CurrentVersionString}",
+            Foreground = TextBrush(),
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        updateStack.Children.Add(verText);
+
+        var statusText = new TextBlock
+        {
+            Text = "Click 'Scan for updates' to check GitHub for the latest release.",
+            Foreground = TextBrush(),
+            TextWrapping = TextWrapping.Wrap,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        AutomationProperties.SetAutomationId(statusText, "UpdateStatusText");
+        updateStack.Children.Add(statusText);
+
+        var progBar = new ProgressBar
+        {
+            Height = 4,
+            Visibility = Visibility.Collapsed,
+            Minimum = 0,
+            Maximum = 100,
+            Value = 0,
+            Margin = new Thickness(0, 0, 0, 6)
+        };
+        AutomationProperties.SetAutomationId(progBar, "UpdateProgressBar");
+        updateStack.Children.Add(progBar);
+
+        var btnHost = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 6) };
+
+        var scanBtn = new Button
+        {
+            Content = "Scan for updates",
+            MinWidth = 120,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        AutomationProperties.SetAutomationId(scanBtn, "ScanForUpdatesButton");
+        btnHost.Children.Add(scanBtn);
+
+        var installBtn = new Button
+        {
+            Content = "Install update",
+            MinWidth = 110,
+            Visibility = Visibility.Collapsed,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+        AutomationProperties.SetAutomationId(installBtn, "InstallUpdateButton");
+        btnHost.Children.Add(installBtn);
+
+        var viewBtn = new Button
+        {
+            Content = "View on GitHub",
+            MinWidth = 120,
+            Visibility = Visibility.Collapsed
+        };
+        AutomationProperties.SetAutomationId(viewBtn, "ViewReleaseButton");
+        btnHost.Children.Add(viewBtn);
+
+        updateStack.Children.Add(btnHost);
+
+        var notesText = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Foreground = TextBrush(),
+            Margin = new Thickness(4)
+        };
+        var notesScroll = new ScrollViewer
+        {
+            Content = notesText,
+            MaxHeight = 80,
+            Visibility = Visibility.Collapsed,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Margin = new Thickness(0, 4, 0, 0)
+        };
+        updateStack.Children.Add(notesScroll);
+
+        var service = updateService ?? new GitHubUpdateService();
+
+        scanBtn.Click += async (_, _) =>
+        {
+            scanBtn.IsEnabled = false;
+            statusText.Text = "Scanning GitHub for newer releases...";
+            try
+            {
+                var check = await service.CheckForUpdatesAsync();
+                if (check.IsUpdateAvailable && check.Release is not null)
+                {
+                    var rel = check.Release;
+                    statusText.Text = $"Update available: {rel.TagName} (current: v{AppVersion.CurrentVersionString})";
+                    notesText.Text = string.IsNullOrWhiteSpace(rel.Body) ? "No release notes provided." : rel.Body;
+                    notesScroll.Visibility = Visibility.Visible;
+                    installBtn.Visibility = Visibility.Visible;
+                    viewBtn.Visibility = Visibility.Visible;
+
+                    viewBtn.Click += (_, _) =>
+                    {
+                        try { Process.Start(new ProcessStartInfo { FileName = rel.HtmlUrl, UseShellExecute = true }); } catch { }
+                    };
+
+                    installBtn.Click += async (_, _) =>
+                    {
+                        var asset = rel.GetUpdateAsset();
+                        if (asset == null)
+                        {
+                            statusText.Text = "No direct Windows update package found. Opening release page...";
+                            try { Process.Start(new ProcessStartInfo { FileName = rel.HtmlUrl, UseShellExecute = true }); } catch { }
+                            return;
+                        }
+                        installBtn.IsEnabled = false;
+                        scanBtn.IsEnabled = false;
+                        viewBtn.IsEnabled = false;
+                        progBar.Visibility = Visibility.Visible;
+                        statusText.Text = $"Downloading {asset.Name}...";
+                        try
+                        {
+                            var tempDir = Path.Combine(Path.GetTempPath(), "OpenRend-Update");
+                            var progress = new Progress<double>(p =>
+                            {
+                                progBar.Value = p * 100;
+                                statusText.Text = $"Downloading {asset.Name}: {(int)(p * 100)}%";
+                            });
+                            var downloaded = await service.DownloadUpdateAsync(asset, tempDir, progress);
+                            statusText.Text = "Starting installer...";
+                            GitHubUpdateService.LaunchUpdateInstaller(downloaded, Environment.ProcessId, AppContext.BaseDirectory);
+                            Application.Current.Shutdown(0);
+                        }
+                        catch (Exception ex)
+                        {
+                            statusText.Text = $"Download failed: {ex.Message}";
+                            installBtn.IsEnabled = true;
+                            scanBtn.IsEnabled = true;
+                            viewBtn.IsEnabled = true;
+                        }
+                    };
+                }
+                else if (check.Status == UpdateStatus.UpToDate)
+                {
+                    statusText.Text = $"OpenRend is up to date (version {AppVersion.CurrentVersionString}).";
+                    notesScroll.Visibility = Visibility.Collapsed;
+                    installBtn.Visibility = Visibility.Collapsed;
+                    viewBtn.Visibility = Visibility.Collapsed;
+                }
+                else
+                {
+                    statusText.Text = $"Scan failed: {check.ErrorMessage}";
+                }
+            }
+            catch (Exception ex)
+            {
+                statusText.Text = $"Error: {ex.Message}";
+            }
+            finally
+            {
+                scanBtn.IsEnabled = true;
+            }
+        };
+
+        var updatesTab = new TabItem
+        {
+            Header = "Updates",
+            Content = new GroupBox
+            {
+                Header = "Software Updates & GitHub Releases",
+                Style = FindStyle("PreferencesGroup"),
+                Content = updateStack,
+                Margin = new Thickness(8)
+            }
+        };
+        AutomationProperties.SetAutomationId(updatesTab, "UpdatesTab");
+        tabs.Items.Add(updatesTab);
+
         root.Children.Add(tabs);
         ok.Click += (_, _) =>
         {
@@ -204,9 +396,10 @@ public sealed class EditingPreferencesWindow : Window
                 EnableAutoSave = enableAutoSave.IsChecked == true,
                 AutoSaveIntervalMinutes = intervalVal,
                 CreateProjectBackups = createProjectBackups.IsChecked == true,
-                UseProjectDirectoryForAutoSave = useProjectDirForAutoSave.IsChecked == true
+                UseProjectDirectoryForAutoSave = useProjectDirForAutoSave.IsChecked == true,
+                CheckForUpdatesOnStartup = checkUpdatesOnStartup.IsChecked == true
             };
-            DialogResult = true;
+            try { DialogResult = true; } catch (InvalidOperationException) { }
         };
         Content = root;
     }

@@ -3186,7 +3186,7 @@ public partial class MainWindow : Window
         Refresh();
     }
     private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / pause\nEnter  Pause\nEsc  Stop\nAlt+Left / Alt+Right  Step one frame\nCtrl+Home / Ctrl+End  Timeline bounds\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
-    private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "OpenRend 0.1\nWindows video and audio editor\nGPL-3.0-or-later\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
+    private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, $"OpenRend {AppVersion.CurrentVersionString}\nWindows video and audio editor\nGPL-3.0-or-later\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
     private void WindowKeyDown(object sender, KeyEventArgs e)
     {

@@ -16,9 +16,96 @@ public partial class MainWindow
             var recovered = await CheckCrashRecoveryAsync();
             if (recovered) return;
 
+            LoadGeneralPreferences();
+            if (generalPreferences.CheckForUpdatesOnStartup)
+            {
+                await CheckForUpdatesStartupAsync();
+            }
+
             if (WelcomePreferencesStore.Load(WelcomePreferencesPath).ShowAtStartup) await ShowWelcomeAsync();
         });
     }
+
+    private async Task CheckForUpdatesStartupAsync()
+    {
+        try
+        {
+            var updateService = new GitHubUpdateService();
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(6));
+            var result = await updateService.CheckForUpdatesAsync(cancellationToken: cts.Token).ConfigureAwait(true);
+            if (result.IsUpdateAvailable && result.Release is not null)
+            {
+                var dialog = new UpdateAvailableWindow(result.Release, generalPreferences.CheckForUpdatesOnStartup, updateService)
+                {
+                    Owner = this
+                };
+                dialog.ShowDialog();
+                if (dialog.DisableStartupUpdatesRequested)
+                {
+                    generalPreferences = generalPreferences with { CheckForUpdatesOnStartup = false };
+                    GeneralPreferencesStore.Save(generalPreferences, GeneralPreferencesPath);
+                    MessageBox.Show(
+                        this,
+                        "Startup update checks have been disabled.\n\nYou can scan for updates anytime in Options → Preferences → Updates.",
+                        "Update Notifications Disabled",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                    vm.Status = "Startup update checks disabled. Scan for updates anytime in Options → Preferences.";
+                }
+            }
+        }
+        catch
+        {
+            // Network failure or timeout during automatic startup check is handled gracefully
+        }
+    }
+
+    private async void CheckForUpdatesClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        vm.Status = "Scanning for updates...";
+        var updateService = new GitHubUpdateService();
+        var result = await updateService.CheckForUpdatesAsync().ConfigureAwait(true);
+        if (result.IsUpdateAvailable && result.Release is not null)
+        {
+            var dialog = new UpdateAvailableWindow(result.Release, generalPreferences.CheckForUpdatesOnStartup, updateService)
+            {
+                Owner = this
+            };
+            dialog.ShowDialog();
+            if (dialog.DisableStartupUpdatesRequested)
+            {
+                generalPreferences = generalPreferences with { CheckForUpdatesOnStartup = false };
+                GeneralPreferencesStore.Save(generalPreferences, GeneralPreferencesPath);
+                MessageBox.Show(
+                    this,
+                    "Startup update checks have been disabled.\n\nYou can scan for updates anytime in Options → Preferences → Updates.",
+                    "Update Notifications Disabled",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                vm.Status = "Startup update checks disabled. Scan for updates anytime in Options → Preferences.";
+            }
+        }
+        else if (result.Status == UpdateStatus.UpToDate)
+        {
+            MessageBox.Show(
+                this,
+                $"You are running the latest version of OpenRend (v{AppVersion.CurrentVersionString}).",
+                "Check for Updates",
+                MessageBoxButton.OK,
+                MessageBoxImage.Information);
+            vm.Status = $"OpenRend is up to date (version {AppVersion.CurrentVersionString}).";
+        }
+        else
+        {
+            MessageBox.Show(
+                this,
+                $"Unable to check for updates: {result.ErrorMessage}\n\nPlease check your internet connection or visit the GitHub repository.",
+                "Check for Updates",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
+            vm.Status = $"Update check failed: {result.ErrorMessage}";
+        }
+    });
 
     private async Task ShowWelcomeAsync()
     {

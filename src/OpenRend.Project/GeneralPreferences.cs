@@ -13,6 +13,7 @@ public sealed record GeneralPreferences
     public int AutoSaveIntervalMinutes { get; init; } = 5;
     public bool CreateProjectBackups { get; init; } = true;
     public bool UseProjectDirectoryForAutoSave { get; init; } = true;
+    public bool CheckForUpdatesOnStartup { get; init; } = true;
 
     public void Validate()
     {

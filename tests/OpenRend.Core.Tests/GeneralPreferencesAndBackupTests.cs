@@ -14,6 +14,7 @@ public sealed class GeneralPreferencesAndBackupTests
         Assert.Equal(5, prefs.AutoSaveIntervalMinutes);
         Assert.True(prefs.CreateProjectBackups);
         Assert.True(prefs.UseProjectDirectoryForAutoSave);
+        Assert.True(prefs.CheckForUpdatesOnStartup);
     }
 
     [Fact]
@@ -41,7 +42,8 @@ public sealed class GeneralPreferencesAndBackupTests
                 EnableAutoSave = false,
                 AutoSaveIntervalMinutes = 10,
                 CreateProjectBackups = false,
-                UseProjectDirectoryForAutoSave = false
+                UseProjectDirectoryForAutoSave = false,
+                CheckForUpdatesOnStartup = false
             };
 
             GeneralPreferencesStore.Save(original, file);

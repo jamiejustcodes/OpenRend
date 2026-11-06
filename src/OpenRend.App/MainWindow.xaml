@@ -229,7 +229,11 @@
         <Separator/>
         <MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/>
       </MenuItem>
-      <MenuItem Header="_Help"><MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/><MenuItem Header="About OpenRend" Click="AboutClick"/></MenuItem>
+      <MenuItem Header="_Help">
+        <MenuItem Header="Keyboard shortcuts" Click="ShortcutsClick"/>
+        <MenuItem Header="Check for _updates…" Click="CheckForUpdatesClick" AutomationProperties.AutomationId="CheckForUpdatesMenu"/>
+        <MenuItem Header="About OpenRend" Click="AboutClick"/>
+      </MenuItem>
     </Menu>
       </DockPanel>
       <TextBlock Text="{Binding Title}" HorizontalAlignment="Center" FontSize="11" FontWeight="SemiBold" IsHitTestVisible="False"/>
