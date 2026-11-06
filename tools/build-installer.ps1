@@ -49,9 +49,12 @@ Write-Host "Compiling $issScript with ultra LZMA2 solid compression..."
 if ($LASTEXITCODE -ne 0) { throw 'Inno Setup compilation failed' }
 
 # 4. Locate generated installer
-$installer = Join-Path $dist 'OpenRend-Setup-v0.2.0.exe'
+$issContent = Get-Content $issScript -Raw
+$verMatch = [regex]::Match($issContent, '#define MyAppVersion "([^"]+)"')
+$appVersion = if ($verMatch.Success) { $verMatch.Groups[1].Value } else { '0.2.1' }
+$installer = Join-Path $dist "OpenRend-Setup-v$appVersion.exe"
 if (!(Test-Path $installer)) {
-    $found = Get-ChildItem -Path $dist -Filter "OpenRend-Setup*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
+    $found = Get-ChildItem -Path $dist -Filter "OpenRend-Setup-v*.exe" | Sort-Object LastWriteTime -Descending | Select-Object -First 1
     if ($found) { $installer = $found.FullName }
 }
 

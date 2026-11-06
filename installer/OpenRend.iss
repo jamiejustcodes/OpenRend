@@ -2,7 +2,7 @@
 ; Compiled using Inno Setup 6
 
 #define MyAppName "OpenRend"
-#define MyAppVersion "0.2.0"
+#define MyAppVersion "0.2.1"
 #define MyAppPublisher "OpenRend"
 #define MyAppURL "https://github.com/jamiejustcodes/OpenRend"
 #define MyAppExeName "OpenRend.exe"
@@ -31,7 +31,7 @@ SetupIconFile=..\assets\OpenRend.ico
 WizardStyle=modern
 DisableWelcomePage=no
 
-; Output & Solid Compression (Lightweight & Smallest Possible)
+; Output & Solid Ultra Compression (Lightweight & Smallest Possible)
 OutputDir=..\dist
 OutputBaseFilename=OpenRend-Setup-v{#MyAppVersion}
 Compression=lzma2/ultra64
@@ -39,6 +39,7 @@ SolidCompression=yes
 LZMAUseSeparateProcess=yes
 LZMADictionarySize=1048576
 LZMANumBlockThreads=4
+LZMANumFastBytes=273
 
 ; Uninstallation
 UninstallDisplayIcon={app}\{#MyAppExeName}
@@ -53,7 +54,10 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 Name: "fileassoc"; Description: "Associate {#MyAppName} with .openrend project files"; GroupDescription: "File Associations:"
 
 [Files]
-Source: "..\dist\OpenRend\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb"
+; Order files to maximize solid LZMA2 dictionary matches across similar PE headers and binaries
+Source: "..\dist\OpenRend\*.dll"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\OpenRend\*.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "..\dist\OpenRend\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.dll,*.exe"
 Source: "..\assets\OpenRend.ico"; DestDir: "{app}"; Flags: ignoreversion
 
 [Icons]

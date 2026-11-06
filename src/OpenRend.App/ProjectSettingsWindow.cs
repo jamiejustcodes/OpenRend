@@ -246,10 +246,10 @@ public sealed class ProjectSettingsWindow : Window
         prerenderFolderBox = CreateTextBox(defaultFolder);
         browseBtn.Click += (_, _) =>
         {
-            var fbd = new System.Windows.Forms.FolderBrowserDialog { SelectedPath = prerenderFolderBox.Text };
-            if (fbd.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            var fbd = new Microsoft.Win32.OpenFolderDialog { InitialDirectory = prerenderFolderBox.Text };
+            if (fbd.ShowDialog() == true)
             {
-                prerenderFolderBox.Text = fbd.SelectedPath;
+                prerenderFolderBox.Text = fbd.FolderName;
                 UpdateFreeSpace();
             }
         };
@@ -317,10 +317,10 @@ public sealed class ProjectSettingsWindow : Window
         AutomationProperties.SetAutomationId(recordedFolderBox, "RecordedFilesFolderBox");
         browseRecBtn.Click += (_, _) =>
         {
-            var fbd = new System.Windows.Forms.FolderBrowserDialog { SelectedPath = recordedFolderBox.Text };
-            if (fbd.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+            var fbd = new Microsoft.Win32.OpenFolderDialog { InitialDirectory = recordedFolderBox.Text };
+            if (fbd.ShowDialog() == true)
             {
-                recordedFolderBox.Text = fbd.SelectedPath;
+                recordedFolderBox.Text = fbd.FolderName;
             }
         };
         recFolderPanel.Children.Add(browseRecBtn);
