@@ -241,10 +241,13 @@ public sealed class UpdateAvailableWindow : Window
 
             var downloadedPath = await updateService.DownloadUpdateAsync(asset, tempDir, progress).ConfigureAwait(true);
 
-            downloadStatus.Text = "Download complete. Starting update...";
+            progressBar.Value = 100;
+            downloadStatus.Text = "Update downloaded. Restarting OpenRend to apply update...";
             UpdateInstalled = true;
 
-            // Launch update installer
+            await Task.Delay(1000);
+
+            // Launch silent in-place update and restart OpenRend
             var appDir = AppContext.BaseDirectory;
             GitHubUpdateService.LaunchUpdateInstaller(downloadedPath, Environment.ProcessId, appDir);
 

@@ -210,6 +210,43 @@ public sealed class UpdateServiceTests
         }
     }
 
+    [Fact]
+    public void GenerateExeUpdateScript_ProducesSilentInnoArgumentsAndProcessWait()
+    {
+        var script = GitHubUpdateService.GenerateExeUpdateScript(
+            waitPid: 12345,
+            installerPath: @"C:\Temp\OpenRend-Setup.exe",
+            targetDir: @"C:\Users\Tester\AppData\Local\Programs\OpenRend\",
+            exeName: "OpenRend.exe");
+
+        Assert.Contains("WAIT_PID=12345", script);
+        Assert.Contains(@"INSTALLER=C:\Temp\OpenRend-Setup.exe", script);
+        Assert.Contains(@"TARGET_DIR=C:\Users\Tester\AppData\Local\Programs\OpenRend", script);
+        Assert.DoesNotContain(@"OpenRend\", script); // Trailing slash stripped
+        Assert.Contains("/VERYSILENT", script);
+        Assert.Contains("/SUPPRESSMSGBOXES", script);
+        Assert.Contains("/NORESTART", script);
+        Assert.Contains("/SP-", script);
+        Assert.Contains(@"/DIR=""%TARGET_DIR%""", script);
+        Assert.Contains(@"start /wait """" ""%INSTALLER%""", script);
+        Assert.Contains(@"start """" ""%TARGET_DIR%\%EXE_NAME%""", script);
+    }
+
+    [Fact]
+    public void GenerateZipUpdateScript_ProducesExtractionAndRelaunchCommands()
+    {
+        var script = GitHubUpdateService.GenerateZipUpdateScript(
+            waitPid: 54321,
+            stagingDir: @"C:\Temp\staging",
+            targetDir: @"C:\Users\Tester\AppData\Local\Programs\OpenRend\",
+            exeName: "OpenRend.exe");
+
+        Assert.Contains("54321", script);
+        Assert.Contains("Copy-Item", script);
+        Assert.Contains("Start-Process", script);
+        Assert.Contains("OpenRend.exe", script);
+    }
+
     private sealed class MockHttpMessageHandler : HttpMessageHandler
     {
         private readonly HttpResponseMessage response;

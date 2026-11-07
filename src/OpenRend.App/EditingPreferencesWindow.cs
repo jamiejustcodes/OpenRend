@@ -330,7 +330,9 @@ public sealed class EditingPreferencesWindow : Window
                                 statusText.Text = $"Downloading {asset.Name}: {(int)(p * 100)}%";
                             });
                             var downloaded = await service.DownloadUpdateAsync(asset, tempDir, progress);
-                            statusText.Text = "Starting installer...";
+                            progBar.Value = 100;
+                            statusText.Text = "Update downloaded. Restarting OpenRend to apply update...";
+                            await Task.Delay(1000);
                             GitHubUpdateService.LaunchUpdateInstaller(downloaded, Environment.ProcessId, AppContext.BaseDirectory);
                             Application.Current.Shutdown(0);
                         }

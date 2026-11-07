@@ -212,49 +212,113 @@ public sealed class GitHubUpdateService : IUpdateService, IDisposable
     }
 
     /// <summary>
-    /// Launches the update mechanism (Installer or Updater script) and gracefully exits the current process.
-    /// This updates OpenRend in place without deleting user data or settings.
+    /// Generates a Windows batch script that waits for the running OpenRend process to exit,
+    /// performs a completely silent in-place update using Inno Setup (no setup wizard pages or prompts),
+    /// relaunches OpenRend, and cleans up the temporary installer.
+    /// </summary>
+    public static string GenerateExeUpdateScript(int waitPid, string installerPath, string targetDir, string exeName = "OpenRend.exe")
+    {
+        var cleanTarget = targetDir.TrimEnd('\\', '/');
+        return $@"@echo off
+setlocal
+set WAIT_PID={waitPid}
+set INSTALLER={installerPath}
+set TARGET_DIR={cleanTarget}
+set EXE_NAME={exeName}
+
+set COUNT=0
+:wait_loop
+set /a COUNT+=1
+if %COUNT% gtr 30 goto continue_install
+tasklist /fi ""PID eq %WAIT_PID%"" 2>nul | findstr /i ""%WAIT_PID%"" >nul
+if not errorlevel 1 (
+    timeout /t 1 /nobreak >nul
+    goto wait_loop
+)
+
+:continue_install
+timeout /t 1 /nobreak >nul
+start /wait """" ""%INSTALLER%"" /VERYSILENT /SUPPRESSMSGBOXES /NORESTART /SP- /DIR=""%TARGET_DIR%""
+if exist ""%TARGET_DIR%\%EXE_NAME%"" (
+    start """" ""%TARGET_DIR%\%EXE_NAME%""
+)
+timeout /t 2 /nobreak >nul
+del /f /q ""%INSTALLER%"" 2>nul
+(goto) 2>nul & del /f /q ""%~f0"" 2>nul
+";
+    }
+
+    /// <summary>
+    /// Generates a PowerShell script for silent update extraction from a portable zip package,
+    /// waiting for OpenRend process termination, copying files in place, relaunching, and cleaning up.
+    /// </summary>
+    public static string GenerateZipUpdateScript(int waitPid, string stagingDir, string targetDir, string exeName = "OpenRend.exe")
+    {
+        var cleanTarget = targetDir.TrimEnd('\\', '/');
+        var cleanStaging = stagingDir.TrimEnd('\\', '/');
+        return $@"try {{
+    $proc = Get-Process -Id {waitPid} -ErrorAction SilentlyContinue
+    if ($proc) {{ $null = $proc.WaitForExit(15000) }}
+}} catch {{}}
+Start-Sleep -Milliseconds 600
+Copy-Item -Path ""{cleanStaging}\*"" -Destination ""{cleanTarget}"" -Recurse -Force
+$newExe = Join-Path ""{cleanTarget}"" ""{exeName}""
+if (Test-Path ""$newExe"") {{
+    Start-Process -FilePath ""$newExe""
+}}
+Start-Sleep -Seconds 2
+Remove-Item -Path ""{cleanStaging}"" -Recurse -Force -ErrorAction SilentlyContinue
+";
+    }
+
+    /// <summary>
+    /// Launches the update mechanism (silent Inno Setup upgrade or silent zip updater) and gracefully exits the current process.
+    /// This updates OpenRend seamlessly in place with zero setup wizard pages, prompts, or reinstallation questions.
     /// </summary>
     public static void LaunchUpdateInstaller(string updateFilePath, int currentProcessId, string applicationDirectory)
     {
+        var cleanTarget = applicationDirectory.TrimEnd('\\', '/');
         var isExe = updateFilePath.EndsWith(".exe", StringComparison.OrdinalIgnoreCase);
+        var isZip = updateFilePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase);
+
         if (isExe)
         {
-            // Execute the Inno Setup installer. It will prompt/update the existing install directory in-place.
-            var startInfo = new ProcessStartInfo
+            var tempDir = Path.GetDirectoryName(updateFilePath) ?? Path.GetTempPath();
+            var scriptPath = Path.Combine(tempDir, "apply_update.cmd");
+            var scriptContent = GenerateExeUpdateScript(currentProcessId, updateFilePath, cleanTarget);
+            File.WriteAllText(scriptPath, scriptContent);
+
+            var isProgramFiles = cleanTarget.Contains("Program Files", StringComparison.OrdinalIgnoreCase);
+            var psi = new ProcessStartInfo
             {
-                FileName = updateFilePath,
-                UseShellExecute = true
+                FileName = "cmd.exe",
+                Arguments = $"/c \"{scriptPath}\"",
+                UseShellExecute = isProgramFiles,
+                Verb = isProgramFiles ? "runas" : "",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             };
-            Process.Start(startInfo);
+            Process.Start(psi);
         }
-        else if (updateFilePath.EndsWith(".zip", StringComparison.OrdinalIgnoreCase))
+        else if (isZip)
         {
-            // Extract the zip to a staging directory, then launch a PowerShell script to replace files after process exit
             var stagingDir = Path.Combine(Path.GetDirectoryName(updateFilePath)!, "staging_" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(stagingDir);
             ZipFile.ExtractToDirectory(updateFilePath, stagingDir, overwriteFiles: true);
 
             var scriptPath = Path.Combine(Path.GetDirectoryName(updateFilePath)!, "apply_update.ps1");
-            var exeName = "OpenRend.exe";
-
-            var scriptContent = $@"
-param($waitPid, $source, $target, $exe)
-Wait-Process -Id $waitPid -ErrorAction SilentlyContinue
-Start-Sleep -Milliseconds 600
-Copy-Item -Path ""$source\*"" -Destination $target -Recurse -Force
-Start-Process (Join-Path $target $exe)
-Start-Sleep -Seconds 2
-Remove-Item -Path $source -Recurse -Force -ErrorAction SilentlyContinue
-";
+            var scriptContent = GenerateZipUpdateScript(currentProcessId, stagingDir, cleanTarget);
             File.WriteAllText(scriptPath, scriptContent);
 
+            var isProgramFiles = cleanTarget.Contains("Program Files", StringComparison.OrdinalIgnoreCase);
             var psi = new ProcessStartInfo
             {
                 FileName = "powershell.exe",
-                Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\" -waitPid {currentProcessId} -source \"{stagingDir}\" -target \"{applicationDirectory}\" -exe \"{exeName}\"",
-                UseShellExecute = true,
-                CreateNoWindow = true
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"{scriptPath}\"",
+                UseShellExecute = isProgramFiles,
+                Verb = isProgramFiles ? "runas" : "",
+                CreateNoWindow = true,
+                WindowStyle = ProcessWindowStyle.Hidden
             };
             Process.Start(psi);
         }
