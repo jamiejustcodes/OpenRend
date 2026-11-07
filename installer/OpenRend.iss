@@ -2,7 +2,7 @@
 ; Compiled using Inno Setup 6
 
 #define MyAppName "OpenRend"
-#define MyAppVersion "0.2.3"
+#define MyAppVersion "0.2.4"
 #define MyAppPublisher "OpenRend"
 #define MyAppURL "https://github.com/jamiejustcodes/OpenRend"
 #define MyAppExeName "OpenRend.exe"
