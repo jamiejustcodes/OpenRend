@@ -29,6 +29,8 @@
         <MenuItem Header="_Import media…" InputGestureText="Ctrl+I" Click="ImportClick"/>
         <MenuItem Header="Import Final Cut Pro 7 XML…" Click="ImportFcp7XmlClick"/>
         <MenuItem Header="Export Final Cut Pro 7 XML…" Click="ExportFcp7XmlClick"/>
+        <MenuItem Header="Import Final Cut Pro X XML…" Click="ImportFcpxmlClick" AutomationProperties.AutomationId="ImportFcpxmlMenu"/>
+        <MenuItem Header="Export Final Cut Pro X XML…" Click="ExportFcpxmlClick" AutomationProperties.AutomationId="ExportFcpxmlMenu"/>
         <MenuItem Header="Import CMX 3600 EDL&#x2026;" Click="ImportEdlClick"/>
         <MenuItem Header="Export CMX 3600 EDL&#x2026;" Click="ExportEdlClick"/>
         <MenuItem Header="Relink missing media…" Click="RelinkClick"/>

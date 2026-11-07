@@ -1308,6 +1308,37 @@ public partial class MainWindow : Window
             vm.Status = $"Exported Final Cut Pro 7 XML to {Path.GetFileName(dialog.FileName)}.";
         }
     });
+    private async void ImportFcpxmlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var dialog = new OpenFileDialog
+        {
+            Title = "Import Final Cut Pro X XML",
+            Filter = "Final Cut Pro X XML (*.fcpxml;*.xml)|*.fcpxml;*.xml|All files (*.*)|*.*"
+        };
+        if (dialog.ShowDialog(this) != true || !await ConfirmUnsavedAsync()) return;
+        Pause();
+        var xml = await File.ReadAllTextAsync(dialog.FileName);
+        var project = FcpxmlInterchange.ImportFromXml(xml);
+        vm.Replace(project, null);
+        await PopulateMediaVisualsAsync();
+        vm.Status = $"Imported Final Cut Pro X XML ({project.Tracks.Count} tracks, {project.Tracks.SelectMany(t => t.Clips).Count()} clips).";
+    });
+    private async void ExportFcpxmlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    {
+        var defaultName = Path.GetFileNameWithoutExtension(vm.ProjectPath) ?? vm.Project.Name ?? "Sequence";
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Final Cut Pro X XML",
+            Filter = "Final Cut Pro X XML (*.fcpxml)|*.fcpxml|XML file (*.xml)|*.xml",
+            FileName = $"{defaultName}.fcpxml"
+        };
+        if (dialog.ShowDialog(this) == true)
+        {
+            var xml = FcpxmlInterchange.ExportToXml(vm.Project);
+            await File.WriteAllTextAsync(dialog.FileName, xml, System.Text.Encoding.UTF8);
+            vm.Status = $"Exported Final Cut Pro X XML to {Path.GetFileName(dialog.FileName)}.";
+        }
+    });
     private async void ImportEdlClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         var dialog = new OpenFileDialog
