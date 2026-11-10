@@ -1,3 +1,4 @@
+using System.IO;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -132,6 +133,30 @@ public sealed partial class TimelineView
             var item = new MenuItem { Header = label };
             item.Click += (_, _) => action(); menu.Items.Add(item); return item;
         }
+        (MediaAsset Media, FrameRange Range)? TrimmerSource()
+        {
+            var targetId = clipId ?? (Selection.Count == 1 ? Selection.First() : Guid.Empty);
+            var clip = Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.Id == targetId);
+            if (clip is not { IsAdjustmentEvent: false, IsReversed: false, PlaybackRate: 1, SourceInFrame: >= 0, DurationFrames: > 0 } ||
+                clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) == true)
+                return null;
+            var media = Project.Media.FirstOrDefault(item => item.Id == clip.MediaId);
+            if (media is not { IsGenerated: false, DurationSeconds: > 0 } || !File.Exists(media.Path))
+                return null;
+            var rate = Project.FrameRate;
+            if (media.DurationSeconds >= long.MaxValue / rate.Value)
+                return null;
+            var duration = rate.Frames(media.DurationSeconds);
+            if (clip.SourceInFrame > duration || clip.DurationFrames > duration - clip.SourceInFrame)
+                return null;
+            return (media, new FrameRange(clip.SourceInFrame, clip.DurationFrames));
+        }
+        var openInTrimmer = Add("Open in Trimmer", () =>
+        {
+            if (IsEnabled && TrimmerSource() is { } source)
+                OpenInTrimmerRequested?.Invoke(source.Media, source.Range);
+        });
+        AutomationProperties.SetAutomationId(openInTrimmer, "OpenEventInTrimmer");
         MenuItem? editText = null;
         if (clipId is { } id && Project.Tracks.SelectMany(t => t.Clips).Any(c => c.Id == id && Project.Media.Any(m => m.Id == c.MediaId && m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))))
         {
@@ -598,6 +623,7 @@ public sealed partial class TimelineView
         menu.Opened += (_, _) =>
         {
             if (clipId is { } id && Project.Tracks.Any(t => t.Clips.Any(c => c.Id == id))) SelectClip(id, false, ensureVisible: false);
+            openInTrimmer.IsEnabled = IsEnabled && OpenInTrimmerRequested is not null && TrimmerSource() is not null;
             var selected = Project.Tracks.SelectMany(t => t.Clips.Where(c => Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
             var targetClips = selected.Where(item => clipId is null || item.Clip.Id == clipId).ToArray();
             var singleTarget = targetClips.Length == 1 ? targetClips[0] : (Track: (TimelineTrack?)null, Clip: (TimelineClip?)null);

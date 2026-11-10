@@ -207,6 +207,11 @@ public partial class MainWindow : Window
             vm.Status = "Overlap converted to cut.";
         });
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
+        Timeline.OpenInTrimmerRequested += (media, range) => Guard(() =>
+        {
+            TrimmerDeck.LoadMedia(media, range);
+            TrimmerClick(this, new RoutedEventArgs());
+        });
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.TrackAudioFxRequested += id => OpenTrackAudioEffects(id);

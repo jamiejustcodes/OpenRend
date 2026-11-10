@@ -24,6 +24,7 @@ Status applies to OpenRend's own implementation and stated test cases. It does n
 | WASAPI synchronized playback | Tested locally | Real output clock seek/pause/drain, underrun accounting and loopback tone verification |
 | WPF desktop editing | Tested locally | Native preview pixels advance during playback and restore on Stop; edge hover/held resize cursor, outside-edge trim, Escape cancellation, selection/track states/split/undo/redo/save/reopen/export and ffprobe validation |
 | Timeline accessibility | Tested | SelectionItem and Invoke/Toggle providers, track/clip keyboard navigation |
+| Timeline event to Trimmer | Tested locally | Open in Trimmer loads the file-backed source of a forward, unretimed event and sets the cursor and selection from its trimmed source range. The command is unavailable for generated sources and ranges that extend outside the file. |
 | Event buttons and options | Tested locally | Pan/Crop, video FX and overflow actions target the clicked event; locked/narrow/clipped cases, accessible actions after zoom/scroll/resize, and session-only header/name/length options |
 | Track opacity / gain / pan | Tested | Atomic level edits, lock checks, persistence/default compatibility, accessible range sliders and actual encoded pixels/stereo samples |
 | Preview display controls | Tested | Monitor zoom, safe-area overlay and drop-frame timecode; snapshots use project-resolution render |

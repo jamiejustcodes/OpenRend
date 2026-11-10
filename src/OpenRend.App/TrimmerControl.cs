@@ -33,6 +33,8 @@ public sealed class TrimmerControl : UserControl
     private bool isLooping = true;
     private readonly DispatcherTimer playbackTimer;
     private float[]? audioWaveform;
+    private long mediaLoadId;
+    private long previewRequestId;
     private TrimmerPlacementStream streamMode = TrimmerPlacementStream.VideoAndAudio;
 
     // Header info controls
@@ -334,14 +336,22 @@ public sealed class TrimmerControl : UserControl
         vm = viewModel;
     }
 
-    public async void LoadMedia(MediaAsset media)
+    public async void LoadMedia(MediaAsset media, FrameRange? sourceRange = null)
     {
-        activeMedia = media ?? throw new ArgumentNullException(nameof(media));
+        ArgumentNullException.ThrowIfNull(media);
         var rate = vm?.Project.FrameRate ?? new Rational(30, 1);
-        totalFrames = Math.Max(1, (long)Math.Round(media.DurationSeconds * rate.Value));
-        inFrame = 0;
-        outFrame = totalFrames;
-        currentFrame = 0;
+        var frameCount = Math.Max(1, rate.Frames(media.DurationSeconds));
+        var range = sourceRange ?? new FrameRange(0, frameCount);
+        range.Validate(frameCount);
+        activeMedia = media;
+        var loadId = ++mediaLoadId;
+        ++previewRequestId;
+        previewImage.Source = null;
+        audioWaveform = null;
+        totalFrames = frameCount;
+        inFrame = range.StartFrame;
+        outFrame = range.EndFrame;
+        currentFrame = inFrame;
         isPlaying = false;
         shuttleSpeed = 0;
         playbackTimer.Stop();
@@ -364,22 +374,26 @@ public sealed class TrimmerControl : UserControl
         previewImage.Visibility = Visibility.Visible;
 
         UpdateReadouts();
+        ruler.InvalidateVisual();
         RequestCurrentFrameAsync();
 
         // Load waveform asynchronously if media has audio
-        audioWaveform = null;
         if (media.HasAudio && vm != null && File.Exists(media.Path))
         {
             try
             {
-                audioWaveform = await vm.Media.GetWaveformAsync(media.Path, 1024);
+                var waveform = await vm.Media.GetWaveformAsync(media.Path, 1024);
+                if (loadId == mediaLoadId)
+                {
+                    audioWaveform = waveform;
+                    ruler.InvalidateVisual();
+                }
             }
             catch
             {
-                audioWaveform = null;
+                // Waveform data is optional.
             }
         }
-        ruler.InvalidateVisual();
     }
 
     public void SeekTo(long frame)
@@ -635,8 +649,9 @@ public sealed class TrimmerControl : UserControl
             var seconds = currentFrame / (double)rate.Value;
             if (activeMedia.HasVideo)
             {
+                var requestId = ++previewRequestId;
                 var bytes = await vm.Media.GetFrameAsync(activeMedia.Path, seconds, 640, 360);
-                if (bytes.Length == 640 * 360 * 4)
+                if (requestId == previewRequestId && bytes.Length == 640 * 360 * 4)
                 {
                     var wb = new WriteableBitmap(640, 360, 96, 96, PixelFormats.Bgra32, null);
                     wb.WritePixels(new Int32Rect(0, 0, 640, 360), bytes, 640 * 4, 0);
