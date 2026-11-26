@@ -158,7 +158,7 @@ public partial class MainWindow
         if (DissolvePluginItem is null || DefaultDissolvePreset is null || FavoriteDissolve is null || EmptyTransitions is null) return;
         var query = TransitionSearch.Text.Trim();
         var selectedCategoryTab = TransitionCategories.SelectedItem as TabItem;
-        var categoryHeader = selectedCategoryTab?.Header?.ToString() ?? "All Plug-ins";
+        var category = selectedCategoryTab?.Header as string;
         var isFavoritesTab = selectedCategoryTab == FavoriteTransitionsCategory;
 
         FavoriteDissolve.Content = transitionPreferences.FavoriteDissolve ? "★" : "☆";
@@ -172,7 +172,7 @@ public partial class MainWindow
             var isFav = transitionPreferences.IsFavorite(plugin.DisplayName);
             var categoryMatch = isFavoritesTab
                 ? isFav
-                : (categoryHeader == "All Plug-ins" || string.Equals(plugin.Category, categoryHeader, StringComparison.OrdinalIgnoreCase));
+                : (category is null || string.Equals(plugin.Category, category, StringComparison.OrdinalIgnoreCase));
 
             var queryMatch = query.Length == 0 ||
                 plugin.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
@@ -183,10 +183,6 @@ public partial class MainWindow
             item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
             if (visible) anyPluginVisible = true;
         }
-
-        // Dissolve default preset visibility specifically for FlaUI test compatibility
-        var dissolveVisible = DissolvePluginItem.Visibility == Visibility.Visible;
-        DefaultDissolvePreset.Visibility = dissolveVisible ? Visibility.Visible : Visibility.Collapsed;
 
         PopulatePresetsForSelectedPlugin();
 
@@ -200,36 +196,31 @@ public partial class MainWindow
         if (TransitionPresets is null || DefaultDissolvePreset is null) return;
 
         var selectedItem = TransitionPlugIns.SelectedItem as ListBoxItem;
-        if (selectedItem?.DataContext is not TransitionPluginInfo plugin)
+        if (selectedItem is not { Visibility: Visibility.Visible, DataContext: TransitionPluginInfo plugin })
         {
             TransitionPresets.Items.Clear();
             return;
         }
 
         var query = TransitionSearch.Text.Trim();
+        var showAllPresets = query.Length == 0 ||
+            plugin.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+            plugin.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
         TransitionPresets.Items.Clear();
 
         if (plugin.Kind == VideoTransitionKind.Dissolve)
         {
-            // First add the DefaultDissolvePreset to preserve exact test binding
-            var defaultMatch = query.Length == 0 || "Dissolve Default Fades".Contains(query, StringComparison.OrdinalIgnoreCase);
-            DefaultDissolvePreset.Visibility = defaultMatch ? Visibility.Visible : Visibility.Collapsed;
-            DefaultDissolvePreset.DataContext = plugin.Presets.First();
-            TransitionPresets.Items.Add(DefaultDissolvePreset);
-
-            foreach (var preset in plugin.Presets.Skip(1))
+            var defaultPreset = plugin.Presets[0];
+            if (showAllPresets || defaultPreset.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             {
-                if (query.Length > 0 && !preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
-                TransitionPresets.Items.Add(CreatePresetItem(plugin, preset));
+                DefaultDissolvePreset.DataContext = defaultPreset;
+                TransitionPresets.Items.Add(DefaultDissolvePreset);
             }
         }
-        else
+        foreach (var preset in plugin.Presets.Skip(plugin.Kind == VideoTransitionKind.Dissolve ? 1 : 0))
         {
-            foreach (var preset in plugin.Presets)
-            {
-                if (query.Length > 0 && !preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            if (showAllPresets || preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
                 TransitionPresets.Items.Add(CreatePresetItem(plugin, preset));
-            }
         }
 
         if (TransitionPresets.Items.Count > 0 && TransitionPresets.SelectedItem is null)
