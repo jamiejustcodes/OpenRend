@@ -1,4 +1,6 @@
 using System.Drawing;
+using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
@@ -29,6 +31,7 @@ public sealed partial class EditorWorkflowTests
             HasVideo = true
         };
         var clip = new TimelineClip { MediaId = asset.Id, Name = "Event 1", DurationFrames = 90 };
+        var rippleClip = new TimelineClip { MediaId = asset.Id, Name = "Ripple event", DurationFrames = 30 };
         await ProjectStore.SaveAsync(new()
         {
             Name = "UI integration",
@@ -36,7 +39,11 @@ public sealed partial class EditorWorkflowTests
             Height = 180,
             FrameRate = new(30, 1),
             Media = [asset],
-            Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }]
+            Tracks =
+            [
+                new() { Kind = TrackKind.Video, Clips = [clip] },
+                new() { Kind = TrackKind.Video, Clips = [rippleClip] }
+            ]
         }, path);
 
         try
@@ -45,8 +52,9 @@ public sealed partial class EditorWorkflowTests
             {
                 var window = running.Window;
 
+                FitTimeline(window);
                 Chord(window, VirtualKeyShort.KEY_M);
-                Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+                WaitFor(() => window.Title.Contains('*'), "M did not add a marker to the open project.");
                 var clipBounds = Find(window, $"Clip_{clip.Id:N}").BoundingRectangle;
                 var scale = clipBounds.Height / 67;
                 Point OnRegionBar(int frame, double offset) => new(
@@ -87,6 +95,32 @@ public sealed partial class EditorWorkflowTests
                 Assert.Single(reloaded.Markers);
                 Assert.Equal(1, reloaded.Markers[0].Index);
                 Assert.Equal(42, Assert.Single(reloaded.Regions).DurationFrames);
+
+                var window = running.Window;
+                FitTimeline(window);
+                var options = window.FindFirstDescendant(c => c.ByName("Options").And(c.ByControlType(ControlType.MenuItem)));
+                Assert.NotNull(options);
+                options.AsMenuItem().Expand();
+                Find(window, "AutoRippleModeMenu").AsMenuItem().Expand();
+                Find(window, "RippleAllTracksMarkersMenu").AsMenuItem().Invoke();
+                Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
+                WaitFor(() => Find(window, "RippleToggle").Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.On,
+                    "Ctrl+L did not enable Auto Ripple.");
+
+                var bounds = Find(window, $"Clip_{rippleClip.Id:N}").BoundingRectangle;
+                var from = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height * 2 / 3);
+                var to = new Point(from.X + bounds.Width / 3, from.Y);
+                foreach (var point in new[] { from, to })
+                    Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
+                DragTrimmer(from, to);
+                WaitFor(() => window.Title.Contains('*'), "The ripple drag did not edit the project.");
+                SaveButton(window).Invoke();
+                WaitFor(() => !window.Title.Contains('*'), "The ripple edit did not save.");
+                var rippled = await ProjectStore.LoadAsync(path);
+                Assert.Equal(10, Assert.Single(rippled.Tracks[1].Clips).StartFrame);
+                var region = Assert.Single(rippled.Regions);
+                Assert.Equal((18L, 70L), (region.StartFrame, region.EndFrame));
+                Assert.Equal(0, Assert.Single(rippled.Markers).Frame);
                 running.CloseGracefully();
             }
         }

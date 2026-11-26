@@ -208,7 +208,7 @@
         <MenuItem x:Name="RippleMenu" Header="Auto _Ripple" InputGestureText="Ctrl+L" IsCheckable="True" Click="RippleMenuClick"/>
         <MenuItem x:Name="AutoRippleModeMenu" Header="Auto Ripple _Mode">
           <MenuItem x:Name="RippleAffectedTracksMenu" Header="_Affected Tracks" InputGestureText="F" IsCheckable="True" IsChecked="True" Click="RippleAffectedTracksClick"/>
-          <MenuItem x:Name="RippleAffectedTracksMarkersMenu" Header="Affected Tracks, Bus Tracks, _Markers" InputGestureText="Ctrl+Shift+F" IsCheckable="True" Click="RippleAffectedTracksMarkersClick"/>
+          <MenuItem x:Name="RippleAffectedTracksMarkersMenu" Header="Affected Tracks, Bus Tracks, _Markers and Regions" InputGestureText="Ctrl+Shift+F" IsCheckable="True" Click="RippleAffectedTracksMarkersClick"/>
           <MenuItem x:Name="RippleAllTracksMarkersMenu" Header="All _Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" IsCheckable="True" Click="RippleAllTracksMarkersClick"/>
         </MenuItem>
         <MenuItem x:Name="RulerFormatMenu" Header="Ruler &amp;Format">
@@ -1023,7 +1023,7 @@
             <ToggleButton.ContextMenu>
               <ContextMenu>
                 <MenuItem x:Name="RippleToggleAffectedTracks" Header="Affected Tracks" InputGestureText="F" Click="RippleAffectedTracksClick" IsChecked="True"/>
-                <MenuItem x:Name="RippleToggleAffectedTracksMarkers" Header="Affected Tracks, Bus Tracks, Markers" InputGestureText="Ctrl+Shift+F" Click="RippleAffectedTracksMarkersClick"/>
+                <MenuItem x:Name="RippleToggleAffectedTracksMarkers" Header="Affected Tracks, Bus Tracks, Markers and Regions" InputGestureText="Ctrl+Shift+F" Click="RippleAffectedTracksMarkersClick"/>
                 <MenuItem x:Name="RippleToggleAllTracksMarkers" Header="All Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" Click="RippleAllTracksMarkersClick"/>
               </ContextMenu>
             </ToggleButton.ContextMenu>

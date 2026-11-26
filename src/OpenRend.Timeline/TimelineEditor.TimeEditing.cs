@@ -7,6 +7,57 @@ namespace OpenRend.Timeline;
 
 public sealed partial class TimelineEditor
 {
+    // Invoke inside the edit transaction so the ruler moves and undoes with the events.
+    public static void ShiftRulerAnnotations(ProjectDocument project, long fromFrame, long delta)
+    {
+        foreach (var marker in project.Markers)
+            if (marker.Frame >= fromFrame)
+                marker.Frame = Math.Max(0, checked(marker.Frame + delta));
+
+        foreach (var region in project.Regions)
+        {
+            if (region.StartFrame >= fromFrame)
+            {
+                var start = Math.Max(0, checked(region.StartFrame + delta));
+                region.EndFrame = checked(start + region.DurationFrames);
+                region.StartFrame = start;
+            }
+            else if (region.EndFrame > fromFrame)
+            {
+                // A region that ends exactly at the edit lies entirely to its left.
+                region.EndFrame = Math.Max(region.StartFrame + 1, checked(region.EndFrame + delta));
+            }
+        }
+    }
+
+    private static void RippleRulerRegionsForRemoval(ProjectDocument project, IReadOnlyList<(long Start, long End)> spans)
+    {
+        for (var i = project.Regions.Count - 1; i >= 0; i--)
+        {
+            var region = project.Regions[i];
+            var start = RemainingFrame(region.StartFrame);
+            var end = RemainingFrame(region.EndFrame);
+            if (end == start)
+                project.Regions.RemoveAt(i);
+            else
+            {
+                region.StartFrame = start;
+                region.EndFrame = end;
+            }
+        }
+
+        long RemainingFrame(long frame)
+        {
+            long removed = 0;
+            foreach (var (start, end) in spans)
+            {
+                if (start >= frame) break;
+                removed += Math.Min(end, frame) - start;
+            }
+            return frame - removed;
+        }
+    }
+
     /// <summary>
     /// Inserts empty time at the specified frame position across tracks and ripples downstream events,
     /// markers, track automation envelopes, bus envelopes, and master bus automation curves.
@@ -116,26 +167,7 @@ public sealed partial class TimelineEditor
                     }
                 }
 
-                foreach (var marker in project.Markers)
-                {
-                    if (marker.Frame >= atFrame)
-                    {
-                        marker.Frame = checked(marker.Frame + durationFrames);
-                    }
-                }
-
-                foreach (var region in project.Regions)
-                {
-                    if (region.StartFrame >= atFrame)
-                    {
-                        region.StartFrame = checked(region.StartFrame + durationFrames);
-                        region.EndFrame = checked(region.EndFrame + durationFrames);
-                    }
-                    else if (region.EndFrame > atFrame)
-                    {
-                        region.EndFrame = checked(region.EndFrame + durationFrames);
-                    }
-                }
+                ShiftRulerAnnotations(project, atFrame, durationFrames);
             }
 
             if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
@@ -321,19 +353,7 @@ public sealed partial class TimelineEditor
                     }
                 }
 
-                project.Regions.RemoveAll(r => r.StartFrame >= startFrame && r.EndFrame <= endFrame);
-                foreach (var region in project.Regions)
-                {
-                    if (region.StartFrame >= endFrame)
-                    {
-                        region.StartFrame = Math.Max(0, checked(region.StartFrame - durationFrames));
-                        region.EndFrame = Math.Max(region.StartFrame + 1, checked(region.EndFrame - durationFrames));
-                    }
-                    else if (region.EndFrame > startFrame)
-                    {
-                        region.EndFrame = Math.Max(region.StartFrame + 1, checked(region.EndFrame - durationFrames));
-                    }
-                }
+                RippleRulerRegionsForRemoval(project, [deleteSpan]);
             }
 
             if (rippleMode == AutoRippleMode.AllTracksAndMarkers)

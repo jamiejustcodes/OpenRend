@@ -754,7 +754,6 @@ public sealed partial class TimelineEditor
         }
 
         var shifts = new Dictionary<Guid, long>();
-        var markerShifts = new Dictionary<Guid, long>();
 
         if (ripple && delta != 0)
         {
@@ -778,10 +777,6 @@ public sealed partial class TimelineEditor
                         shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                     }
                 }
-                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                {
-                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
-                }
             }
             else // AutoRippleMode.AllTracksAndMarkers
             {
@@ -791,10 +786,6 @@ public sealed partial class TimelineEditor
                     {
                         shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                     }
-                }
-                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                {
-                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
                 }
             }
         }
@@ -807,11 +798,8 @@ public sealed partial class TimelineEditor
                 var (_, clip) = FindClip(clipId);
                 clip.StartFrame = newFrame;
             }
-            foreach (var (markerId, newFrame) in markerShifts)
-            {
-                var m = Project.Markers.FirstOrDefault(mk => mk.Id == markerId);
-                if (m != null) m.Frame = newFrame;
-            }
+            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
+                ShiftRulerAnnotations(Project, oldEnd, delta);
             if (source != target) { source.Clips.Remove(primary); target.Clips.Add(primary); }
 
             if (ripple && delta != 0)
@@ -867,7 +855,6 @@ public sealed partial class TimelineEditor
         }
 
         var shifts = new Dictionary<Guid, long>();
-        var markerShifts = new Dictionary<Guid, long>();
 
         if (ripple && delta != 0)
         {
@@ -891,10 +878,6 @@ public sealed partial class TimelineEditor
                         shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                     }
                 }
-                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                {
-                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
-                }
             }
             else // AutoRippleMode.AllTracksAndMarkers
             {
@@ -904,10 +887,6 @@ public sealed partial class TimelineEditor
                     {
                         shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                     }
-                }
-                foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                {
-                    markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
                 }
             }
         }
@@ -930,11 +909,8 @@ public sealed partial class TimelineEditor
                 var (_, clip) = FindClip(clipId);
                 clip.StartFrame = newFrame;
             }
-            foreach (var (markerId, newFrame) in markerShifts)
-            {
-                var m = Project.Markers.FirstOrDefault(mk => mk.Id == markerId);
-                if (m != null) m.Frame = newFrame;
-            }
+            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
+                ShiftRulerAnnotations(Project, oldEnd, delta);
             foreach (var clip in clipsToMove)
             {
                 source.Clips.Remove(clip);
@@ -1000,7 +976,6 @@ public sealed partial class TimelineEditor
         }
 
         var shifts = new Dictionary<Guid, long>();
-        var markerShifts = new Dictionary<Guid, long>();
 
         if (ripple)
         {
@@ -1028,10 +1003,6 @@ public sealed partial class TimelineEditor
                             shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                         }
                     }
-                    foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                    {
-                        markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
-                    }
                 }
                 else // AllTracksAndMarkers
                 {
@@ -1041,10 +1012,6 @@ public sealed partial class TimelineEditor
                         {
                             shifts[clip.Id] = Math.Max(0, checked(clip.StartFrame + delta));
                         }
-                    }
-                    foreach (var marker in Project.Markers.Where(m => m.Frame >= oldEnd))
-                    {
-                        markerShifts[marker.Id] = Math.Max(0, checked(marker.Frame + delta));
                     }
                 }
             }
@@ -1063,8 +1030,8 @@ public sealed partial class TimelineEditor
             foreach (var track in Project.Tracks)
                 foreach (var clip in track.Clips)
                     if (shifts.TryGetValue(clip.Id, out var pos)) clip.StartFrame = pos;
-            foreach (var marker in Project.Markers)
-                if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
+            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
+                ShiftRulerAnnotations(Project, oldEnd, delta);
 
             if (ripple && delta != 0)
             {
@@ -1223,6 +1190,9 @@ public sealed partial class TimelineEditor
                     if (shifts.TryGetValue(clip.Id, out var position)) clip.StartFrame = position;
             foreach (var marker in Project.Markers)
                 if (markerShifts.TryGetValue(marker.Id, out var mPos)) marker.Frame = mPos;
+
+            if (ripple && rippleMode != AutoRippleMode.AffectedTracks)
+                RippleRulerRegionsForRemoval(Project, CollapseSpans(selected.Select(item => item.Clip)));
 
             if (ripple)
             {

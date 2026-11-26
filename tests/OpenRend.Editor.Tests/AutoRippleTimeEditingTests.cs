@@ -304,8 +304,72 @@ public sealed class AutoRippleTimeEditingTests
         Assert.Contains("Deleted", vm.Status);
     });
 
+    [Theory]
+    [InlineData(AutoRippleMode.AffectedTracks, false)]
+    [InlineData(AutoRippleMode.AffectedTracksAndMarkers, true)]
+    [InlineData(AutoRippleMode.AllTracksAndMarkers, true)]
+    public void EventMoveAndTrimRippleTheRulerOnlyInTheRulerModes(AutoRippleMode mode, bool ripplesRuler)
+    {
+        var media = new MediaAsset { Path = "sample.mp4", DurationSeconds = 20, HasVideo = true };
+        var clip = new TimelineClip { MediaId = media.Id, StartFrame = 20, DurationFrames = 40 };
+        var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [clip] };
+        var doc = new ProjectDocument
+        {
+            Media = [media], Tracks = [track], Markers = [new() { Frame = 60 }],
+            Regions = [new() { StartFrame = 10, EndFrame = 60 }, new() { StartFrame = 55, EndFrame = 70 },
+                new() { StartFrame = 60, EndFrame = 90 }]
+        };
+        var editor = new TimelineEditor(doc);
+        var initialRanges = doc.Regions.Select(region => (region.StartFrame, region.EndFrame)).ToArray();
+        (long Start, long End)[] shiftedRanges = [(10, 60), (55, 80), (70, 100)];
+
+        editor.MoveSelection([clip.Id], clip.Id, track.Id, 30, ripple: true, rippleMode: mode);
+        CheckShift();
+        Assert.True(editor.Undo());
+        Assert.Equal(initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+        Assert.Equal(60, Assert.Single(doc.Markers).Frame);
+
+        editor.TrimSelection(clip.Id, 20, 0, 50, ripple: true, rippleMode: mode);
+        CheckShift();
+
+        void CheckShift()
+        {
+            Assert.Equal(ripplesRuler ? shiftedRanges : initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+            Assert.Equal(ripplesRuler ? 70 : 60, Assert.Single(doc.Markers).Frame);
+        }
+    }
+
     [Fact]
-    public void EditorViewModel_PlaceSubclip_And_Paste_AutoRipple_ShiftsTrackAndBusEnvelopes() => RunSta(() =>
+    public void DeleteEventsRipplesRegionsThroughDisjointRemovedSpans()
+    {
+        var media = new MediaAsset { Path = "sample.mp4", DurationSeconds = 20, HasVideo = true };
+        var first = new TimelineClip { MediaId = media.Id, StartFrame = 20, DurationFrames = 20 };
+        var second = new TimelineClip { MediaId = media.Id, StartFrame = 50, DurationFrames = 10 };
+        var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [first, second] };
+        var doc = new ProjectDocument
+        {
+            Media = [media], Tracks = [track],
+            Regions =
+            [
+                new() { StartFrame = 15, EndFrame = 55 },
+                new() { StartFrame = 20, EndFrame = 40 },
+                new() { StartFrame = 45, EndFrame = 65 },
+                new() { StartFrame = 60, EndFrame = 80 }
+            ]
+        };
+        var editor = new TimelineEditor(doc);
+        var initialRanges = doc.Regions.Select(region => (region.StartFrame, region.EndFrame)).ToArray();
+
+        editor.DeleteSelection([first.Id, second.Id], ripple: true, rippleMode: AutoRippleMode.AllTracksAndMarkers);
+
+        (long Start, long End)[] expected = [(15, 30), (25, 35), (30, 50)];
+        Assert.Equal(expected, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+        Assert.True(editor.Undo());
+        Assert.Equal(initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+    }
+
+    [Fact]
+    public void PlaceSubclipAndPasteRippleRegionsTrackAndBusEnvelopes() => RunSta(() =>
     {
         var mediaService = new MediaService();
         var renderer = new TimelineRenderService(mediaService);
@@ -352,6 +416,7 @@ public sealed class AutoRippleTimeEditingTests
             ]
         };
         vm.Project.AudioBuses = [bus];
+        vm.Project.Regions = [new() { StartFrame = 30, EndFrame = 50 }];
 
         vm.Ripple = true;
         vm.RippleMode = AutoRippleMode.AllTracksAndMarkers;
@@ -363,6 +428,15 @@ public sealed class AutoRippleTimeEditingTests
         Assert.Equal(55, t.Clips.First(c => c.Id == clip2.Id).StartFrame); // 40 + 15 = 55
         Assert.Equal(60, t.Envelopes![0].Points[1].Frame); // 45 + 15 = 60
         Assert.Equal(65, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame); // 50 + 15 = 65
+        Assert.Equal((30L, 65L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
+
+        vm.Copy();
+        vm.Position = 30;
+        vm.Paste();
+
+        Assert.Equal((45L, 80L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
+        Assert.Equal(75, t.Envelopes![0].Points[1].Frame);
+        Assert.Equal(80, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame);
     });
 
     [Fact]

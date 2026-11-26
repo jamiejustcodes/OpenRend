@@ -2754,7 +2754,7 @@ public partial class MainWindow : Window
     private static string GetRippleModeDescription(AutoRippleMode mode) => mode switch
     {
         AutoRippleMode.AffectedTracks => "Affected Tracks",
-        AutoRippleMode.AffectedTracksAndMarkers => "Affected Tracks, Bus Tracks, Markers",
+        AutoRippleMode.AffectedTracksAndMarkers => "Affected Tracks, Bus Tracks, Markers and Regions",
         AutoRippleMode.AllTracksAndMarkers => "All Tracks, Markers, Regions",
         _ => mode.ToString()
     };

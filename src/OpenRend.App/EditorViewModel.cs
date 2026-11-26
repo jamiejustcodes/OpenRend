@@ -426,6 +426,8 @@ public sealed class EditorViewModel : ObservableObject
             {
                 var affectedTrackIds = new HashSet<Guid> { target.Id };
                 if (audioTrack is not null) affectedTrackIds.Add(audioTrack.Id);
+                if (mode != AutoRippleMode.AffectedTracks)
+                    TimelineEditor.ShiftRulerAnnotations(p, start, duration);
 
                 if (mode == AutoRippleMode.AffectedTracks)
                 {
@@ -446,8 +448,6 @@ public sealed class EditorViewModel : ObservableObject
                         foreach (var bus in p.AudioBuses)
                             if (bus.Envelopes != null)
                                 foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
-                    foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
-                        m.Frame += duration;
                 }
                 else // AllTracksAndMarkers
                 {
@@ -464,8 +464,6 @@ public sealed class EditorViewModel : ObservableObject
                                 foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
                     if (p.MasterAudioEnvelopes != null)
                         foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(start, duration);
-                    foreach (var m in p.Markers.Where(mk => mk.Frame >= start))
-                        m.Frame += duration;
                 }
             }
 
@@ -774,6 +772,8 @@ public sealed class EditorViewModel : ObservableObject
             {
                 var destinationTrackIds = destinations.Values.Select(d => d.Id).ToHashSet();
                 var rippleMode = forceInsertRipple && !Ripple ? AutoRippleMode.AffectedTracks : RippleMode;
+                if (rippleMode != AutoRippleMode.AffectedTracks)
+                    TimelineEditor.ShiftRulerAnnotations(p, at, totalPasteSpan);
                 if (rippleMode == AutoRippleMode.AffectedTracks)
                 {
                     foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
@@ -793,8 +793,6 @@ public sealed class EditorViewModel : ObservableObject
                         foreach (var bus in p.AudioBuses)
                             if (bus.Envelopes != null)
                                 foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
-                    foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
-                        m.Frame += totalPasteSpan;
                 }
                 else // AllTracksAndMarkers
                 {
@@ -811,8 +809,6 @@ public sealed class EditorViewModel : ObservableObject
                                 foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
                     if (p.MasterAudioEnvelopes != null)
                         foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(at, totalPasteSpan);
-                    foreach (var m in p.Markers.Where(mk => mk.Frame >= at))
-                        m.Frame += totalPasteSpan;
                 }
             }
 

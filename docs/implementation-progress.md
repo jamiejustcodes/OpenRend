@@ -16,6 +16,10 @@ Open floating panes also recheck their work area when Windows reports a display 
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.
 
+## Auto Ripple and ruler regions
+
+Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.
+
 ## Timeline track height
 
 Use Track height on a track header's context menu to minimize, expand, or restore that row. The view recalculates event, drop target, automation envelope, and accessibility bounds together. These choices apply to the current project session. Focused layout and accessibility tests passed, followed by all 27 current-executable desktop workflows, including the track header context menu.
