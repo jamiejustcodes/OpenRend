@@ -435,6 +435,16 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
             {
                 var window = running.Window;
                 VerifyLoadedWorkspace(window);
+                Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);
+                Chord(window, VirtualKeyShort.KEY_S);
+                WaitFor(() => Find(window, "UndoButton").IsEnabled, "S did not split the event under an unselected cursor.");
+                SaveButton(window).Invoke();
+                var cursorSplit = (await WaitForSavedClipsAsync(projectPath, 2)).Tracks[0].Clips.OrderBy(clip => clip.StartFrame).ToArray();
+                Assert.Equal((1L, 1L, 89L), (cursorSplit[1].StartFrame, cursorSplit[1].SourceInFrame, cursorSplit[1].DurationFrames));
+                Find(window, "UndoButton").AsButton().Invoke();
+                SaveButton(window).Invoke();
+                await WaitForSavedClipsAsync(projectPath, 1);
+                Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.HOME);
                 VerifyVideoPlayback(window);
                 await VerifyTrimPointerAsync(window, projectPath);
                 try { await VerifyTimelineProvidersAsync(window, projectPath); }
@@ -467,7 +477,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
                 AssertSplitRanges(await ProjectStore.LoadAsync(projectPath));
 
                 Find(window, "UndoButton").AsButton().Invoke();
-                WaitFor(() => Find(window, "RedoButton").IsEnabled, "Undo did not enable redo.");
+                WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RedoButton"))?.IsEnabled == true, "Undo did not enable redo.");
                 SaveButton(window).Invoke();
                 var unsplit = await WaitForSavedClipsAsync(projectPath, 1);
                 Assert.Equal(90, Assert.Single(unsplit.Tracks[0].Clips).DurationFrames);

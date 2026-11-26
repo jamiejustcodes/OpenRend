@@ -34,10 +34,11 @@ public sealed partial class TimelineView
         {
             var sx = X(region.StartFrame);
             var ex = X(region.EndFrame);
-            if (ex < HeaderWidth - 20 || sx > ActualWidth + 40) continue;
+            var left = Math.Max(HeaderWidth, sx);
+            var right = Math.Min(ActualWidth, ex);
+            if (right <= left) continue;
 
             var regionBrush = Brush(region.ColorHex);
-            var spanWidth = Math.Max(4, ex - sx);
 
             // Vertical guidelines down through tracks for start and end
             if (sx >= HeaderWidth)
@@ -53,8 +54,8 @@ public sealed partial class TimelineView
 
             // Top connecting bar across the region span
             var fillBrush = Brush(region.ColorHex.Length == 7 ? "#40" + region.ColorHex.Substring(1) : region.ColorHex);
-            dc.DrawRectangle(fillBrush, null, new Rect(Math.Max(HeaderWidth, sx), 1, Math.Min(ex, ActualWidth) - Math.Max(HeaderWidth, sx), 10));
-            dc.DrawLine(FrozenPen(region.ColorHex, 2), new Point(Math.Max(HeaderWidth, sx), 1), new Point(Math.Min(ex, ActualWidth), 1));
+            dc.DrawRectangle(fillBrush, null, new Rect(left, 1, right - left, 10));
+            dc.DrawLine(FrozenPen(region.ColorHex, 2), new Point(left, 1), new Point(right, 1));
 
             // Start flag (pointing right)
             if (sx >= HeaderWidth - 10)

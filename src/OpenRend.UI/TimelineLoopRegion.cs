@@ -48,6 +48,11 @@ public sealed partial class TimelineView
         LoopRegion = other == loopAnchor ? null : new FrameRange(start, Math.Abs(other - loopAnchor));
     }
 
+    private void RestoreLoopBeforeDrag()
+    {
+        LoopRegion = loopBeforeDrag is { } range && range.EndFrame <= Project.DurationFrames ? range : null;
+    }
+
     private void DrawLoopRegion(DrawingContext dc)
     {
         if (LoopRegion is not { } range) return;

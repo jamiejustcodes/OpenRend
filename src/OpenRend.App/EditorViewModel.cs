@@ -483,12 +483,26 @@ public sealed class EditorViewModel : ObservableObject
         PlaceSubclip(mediaId, sourceIn, targetDuration, trackId, at: targetRange.StartFrame, advanceCursor: true, stream: stream, playbackRate: rate);
     }
 
-    public void Split()
+    public void Split(int? focusedTrackIndex = null)
     {
-        if (!Project.Tracks.SelectMany(t => t.Clips).Any(c => Selection.Contains(c.Id) && c.StartFrame < Position && c.EndFrame > Position))
-        { Status = "Select a clip and place the cursor inside it to split."; return; }
-        Editor.SplitSelection(Selection, Position, IgnoreGroups);
-        Status = "Split selection at cursor.";
+        var frame = Position;
+        bool CrossesCursor(TimelineClip clip) => clip.StartFrame < frame && frame < clip.EndFrame;
+        var targets = Editor.ExpandSelection(Selection, IgnoreGroups);
+        if (targets.Count == 0)
+        {
+            var focusedTrack = Project.Tracks.ElementAtOrDefault(focusedTrackIndex ?? ActiveTrackIndex);
+            var clip = focusedTrack?.Clips.LastOrDefault(CrossesCursor) ?? Project.Tracks
+                .Select(track => track.Clips.LastOrDefault(CrossesCursor)).FirstOrDefault(candidate => candidate is not null);
+            if (clip is not null) targets.Add(clip.Id);
+        }
+
+        if (!Project.Tracks.Any(track => track.Clips.Any(clip => targets.Contains(clip.Id) && CrossesCursor(clip))))
+        {
+            Status = "Place the cursor inside an event to split it.";
+            return;
+        }
+        var count = Editor.SplitSelection(targets, frame, IgnoreGroups).Count;
+        Status = count == 1 ? "Split event at cursor." : $"Split {count} events at cursor.";
     }
     public void SmartSplit(long? startFrame = null, long? durationFrames = null, int? overlapFrames = null, AutoRippleMode? rippleMode = null)
     {

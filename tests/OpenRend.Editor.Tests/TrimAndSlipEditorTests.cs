@@ -52,7 +52,11 @@ public sealed class TrimAndSlipEditorTests
             MediaId = media.Id,
             StartFrame = 100,
             SourceInFrame = 20,
-            DurationFrames = 50
+            DurationFrames = 50,
+            FadeInFrames = 8,
+            FadeOutFrames = 12,
+            FadeDurationFrames = 60,
+            FadeOffsetFrames = 5
         };
         track.Clips.Add(clip);
 
@@ -63,6 +67,10 @@ public sealed class TrimAndSlipEditorTests
         Assert.Equal(100, current.StartFrame);
         Assert.Equal(50, current.DurationFrames);
         Assert.Equal(35, current.SourceInFrame);
+        Assert.Equal(8, current.FadeInFrames);
+        Assert.Equal(12, current.FadeOutFrames);
+        Assert.Equal(60, current.FadeDurationFrames);
+        Assert.Equal(5, current.FadeOffsetFrames);
 
         // Test Undo
         editor.Undo();
@@ -115,6 +123,32 @@ public sealed class TrimAndSlipEditorTests
         Assert.Equal(100, undone[2].StartFrame);
         Assert.Equal(0, undone[2].SourceInFrame);
         Assert.Equal(50, undone[2].DurationFrames);
+    }
+
+    [Fact]
+    public void SlideMovesLinkedEventsAndLeavesClipsAcrossGapsUntouched()
+    {
+        var (editor, media, track) = CreateEditorWithMedia();
+        var group = Guid.NewGuid();
+        var beforeGap = new TimelineClip { MediaId = media.Id, DurationFrames = 30 };
+        var first = new TimelineClip { MediaId = media.Id, GroupId = group, StartFrame = 50, DurationFrames = 50, SourceInFrame = 7 };
+        var afterGap = new TimelineClip { MediaId = media.Id, StartFrame = 120, DurationFrames = 35 };
+        track.Clips.AddRange([beforeGap, first, afterGap]);
+        var linked = new TimelineClip { MediaId = media.Id, GroupId = group, StartFrame = 50, DurationFrames = 50, SourceInFrame = 17 };
+        var touching = new TimelineClip { MediaId = media.Id, StartFrame = 100, DurationFrames = 40 };
+        editor.Project.Tracks.Add(new TimelineTrack { Kind = TrackKind.Video, Clips = [linked, touching] });
+
+        editor.SlideClip(first.Id, 6);
+
+        Assert.Equal((56L, 7L), (first.StartFrame, first.SourceInFrame));
+        Assert.Equal((56L, 17L), (linked.StartFrame, linked.SourceInFrame));
+        Assert.Equal((106L, 6L, 34L), (touching.StartFrame, touching.SourceInFrame, touching.DurationFrames));
+        Assert.Equal(30, beforeGap.DurationFrames);
+        Assert.Equal((120L, 35L), (afterGap.StartFrame, afterGap.DurationFrames));
+        Assert.True(editor.Undo());
+        Assert.False(editor.CanUndo);
+        Assert.Equal(50, editor.Project.Tracks[0].Clips[1].StartFrame);
+        Assert.Equal(50, editor.Project.Tracks[1].Clips[0].StartFrame);
     }
 
     [Fact]

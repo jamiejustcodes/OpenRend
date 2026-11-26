@@ -205,7 +205,7 @@ public partial class MainWindow : Window
                     ? "Default Dissolve applied to the dropped overlap."
                     : $"{gesture.Transition.Kind} ({gesture.Transition.Preset}) applied to the dropped overlap.");
         });
-        Timeline.SplitRequested += () => Guard(vm.Split);
+        Timeline.SplitRequested += SplitAtCursor;
         Timeline.OverlapToCutRequested += (outgoing, incoming) => Guard(() =>
         {
             Pause();
@@ -291,11 +291,9 @@ public partial class MainWindow : Window
         });
         Timeline.RegionSelected += region => Guard(() =>
         {
-            Pause();
-            vm.LoopRegion = new FrameRange(region.StartFrame, region.EndFrame);
-            vm.Position = region.StartFrame;
-            UpdatePosition();
-            RequestPreview();
+            Pause(region.StartFrame);
+            var end = Math.Min(region.EndFrame, vm.Project.DurationFrames);
+            Timeline.LoopRegion = end > region.StartFrame ? new FrameRange(region.StartFrame, end - region.StartFrame) : null;
             vm.Status = $"Region {region.Index}: {region.Label} ({TimelineView.FormatTimecode(region.StartFrame, vm.Project.FrameRate)} - {TimelineView.FormatTimecode(region.EndFrame, vm.Project.FrameRate)})";
         });
         Timeline.RegionEditRequested += region => OpenRegionEdit(region);
@@ -1517,8 +1515,8 @@ public partial class MainWindow : Window
             else
             {
                 vm.Editor.TrimSelection(gesture.ClipId, gesture.Start, gesture.SourceIn, gesture.Duration, ignoreGroups, gesture.Ripple, gesture.RippleMode);
+                vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
             }
-            vm.Status = $"Trimmed event duration to {gesture.Duration} frames.";
         }
         Refresh();
     }
@@ -1701,7 +1699,8 @@ public partial class MainWindow : Window
     private void MuteMasterClick(object sender, RoutedEventArgs e) { masterMuted = !masterMuted; MasterGainChanged(sender, new(MasterGain.Value, MasterGain.Value)); }
     private void UndoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Undo(); });
     private void RedoClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Editor.Redo(); });
-    private void SplitClick(object sender, RoutedEventArgs e) => Guard(() => { Pause(); vm.Split(); });
+    private void SplitClick(object sender, RoutedEventArgs e) => SplitAtCursor();
+    private void SplitAtCursor() => Guard(() => { Pause(); vm.Split(Timeline.ActiveTrackIndex); });
     private void SmartSplitClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
         Pause();
@@ -2460,9 +2459,9 @@ public partial class MainWindow : Window
     {
         Pause();
         var startFrame = vm.Position;
-        var endFrame = vm.Position + (long)Math.Round(vm.Project.FrameRate.Value * 2);
+        var endFrame = checked(startFrame + Math.Max(1, vm.Project.FrameRate.Frames(2)));
 
-        if (vm.LoopRegion is { } loop && loop.EndFrame > loop.StartFrame)
+        if (Timeline.LoopRegion is { } loop)
         {
             startFrame = loop.StartFrame;
             endFrame = loop.EndFrame;
@@ -2595,9 +2594,16 @@ public partial class MainWindow : Window
     }
     private void LinkClick(object sender, RoutedEventArgs e) => GroupCreateClick(sender, e);
     private void UnlinkClick(object sender, RoutedEventArgs e) => GroupRemoveClick(sender, e);
-    private void IgnoreGroupsClick(object sender, RoutedEventArgs e)
+    private void IgnoreGroupsClick(object sender, RoutedEventArgs e) => SetIgnoreGroups(sender switch
     {
-        vm.IgnoreGroups = sender == IgnoreGroupsToggle ? (IgnoreGroupsToggle.IsChecked == true) : (IgnoreGroupsMenu.IsChecked = !IgnoreGroupsMenu.IsChecked);
+        MenuItem menu => menu.IsChecked,
+        System.Windows.Controls.Primitives.ToggleButton toggle => toggle.IsChecked == true,
+        _ => !vm.IgnoreGroups
+    });
+
+    private void SetIgnoreGroups(bool ignore)
+    {
+        vm.IgnoreGroups = ignore;
         if (IgnoreGroupsToggle is not null) IgnoreGroupsToggle.IsChecked = vm.IgnoreGroups;
         if (IgnoreGroupsMenu is not null) IgnoreGroupsMenu.IsChecked = vm.IgnoreGroups;
         Timeline.IgnoreGroups = vm.IgnoreGroups;
@@ -3360,7 +3366,7 @@ public partial class MainWindow : Window
             Key.F when !ctrl && !shift && !alt => () => SetRippleMode(AutoRippleMode.AffectedTracks),
             Key.F when ctrl && shift && !alt => () => SetRippleMode(AutoRippleMode.AffectedTracksAndMarkers),
             Key.F when ctrl && !shift && alt => () => SetRippleMode(AutoRippleMode.AllTracksAndMarkers),
-            Key.U when ctrl && shift => () => { IgnoreGroupsClick(IgnoreGroupsToggle ?? (object)this, e); },
+            Key.U when ctrl && shift && !alt => () => SetIgnoreGroups(!vm.IgnoreGroups),
             Key.A when ctrl => () => SelectAllClick(this, e),
             Key.C when ctrl => () => CopyClick(this, e),
             Key.X when ctrl => () => CutClick(this, e),

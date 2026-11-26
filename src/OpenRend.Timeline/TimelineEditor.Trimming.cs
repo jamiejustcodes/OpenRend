@@ -1,69 +1,96 @@
+using OpenRend.Core;
+
 namespace OpenRend.Timeline;
 
 public sealed partial class TimelineEditor
 {
     /// <summary>
-    /// Performs a Vegas Pro 1:1 Slip Edit: shifts media in-point without altering timeline placement or length.
+    /// Shifts the source in-point while keeping event timing and envelopes in place.
     /// </summary>
     public void SlipClip(Guid clipId, long sourceDelta, bool ignoreGroups = false)
     {
-        var (track, clip) = FindClip(clipId);
-        TrimSelection(clipId, clip.StartFrame, clip.SourceInFrame + sourceDelta, clip.DurationFrames, ignoreGroups);
+        var selected = SelectedClips([clipId], ignoreGroups);
+        if (selected.Count == 0) throw new KeyNotFoundException("Clip was not found.");
+        if (sourceDelta == 0) return;
+        var changes = new Dictionary<TimelineClip, long>();
+        foreach (var (track, clip) in selected)
+        {
+            EnsureUnlocked(track, clip);
+            var sourceIn = checked(clip.SourceInFrame + sourceDelta);
+            var slipped = clip.DeepClone();
+            slipped.SourceInFrame = clip.VideoSourceMode == VideoSourceMode.HoldLastFrame ? Math.Max(0, sourceIn) : sourceIn;
+            EnsureSourceBounds(slipped, Project.Media.Single(media => media.Id == slipped.MediaId));
+            if (slipped.SourceInFrame != clip.SourceInFrame)
+                changes.Add(clip, slipped.SourceInFrame);
+        }
+        if (changes.Count > 0)
+            Execute(_ => { foreach (var (clip, sourceIn) in changes) clip.SourceInFrame = sourceIn; });
     }
 
     /// <summary>
-    /// Performs a Vegas Pro 1:1 Slide Edit: moves event along timeline while simultaneously trimming
-    /// adjacent predecessor (tail) and successor (head) events on the same track.
+    /// Moves events together and shifts the shared cuts with touching neighbors.
     /// </summary>
     public void SlideClip(Guid clipId, long delta, bool ignoreGroups = false)
     {
         if (delta == 0) return;
-        var (track, primary) = FindClip(clipId);
-        EnsureUnlocked(track, primary);
-
-        var ordered = track.Clips.OrderBy(c => c.StartFrame).ToList();
-        var idx = ordered.IndexOf(primary);
-        var predecessor = idx > 0 ? ordered[idx - 1] : null;
-        var successor = idx < ordered.Count - 1 ? ordered[idx + 1] : null;
-
-        var predClone = predecessor?.DeepClone();
-        var succClone = successor?.DeepClone();
-        var primClone = primary.DeepClone();
-
-        primClone.StartFrame += delta;
-        EnsureTimelineBounds(primClone);
-
-        if (predClone != null)
+        var selected = SelectedClips([clipId], ignoreGroups);
+        if (selected.Count == 0) throw new KeyNotFoundException("Clip was not found.");
+        var moving = selected.Select(item => item.Clip.Id).ToHashSet();
+        var cuts = new Dictionary<TimelineClip, (long Start, long End)>();
+        foreach (var (track, clip) in selected)
         {
-            EnsureUnlocked(track, predecessor!);
-            predClone.DurationFrames += delta;
-            if (predClone.DurationFrames < 1) throw new InvalidOperationException("Slide exceeds predecessor event length.");
-            EnsureSourceBounds(predClone, Project.Media.Single(m => m.Id == predClone.MediaId));
+            EnsureUnlocked(track, clip);
+            cuts.Add(clip, (delta, delta));
+            if (track.Clips.LastOrDefault(candidate => !moving.Contains(candidate.Id) && candidate.EndFrame == clip.StartFrame) is { } before)
+            {
+                EnsureUnlocked(track, before);
+                cuts[before] = (cuts.GetValueOrDefault(before).Start, delta);
+            }
+            if (track.Clips.LastOrDefault(candidate => !moving.Contains(candidate.Id) && candidate.StartFrame == clip.EndFrame) is { } after)
+            {
+                EnsureUnlocked(track, after);
+                cuts[after] = (delta, cuts.GetValueOrDefault(after).End);
+            }
         }
 
-        if (succClone != null)
+        var changes = new Dictionary<TimelineClip, TimelineClip>();
+        foreach (var (clip, (start, end)) in cuts)
         {
-            EnsureUnlocked(track, successor!);
-            succClone.StartFrame += delta;
-            succClone.SourceInFrame += delta;
-            succClone.DurationFrames -= delta;
-            if (succClone.DurationFrames < 1) throw new InvalidOperationException("Slide exceeds successor event length.");
-            EnsureTimelineBounds(succClone);
-            EnsureSourceBounds(succClone, Project.Media.Single(m => m.Id == succClone.MediaId));
+            var changed = clip.DeepClone();
+            changed.StartFrame = checked(changed.StartFrame + start);
+            if (!moving.Contains(clip.Id))
+            {
+                changed.DurationFrames = checked(changed.DurationFrames + end - start);
+                var sourceDelta = (clip.IsReversed ? -(double)end : start) * Math.Abs(clip.PlaybackRate);
+                changed.SourceInFrame = checked(changed.SourceInFrame + (long)Math.Round(sourceDelta));
+                if (clip.VideoSourceMode == VideoSourceMode.HoldLastFrame)
+                    changed.SourceInFrame = Math.Max(0, changed.SourceInFrame);
+                if (changed.Crop is not null)
+                    changed.CropOffsetFrames = checked(changed.CropOffsetFrames + start);
+
+                // Reset the fade envelope just as an ordinary edge trim does.
+                changed.FadeInFrames = Math.Min(changed.FadeInFrames, changed.DurationFrames);
+                changed.FadeOutFrames = Math.Min(changed.FadeOutFrames, changed.DurationFrames - changed.FadeInFrames);
+                changed.FadeDurationFrames = null;
+                changed.FadeOffsetFrames = 0;
+            }
+            EnsureTimelineBounds(changed);
+            EnsureSourceBounds(changed, Project.Media.Single(media => media.Id == changed.MediaId));
+            changes.Add(clip, changed);
         }
 
         Execute(_ =>
         {
-            primary.StartFrame = primClone.StartFrame;
-            if (predecessor != null && predClone != null)
+            foreach (var (clip, changed) in changes)
             {
-                predecessor.DurationFrames = predClone.DurationFrames;
-            }
-            if (successor != null && succClone != null)
-            {
-                successor.StartFrame = succClone.StartFrame;
-                successor.SourceInFrame = succClone.SourceInFrame;
-                successor.DurationFrames = succClone.DurationFrames;
+                clip.StartFrame = changed.StartFrame;
+                clip.DurationFrames = changed.DurationFrames;
+                clip.SourceInFrame = changed.SourceInFrame;
+                clip.CropOffsetFrames = changed.CropOffsetFrames;
+                clip.FadeInFrames = changed.FadeInFrames;
+                clip.FadeOutFrames = changed.FadeOutFrames;
+                clip.FadeDurationFrames = changed.FadeDurationFrames;
+                clip.FadeOffsetFrames = changed.FadeOffsetFrames;
             }
         });
     }

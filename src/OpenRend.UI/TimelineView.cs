@@ -23,9 +23,9 @@ public sealed partial class TimelineView : FrameworkElement
         get => project;
         set
         {
-            if (!ReferenceEquals(project, value)) loopRegion = null;
+            var replaced = !ReferenceEquals(project, value);
             project = value ?? throw new ArgumentNullException(nameof(value));
-            if (loopRegion is { } range && range.EndFrame > project.DurationFrames) loopRegion = null;
+            if (replaced || loopRegion is { } range && range.EndFrame > project.DurationFrames) LoopRegion = null;
             if (levelTrack is { } levelId && project.Tracks.All(t => t.Id != levelId)) CancelTrackLevelInput();
             ActiveTrackIndex = Math.Clamp(ActiveTrackIndex, 0, Math.Max(0, project.Tracks.Count - 1));
             (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
@@ -241,7 +241,7 @@ public sealed partial class TimelineView : FrameworkElement
     public void CancelPointerInput()
     {
         pressedEventButton = null;
-        if (selectingLoop) loopRegion = loopBeforeDrag;
+        if (selectingLoop) RestoreLoopBeforeDrag();
         selectingLoop = false;
         isDragging = false; alreadySelectedOnDown = false;
         FinishSeeking();
@@ -1658,9 +1658,8 @@ public sealed partial class TimelineView : FrameworkElement
         if (HandleEnvelopeMouseDown(origin, e)) { e.Handled = true; return; }
         if (HitRegion(origin) is { } hitRegion)
         {
-            SeekRequested?.Invoke(hitRegion.StartFrame);
-            RegionSelected?.Invoke(hitRegion);
-            if (e.ClickCount == 2) RegionEditRequested?.Invoke(hitRegion);
+            if (e.ClickCount == 2) RegionSelected?.Invoke(hitRegion);
+            else SeekRequested?.Invoke(hitRegion.StartFrame);
             e.Handled = true;
             return;
         }
@@ -2256,7 +2255,8 @@ public sealed partial class TimelineView : FrameworkElement
         var commitDragTrack = dragTrack;
         var commitOrigin = origin;
         var commitAlreadySelected = alreadySelectedOnDown;
-        var commitIgnoreGroups = ShouldIgnoreGroups || modifiers.HasFlag(ModifierKeys.Alt);
+        var commitIgnoreGroups = IgnoreGroups || (commitMode is not ("Slip" or "Slide") &&
+            (ShouldIgnoreGroups || modifiers.HasFlag(ModifierKeys.Alt)));
 
         // Reset drag fields before releasing capture so OnLostMouseCapture is a no-op
         isDragging = false;
@@ -2461,7 +2461,7 @@ public sealed partial class TimelineView : FrameworkElement
         marqueeRect = Rect.Empty;
         isZooming = false;
         zoomRect = Rect.Empty;
-        if (selectingLoop) loopRegion = loopBeforeDrag;
+        if (selectingLoop) RestoreLoopBeforeDrag();
         selectingLoop = false;
         pressedEventButton = null;
         adjustingLevel = false;

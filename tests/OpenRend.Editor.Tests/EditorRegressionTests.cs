@@ -14,6 +14,39 @@ namespace OpenRend.Editor.Tests;
 public sealed class EditorRegressionTests
 {
     [Fact]
+    public void SplitWithoutSelectionTargetsTheTopEventOnTheFocusedTrack()
+    {
+        using var media = new MediaService(); using var renderer = new TimelineRenderService(media);
+        var vm = new EditorViewModel(media, renderer, new ExportService(renderer));
+        var asset = new MediaAsset { Path = "source.mp4", DurationSeconds = 5, HasVideo = true };
+        var earlier = new TimelineClip { MediaId = asset.Id, DurationFrames = 80 };
+        var target = new TimelineClip { MediaId = asset.Id, StartFrame = 20, DurationFrames = 60, SourceInFrame = 10 };
+        vm.Replace(new ProjectDocument
+        {
+            FrameRate = new(30000, 1001), Media = [asset], Tracks =
+            [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = asset.Id, DurationFrames = 90 }] },
+             new() { Kind = TrackKind.Video, Clips = [earlier, target] }]
+        }, "split.openrend");
+
+        vm.Position = 30;
+        vm.Split(focusedTrackIndex: 1);
+
+        Assert.Single(vm.Project.Tracks[0].Clips);
+        Assert.Equal(80, earlier.DurationFrames);
+        Assert.Equal(10, target.DurationFrames);
+        var right = Assert.Single(vm.Project.Tracks[1].Clips, clip => clip.StartFrame == 30);
+        Assert.Equal((20L, 50L), (right.SourceInFrame, right.DurationFrames));
+        Assert.Empty(vm.Selection);
+        Assert.True(vm.Editor.Undo());
+        Assert.Equal(2, vm.Project.Tracks[1].Clips.Count);
+        Assert.False(vm.Editor.CanUndo);
+
+        vm.Position = 0;
+        vm.Split(focusedTrackIndex: 1);
+        Assert.False(vm.Editor.CanUndo);
+    }
+
+    [Fact]
     public void OneFrameClipWithCachedThumbnailRendersAtNormalZoom()
     {
         Exception? failure = null;
