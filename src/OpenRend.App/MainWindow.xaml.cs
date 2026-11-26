@@ -638,7 +638,7 @@ public partial class MainWindow : Window
             vm.LoopRegion = range;
             UpdateWorkspaceSelectionDuration();
         };
-        TrimmerDeck.Initialize(vm);
+        TrimmerDeck.Initialize(vm, () => vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex));
         InitializeWorkspacePanes();
         vm.Changed += Refresh;
         vm.Changed += () =>

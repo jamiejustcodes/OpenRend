@@ -23,6 +23,7 @@ namespace OpenRend.App;
 public sealed class TrimmerControl : UserControl
 {
     private EditorViewModel? vm;
+    private Func<TimelineTrack?>? getActiveTrack;
     private MediaAsset? activeMedia;
     private long totalFrames;
     private long inFrame;
@@ -306,9 +307,10 @@ public sealed class TrimmerControl : UserControl
         KeyDown += OnTrimmerKeyDown;
     }
 
-    public void Initialize(EditorViewModel viewModel)
+    public void Initialize(EditorViewModel viewModel, Func<TimelineTrack?>? activeTrack = null)
     {
         vm = viewModel;
+        getActiveTrack = activeTrack;
     }
 
     public async void LoadMedia(MediaAsset media, FrameRange? sourceRange = null)
@@ -542,12 +544,20 @@ public sealed class TrimmerControl : UserControl
 
     private FrameRange PlacementRange => outFrame > inFrame ? new(inFrame, outFrame - inFrame) : new(0, totalFrames);
 
+    private Guid? PlacementTrackId(MediaAsset media)
+    {
+        if (getActiveTrack?.Invoke() is not { IsLocked: false, IsAdjustmentTrack: false } track)
+            return null;
+        var kind = streamMode == TrimmerPlacementStream.AudioOnly || !media.HasVideo ? TrackKind.Audio : TrackKind.Video;
+        return track.Kind == kind ? track.Id : null;
+    }
+
     public void AddSubclipToTimeline()
     {
         if (activeMedia is null || vm is null) return;
         var source = PlacementRange;
         AddToTimelineRequested?.Invoke(activeMedia.Id, source.StartFrame, source.FrameCount);
-        vm.PlaceSubclip(activeMedia.Id, source.StartFrame, source.FrameCount, stream: streamMode);
+        vm.PlaceSubclip(activeMedia.Id, source.StartFrame, source.FrameCount, PlacementTrackId(activeMedia), stream: streamMode);
         vm.Status = $"Placed subclip '{activeMedia.Name}' [{source.StartFrame}..{source.EndFrame}] on timeline ({streamMode}).";
     }
 
@@ -556,7 +566,7 @@ public sealed class TrimmerControl : UserControl
         if (activeMedia is null || vm is null) return;
         if (vm.Position <= 0) { vm.Status = "Move the cursor beyond the start to place media up to it."; return; }
         var source = PlacementRange;
-        vm.PlaceSubclipUpToCursor(activeMedia.Id, source.StartFrame, source.FrameCount, stream: streamMode);
+        vm.PlaceSubclipUpToCursor(activeMedia.Id, source.StartFrame, source.FrameCount, PlacementTrackId(activeMedia), stream: streamMode);
         vm.Status = $"Placed subclip '{activeMedia.Name}' up to the timeline cursor ({streamMode}).";
     }
 
@@ -570,7 +580,7 @@ public sealed class TrimmerControl : UserControl
             return;
         }
 
-        vm.PlaceSubclipFitToFill(activeMedia.Id, inFrame, duration, targetRange, stream: streamMode);
+        vm.PlaceSubclipFitToFill(activeMedia.Id, inFrame, duration, targetRange, PlacementTrackId(activeMedia), stream: streamMode);
         vm.Status = $"Fit to Fill '{activeMedia.Name}' [{inFrame}..{outFrame}] into timeline range [{targetRange.StartFrame}..{targetRange.EndFrame}].";
     }
 

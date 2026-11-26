@@ -34,7 +34,7 @@ The Master Bus also displays integrated loudness for the current playback pass. 
 
 ## Source workflows
 
-Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. Shift+A ends the placement at the timeline cursor and retains the selected source Out point if the placement reaches the project start. Core and editor tests cover the drop target, source range, and undo. The desktop workflow drags the marked source audio, saves the project, and checks the exact range on the destination track.
+Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. I and O mark the source range. A starts placement at the timeline cursor and Shift+A ends placement there. Keyboard placement uses the focused track when it accepts the stream and falls back to an available compatible track. Shift+A retains the source Out point if the placement reaches project start. The desktop workflow verifies both stream-only drops, marks the range with I and O, and checks the exact saved ranges from A and Shift+A on a second video track.
 
 Project Media thumbnails and properties show measured file metadata, including audio channels and sample rate. Replace source file and the missing-media prompt share the same undoable edit. They preserve the media ID, event ranges and takes. The managed tests replace a source, undo and redo it, save and reopen, and check its bytes. The desktop workflow relinks a missing file at startup and checks the saved event range and mono source metadata.
 
