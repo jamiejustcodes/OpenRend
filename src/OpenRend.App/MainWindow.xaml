@@ -9,7 +9,7 @@
       <RowDefinition Height="5"/>
       <RowDefinition x:Name="TimelineRowHeight" Height="300*" MinHeight="60"/>
       <RowDefinition Height="34"/>
-      <RowDefinition Height="20"/>
+      <RowDefinition Height="24"/>
     </Grid.RowDefinitions>
     <Grid Background="#141414">
       <DockPanel LastChildFill="False">
@@ -984,15 +984,9 @@
       <ui:TimelineView x:Name="Timeline"/>
       <Grid Grid.Row="1" Background="#262626"><Grid.ColumnDefinitions><ColumnDefinition Width="256"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ScrollBar x:Name="TimelineScroll" Grid.Column="1" Orientation="Horizontal" Minimum="0" ViewportSize="100" SmallChange="20" LargeChange="100" ValueChanged="TimelineScrollChanged" ToolTip="Timeline horizontal scroll"/></Grid>
     </Grid>
-    <!-- 1:1 Vegas Pro Transport Bar -->
     <Border Grid.Row="5" Background="{StaticResource ColorD}" Padding="4,2" BorderBrush="{StaticResource ColorBG}" BorderThickness="0,1,0,0">
       <DockPanel>
-        <!-- Right side: Record Time readout, Timecode sunken display, Zoom buttons -->
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
-          <TextBlock x:Name="RecordTimeDisplay" Text="Record Time (2 ch): 24:00:00:00" VerticalAlignment="Center" FontSize="10" Foreground="{StaticResource TextColorGrey}" Margin="6,0" IsHitTestVisible="False"/>
-          <Border x:Name="TimecodeBorder" Background="#0E0E0E" BorderBrush="{StaticResource ColorM}" BorderThickness="1" CornerRadius="1" Padding="8,3" Margin="4,0" Cursor="Hand" ToolTip="Time at Cursor (Right-click for Ruler Format, Double-click to set time)" MouseRightButtonUp="Timecode_MouseRightButtonUp" MouseLeftButtonDown="Timecode_MouseLeftButtonDown">
-            <TextBlock x:Name="Timecode" FontSize="13" FontFamily="Consolas" FontWeight="Bold" Foreground="#FFFFFF" Text="00:00:00:00"/>
-          </Border>
           <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>
           <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in" Foreground="{StaticResource TextColor}"/>
           <Button Style="{StaticResource IconButton}" Content="↔" Width="24" Height="24" Click="FitClick" ToolTip="Fit timeline" Foreground="{StaticResource TextColor}"/>
@@ -1031,6 +1025,16 @@
         </StackPanel>
       </DockPanel>
     </Border>
-    <DockPanel Grid.Row="6" Margin="8,3"><ProgressBar DockPanel.Dock="Right" Width="160" Maximum="1" Value="{Binding Progress}"/><Button x:Name="CancelRender" DockPanel.Dock="Right" Content="Cancel render" Visibility="Collapsed" Click="CancelExportClick" Padding="7,1"/><TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" Foreground="#B8B8B8" FontSize="11"/></DockPanel>
+    <DockPanel Grid.Row="6" Margin="8,2" TextBlock.FontSize="11" TextBlock.Foreground="{StaticResource TextColorGrey}">
+      <Border DockPanel.Dock="Left" Background="{StaticResource ColorD}" Padding="6,0" Margin="0,0,10,0" Cursor="Hand" ToolTip="Right-click to change ruler format. Double-click to set the cursor time." MouseRightButtonUp="Timecode_MouseRightButtonUp" MouseLeftButtonDown="Timecode_MouseLeftButtonDown">
+        <TextBlock x:Name="Timecode" FontFamily="Consolas" Foreground="{StaticResource TextColor}" VerticalAlignment="Center"/>
+      </Border>
+      <TextBlock x:Name="WorkspaceSelectionDuration" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0" Visibility="Collapsed"/>
+      <TextBlock x:Name="WorkspaceProjectFormat" DockPanel.Dock="Left" VerticalAlignment="Center" Margin="0,0,12,0"/>
+      <TextBlock x:Name="WorkspaceDriveSpace" DockPanel.Dock="Right" VerticalAlignment="Center" Margin="12,0,0,0" Visibility="Collapsed"/>
+      <ProgressBar DockPanel.Dock="Right" Width="120" Maximum="1" Value="{Binding Progress}"/>
+      <Button x:Name="CancelRender" DockPanel.Dock="Right" Content="Cancel render" Visibility="Collapsed" Click="CancelExportClick" Padding="7,1"/>
+      <TextBlock Text="{Binding Status}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+    </DockPanel>
   </Grid>
 </Window>

@@ -72,6 +72,9 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
             var y = (int)(bounds.Top - 46 * scale + 12 * scale);
             Mouse.Drag(new System.Drawing.Point((int)(bounds.Left + bounds.Width / 6), y),
                 new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), y), MouseButton.Left);
+            var loopDuration = TimecodeFormatter.Format(30, new Rational(30, 1));
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("WorkspaceSelectionDuration"))?.Name == $"Selection {loopDuration}",
+                "The status bar did not show the dragged selection duration.");
             RenderAndVerify(window, executable, Path.Combine(temporary, "loop.mp4"), "30", dialog =>
             {
                 var search = Find(dialog, "RenderSearch").AsTextBox();
@@ -761,6 +764,10 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         try
         {
             Assert.Equal("UI integration — OpenRend", window.Title);
+            Assert.Equal("320×180 · 30 fps", Find(window, "WorkspaceProjectFormat").Name);
+            var drive = Path.GetPathRoot(Path.GetTempPath())!.TrimEnd(Path.DirectorySeparatorChar);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("WorkspaceDriveSpace"))?.Name.StartsWith(drive + " · ", StringComparison.Ordinal) == true,
+                "The status bar did not show free space for the project drive.");
             var library = Find(window, "MediaList").AsListBox();
             WaitFor(() => library.Items.Length == 1, "The project media library is empty.");
             Assert.Contains("fixture.mp4", library.Items[0].FindAllDescendants().Select(e => e.Name));

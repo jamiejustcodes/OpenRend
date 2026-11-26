@@ -623,7 +623,11 @@ public partial class MainWindow : Window
         Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
         Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
-        Timeline.LoopRegionChanged += range => vm.LoopRegion = range;
+        Timeline.LoopRegionChanged += range =>
+        {
+            vm.LoopRegion = range;
+            UpdateWorkspaceSelectionDuration();
+        };
         TrimmerDeck.Initialize(vm);
         InitializeWorkspacePanes();
         vm.Changed += Refresh;
@@ -676,6 +680,7 @@ public partial class MainWindow : Window
         };
         autosave.Tick += async (_, _) =>
         {
+            RefreshWorkspaceDriveSpace();
             var dataDir = Path.GetDirectoryName(recoveryPath)!;
             SessionRecoveryManager.RecordHeartbeat(dataDir, vm.Dirty, vm.ProjectPath);
             if (!vm.Dirty || vm.Busy || !generalPreferences.EnableAutoSave) return;
@@ -745,7 +750,7 @@ public partial class MainWindow : Window
         TimelineScroll.ViewportSize = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
         UpdatePreviewStatus();
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
-        UpdateRecordTimeDisplay();
+        UpdateWorkspaceStatus();
         if (editDetailsWindow != null && editDetailsWindow.IsLoaded) editDetailsWindow.RefreshGrid();
         RequestPreview();
     }
@@ -1247,6 +1252,7 @@ public partial class MainWindow : Window
             path = dialog.FileName;
         }
         await vm.SaveAsync(path);
+        RefreshWorkspaceDriveSpace();
         RecordRecentProject(path);
         var dataDir = Path.GetDirectoryName(recoveryPath)!;
         SessionRecoveryManager.RecordHeartbeat(dataDir, false, vm.ProjectPath);
@@ -2715,25 +2721,6 @@ public partial class MainWindow : Window
         if (AutoCrossfadeMenu is not null) AutoCrossfadeMenu.IsChecked = autoCrossfade;
         vm.Status = autoCrossfade ? "Automatic crossfades enabled." : "Automatic crossfades disabled.";
     }
-    private void UpdateRecordTimeDisplay()
-    {
-        if (RecordTimeDisplay is null) return;
-        try
-        {
-            var rootDir = System.IO.Path.GetPathRoot(System.IO.Directory.GetCurrentDirectory()) ?? "C:\\";
-            var drive = new System.IO.DriveInfo(rootDir);
-            if (drive.IsReady)
-            {
-                var freeSeconds = (double)drive.AvailableFreeSpace / 288000.0;
-                var timeSpan = TimeSpan.FromSeconds(Math.Min(freeSeconds, 3599999));
-                var totalHours = (int)timeSpan.TotalHours;
-                RecordTimeDisplay.Text = $"Record Time (2 ch): {totalHours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}:00";
-                return;
-            }
-        }
-        catch { }
-        RecordTimeDisplay.Text = "Record Time (2 ch): 24:00:00:00";
-    }
     private void ZoomInClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Min(1200, Timeline.PixelsPerSecond * 1.25); Refresh(); }
     private void ZoomOutClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Max(5, Timeline.PixelsPerSecond / 1.25); Refresh(); }
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
@@ -3385,7 +3372,7 @@ public partial class MainWindow : Window
     {
         if (ActualHeight > 0)
         {
-            var totalNonWorkspaceHeight = 32 + 34 + 5 + TimelineRowHeight.MinHeight + 34 + 20;
+            var totalNonWorkspaceHeight = 32 + 34 + 5 + TimelineRowHeight.MinHeight + 34 + 24;
             WorkspaceHeight.MaxHeight = Grid.GetRow(Workspace) == 2
                 ? Math.Max(WorkspaceHeight.MinHeight, ActualHeight - RootGrid.Margin.Top - RootGrid.Margin.Bottom - totalNonWorkspaceHeight)
                 : double.PositiveInfinity;

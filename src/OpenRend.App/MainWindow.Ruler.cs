@@ -57,22 +57,6 @@ public partial class MainWindow
 
         var menu = new ContextMenu();
 
-        // 1. Cursor mode selection (Vegas Pro Menu 1012 header)
-        var cursorTimeItem = new MenuItem { Header = "Time at Cursor", IsCheckable = true, IsChecked = true, IsEnabled = false };
-        menu.Items.Add(cursorTimeItem);
-
-        var midiInItem = new MenuItem { Header = "MIDI Timecode In", IsEnabled = false };
-        menu.Items.Add(midiInItem);
-
-        var midiOutItem = new MenuItem { Header = "MIDI Timecode Out", IsEnabled = false };
-        menu.Items.Add(midiOutItem);
-
-        var midiClockItem = new MenuItem { Header = "MIDI Clock Out", IsEnabled = false };
-        menu.Items.Add(midiClockItem);
-
-        menu.Items.Add(new Separator());
-
-        // 2. Time Format submenu
         var formatSubmenu = new MenuItem { Header = "Time &Format" };
         var activeFormat = vm.Project.RulerFormat;
 
@@ -89,17 +73,7 @@ public partial class MainWindow
             formatSubmenu.Items.Add(mi);
         }
 
-        formatSubmenu.Items.Add(new Separator());
-
-        var setTimeSubItem = new MenuItem { Header = "Set T&ime at Cursor…" };
-        setTimeSubItem.Click += (_, _) => OpenSetTimeAtCursorDialog();
-        formatSubmenu.Items.Add(setTimeSubItem);
-
         menu.Items.Add(formatSubmenu);
-
-        menu.Items.Add(new Separator());
-
-        // 3. Set Time at Cursor shortcut at root
         var rootSetTime = new MenuItem { Header = "Set T&ime at Cursor…" };
         rootSetTime.Click += (_, _) => OpenSetTimeAtCursorDialog();
         menu.Items.Add(rootSetTime);
