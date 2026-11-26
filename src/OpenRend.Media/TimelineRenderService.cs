@@ -473,7 +473,11 @@ public sealed partial class TimelineRenderService : IDisposable
     public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output) =>
         RenderAudio(project, seconds, frames, output, clampOutput: true);
 
-    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output, bool clampOutput)
+    public static float MasterOutputGain(ProjectDocument project) => project.MasterAudioMute ? 0 :
+        (float)(project.MasterAudioGain * (project.MasterAudioDim ? 0.1 : 1));
+
+    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output, bool clampOutput,
+        bool applyMasterControls = true)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed), this);
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
@@ -482,7 +486,7 @@ public sealed partial class TimelineRenderService : IDisposable
         var totalSamples = checked(frames * MediaService.Channels);
         if (output.Length < totalSamples) throw new ArgumentException("Output buffer is too small.", nameof(output));
         Array.Clear(output, 0, totalSamples);
-        if (frames == 0 || project.MasterAudioMute) return;
+        if (frames == 0 || (applyMasterControls && project.MasterAudioMute)) return;
 
         var solo = false;
         var tracks = project.Tracks;
@@ -741,26 +745,27 @@ public sealed partial class TimelineRenderService : IDisposable
                 AudioDspService.ProcessAudioChain(output, MediaService.SampleRate, project.MasterAudioEffects);
             }
 
-            // 5. Master Gain & Dim (-20 dB = 0.1)
-            var masterGain = (float)(project.MasterAudioGain * (project.MasterAudioDim ? 0.1 : 1.0));
+            // Apply automation before the fader so playback can apply the live fader to queued audio.
+            var envelopeGain = 1.0f;
             if (project.MasterAudioEnvelopes != null)
             {
                 for (var eIdx = 0; eIdx < project.MasterAudioEnvelopes.Count; eIdx++)
                 {
                     var env = project.MasterAudioEnvelopes[eIdx];
-                    if (env.Type == EnvelopeType.Volume && env.IsEnabled) masterGain *= (float)env.ValueAt(projectFrame);
-                    if (env.Type == EnvelopeType.Mute && env.IsEnabled && env.ValueAt(projectFrame) >= 0.5) masterGain = 0f;
+                    if (env.Type == EnvelopeType.Volume && env.IsEnabled) envelopeGain *= (float)env.ValueAt(projectFrame);
+                    if (env.Type == EnvelopeType.Mute && env.IsEnabled && env.ValueAt(projectFrame) >= 0.5) envelopeGain = 0f;
                 }
             }
 
-            if (Math.Abs(masterGain - 1.0f) > 1e-4f)
+            if (envelopeGain != 1)
             {
                 for (var i = 0; i < totalSamples; i++)
-                {
-                    output[i] *= masterGain;
-                }
+                    output[i] *= envelopeGain;
             }
 
+            var programGain = applyMasterControls ? MasterOutputGain(project) : 1;
+            if (programGain != 1)
+                for (var i = 0; i < totalSamples; i++) output[i] *= programGain;
             if (clampOutput)
                 for (var i = 0; i < totalSamples; i++) output[i] = Math.Clamp(output[i], -1f, 1f);
         }

@@ -58,6 +58,7 @@ public sealed class MixingConsoleWindow : Window
     private readonly Dictionary<Guid, Border> busClipLeds = [];
 
     private bool isDimmed;
+    private bool refreshingMasterFader;
 
     private sealed record BusComboItem(string Name, Guid? BusId)
     {
@@ -263,8 +264,10 @@ public sealed class MixingConsoleWindow : Window
         }
 
         // 3. Update Master Bus values
+        refreshingMasterFader = true;
         masterFader.Value = LinearToDb(vm.Project.MasterAudioGain);
-        masterFaderText.Text = vm.Project.MasterAudioGain <= 1e-4 ? "-inf dB" : $"{masterFader.Value:+0.0;-0.0;0.0} dB";
+        refreshingMasterFader = false;
+        masterFaderText.Text = vm.Project.MasterAudioGain <= 1e-4 ? "−∞ dB" : $"{20 * Math.Log10(vm.Project.MasterAudioGain):+0.0;-0.0;0.0} dB";
         masterMuteBtn.Background = vm.Project.MasterAudioMute ? new SolidColorBrush(Color.FromRgb(180, 40, 40)) : new SolidColorBrush(Color.FromRgb(45, 45, 45));
         masterMuteBtn.Foreground = vm.Project.MasterAudioMute ? Brushes.White : Brushes.Silver;
         isDimmed = vm.Project.MasterAudioDim;
@@ -999,6 +1002,7 @@ public sealed class MixingConsoleWindow : Window
 
         masterFader.ValueChanged += (_, e) =>
         {
+            if (refreshingMasterFader) return;
             double db = e.NewValue;
             masterFaderText.Text = db <= -59.5 ? "-inf dB" : $"{db:+0.0;-0.0;0.0} dB";
             vm.Editor.SetMasterAudioGain(DbToLinear(db));

@@ -21,6 +21,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     private long submittedSamples;
     private long lastFrame;
     private double masterGain;
+    private float programGain;
     private int disposed;
     private bool started;
     private Exception? outputError;
@@ -33,6 +34,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     public double Rate { get; }
     internal MasterMeterReading MeterReading => buffer.MeterReading;
     internal void ClearMeterClips() => buffer.ClearMeterClips();
+    internal void UpdateMasterControls(ProjectDocument document) => Volatile.Write(ref programGain, TimelineRenderService.MasterOutputGain(document));
     public double MasterGain
     {
         get => Volatile.Read(ref masterGain);
@@ -82,6 +84,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         originSeconds = project.FrameRate.Seconds(startFrame);
         Rate = rate;
         MasterGain = masterGain;
+        UpdateMasterControls(document);
         if (loopRange is { } range)
         {
             if (rate != 1) throw new ArgumentOutOfRangeException(nameof(rate));
@@ -91,13 +94,13 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
             if (loop.SampleCount <= MediaService.SampleRate / 2)
             {
                 cachedLoop = new float[(int)loop.SampleCount * MediaService.Channels];
-                renderer.RenderAudio(project, loop.SecondsAt(0), (int)loop.SampleCount, cachedLoop, clampOutput: false);
+                renderer.RenderAudio(project, loop.SecondsAt(0), (int)loop.SampleCount, cachedLoop, clampOutput: false, applyMasterControls: false);
             }
         }
         totalSamples = loop is not null ? long.MaxValue : checked((long)Math.Ceiling(project.FrameRate.Seconds(Math.Abs(endFrame - startFrame)) * MediaService.SampleRate / Math.Abs(Rate)));
         if (rate != 1)
             shuttleAudioBuffer = new float[PlaybackAudioResampling.Window(0, BlockFrames, rate).FrameCount * MediaService.Channels + MediaService.Channels];
-        buffer = new TimelineAudioBuffer(() => MasterGain);
+        buffer = new TimelineAudioBuffer(() => MasterGain, () => Volatile.Read(ref programGain));
         output = new WasapiOut(AudioClientShareMode.Shared, false, 60);
         try
         {
@@ -161,7 +164,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
                 var (offset, length) = loop.Window(submittedSamples + written, count - written);
                 if (cachedLoop is null)
                 {
-                    renderer.RenderAudio(project, loop.SecondsAt(offset), length, playbackAudioBuffer, clampOutput: false);
+                    renderer.RenderAudio(project, loop.SecondsAt(offset), length, playbackAudioBuffer, clampOutput: false, applyMasterControls: false);
                     Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, written * frameBytes, length * frameBytes);
                 }
                 else
@@ -174,9 +177,11 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         else
         {
             if (shuttleAudioBuffer is null)
-                renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer, clampOutput: false);
+                renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer,
+                    clampOutput: false, applyMasterControls: false);
             else
-                PlaybackAudioResampling.Render(renderer, project, originSeconds, submittedSamples, count, Rate, shuttleAudioBuffer, playbackAudioBuffer);
+                PlaybackAudioResampling.Render(renderer, project, originSeconds, submittedSamples, count, Rate, shuttleAudioBuffer, playbackAudioBuffer,
+                    applyMasterControls: false);
             Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, 0, count * frameBytes);
         }
         cancellation.Token.ThrowIfCancellationRequested();
@@ -226,14 +231,14 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
 internal static class PlaybackAudioResampling
 {
     internal static void Render(TimelineRenderService renderer, ProjectDocument project, double originSeconds,
-        long submitted, int count, double rate, float[] source, float[] output)
+        long submitted, int count, double rate, float[] source, float[] output, bool applyMasterControls = true)
     {
         var window = Window(submitted, count, rate);
         var firstAvailable = (long)Math.Ceiling(-originSeconds * MediaService.SampleRate - 1e-7);
         var silence = (int)Math.Clamp(firstAvailable - window.StartFrame, 0, window.FrameCount);
         var sourceStart = Math.Max(0, originSeconds + (double)(window.StartFrame + silence) / MediaService.SampleRate);
         var sourceFrames = window.FrameCount - silence;
-        renderer.RenderAudio(project, sourceStart, sourceFrames, source);
+        renderer.RenderAudio(project, sourceStart, sourceFrames, source, clampOutput: applyMasterControls, applyMasterControls: applyMasterControls);
         if (silence > 0)
         {
             Array.Copy(source, 0, source, silence * MediaService.Channels, sourceFrames * MediaService.Channels);
@@ -282,7 +287,7 @@ internal static class PlaybackAudioResampling
     private static int FilterWidth(double rate) => Math.Max(1, (int)Math.Abs(rate));
 }
 
-internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
+internal sealed class TimelineAudioBuffer(Func<double> gain, Func<float>? program = null) : IWaveProvider
 {
     private readonly BufferedWaveProvider buffer = new(WaveFormat.CreateIeeeFloatWaveFormat(MediaService.SampleRate, 2))
     { BufferDuration = TimeSpan.FromSeconds(2), DiscardOnBufferOverflow = false, ReadFully = false };
@@ -320,6 +325,9 @@ internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
             queuedSamples += count / 8;
             var level = (float)gain();
             var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(destination.AsSpan(offset, count));
+            var programLevel = program?.Invoke() ?? 1;
+            if (programLevel != 1)
+                for (var sample = 0; sample < samples.Length; sample++) samples[sample] *= programLevel;
             Volatile.Write(ref meterReading, meter.Measure(samples));
             // Keep the program ceiling at the same point as export, before monitor gain.
             for (var sample = 0; sample < samples.Length; sample++)

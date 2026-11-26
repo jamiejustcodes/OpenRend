@@ -1,5 +1,4 @@
 using FlaUI.Core.AutomationElements;
-using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
 using OpenRend.Project;
 using Xunit;
@@ -36,14 +35,24 @@ public sealed partial class EditorWorkflowTests
             var monitorMute = window.FindFirstDescendant(c => c.ByName("Mute monitor"));
             Assert.NotNull(monitorMute);
             monitorMute.AsButton().Invoke();
-            Chord(window, VirtualKeyShort.SPACE);
+            var transport = Find(window, "PlayButton").AsButton();
+            transport.Invoke();
             WaitFor(() => momentary.Name.StartsWith("M 1") && truePeak.Name.StartsWith("1"), "The master meter did not read the overloaded stereo mix.");
             WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("MasterClipping"))?.IsOffscreen == false,
                 "The master overload indicator did not latch.");
             WaitFor(() => shortTerm.Name.StartsWith("S 1"), "Short-term master loudness did not fill its three-second window.");
-            Chord(window, VirtualKeyShort.SPACE);
+            Find(window, "MasterDimBtn").AsButton().Invoke();
+            WaitFor(() => momentary.Name.StartsWith("M -18."), "Master Dim did not attenuate the playing mix by 20 dB.");
+            Find(window, "MasterMuteBtn").AsButton().Invoke();
+            WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 1.00" && truePeak.Name == "−∞ dBTP",
+                "Master Mute did not silence the mix while playback continued.");
+            transport.Invoke();
             WaitFor(() => momentary.Name == "M — LUFS" && truePeak.Name == "−∞ dBTP", "Stopping did not reset the master readouts.");
-            Assert.DoesNotContain('*', window.Title);
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The master controls did not save.");
+            var saved = await ProjectStore.LoadAsync(path);
+            Assert.True(saved.MasterAudioDim);
+            Assert.True(saved.MasterAudioMute);
             running.CloseGracefully();
         }
         finally { Directory.Delete(temporary, recursive: true); }

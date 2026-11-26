@@ -1,5 +1,6 @@
 using System.Runtime.InteropServices;
 using OpenRend.App;
+using OpenRend.Core;
 using OpenRend.Media;
 using Xunit;
 
@@ -27,6 +28,33 @@ public sealed class MasterAudioMeterTests
         var reading = meter.Measure(StereoTone(12000, .5, Math.PI / 4, MediaService.SampleRate));
         Assert.InRange(20 * Math.Log10(reading.Left), -9.1, -8.9);
         Assert.InRange(reading.TruePeakDb, -6.4, -5.8);
+    }
+
+    [Fact]
+    public void QueuedAudioUsesTheCurrentProgramGainDimAndMute()
+    {
+        var project = new ProjectDocument { MasterAudioGain = 2 };
+        var provider = new TimelineAudioBuffer(() => 1, () => TimelineRenderService.MasterOutputGain(project));
+        var stereo = new[] { .75f, .5f, .75f, .5f, .75f, .5f, .75f, .5f };
+        provider.AddSamples(MemoryMarshal.AsBytes(stereo.AsSpan()).ToArray());
+        var bytes = new byte[2 * sizeof(float)];
+        (float Left, float Right) Read()
+        {
+            provider.Read(bytes, 0, bytes.Length);
+            var samples = MemoryMarshal.Cast<byte, float>(bytes.AsSpan());
+            return (samples[0], samples[1]);
+        }
+
+        Assert.Equal((1f, 1f), Read());
+        Assert.Equal(1.5, provider.MeterReading.Left);
+        project.MasterAudioDim = true;
+        Assert.Equal((.15f, .1f), Read());
+        project.MasterAudioMute = true;
+        Assert.Equal((0f, 0f), Read());
+        project.MasterAudioMute = false;
+        project.MasterAudioDim = false;
+        project.MasterAudioGain = .5;
+        Assert.Equal((.375f, .25f), Read());
     }
 
     [Fact]
