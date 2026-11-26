@@ -93,6 +93,80 @@ public sealed class PlaybackTests(ITestOutputHelper log)
     }
 
     [Fact]
+    public void LoopClockWrapsAtTheSameFractionalRateSamplesAsTheRenderer()
+    {
+        var loop = new TimelinePlaybackLoop(new FrameRange(10, 7), new Rational(30000, 1001), 13);
+        Assert.Equal(11212, loop.SampleCount);
+        var (offset, wrap) = loop.Window(0, int.MaxValue);
+        Assert.Equal(4804.8, offset, 8);
+        Assert.Equal(6407, wrap);
+        Assert.Equal(13, loop.FrameAt(0));
+        Assert.Equal(16, loop.FrameAt(wrap - 1));
+        Assert.Equal(10, loop.FrameAt(wrap));
+        const long elapsedOver100000Cycles = 1_121_120_000;
+        Assert.Equal(loop.Window(wrap, int.MaxValue), loop.Window(wrap + elapsedOver100000Cycles, int.MaxValue));
+        Assert.Equal(10, loop.FrameAt(wrap + elapsedOver100000Cycles));
+    }
+
+    [Theory]
+    [InlineData(7)]
+    [InlineData(19)]
+    [Trait("Category", "AudioDevice")]
+    public async Task WasapiRepeatsTheSelectedRangeWithoutSilentBuffers(int frameCount)
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"openrend-loop-{Guid.NewGuid():N}.wav");
+        try
+        {
+            WriteStereoTone(path);
+            using var media = new MediaService();
+            using var renderer = new TimelineRenderService(media);
+            var asset = await media.ProbeAsync(path);
+            var range = new FrameRange(10, frameCount);
+            var project = new ProjectDocument
+            {
+                FrameRate = new Rational(30000, 1001), Media = [asset],
+                Tracks = [new TimelineTrack { Kind = TrackKind.Audio, Clips = [new TimelineClip
+                {
+                    MediaId = asset.Id, StartFrame = range.StartFrame, DurationFrames = range.FrameCount
+                }] }]
+            };
+            using var capture = new WasapiLoopbackCapture();
+            var recorded = new ConcurrentQueue<byte[]>();
+            capture.DataAvailable += (_, args) => recorded.Enqueue(args.Buffer.AsSpan(0, args.BytesRecorded).ToArray());
+            await using var playback = new PlaybackSession(renderer, project, 13, startImmediately: false, loopRange: range);
+            Assert.Equal(13, playback.CurrentFrame);
+            capture.StartRecording();
+            playback.Start();
+            var timer = Stopwatch.StartNew();
+            var wraps = 0;
+            var previous = 13L;
+            while (timer.Elapsed < TimeSpan.FromSeconds(1.8))
+            {
+                await Task.Delay(10);
+                await playback.CheckAsync();
+                var frame = playback.CurrentFrame;
+                Assert.False(playback.IsFinished);
+                Assert.InRange(frame, range.StartFrame, range.EndFrame - 1);
+                if (frame < previous) wraps++;
+                previous = frame;
+            }
+            capture.StopRecording();
+            Assert.True(wraps >= 2, $"The audio clock only wrapped {wraps} times.");
+            Assert.Equal(32, capture.WaveFormat.BitsPerSample);
+            var samples = MemoryMarshal.Cast<byte, float>(recorded.SelectMany(chunk => chunk).ToArray().AsSpan()).ToArray();
+            var channels = capture.WaveFormat.Channels;
+            var window = capture.WaveFormat.SampleRate * channels / 200;
+            var active = samples.Chunk(window).Select(chunk => chunk.Max(sample => Math.Abs(sample)) > .01f).ToArray();
+            var first = Array.IndexOf(active, true);
+            var last = Array.LastIndexOf(active, true);
+            Assert.True(first >= 0 && last - first > 250, "Loopback did not capture enough playback.");
+            Assert.DoesNotContain(false, active[first..(last + 1)]);
+            log.WriteLine($"Observed {wraps} wraps and {(last - first + 1) * 5} ms of continuous loopback audio.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
     [Trait("Category", "AudioDevice")]
     public async Task ActualWasapiClockSeeksPausesAndDrainsTheFinalHardwareBuffer()
     {

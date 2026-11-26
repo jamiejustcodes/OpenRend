@@ -12,6 +12,10 @@ OpenRend has tools, preview and master bus tab groups with resizable splitters. 
 
 Use Track height on a track header's context menu to minimize, expand, or restore that row. The view recalculates event, drop target, automation envelope, and accessibility bounds together. These choices apply to the current project session. Focused layout and accessibility tests passed, followed by all 27 current-executable desktop workflows, including the track header context menu.
 
+## Timeline loop playback
+
+Loop Playback repeats the selected frame range, with the project bounds as the default. Audio and the playhead wrap on the same rational sample grid within one WASAPI stream. Toggling loop playback while playing starts playback with the new bounds. Tests cover repeated wraps and uninterrupted tone output on the active endpoint at 29.97 fps, plus cursor selection and wrap through the desktop shortcut.
+
 ## Requested addition: startup and project creation
 
 Status: functional startup slice, full parity open. OpenRend has its own welcome artwork/branding, New/Open/Getting Started pages, sizing/rate choices and startup preference. Complete advanced project controls, factory defaults and exact visual matching remain open.

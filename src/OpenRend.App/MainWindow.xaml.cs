@@ -664,18 +664,7 @@ public partial class MainWindow : Window
                 RightMeter.Height = meterHeight * MeterPosition(session.PeakRight);
                 if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(session.PeakLeft, session.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
-                if (session.IsFinished)
-                {
-                    if (loopPlayback && !timelineShuttle && vm.Project.DurationFrames > 0)
-                    {
-                        Pause(0);
-                        await StartTimelinePlaybackAsync(rememberOrigin: false);
-                    }
-                    else
-                    {
-                        Pause();
-                    }
-                }
+                if (session.IsFinished) Pause();
             }
             catch (Exception ex) { Pause(); ShowError(ex); }
         };
@@ -1631,8 +1620,13 @@ public partial class MainWindow : Window
     {
         if (vm.Project.DurationFrames == 0) return;
         StopTimelineScrub();
-        if (!shuttle && vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
-        var project = vm.Project.DeepClone(); var start = vm.Position;
+        var project = vm.Project.DeepClone();
+        var start = vm.Position;
+        FrameRange? loop = loopPlayback && !shuttle ? Timeline.LoopRegion ?? new FrameRange(0, project.DurationFrames) : null;
+        if (loop is { } range && (start < range.StartFrame || start >= range.EndFrame))
+            start = range.StartFrame;
+        else if (!shuttle && start >= project.DurationFrames)
+            start = 0;
         if (rememberOrigin) playbackOrigin = start;
         var masterGain = masterMuted ? 0 : MasterGain.Value;
         var generation = ++playbackGeneration; playbackStarting = true;
@@ -1642,7 +1636,7 @@ public partial class MainWindow : Window
         {
             await scrubShutdown;
             if (generation != playbackGeneration || !IsLoaded) return;
-            var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false));
+            var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false, loopRange: loop));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
             try { session.Start(); }
             catch { await session.DisposeAsync(); throw; }
@@ -2747,12 +2741,17 @@ public partial class MainWindow : Window
         if (RippleToggle is not null)
             RippleToggle.ToolTip = $"Auto Ripple (Ctrl+L) - {GetRippleModeDescription(vm.RippleMode)}";
     }
-    private void LoopPlaybackClick(object sender, RoutedEventArgs e)
+    private async void LoopPlaybackClick(object sender, RoutedEventArgs e)
     {
         loopPlayback = !loopPlayback;
         if (LoopPlaybackToggle is not null) LoopPlaybackToggle.IsChecked = loopPlayback;
         if (LoopPlaybackMenu is not null) LoopPlaybackMenu.IsChecked = loopPlayback;
         vm.Status = loopPlayback ? "Loop playback enabled." : "Loop playback disabled.";
+        if (!timelineShuttle && (playbackStarting || playback is not null))
+        {
+            Pause();
+            await GuardAsync(() => StartTimelinePlaybackAsync(rememberOrigin: false));
+        }
     }
     private void AutoCrossfadeClick(object sender, RoutedEventArgs e)
     {
