@@ -25,13 +25,13 @@ public static class ProjectStore
         ArgumentNullException.ThrowIfNull(project);
         project.Validate();
         var fullPath = System.IO.Path.GetFullPath(path);
-        if (project.Media.Any(media => string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
+        if (project.Media.Any(media => !IsVirtualSource(media) && string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("A project file cannot overwrite source media.");
         var directory = System.IO.Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
         var saved = project.DeepClone();
         foreach (var media in saved.Media)
-            media.Path = System.IO.Path.GetRelativePath(directory, System.IO.Path.GetFullPath(media.Path));
+            if (!IsVirtualSource(media)) media.Path = System.IO.Path.GetRelativePath(directory, System.IO.Path.GetFullPath(media.Path));
         var manifest = new ProjectManifest { Version = CurrentVersion, SavedUtc = DateTimeOffset.UtcNow, Project = saved };
         var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -60,13 +60,13 @@ public static class ProjectStore
         ArgumentNullException.ThrowIfNull(project);
         project.Validate();
         var fullPath = System.IO.Path.GetFullPath(path);
-        if (project.Media.Any(media => string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
+        if (project.Media.Any(media => !IsVirtualSource(media) && string.Equals(System.IO.Path.GetFullPath(media.Path), fullPath, StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("A project file cannot overwrite source media.");
         var directory = System.IO.Path.GetDirectoryName(fullPath)!;
         Directory.CreateDirectory(directory);
         var saved = project.DeepClone();
         foreach (var media in saved.Media)
-            media.Path = System.IO.Path.GetRelativePath(directory, System.IO.Path.GetFullPath(media.Path));
+            if (!IsVirtualSource(media)) media.Path = System.IO.Path.GetRelativePath(directory, System.IO.Path.GetFullPath(media.Path));
         var manifest = new ProjectManifest { Version = CurrentVersion, SavedUtc = DateTimeOffset.UtcNow, Project = saved };
         var temporary = fullPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
         try
@@ -108,7 +108,8 @@ public static class ProjectStore
         var project = manifest.Project;
         project.Validate();
         var directory = System.IO.Path.GetDirectoryName(fullPath)!;
-        foreach (var media in project.Media) media.Path = System.IO.Path.GetFullPath(media.Path, directory);
+        foreach (var media in project.Media)
+            if (!IsVirtualSource(media)) media.Path = System.IO.Path.GetFullPath(media.Path, directory);
         return project;
     }
 
@@ -124,7 +125,9 @@ public static class ProjectStore
         return File.Exists(autosave) && (!File.Exists(projectPath) || File.GetLastWriteTimeUtc(autosave) > File.GetLastWriteTimeUtc(projectPath));
     }
 
-    public static IReadOnlyList<MediaAsset> FindMissingMedia(ProjectDocument project) => project.Media.Where(m => !File.Exists(m.Path)).ToList();
+    private static bool IsVirtualSource(MediaAsset asset) => asset.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
+
+    public static IReadOnlyList<MediaAsset> FindMissingMedia(ProjectDocument project) => project.Media.Where(m => !IsVirtualSource(m) && !File.Exists(m.Path)).ToList();
 
     public static void RelinkMedia(ProjectDocument project, Guid mediaId, string replacementPath)
     {

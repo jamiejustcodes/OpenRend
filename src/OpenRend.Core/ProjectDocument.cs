@@ -609,6 +609,10 @@ public sealed class MediaAsset
     public bool HasVideo { get; set; }
     public bool HasAudio { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AudioChannels { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public int AudioSampleRate { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<VideoEffect> VideoEffects { get; set; } = [];
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public List<string> Tags { get; set; } = [];

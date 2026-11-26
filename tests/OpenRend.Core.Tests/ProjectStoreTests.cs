@@ -124,6 +124,50 @@ public sealed class ProjectStoreTests : IDisposable
     }
 
     [Fact]
+    public async Task SourceReplacementKeepsEditRangesAndPersistsProbedAudioFormat()
+    {
+        var project = Create();
+        var id = project.Media[0].Id;
+        project.Media[0].Tags.Add("Original tag");
+        var before = project.Tracks[0].Clips[0].DeepClone();
+        var replacement = Path.Combine(directory, "different-source.mp4");
+        var sourceBytes = new byte[] { 1, 3, 5, 7 };
+        await File.WriteAllBytesAsync(replacement, sourceBytes);
+        var editor = new OpenRend.Timeline.TimelineEditor(project);
+        Assert.Throws<InvalidOperationException>(() => editor.ReplaceMediaSource(id, new MediaAsset { Path = replacement, HasAudio = true }));
+        Assert.False(editor.CanUndo);
+        editor.ReplaceMediaSource(id, new MediaAsset
+        {
+            Path = replacement, HasVideo = true, HasAudio = true, Width = 1920, Height = 1080,
+            FrameRate = 25, DurationSeconds = 20, AudioChannels = 1, AudioSampleRate = 44100
+        });
+        Assert.True(editor.Undo());
+        Assert.NotEqual(replacement, project.Media[0].Path);
+        Assert.True(editor.Redo());
+        var manifest = Path.Combine(directory, "replacement.openrend");
+        await ProjectStore.SaveAsync(project, manifest);
+        var reopened = await ProjectStore.LoadAsync(manifest);
+        var asset = Assert.Single(reopened.Media);
+        var clip = Assert.Single(reopened.Tracks[0].Clips);
+        Assert.Equal((id, replacement, 1, 44100), (asset.Id, asset.Path, asset.AudioChannels, asset.AudioSampleRate));
+        Assert.Contains("Original tag", asset.Tags);
+        Assert.Equal((before.Id, before.MediaId, before.StartFrame, before.SourceInFrame, before.DurationFrames),
+            (clip.Id, clip.MediaId, clip.StartFrame, clip.SourceInFrame, clip.DurationFrames));
+        Assert.Equal(sourceBytes, await File.ReadAllBytesAsync(replacement));
+    }
+
+    [Fact]
+    public async Task GeneratedMediaUriSurvivesSaveAndDoesNotNeedRelinking()
+    {
+        var project = new ProjectDocument { Media = [new MediaAsset { Path = "openrend://test/picture", IsGenerated = true, HasVideo = true }] };
+        var manifest = Path.Combine(directory, "generated.openrend");
+        await ProjectStore.SaveAsync(project, manifest);
+        var reopened = await ProjectStore.LoadAsync(manifest);
+        Assert.Equal(project.Media[0].Path, Assert.Single(reopened.Media).Path);
+        Assert.Empty(ProjectStore.FindMissingMedia(reopened));
+    }
+
+    [Fact]
     public async Task ConcurrentReadersKeepCompleteSnapshotsWhileSavesReplaceTheProject()
     {
         var path = System.IO.Path.Combine(directory, "concurrent.openrend");

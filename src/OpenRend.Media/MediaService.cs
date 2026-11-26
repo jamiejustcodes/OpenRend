@@ -33,7 +33,9 @@ public sealed class MediaService : IDisposable
             Height = metadata.Height,
             FrameRate = metadata.FrameRate,
             HasVideo = metadata.VideoStreams > 0,
-            HasAudio = metadata.AudioStreams > 0
+            HasAudio = metadata.AudioStreams > 0,
+            AudioChannels = metadata.Channels,
+            AudioSampleRate = metadata.SampleRate
         };
     }, cancellationToken);
 

@@ -446,6 +446,7 @@
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
+                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
                       <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
                       <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
                       <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>
@@ -454,7 +455,7 @@
                   <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
                   <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
-                      <Setter Property="Width" Value="128"/><Setter Property="Height" Value="104"/><Setter Property="Padding" Value="4"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="VerticalContentAlignment" Value="Top"/>
+                      <Setter Property="Width" Value="128"/><Setter Property="Height" Value="132"/><Setter Property="Padding" Value="4"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="VerticalContentAlignment" Value="Top"/>
                     </Style>
                   </ListBox.ItemContainerStyle>
                   <ListBox.ItemTemplate>
@@ -474,6 +475,7 @@
                           </Button>
                         </Grid>
                         <TextBlock Text="{Binding Name}" FontSize="11" Foreground="{StaticResource TextColor}" TextAlignment="Center" TextTrimming="CharacterEllipsis" TextWrapping="Wrap" Height="28" Margin="0,2,0,0"/>
+                        <TextBlock Text="{Binding ThumbnailDetails}" ToolTip="{Binding Details}" FontSize="9" Foreground="{StaticResource TextColorGrey}" TextAlignment="Center" TextWrapping="Wrap"/>
                       </StackPanel>
                     </DataTemplate>
                   </ListBox.ItemTemplate>
@@ -484,6 +486,7 @@
                   <ListView.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
+                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
                       <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
                       <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
                       <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>
@@ -519,6 +522,7 @@
                   <ListBox.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
+                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
                       <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
                       <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
                       <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>

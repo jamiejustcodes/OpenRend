@@ -7,12 +7,11 @@ using OpenRend.Core;
 namespace OpenRend.App;
 
 /// <summary>
-/// 1:1 Vegas Pro Media Properties dialog displaying source media format, resolution,
-/// frame rate, pixel aspect ratio, audio stream parameters, and file path.
+/// Displays measured source metadata and the file location.
 /// </summary>
 public sealed class MediaPropertiesWindow : Window
 {
-    public MediaPropertiesWindow(MediaAsset asset, Window? owner = null)
+    public MediaPropertiesWindow(MediaAsset asset, Window? owner = null, int observedChannels = 0, int observedRate = 0)
     {
         Owner = owner;
         Title = $"{asset.Name} - Properties";
@@ -53,10 +52,6 @@ public sealed class MediaPropertiesWindow : Window
             var videoGrid = CreatePropertyGrid();
             AddRow(videoGrid, "Frame Size:", $"{asset.Width} × {asset.Height}");
             AddRow(videoGrid, "Frame Rate:", $"{asset.FrameRate:0.###} fps");
-            AddRow(videoGrid, "Pixel Aspect Ratio:", "1.0000 (Square)");
-            AddRow(videoGrid, "Field Order:", "None (Progressive Scan)");
-            AddRow(videoGrid, "Pixel Format:", "32-bit floating point / 8-bit");
-            AddRow(videoGrid, "Alpha Channel:", "Undefined / Straight");
             videoTab.Content = new ScrollViewer { Content = videoGrid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             tabs.Items.Add(videoTab);
         }
@@ -66,10 +61,10 @@ public sealed class MediaPropertiesWindow : Window
         {
             var audioTab = new TabItem { Header = "Audio" };
             var audioGrid = CreatePropertyGrid();
-            AddRow(audioGrid, "Sample Rate:", "48,000 Hz");
-            AddRow(audioGrid, "Bit Depth:", "16-bit / 24-bit");
-            AddRow(audioGrid, "Channels:", "2 (Stereo)");
-            AddRow(audioGrid, "Format:", "PCM / AAC");
+            var rate = asset.AudioSampleRate > 0 ? asset.AudioSampleRate : observedRate;
+            var channels = asset.AudioChannels > 0 ? asset.AudioChannels : observedChannels;
+            AddRow(audioGrid, "Sample Rate:", rate > 0 ? $"{rate:N0} Hz" : "Unavailable");
+            AddRow(audioGrid, "Channels:", channels > 0 ? channels.ToString() : "Unavailable");
             audioTab.Content = new ScrollViewer { Content = audioGrid, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
             tabs.Items.Add(audioTab);
         }

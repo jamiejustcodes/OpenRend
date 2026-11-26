@@ -11,14 +11,29 @@ namespace OpenRend.App;
 public sealed class MediaItem(MediaAsset asset) : ObservableObject
 {
     public MediaAsset Asset { get; private set; } = asset;
+    private (string Path, int Channels, int Rate)? observedAudio;
     public string Name => Asset.Name;
-    public string Details => $"{(Asset.HasVideo ? $"{Asset.Width} \u00D7 {Asset.Height}  \u2022  {Asset.FrameRate:0.###} fps" : "Audio")}  \u2022  {Asset.DurationSeconds:0.00} s";
+    public string Details => string.Join("  ·  ", new[] { Asset.HasVideo ? $"{FrameSize}  ·  {FrameRateText}" : null,
+        $"{Asset.DurationSeconds:0.00} s", Asset.HasAudio ? AudioInfo : null }.OfType<string>());
+    public string ThumbnailDetails => Asset.HasVideo
+        ? $"{Asset.DurationSeconds:0.##} s · {Asset.FrameRate:0.###} fps\n{Asset.Width}×{Asset.Height}{(AudioChannels > 0 ? $" · {AudioChannels} ch" : "")}"
+        : $"{Asset.DurationSeconds:0.##} s · {AudioInfo}";
     public string Type => Asset.IsGenerated ? "Generated" : Asset.HasVideo ? "Video" : "Audio";
     public string FrameSize => Asset.HasVideo ? $"{Asset.Width} \u00D7 {Asset.Height}" : "\u2014";
     public string FrameRateText => Asset.HasVideo ? $"{Asset.FrameRate:0.###} fps" : "\u2014";
     public string DurationText => TimeSpan.FromSeconds(Asset.DurationSeconds).ToString(@"hh\:mm\:ss\.ff");
     public string Path => Asset.Path;
-    public string AudioInfo => Asset.HasAudio ? "Stereo, 48 kHz" : "\u2014";
+    internal int AudioChannels => Asset.AudioChannels > 0 ? Asset.AudioChannels : observedAudio is { } audio && audio.Path == Path ? audio.Channels : 0;
+    internal int SourceAudioRate => Asset.AudioSampleRate > 0 ? Asset.AudioSampleRate : observedAudio is { } audio && audio.Path == Path ? audio.Rate : 0;
+    public string AudioInfo
+    {
+        get
+        {
+            if (!Asset.HasAudio) return "—";
+            var layout = AudioChannels switch { 0 => "Audio", 1 => "Mono", 2 => "Stereo", var count => $"{count} ch" };
+            return SourceAudioRate > 0 ? $"{layout}, {SourceAudioRate / 1000.0:0.##} kHz" : layout;
+        }
+    }
     private int useCount;
     public int UseCount { get => useCount; set => SetProperty(ref useCount, value); }
     public bool HasEffects => Asset.VideoEffects.Count > 0;
@@ -27,12 +42,20 @@ public sealed class MediaItem(MediaAsset asset) : ObservableObject
         : new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromArgb(0x80, 0x33, 0x33, 0x33));
     private System.Windows.Media.ImageSource? thumbnail;
     public System.Windows.Media.ImageSource? Thumbnail { get => thumbnail; set => SetProperty(ref thumbnail, value); }
+    public void SetObservedAudio(MediaAsset source)
+    {
+        if (!string.Equals(source.Path, Path, StringComparison.OrdinalIgnoreCase)) return;
+        observedAudio = (Path, source.AudioChannels, source.AudioSampleRate);
+        OnPropertyChanged(nameof(AudioInfo));
+        OnPropertyChanged(nameof(Details));
+        OnPropertyChanged(nameof(ThumbnailDetails));
+    }
     public void Rebind(MediaAsset current, int count = 0)
     {
         if (!string.Equals(Asset.Path, current.Path, StringComparison.OrdinalIgnoreCase)) Thumbnail = null;
         Asset = current;
         UseCount = count;
-        OnPropertyChanged(nameof(Asset)); OnPropertyChanged(nameof(Name)); OnPropertyChanged(nameof(Details));
+        OnPropertyChanged(nameof(Asset)); OnPropertyChanged(nameof(Name)); OnPropertyChanged(nameof(Details)); OnPropertyChanged(nameof(ThumbnailDetails));
         OnPropertyChanged(nameof(Type)); OnPropertyChanged(nameof(FrameSize)); OnPropertyChanged(nameof(FrameRateText));
         OnPropertyChanged(nameof(DurationText)); OnPropertyChanged(nameof(Path)); OnPropertyChanged(nameof(AudioInfo));
         OnPropertyChanged(nameof(UseCount));

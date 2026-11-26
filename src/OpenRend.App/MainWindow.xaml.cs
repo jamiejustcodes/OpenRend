@@ -1089,7 +1089,7 @@ public partial class MainWindow : Window
     {
         var selected = SelectedLibraryItem;
         if (selected is null) { vm.Status = "Select a media item to view properties."; return; }
-        new MediaPropertiesWindow(selected.Asset, this).ShowDialog();
+        new MediaPropertiesWindow(selected.Asset, this, selected.AudioChannels, selected.SourceAudioRate).ShowDialog();
     }
 
     private void MediaPropertiesClick(object sender, RoutedEventArgs e) => MediaToolbarPropsClick(sender, e);
@@ -1187,8 +1187,10 @@ public partial class MainWindow : Window
         RecordRecentProject(path);
         var dataDir = Path.GetDirectoryName(recoveryPath)!;
         SessionRecoveryManager.StartSession(dataDir, path);
-        await PopulateMediaVisualsAsync();
         var missing = ProjectStore.FindMissingMedia(project);
+        if (missing.Count > 0) await RelinkMissingMediaAsync(project, missing);
+        await PopulateMediaVisualsAsync();
+        missing = ProjectStore.FindMissingMedia(project);
         vm.Status = missing.Count > 0 ? $"{missing.Count} missing media files. File → Relink missing media." : $"Opened {Path.GetFileName(path)}.";
     }
     private async Task PopulateMediaVisualsAsync()
@@ -1197,26 +1199,41 @@ public partial class MainWindow : Window
         {
             if (cachedMediaPaths.TryGetValue(item.Asset.Id, out var cachedPath) && cachedPath == item.Asset.Path) continue;
             var asset = item.Asset;
-            cachedMediaPaths[asset.Id] = asset.Path;
+            var path = asset.Path;
+            cachedMediaPaths[asset.Id] = path;
             Timeline.Thumbnails.Remove(asset.Id); Timeline.Waveforms.Remove(asset.Id);
-            if (!File.Exists(item.Asset.Path)) continue;
+            item.Thumbnail = null;
+            if (!File.Exists(path)) continue;
             try
             {
-                if (item.Asset.HasVideo)
+                if (asset.HasAudio && (asset.AudioChannels <= 0 || asset.AudioSampleRate <= 0))
                 {
-                    var data = await vm.Media.GetThumbnailAsync(item.Asset.Path, 0, 160, 90);
-                    if (vm.Project.Media.All(m => m.Id != asset.Id || m.Path != asset.Path)) continue;
+                    var source = await vm.Media.ProbeAsync(path);
+                    if (vm.Project.Media.All(m => m.Id != asset.Id || m.Path != path)) continue;
+                    item.SetObservedAudio(source);
+                }
+                if (asset.HasVideo)
+                {
+                    var data = await vm.Media.GetThumbnailAsync(path, 0, 160, 90);
+                    if (vm.Project.Media.All(m => m.Id != asset.Id || m.Path != path)) continue;
                     var bitmap = BitmapSource.Create(160, 90, 96, 96, PixelFormats.Bgra32, null, data, 160 * 4); bitmap.Freeze();
-                    item.Thumbnail = bitmap; Timeline.Thumbnails[item.Asset.Id] = bitmap;
+                    item.Thumbnail = bitmap; Timeline.Thumbnails[asset.Id] = bitmap;
                 }
                 if (asset.HasAudio)
                 {
-                    var waveform = await vm.Media.GetWaveformAsync(asset.Path, 512);
-                    if (vm.Project.Media.Any(m => m.Id == asset.Id && m.Path == asset.Path)) Timeline.Waveforms[asset.Id] = waveform;
+                    var waveform = await vm.Media.GetWaveformAsync(path, 512);
+                    if (vm.Project.Media.Any(m => m.Id == asset.Id && m.Path == path)) Timeline.Waveforms[asset.Id] = waveform;
                 }
                 Timeline.InvalidateVisual();
             }
-            catch (Exception ex) { cachedMediaPaths.Remove(asset.Id); vm.Status = "Media cache: " + ex.Message; }
+            catch (Exception ex)
+            {
+                if (cachedMediaPaths.TryGetValue(asset.Id, out var pending) && pending == path)
+                {
+                    cachedMediaPaths.Remove(asset.Id);
+                    vm.Status = "Media cache: " + ex.Message;
+                }
+            }
         }
     }
     private async Task ImportPathsAsync(IEnumerable<string> paths)
@@ -1382,22 +1399,12 @@ public partial class MainWindow : Window
     });
     private async void RelinkClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
-        Pause(); var missing = ProjectStore.FindMissingMedia(vm.Project);
-        if (missing.Count == 0) { vm.Status = "All source media is available."; return; }
-        foreach (var asset in missing)
-        {
-            var dialog = new OpenFileDialog { Title = $"Locate {asset.Name}", FileName = asset.Name };
-            if (dialog.ShowDialog(this) != true) break;
-            var probe = await vm.Media.ProbeAsync(dialog.FileName);
-            vm.Editor.Execute(p =>
-            {
-                var current = p.Media.Single(m => m.Id == asset.Id);
-                current.Path = probe.Path; current.DurationSeconds = probe.DurationSeconds;
-                current.HasVideo = probe.HasVideo; current.HasAudio = probe.HasAudio;
-                current.Width = probe.Width; current.Height = probe.Height; current.FrameRate = probe.FrameRate;
-            });
-        }
-        await PopulateMediaVisualsAsync();
+        Pause();
+        var project = vm.Project;
+        var missing = ProjectStore.FindMissingMedia(project);
+        if (missing.Count > 0) await RelinkMissingMediaAsync(project, missing);
+        var remaining = ProjectStore.FindMissingMedia(project).Count;
+        vm.Status = remaining == 0 ? "All source media is available." : $"{remaining} source files still need relinking.";
     });
     private void PlaceSelectedClick(object sender, RoutedEventArgs e) => Guard(() =>
     {

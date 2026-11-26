@@ -45,7 +45,9 @@ public sealed class ProjectMediaEditorTests
             FrameRate = 29.97,
             DurationSeconds = 65.5,
             HasVideo = true,
-            HasAudio = true
+            HasAudio = true,
+            AudioChannels = 1,
+            AudioSampleRate = 44100
         };
 
         var item = new MediaItem(asset);
@@ -56,8 +58,23 @@ public sealed class ProjectMediaEditorTests
         Assert.Equal("1920 \u00D7 1080", item.FrameSize);
         Assert.Equal("29.97 fps", item.FrameRateText);
         Assert.Equal("00:01:05.50", item.DurationText);
-        Assert.Equal("Stereo, 48 kHz", item.AudioInfo);
+        Assert.Equal("Mono, 44.1 kHz", item.AudioInfo);
+        Assert.Contains("1920×1080 · 1 ch", item.ThumbnailDetails);
         Assert.Equal(3, item.UseCount);
+    }
+
+    [Fact]
+    public void LegacyAudioMetadataIsObservedWithoutChangingTheAsset()
+    {
+        var original = new MediaAsset { Path = "old.wav", HasAudio = true };
+        var item = new MediaItem(original);
+        Assert.Equal("Audio", item.AudioInfo);
+        item.SetObservedAudio(new MediaAsset { Path = original.Path, AudioChannels = 1, AudioSampleRate = 48000 });
+        Assert.Equal("Mono, 48 kHz", item.AudioInfo);
+        Assert.Equal(0, original.AudioChannels);
+        item.Rebind(new MediaAsset { Path = "different.wav", HasAudio = true, AudioChannels = 2, AudioSampleRate = 44100 });
+        item.SetObservedAudio(new MediaAsset { Path = original.Path, AudioChannels = 1, AudioSampleRate = 48000 });
+        Assert.Equal("Stereo, 44.1 kHz", item.AudioInfo);
     }
 
     [Fact]
