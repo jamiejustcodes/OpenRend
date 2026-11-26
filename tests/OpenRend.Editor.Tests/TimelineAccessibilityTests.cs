@@ -70,6 +70,33 @@ public sealed class TimelineAccessibilityTests
     });
 
     [Fact]
+    public void TrackGainPointerAndAutomationShareSixDecibelLimitAndPanHasACenterDetent() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        var sound = editor.Project.Tracks[1];
+        var gain = view.TrackLevelBounds(sound.Id, "Gain");
+        var pan = view.TrackLevelBounds(sound.Id, "Pan");
+        var peer = UIElementAutomationPeer.CreatePeerForElement(view).GetChildren()[1];
+        var provider = Assert.IsAssignableFrom<IRangeValueProvider>(peer.GetChildren().Single(child => child.GetAutomationId().EndsWith("_Gain"))
+            .GetPattern(PatternInterface.RangeValue));
+        Assert.Equal(6, 20 * Math.Log10(provider.Maximum), 8);
+        Assert.Equal(provider.Maximum, view.TrackLevelAt(sound.Id, "Gain", gain.Right));
+        Assert.Equal(0, view.TrackLevelAt(sound.Id, "Gain", gain.Left));
+        Assert.Equal(-1, view.TrackLevelAt(sound.Id, "Pan", pan.Left));
+        Assert.Equal(0, view.TrackLevelAt(sound.Id, "Pan", pan.Left + pan.Width / 2 + 1.5));
+        Assert.True(view.TrackLevelAt(sound.Id, "Pan", pan.Left + pan.Width / 2 + 3) > 0);
+        Assert.Equal(1, view.TrackLevelAt(sound.Id, "Pan", pan.Right));
+
+        editor.SetTrackLevels(sound.Id, gain: 3);
+        Assert.Equal(3, provider.Value);
+        Assert.Equal(3, provider.Maximum);
+        provider.SetValue(1);
+        Assert.Throws<ArgumentOutOfRangeException>(() => provider.SetValue(3));
+        editor.Undo();
+        Assert.Equal(3, provider.Value);
+    });
+
+    [Fact]
     public void TrackSizesUpdateEventsDropTargetsAndAccessibleControlsWithoutEditing() => Sta(() =>
     {
         var (view, editor) = Create();

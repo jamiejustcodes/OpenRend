@@ -181,7 +181,7 @@ internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer ti
     private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
     public bool IsReadOnly => Track.IsLocked || !View.IsEnabled || View.TrackLevelBounds(trackId, level).IsEmpty;
     public double Minimum => level == "Pan" ? -1 : 0;
-    public double Maximum => level == "Gain" ? Math.Max(4, Value) : 1;
+    public double Maximum => TimelineView.TrackLevelMaximum(level, Value);
     public double SmallChange => .01;
     public double LargeChange => .1;
     public double Value => View.ReadTrackLevel(trackId, level);
@@ -192,7 +192,7 @@ internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer ti
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Slider;
     protected override AutomationOrientation GetOrientationCore() => AutomationOrientation.Horizontal;
     protected override Rect GetBoundingRectangleCore() => View.ToScreenBounds(View.TrackLevelBounds(trackId, level));
-    protected override bool IsEnabledCore() => View.IsEnabled && !Track.IsLocked;
+    protected override bool IsEnabledCore() => !IsReadOnly;
     protected override bool HasKeyboardFocusCore() => View.IsTrackLevelFocused(trackId, level);
     protected override void SetFocusCore() { EnsureEnabled(); View.FocusTrackLevel(trackId, level); }
     public override object? GetPattern(PatternInterface patternInterface) => patternInterface == PatternInterface.RangeValue ? this : null;
@@ -207,6 +207,9 @@ internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer ti
     {
         var current = Value;
         if (current != previous) RaisePropertyChangedEvent(RangeValuePatternIdentifiers.ValueProperty, previous, current);
+        var previousMaximum = TimelineView.TrackLevelMaximum(level, previous);
+        var currentMaximum = TimelineView.TrackLevelMaximum(level, current);
+        if (currentMaximum != previousMaximum) RaisePropertyChangedEvent(RangeValuePatternIdentifiers.MaximumProperty, previousMaximum, currentMaximum);
         previous = current;
         InvalidatePeer();
     }

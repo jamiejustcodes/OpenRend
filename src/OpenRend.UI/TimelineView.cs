@@ -69,6 +69,9 @@ public sealed partial class TimelineView : FrameworkElement
     public const double HeaderWidth = 256;
     public const double RulerHeight = 46;
     public const double TrackHeight = 69;
+    private const double MaxTrackGainDb = 6;
+    private const double MinTrackGainDb = -60;
+    private static readonly double MaxTrackGain = Math.Pow(10, MaxTrackGainDb / 20);
     public event Action<long>? SeekRequested;
     public event Action<long>? ScrubMoved;
     public event Action? ScrubEnded;
@@ -411,7 +414,8 @@ public sealed partial class TimelineView : FrameworkElement
         {
             if (Project.Tracks.Single(t => t.Id == levelId).IsLocked) return true;
             var current = ReadTrackLevel(levelId, level);
-            var min = level == "Pan" ? -1 : 0; var max = level == "Gain" ? Math.Max(4, current) : 1;
+            var min = level == "Pan" ? -1 : 0;
+            var max = TrackLevelMaximum(level, current);
             var value = key switch { Key.Home => min, Key.End => max, _ => current + (key == Key.Left ? -.01 : .01) };
             SetTrackLevel(levelId, level, Math.Clamp(value, min, max));
             return true;
@@ -792,6 +796,7 @@ public sealed partial class TimelineView : FrameworkElement
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
         if (index < 0) throw new ElementNotAvailableException();
+        if (TrackLevelBounds(trackId, level).IsEmpty) throw new ElementNotEnabledException();
         var changed = levelTrack != trackId || levelKind != level;
         ActivateTrack(index); levelTrack = trackId; levelKind = level; Focus(); InvalidateVisual();
         if (changed) (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.NotifyTrackLevelFocus(trackId, level);
@@ -803,17 +808,25 @@ public sealed partial class TimelineView : FrameworkElement
         InvalidateVisual();
         (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.RefreshProject();
     }
+    // Keep saved projects with higher gains readable and adjustable down to the current range.
+    internal static double TrackLevelMaximum(string level, double current) => level == "Gain" ? Math.Max(MaxTrackGain, current) : 1;
+
     private static double LevelFraction(string level, double value) => level switch
     {
-        "Gain" => value <= 0 ? 0 : Math.Clamp((20 * Math.Log10(value) + 60) / (60 + 20 * Math.Log10(4)), 0, 1),
+        "Gain" => value <= 0 ? 0 : Math.Clamp((20 * Math.Log10(value) - MinTrackGainDb) / (MaxTrackGainDb - MinTrackGainDb), 0, 1),
         "Pan" => (value + 1) / 2,
         _ => value
     };
-    private double LevelAt(double x)
+    internal double TrackLevelAt(Guid trackId, string level, double x)
     {
-        var bounds = TrackLevelBounds(levelTrack!.Value, levelKind!);
+        var bounds = TrackLevelBounds(trackId, level);
         var fraction = Math.Clamp((x - bounds.X - 4) / (bounds.Width - 8), 0, 1);
-        return levelKind switch { "Gain" => fraction == 0 ? 0 : Math.Pow(10, (-60 + (60 + 20 * Math.Log10(4)) * fraction) / 20), "Pan" => fraction * 2 - 1, _ => fraction };
+        return level switch
+        {
+            "Gain" => fraction == 0 ? 0 : Math.Pow(10, (MinTrackGainDb + (MaxTrackGainDb - MinTrackGainDb) * fraction) / 20),
+            "Pan" => Math.Abs(x - (bounds.X + bounds.Width / 2)) <= 2 ? 0 : fraction * 2 - 1,
+            _ => fraction
+        };
     }
 
     internal Rect ToScreenBounds(Rect bounds, bool clipContent = false)
@@ -1754,7 +1767,7 @@ public sealed partial class TimelineView : FrameworkElement
                     FocusTrackLevel(track.Id, level);
                     if (track.IsLocked) return;
                     if (e.ClickCount == 2) { SetTrackLevel(track.Id, level, level == "Pan" ? 0 : 1); return; }
-                    adjustingLevel = true; pendingLevel = LevelAt(origin.X); CaptureMouse(); InvalidateVisual(); return;
+                    adjustingLevel = true; pendingLevel = TrackLevelAt(track.Id, level, origin.X); CaptureMouse(); InvalidateVisual(); return;
                 }
                 foreach (var action in new[] { "Mute", "Solo", "Lock", "Visible", "FX", "Motion", "Phase", "Arm", "Automation", "CompChild" })
                 {
@@ -1922,7 +1935,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (selectingLoop) { UpdateLoopRegion(p); return; }
         if (pressedEventButton is not null) { UpdateHover(p); return; }
-        if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
+        if (adjustingLevel) { pendingLevel = TrackLevelAt(levelTrack!.Value, levelKind!, p.X); InvalidateVisual(); return; }
         if (seeking)
         {
             (ScrubMoved ?? SeekRequested)?.Invoke(FrameAt(p.X));
@@ -2242,7 +2255,7 @@ public sealed partial class TimelineView : FrameworkElement
 
         if (commitLevel)
         {
-            SetTrackLevel(levelTrack!.Value, levelKind!, pendingLevel);
+            SetTrackLevel(levelTrack!.Value, levelKind!, TrackLevelAt(levelTrack.Value, levelKind!, p.X));
             ReleaseMouseCapture();
             UpdateHover(p);
             return;
