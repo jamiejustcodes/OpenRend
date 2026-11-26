@@ -60,7 +60,7 @@ public sealed partial class EditorWorkflowTests
             Assert.Contains(saved.Tracks[0].Envelopes!, envelope => envelope.Type == EnvelopeType.Composite);
             Assert.Contains(saved.Tracks[1].Envelopes!, envelope => envelope.Type == EnvelopeType.Volume);
             Assert.Contains(saved.Tracks[1].Envelopes!, envelope => envelope.Type == EnvelopeType.Pan);
-            running.CloseGracefully();
+            running.CloseGracefully(waitForRender: false);
 
             void CheckOwner(System.Drawing.Point point) => Assert.Equal(window.Properties.ProcessId.Value,
                 window.Automation.FromPoint(point).Properties.ProcessId.Value);

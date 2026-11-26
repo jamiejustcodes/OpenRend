@@ -994,7 +994,8 @@
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
           <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>
           <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in" Foreground="{StaticResource TextColor}"/>
-          <Button Style="{StaticResource IconButton}" Content="↔" Width="24" Height="24" Click="FitClick" ToolTip="Fit timeline" Foreground="{StaticResource TextColor}"/>
+          <Button Style="{StaticResource IconButton}" Content="↔" Width="24" Height="24" Click="FitClick" ToolTip="Fit timeline"
+                  AutomationProperties.AutomationId="FitTimelineButton" AutomationProperties.Name="Fit timeline" Foreground="{StaticResource TextColor}"/>
         </StackPanel>
 
         <!-- Left side: Transport Buttons & Rate -->

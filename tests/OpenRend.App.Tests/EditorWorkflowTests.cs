@@ -144,9 +144,12 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         {
             using var running = Launch(executable, projectPath, temporary);
             var window = running.Window;
-            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
-            Mouse.Click(Find(window, $"Clip_{outgoing.Id:N}").GetClickablePoint());
-            Assert.True(Find(window, $"Clip_{outgoing.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
+            FitTimeline(window);
+            var first = Find(window, $"Clip_{outgoing.Id:N}");
+            var point = first.GetClickablePoint();
+            Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
+            Mouse.Click(point);
+            WaitFor(() => first.Patterns.SelectionItem.Pattern.IsSelected.Value, "The outgoing event was not selected.");
             Assert.False(Find(window, $"Clip_{incoming.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
             if (convertCut)
             {
@@ -867,6 +870,14 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         return element;
     }
 
+    private static void FitTimeline(Window window)
+    {
+        WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("Timeline"))?.BoundingRectangle.Width > 600,
+            "The timeline did not finish laying out.");
+        Find(window, "FitTimelineButton").AsButton().Invoke();
+        Wait.UntilInputIsProcessed();
+    }
+
     [StructLayout(LayoutKind.Sequential)]
     private struct NativeRect { public int Left, Top, Right, Bottom; }
     [StructLayout(LayoutKind.Sequential)]
@@ -962,9 +973,9 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
     private sealed class RunningApplication(Application app, UIA3Automation automation, Window window) : IDisposable
     {
         public Window Window { get; } = window;
-        public void CloseGracefully()
+        public void CloseGracefully(bool waitForRender = true)
         {
-            WaitFor(() => Find(Window, "RenderButton").IsEnabled, "Render did not finish before closing.");
+            if (waitForRender) WaitFor(() => Find(Window, "RenderButton").IsEnabled, "Render did not finish before closing.");
             Window.Close();
             WaitFor(() => app.HasExited, "The clean project did not close gracefully.");
         }

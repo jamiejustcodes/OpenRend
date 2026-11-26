@@ -1,7 +1,6 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
-using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
 using OpenRend.Project;
 using Xunit;
@@ -37,8 +36,14 @@ public sealed partial class EditorWorkflowTests
 
             using var running = Launch(executable, path, temporary);
             var window = running.Window;
-            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
-            Find(window, $"Clip_{clip.Id:N}_More").AsButton().Invoke();
+            FitTimeline(window);
+            AutomationElement? clipElement = null;
+            WaitFor(() => (clipElement = window.FindFirstDescendant(c => c.ByAutomationId($"Clip_{clip.Id:N}")))?.BoundingRectangle.Width > 100,
+                "Fit Timeline did not expand the timeline event.");
+            var clipBounds = clipElement!.BoundingRectangle;
+            var menuPoint = new System.Drawing.Point(clipBounds.Left + clipBounds.Width / 2, clipBounds.Top + clipBounds.Height / 2);
+            Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(menuPoint).Properties.ProcessId.Value);
+            Mouse.Click(menuPoint, MouseButton.Right);
             AutomationElement? command = null;
             WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(c =>
                 c.ByAutomationId("OpenEventInTrimmer").And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null,

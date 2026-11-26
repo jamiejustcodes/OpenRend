@@ -83,15 +83,20 @@ public sealed partial class EditorWorkflowTests
             Assert.NotNull(monitorMute);
             monitorMute.AsButton().Invoke();
             var autoplay = Find(window, "ExplorerAutoPlay").AsToggleButton();
+            WaitFor(() => PresentedFrame(window) == 0, "The initial empty timeline frame did not render.");
+            var surface = Assert.Single(window.FindAllDescendants(c => c.ByClassName("OpenRend.Preview")));
+            var emptyPixels = SamplePreview(surface);
             autoplay.Toggle();
             entries.Items[0].Select();
             var preview = Find(window, "PreviewInfo");
             WaitFor(() => preview.Name == "Source preview · source.mp4", "Explorer selection did not open the source preview.");
+            WaitFor(() => PreviewDifference(emptyPixels, SamplePreview(surface)) > 20, "The source never drew video in the native preview.");
             Assert.DoesNotContain('*', window.Title);
             autoplay.Toggle();
             WaitFor(() => preview.Name.Contains("Frame:"), "Disabling autoplay did not restore the timeline preview.");
+            WaitFor(() => PreviewDifference(emptyPixels, SamplePreview(surface)) < 1, "The empty timeline frame did not replace the source preview.");
             Assert.Empty((await ProjectStore.LoadAsync(path)).Media);
-            running.CloseGracefully();
+            running.CloseGracefully(waitForRender: false);
         }
         finally { Directory.Delete(temporary, recursive: true); }
     }

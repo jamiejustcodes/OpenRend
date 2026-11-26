@@ -8,7 +8,7 @@ Source Window Layout shows the existing Trimmer beside Video Preview. Explorer t
 
 OpenRend has tools, preview and master bus tab groups with resizable splitters. Five built-in presets and saved layouts can set splitter sizes and active tabs, move the timeline above the tab groups, and open separate tool windows. Drag the Trimmer, Video Preview, Explorer, Project Media, Video FX, Transitions or Master Bus tab upward to float it. Hold Ctrl and drag its title into the home group to redock it. View > Window opens closed tools, and Alt+2 toggles the Trimmer. Restart restores saved visibility and floating bounds, with an off-screen position moved into a connected monitor's work area. Layout tests cover preset definitions, serialization and shortcut slots. Arbitrary dock targets and mixed-DPI display changes remain open. Test counts in the history below describe individual runs.
 
-Open floating panes also recheck their work area when Windows reports a display or work-area change. Geometry tests cover recovery from a removed negative-coordinate monitor and fitting to a smaller work area. The simulated Windows notification and physical display-removal replays are pending.
+Open floating panes also recheck their work area when Windows reports a display or work-area change. Geometry tests cover recovery from a removed negative-coordinate monitor and fitting to a smaller work area. A simulated Windows display-change notification recovered an open Trimmer in the desktop test. Physical display removal remains unverified.
 
 ## Timeline track height
 
@@ -24,15 +24,15 @@ The resizable Master Bus pane measures the stereo program before the playback ce
 
 Project master gain, Dim and Mute apply to queued WASAPI audio as playback continues. The live meter follows these controls. Preview and export apply program gain after the shared automation and effects stage. The workspace's monitor gain controls the playback device separately. The desktop workflow exercised Dim and Mute during playback and verified both saved project settings.
 
-The Master Bus also displays integrated loudness for the current playback pass. It applies both BS.1770 gates to overlapping 400 ms stereo blocks and scans the measured blocks once per second. Stopping playback displays the final reading for that pass. Managed tests checked the gating against mixed-level calibration tones and audio buffer boundaries. The integrated readout's desktop workflow is pending. [ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en)
+The Master Bus also displays integrated loudness for the current playback pass. It applies both BS.1770 gates to overlapping 400 ms stereo blocks and scans the measured blocks once per second. Managed tests check mixed-level calibration tones and audio buffer boundaries. The desktop workflow reads the integrated meter during playback and after stopping. [ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en)
 
 ## Source workflows
 
-Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. Shift+A ends the placement at the timeline cursor and retains the selected source Out point if the placement reaches the project start. Core and editor tests cover the drop target, source range, and undo. The physical drag workflow remains pending.
+Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. Shift+A ends the placement at the timeline cursor and retains the selected source Out point if the placement reaches the project start. Core and editor tests cover the drop target, source range, and undo. The desktop workflow drags the marked source audio, saves the project, and checks the exact range on the destination track.
 
-Project Media thumbnails and properties show measured file metadata, including audio channels and sample rate. Replace source file and the missing-media prompt share the same undoable edit. They preserve the media ID, event ranges and takes. The managed tests replace a source, undo and redo it, save and reopen, and confirm that the source file contents are unchanged. The desktop relink workflow remains pending.
+Project Media thumbnails and properties show measured file metadata, including audio channels and sample rate. Replace source file and the missing-media prompt share the same undoable edit. They preserve the media ID, event ranges and takes. The managed tests replace a source, undo and redo it, save and reopen, and check its bytes. The desktop workflow relinks a missing file at startup and checks the saved event range and mono source metadata.
 
-The Explorer item preview and Auto-play selection toggle play source files through OpenRend's renderer and audio playback engine using a temporary source timeline. Changing selection or returning to timeline playback cancels the source preview. The managed native-media fixture verified the preview's audio samples and original mono metadata. The desktop Auto-play workflow remains pending.
+The Explorer item preview and Auto-play selection toggle play source files through OpenRend's renderer and audio playback engine using a temporary source timeline. Changing selection or returning to timeline playback cancels the source preview. The managed native-media fixture verifies the preview's audio samples and original mono metadata. The desktop workflow verifies that selecting a source draws the video and switching Auto-play off restores the empty timeline.
 
 ## Requested addition: startup and project creation
 
