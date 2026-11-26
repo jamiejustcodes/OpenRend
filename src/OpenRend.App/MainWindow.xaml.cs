@@ -625,7 +625,7 @@ public partial class MainWindow : Window
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
         Timeline.LoopRegionChanged += range => vm.LoopRegion = range;
         TrimmerDeck.Initialize(vm);
-        InitializeTrimmerPane();
+        InitializeWorkspacePanes();
         vm.Changed += Refresh;
         vm.Changed += () =>
         {
@@ -3227,7 +3227,7 @@ public partial class MainWindow : Window
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
     private void WindowKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Escape && CancelTrimmerDrag())
+        if (e.Key == Key.Escape && CancelWorkspacePaneDrag())
         {
             e.Handled = true;
             return;
@@ -3466,7 +3466,8 @@ public partial class MainWindow : Window
             screen?.X, screen?.Y,
             WorkspaceHeight.Height.IsStar && TimelineRowHeight.Height.IsStar
                 ? WorkspaceHeight.Height.Value / (WorkspaceHeight.Height.Value + TimelineRowHeight.Height.Value)
-                : null)));
+                : null,
+            CaptureWorkspacePanes())));
     }
     private void LoadWorkspace()
     {
@@ -3519,9 +3520,14 @@ public partial class MainWindow : Window
 
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
             RestoreTrimmerPane(settings.Trimmer);
+            RestoreWorkspacePanes(settings.Panes);
             if (sourceDock)
-                ToolsTabs.SelectedIndex = settings.SourceToolsTabIndex is >= 0 && settings.SourceToolsTabIndex < ToolsTabs.Items.Count
-                    ? settings.SourceToolsTabIndex.Value : 0;
+            {
+                var toolsIndex = settings.SourceToolsTabIndex ?? 0;
+                if (toolsIndex >= 0 && toolsIndex < ToolsTabs.Items.Count &&
+                    ToolsTabs.Items[toolsIndex] is TabItem { Visibility: Visibility.Visible } toolsTab)
+                    ToolsTabs.SelectedItem = toolsTab;
+            }
             if (settings.TrimmerSelected && TrimmerTab.Visibility == Visibility.Visible)
                 PreviewDeckTabs.SelectedItem = TrimmerTab;
         }
@@ -3529,7 +3535,8 @@ public partial class MainWindow : Window
     }
     private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth,
         double WorkspaceHeight, double Zoom, bool Maximized, TrimmerPaneLayout? Trimmer = null, bool TrimmerSelected = false,
-        int? SourceToolsTabIndex = null, int? MonitorX = null, int? MonitorY = null, double? WorkspaceShare = null);
+        int? SourceToolsTabIndex = null, int? MonitorX = null, int? MonitorY = null, double? WorkspaceShare = null,
+        Dictionary<string, WorkspacePaneLayout>? Panes = null);
 
     private (float u, float v, float vpWidth, float vpHeight)? PreviewWindowToVideoCoords(int mouseX, int mouseY)
     {

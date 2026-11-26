@@ -78,12 +78,14 @@ public partial class MainWindow
         }
 
         RestoreTrimmerPane(layout.Trimmer);
+        RestoreWorkspacePanes(layout.Panes);
         ApplyLayoutConstraints();
 
         // 3. Tab selections
-        if (layout.ToolsTabIndex >= 0 && layout.ToolsTabIndex < ToolsTabs.Items.Count)
+        if (layout.ToolsTabIndex >= 0 && layout.ToolsTabIndex < ToolsTabs.Items.Count &&
+            ToolsTabs.Items[layout.ToolsTabIndex] is TabItem { Visibility: Visibility.Visible } toolsTab)
         {
-            ToolsTabs.SelectedIndex = layout.ToolsTabIndex;
+            ToolsTabs.SelectedItem = toolsTab;
         }
         if (layout.PreviewDeckTabIndex >= 0 && layout.PreviewDeckTabIndex < PreviewDeckTabs.Items.Count &&
             PreviewDeckTabs.Items[layout.PreviewDeckTabIndex] is TabItem { Visibility: Visibility.Visible } previewTab)
@@ -144,6 +146,7 @@ public partial class MainWindow
             VideoScopesOpen = videoScopesWindow != null && videoScopesWindow.IsLoaded && videoScopesWindow.IsVisible,
             EditDetailsOpen = editDetailsWindow != null && editDetailsWindow.IsLoaded && editDetailsWindow.IsVisible,
             Trimmer = CaptureTrimmerPane(),
+            Panes = CaptureWorkspacePanes(),
             ShortcutSlot = shortcutSlot
         };
     }

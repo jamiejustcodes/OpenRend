@@ -123,11 +123,112 @@ public sealed partial class EditorWorkflowTests
         finally { Directory.Delete(temporary, recursive: true); }
     }
 
-    private static Window? FloatingTrimmer(Window owner) => owner
-        .FindFirstDescendant(c => c.ByControlType(ControlType.Window).And(c.ByName("Trimmer")))?.AsWindow();
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public async Task CoreWorkspacePanesFloatAndRedock()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        var projectPath = Path.Combine(temporary, "panes.openrend");
+        try
+        {
+            var media = new MediaAsset
+            {
+                Path = Path.Combine(root, "tests", "native", "fixture.mp4"),
+                Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true
+            };
+            await ProjectStore.SaveAsync(new ProjectDocument
+            {
+                Name = "UI integration", Media = [media],
+                Tracks = [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = media.Id, DurationFrames = 90 }] }]
+            }, projectPath);
 
-    private static TabItem? DockedTrimmer(Window owner) => owner
-        .FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Trimmer")))?.AsTabItem();
+            Rectangle savedMediaBounds;
+            using (var running = Launch(executable, projectPath, temporary))
+            {
+                var window = running.Window;
+                var scale = GetDpiForWindow(window.Properties.NativeWindowHandle.Value) / 96.0;
+                foreach (var (name, dock, control) in new[]
+                {
+                    ("Video Preview", "PreviewDeckTabs", "PreviewInfo"), ("Explorer", "ToolsTabs", "ExplorerList"),
+                    ("Project Media", "ToolsTabs", "MediaList"), ("Video FX", "ToolsTabs", "VideoFxPlugIns"),
+                    ("Transitions", "ToolsTabs", "TransitionPlugIns"), ("Master Bus", "MasterBusTabs", "MasterGain")
+                })
+                {
+                    var floating = FloatPane(window, name, scale);
+                    var movedControl = Find(floating, control);
+                    if (name == "Project Media")
+                        Assert.Single(movedControl.AsListBox().Items);
+                    if (name == "Video Preview")
+                        WaitFor(() => movedControl.Properties.HelpText.ValueOrDefault?.Contains("Direct3D 11") == true,
+                            "The native display did not initialize in the floating preview.");
+
+                    var bounds = floating.BoundingRectangle;
+                    var home = Find(window, dock).BoundingRectangle;
+                    var caption = new Point(bounds.Left + (int)(60 * scale), bounds.Top + (int)(16 * scale));
+                    var target = new Point(home.Left + home.Width / 2, home.Top + home.Height / 2);
+                    using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
+                        DragTrimmer(caption, target);
+                    WaitFor(() => FloatingPane(window, name) is null && DockedPane(window, name) is not null,
+                        $"Ctrl-drag did not redock {name}.");
+                    Find(window, control);
+                }
+
+                var projectMedia = FloatPane(window, "Project Media", scale);
+                savedMediaBounds = projectMedia.BoundingRectangle;
+                running.CloseGracefully();
+            }
+
+            using (var running = Launch(executable, projectPath, temporary))
+            {
+                var window = running.Window;
+                WaitFor(() => FloatingPane(window, "Project Media")?.BoundingRectangle == savedMediaBounds,
+                    "Restart did not restore the floating Project Media bounds.");
+                var floating = FloatingPane(window, "Project Media")!;
+                var close = floating.FindFirstDescendant(c => c.ByName("Close Project Media"));
+                Assert.NotNull(close);
+                close.AsButton().Invoke();
+                WaitFor(() => FloatingPane(window, "Project Media") is null, "The Project Media pane did not close.");
+
+                var view = window.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("View")));
+                Assert.NotNull(view);
+                view.AsMenuItem().Expand();
+                Find(window, "WorkspaceWindowMenu").AsMenuItem().Expand();
+                Find(window, "ShowPane_ProjectMedia").AsMenuItem().Invoke();
+                WaitFor(() => FloatingPane(window, "Project Media")?.BoundingRectangle == savedMediaBounds,
+                    "The Window menu did not reopen Project Media at its prior bounds.");
+                running.CloseGracefully();
+            }
+
+            static Window FloatPane(Window window, string name, double scale)
+            {
+                FocusTrimmerWindow(window);
+                var tab = DockedPane(window, name);
+                Assert.NotNull(tab);
+                tab.Select();
+                WaitFor(() => !tab.Properties.IsOffscreen.ValueOrDefault, $"The {name} tab was off screen.");
+                var tabBounds = tab.BoundingRectangle;
+                var start = new Point(tabBounds.Left + (int)(22 * scale), tabBounds.Top + tabBounds.Height / 2);
+                DragTrimmer(start, new Point(start.X, start.Y - (int)(140 * scale)));
+                WaitFor(() => FloatingPane(window, name) is not null, $"Dragging the tab did not float {name}.");
+                return FloatingPane(window, name)!;
+            }
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    private static Window? FloatingTrimmer(Window owner) => FloatingPane(owner, "Trimmer");
+
+    private static Window? FloatingPane(Window owner, string name) => owner
+        .FindFirstDescendant(c => c.ByControlType(ControlType.Window).And(c.ByName(name)))?.AsWindow();
+
+    private static TabItem? DockedTrimmer(Window owner) => DockedPane(owner, "Trimmer");
+
+    private static TabItem? DockedPane(Window owner, string name) => owner
+        .FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName(name)))?.AsTabItem();
 
     private static void DragTrimmer(Point start, Point end)
     {

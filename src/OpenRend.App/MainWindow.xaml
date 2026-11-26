@@ -128,7 +128,7 @@
           <MenuItem x:Name="LayoutSlot8Menu" Header="Layout &amp;8 &lt;EMPTY&gt;" InputGestureText="Alt+D, 8" Click="LayoutSlotClick" Tag="8"/>
           <MenuItem x:Name="LayoutSlot9Menu" Header="Layout &amp;9 &lt;EMPTY&gt;" InputGestureText="Alt+D, 9" Click="LayoutSlotClick" Tag="9"/>
         </MenuItem>
-        <MenuItem Header="Window">
+        <MenuItem x:Name="WorkspaceWindowMenu" Header="Window">
           <MenuItem x:Name="TrimmerWindowMenu" Header="Trimmer" InputGestureText="Alt+2" Click="TrimmerClick"/>
           <MenuItem x:Name="VideoScopesWindowMenu" Header="Video Scopes" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
           <MenuItem x:Name="EditDetailsWindowMenu" Header="Edit Details" InputGestureText="Ctrl+Alt+4" Click="EditDetailsClick"/>
@@ -271,7 +271,7 @@
       </Grid.ColumnDefinitions>
       <TabControl x:Name="ToolsTabs" TabStripPlacement="Bottom" SelectedIndex="1">
         <!-- 1:1 Vegas Pro UnifiedExplorer Tab -->
-        <TabItem Header="Explorer">
+        <TabItem x:Name="ExplorerTab" Header="Explorer">
           <Grid Background="{StaticResource ColorBG}">
             <Grid.RowDefinitions>
               <RowDefinition Height="30" />
@@ -386,7 +386,7 @@
             </Grid>
           </Grid>
         </TabItem>
-        <TabItem Header="Project Media">
+        <TabItem x:Name="ProjectMediaTab" Header="Project Media">
           <DockPanel Background="{StaticResource ColorBG}">
             <Border DockPanel.Dock="Top" Height="30" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
               <DockPanel Margin="4,0" VerticalAlignment="Center">
@@ -605,7 +605,7 @@
           </Grid>
         </TabItem>
         <!-- 1:1 Vegas Pro Transitions Tab -->
-        <TabItem Header="Transitions">
+        <TabItem x:Name="TransitionsTab" Header="Transitions">
           <Grid Background="{StaticResource ColorBG}">
             <Grid.RowDefinitions>
               <RowDefinition Height="30"/>
@@ -699,7 +699,7 @@
           </Grid>
         </TabItem>
         <!-- 1:1 Vegas Pro Video FX Tab -->
-        <TabItem Header="Video FX">
+        <TabItem x:Name="VideoEffectsTab" Header="Video FX">
           <Grid Background="{StaticResource ColorBG}">
             <Grid.RowDefinitions>
               <RowDefinition Height="30"/>
@@ -897,7 +897,7 @@
         <TabControl x:Name="SourceDeckTabs" TabStripPlacement="Bottom" Visibility="Collapsed"/>
         <GridSplitter x:Name="SourceSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" Visibility="Collapsed" DragCompleted="SourceSplitterCompleted"/>
       <TabControl x:Name="PreviewDeckTabs" Grid.Column="2" TabStripPlacement="Bottom">
-        <TabItem Header="Video Preview">
+        <TabItem x:Name="VideoPreviewTab" Header="Video Preview">
         <Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="*"/><RowDefinition Height="32"/><RowDefinition Height="28"/></Grid.RowDefinitions>
           <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
             <Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Project video settings" Click="SettingsClick" ToolTip="Project video properties"><Image Source="{StaticResource Icon.Settings}"/></Button>
@@ -959,7 +959,7 @@
     </TabControl>
       </Grid>
       <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" DragCompleted="SourceSplitterCompleted"/>
-      <TabControl Grid.Column="4" TabStripPlacement="Bottom"><TabItem Header="Master Bus"><Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="24"/><RowDefinition Height="28"/><RowDefinition Height="*"/><RowDefinition Height="14"/></Grid.RowDefinitions>
+      <TabControl x:Name="MasterBusTabs" Grid.Column="4" TabStripPlacement="Bottom"><TabItem x:Name="MasterBusTab" Header="Master Bus"><Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="24"/><RowDefinition Height="28"/><RowDefinition Height="*"/><RowDefinition Height="14"/></Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal"><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Reset monitor gain" ToolTip="Reset monitor gain to 0 dB" Click="ResetMasterClick"><Image Source="{StaticResource Icon.Settings}"/></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Mute monitor" ToolTip="Mute monitor" Click="MuteMasterClick"><Image Source="{StaticResource Icon.Pause}"/></Button></StackPanel>
         <TextBlock Grid.Row="1" Text="Master" Margin="8,0" FontSize="11"/>
                 <DockPanel Grid.Row="2" Margin="8,0">

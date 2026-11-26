@@ -40,6 +40,8 @@ public sealed class WorkspaceLayout
 
     public TrimmerPaneLayout? Trimmer { get; set; }
 
+    public Dictionary<string, WorkspacePaneLayout>? Panes { get; set; }
+
     /// <summary>
     /// Numbered shortcut slot 0 through 9 (triggerable via Alt+D, 0-9), or null if unassigned.
     /// </summary>
@@ -63,6 +65,7 @@ public sealed class WorkspaceLayout
             MixingConsoleOpen = MixingConsoleOpen,
             EditDetailsOpen = EditDetailsOpen,
             Trimmer = Trimmer,
+            Panes = Panes is null ? null : new(Panes),
             ShortcutSlot = ShortcutSlot,
             IsBuiltIn = false
         };
@@ -74,6 +77,8 @@ public sealed record TrimmerPaneLayout(bool Floating, bool Visible, PaneBounds? 
     public bool SeparateDock { get; init; }
     public double DockWidth { get; init; } = 568;
 }
+
+public sealed record WorkspacePaneLayout(bool Floating, bool Visible, PaneBounds? Bounds);
 
 // Position uses physical screen coordinates. Size uses device-independent units.
 public sealed record PaneBounds(int Left, int Top, double Width, double Height);
