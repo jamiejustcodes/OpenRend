@@ -39,6 +39,26 @@ public sealed class MediaService : IDisposable
         };
     }, cancellationToken);
 
+    public static ProjectDocument CreateSourcePreview(MediaAsset source, Rational frameRate)
+    {
+        var asset = source.DeepClone();
+        var preview = new ProjectDocument { FrameRate = frameRate, Media = [asset] };
+        var length = Math.Max(1, frameRate.Frames(asset.DurationSeconds));
+        if (asset.HasVideo)
+        {
+            preview.Width = asset.Width;
+            preview.Height = asset.Height;
+            AddTrack(TrackKind.Video);
+        }
+        if (asset.HasAudio) AddTrack(TrackKind.Audio);
+        return preview;
+
+        void AddTrack(TrackKind kind) => preview.Tracks.Add(new TimelineTrack
+        {
+            Kind = kind, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = length }]
+        });
+    }
+
     public Task<byte[]> GetFrameAsync(string path, double seconds, int width, int height, CancellationToken cancellationToken = default) => Task.Run(() =>
     {
         cancellationToken.ThrowIfCancellationRequested();

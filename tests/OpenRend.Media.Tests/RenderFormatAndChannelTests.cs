@@ -66,6 +66,12 @@ public sealed class RenderFormatAndChannelTests
             MediaFixture.Run("ffmpeg", "-v", "error", "-f", "lavfi", "-i", "sine=f=440:r=48000:d=1", "-c:a", "pcm_s24le", sourceAudio);
             using var media = new MediaService();
             var audioAsset = await media.ProbeAsync(sourceAudio);
+            Assert.Equal(1, audioAsset.AudioChannels);
+            Assert.Equal(48000, audioAsset.AudioSampleRate);
+            var sourcePreview = MediaService.CreateSourcePreview(audioAsset, new Rational(30000, 1001));
+            Assert.NotSame(audioAsset, Assert.Single(sourcePreview.Media));
+            Assert.Equal(TrackKind.Audio, Assert.Single(sourcePreview.Tracks).Kind);
+            Assert.Equal(30, sourcePreview.DurationFrames);
 
             var project = new ProjectDocument
             {
@@ -77,6 +83,7 @@ public sealed class RenderFormatAndChannelTests
             };
 
             using var renderer = new TimelineRenderService(media, false);
+            Assert.Contains(renderer.RenderAudio(sourcePreview, 0, 480), sample => Math.Abs(sample) > .02f);
             var template = RenderTemplateCatalog.Find("project-wav-24");
             var options = new ExportOptions
             {

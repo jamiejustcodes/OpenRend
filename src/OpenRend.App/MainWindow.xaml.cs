@@ -752,6 +752,7 @@ public partial class MainWindow : Window
     }
     private string PreviewDescription()
     {
+        if (explorerPreviewName is { } source) return $"Source preview · {source}";
         var backend = $"Composite: {(vm.Renderer.IsHardwareCompositing ? "GPU" : vm.Renderer.IsD3DCompositing ? "WARP" : "CPU")}; display: Direct3D 11 {(Preview.IsHardware ? "hardware" : "software")}";
         PreviewInfo.ToolTip = backend;
         System.Windows.Automation.AutomationProperties.SetHelpText(PreviewInfo, Preview.IsReady ? backend : "Preview is starting.");
@@ -766,6 +767,11 @@ public partial class MainWindow : Window
     private void RenderPreviewStatusBadges()
     {
         PreviewInfo.Inlines.Clear();
+        if (explorerPreviewName is { } source)
+        {
+            PreviewInfo.Inlines.Add($"Source preview · {source}");
+            return;
+        }
 
         // Project format badge (page icon + resolution + framerate)
         PreviewInfo.Inlines.Add(new System.Windows.Documents.InlineUIContainer(CreateProjectIcon()));
@@ -1100,13 +1106,13 @@ public partial class MainWindow : Window
     }
     private async void RequestPreview()
     {
-        if (!initialized) return;
+        if (!initialized || explorerPreviewName is not null) return;
         previewRequested = true;
         if (previewRunning) return;
         previewRunning = true;
         try
         {
-            while (previewRequested && IsLoaded)
+            while (previewRequested && IsLoaded && explorerPreviewName is null)
             {
                 previewRequested = false;
                 if (cachedPreviewProject is null || cachedPreviewRevision != revision)
@@ -1163,7 +1169,7 @@ public partial class MainWindow : Window
                 });
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
-                if (IsLoaded && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
+                if (IsLoaded && explorerPreviewName is null && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
                     Preview.Present(pixels, width, height); currentPreviewPixels = pixels; previewWidth = width; previewHeight = height; lastPreview = frame; UpdatePreviewStatus(); FrameRendered?.Invoke(pixels, width, height);
                 }
@@ -1457,9 +1463,7 @@ public partial class MainWindow : Window
     {
         var dialog = new OpenFolderDialog();
         if (dialog.ShowDialog(this) != true) return;
-        FolderLabel.Text = dialog.FolderName;
-        ExplorerList.ItemsSource = new DirectoryInfo(dialog.FolderName).EnumerateFiles()
-            .Where(f => new[] { ".mp4", ".mov", ".mkv", ".avi", ".webm", ".wav", ".mp3", ".flac", ".m4a", ".mxf" }.Contains(f.Extension.ToLowerInvariant())).OrderBy(f => f.Name).ToList();
+        NavigateExplorer(dialog.FolderName);
     });
     private async void ExplorerDoubleClick(object sender, MouseButtonEventArgs e) => await GuardAsync(async () =>
     {
@@ -1631,7 +1635,8 @@ public partial class MainWindow : Window
 
     private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true, double rate = 1, bool shuttle = false)
     {
-        if (vm.Project.DurationFrames == 0) return;
+        StopExplorerPreview();
+        if (vm.Project.DurationFrames == 0) { RequestPreview(); return; }
         StopTimelineScrub();
         var project = vm.Project.DeepClone();
         var start = vm.Position;
@@ -1648,6 +1653,7 @@ public partial class MainWindow : Window
         try
         {
             await scrubShutdown;
+            await explorerPreviewTask;
             if (generation != playbackGeneration || !IsLoaded) return;
             var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false, loopRange: loop));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
@@ -1674,6 +1680,7 @@ public partial class MainWindow : Window
 
     private void Pause(long? seekTo = null)
     {
+        StopExplorerPreview();
         StopTimelineScrub();
         timer.Stop();
         playbackGeneration++; playbackStarting = false;
@@ -1702,6 +1709,7 @@ public partial class MainWindow : Window
     {
         if (MasterLevel is not null) MasterLevel.Text = masterMuted ? "Muted" : e.NewValue > 0 ? $"{20 * Math.Log10(e.NewValue):0.0} dB" : "−∞ dB";
         if (playback is not null) playback.MasterGain = masterMuted ? 0 : e.NewValue;
+        if (explorerPlayback is not null) explorerPlayback.MasterGain = masterMuted ? 0 : e.NewValue;
     }
     private void ResetMasterClick(object sender, RoutedEventArgs e) { masterMuted = false; MasterGain.Value = 1; MasterGainChanged(sender, new(0, MasterGain.Value)); }
     private void MuteMasterClick(object sender, RoutedEventArgs e) { masterMuted = !masterMuted; MasterGainChanged(sender, new(MasterGain.Value, MasterGain.Value)); }
@@ -3416,6 +3424,7 @@ public partial class MainWindow : Window
         {
             if (!await ConfirmUnsavedAsync()) return;
             Pause(); autosave.Stop(); recoverySaveTimer.Stop(); SaveWorkspace();
+            await explorerPreviewTask;
             SessionRecoveryManager.RecordCleanExit(Path.GetDirectoryName(recoveryPath)!);
             allowClose = true;
             // Complete the cancelled Closing event before requesting the final close.

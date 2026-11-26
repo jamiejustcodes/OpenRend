@@ -133,11 +133,6 @@ public partial class MainWindow
         }
     }
 
-    private void ExplorerViewModeClick(object sender, RoutedEventArgs e)
-    {
-        // View modes: Large Icons, Details, List
-    }
-
     private async void ExplorerItemAddClick(object sender, RoutedEventArgs e)
     {
         if (sender is FrameworkElement elem && elem.DataContext is FileInfo file)
@@ -149,7 +144,7 @@ public partial class MainWindow
 
     private void ExplorerItemPreviewClick(object sender, RoutedEventArgs e)
     {
-        // Preview clip playback in video preview
+        if (sender is FrameworkElement { DataContext: FileInfo file }) StartExplorerPreview(file);
     }
 
     private readonly HashSet<VideoEffectKind> favoriteVideoFx = [];

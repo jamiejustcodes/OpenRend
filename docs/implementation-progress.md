@@ -22,6 +22,14 @@ The resizable Master Bus pane measures the stereo program before the playback ce
 
 Project master gain, Dim and Mute apply to queued WASAPI audio as playback continues. The live meter follows these controls. Preview and export apply program gain after the shared automation and effects stage. The workspace's monitor gain controls the playback device separately. The desktop workflow exercised Dim and Mute during playback and verified both saved project settings.
 
+## Source workflows
+
+Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. Shift+A ends the placement at the timeline cursor and retains the selected source Out point if the placement reaches the project start. Core and editor tests cover the drop target, source range, and undo. The physical drag workflow remains pending.
+
+Project Media thumbnails and properties show measured file metadata, including audio channels and sample rate. Replace source file and the missing-media prompt share the same undoable edit. They preserve the media ID, event ranges and takes. The managed tests replace a source, undo and redo it, save and reopen, and confirm that the source file contents are unchanged. The desktop relink workflow remains pending.
+
+The Explorer item preview and Auto-play selection toggle play source files through OpenRend's renderer and audio playback engine using a temporary source timeline. Changing selection or returning to timeline playback cancels the source preview. The managed native-media fixture verified the preview's audio samples and original mono metadata. The desktop Auto-play workflow remains pending.
+
 ## Requested addition: startup and project creation
 
 Status: functional startup slice, full parity open. OpenRend has its own welcome artwork/branding, New/Open/Getting Started pages, sizing/rate choices and startup preference. Complete advanced project controls, factory defaults and exact visual matching remain open.
