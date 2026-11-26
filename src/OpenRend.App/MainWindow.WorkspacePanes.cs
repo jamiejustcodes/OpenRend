@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
+using System.Windows.Threading;
 
 namespace OpenRend.App;
 
@@ -18,6 +19,7 @@ public partial class MainWindow
     private bool HasSeparateTrimmerDock { get; set; }
     private Popup? paneDockOutline;
     private PaneDrag? paneDrag;
+    private bool paneBoundsCheckQueued;
 
     private sealed class DockablePane(string name, TabControl dock, TabItem tab, Action? onHidden = null)
     {
@@ -374,18 +376,37 @@ public partial class MainWindow
         var hwnd = new WindowInteropHelper(pane.Window).Handle;
         const uint noSize = 0x1, noZOrder = 0x4, noActivate = 0x10;
         SetWindowPos(hwnd, 0, x, y, 0, 0, noSize | noZOrder | noActivate);
-        if (!clampToMonitor || !GetWindowRect(hwnd, out var rect))
-            return;
+        if (clampToMonitor) ClampPaneToMonitor(hwnd);
+    }
 
+    private void QueueFloatingPaneBoundsCheck()
+    {
+        if (paneBoundsCheckQueued || !IsLoaded) return;
+        paneBoundsCheckQueued = true;
+        Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, () =>
+        {
+            paneBoundsCheckQueued = false;
+            if (!IsLoaded) return;
+            foreach (var pane in workspacePanes.Values.Prepend(trimmerPane))
+            {
+                if (pane == paneDrag?.Pane || pane.Window is not { IsVisible: true, WindowState: WindowState.Normal } window) continue;
+                ClampPaneToMonitor(new WindowInteropHelper(window).Handle);
+                pane.Bounds = ReadPaneBounds(pane) ?? pane.Bounds;
+            }
+        });
+    }
+
+    private static void ClampPaneToMonitor(nint hwnd)
+    {
         // Screen coordinates stay in physical pixels across monitors.
         var info = new MonitorInfo { Size = Marshal.SizeOf<MonitorInfo>() };
-        if (!GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info))
+        if (!GetWindowRect(hwnd, out var rect) || !GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info))
             return;
-        var width = Math.Min(rect.Right - rect.Left, info.Work.Right - info.Work.Left);
-        var height = Math.Min(rect.Bottom - rect.Top, info.Work.Bottom - info.Work.Top);
-        x = Math.Clamp(rect.Left, info.Work.Left, info.Work.Right - width);
-        y = Math.Clamp(rect.Top, info.Work.Top, info.Work.Bottom - height);
-        SetWindowPos(hwnd, 0, x, y, width, height, noZOrder | noActivate);
+        var current = new Int32Rect(rect.Left, rect.Top, rect.Right - rect.Left, rect.Bottom - rect.Top);
+        var work = new Int32Rect(info.Work.Left, info.Work.Top, info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top);
+        var constrained = WorkspacePaneGeometry.ConstrainToWorkArea(current, work);
+        if (constrained != current)
+            SetWindowPos(hwnd, 0, constrained.X, constrained.Y, constrained.Width, constrained.Height, 0x4 | 0x10);
     }
 
     private bool BeginPaneDrag(DockablePane pane, UIElement capture, PaneBounds? bounds)
@@ -496,7 +517,7 @@ public partial class MainWindow
         if (!drag.Started || pane.Window is null)
             return true;
         if (cancel && drag.Bounds is { } original)
-            PlacePane(pane, original.Left, original.Top, clampToMonitor: false);
+            PlacePane(pane, original.Left, original.Top, clampToMonitor: true);
         else if (cancel || (GetCursorPos(out var pointer) && GetPaneDockTarget(pane, pointer) is not null))
             DockFloatingPane(pane);
         else

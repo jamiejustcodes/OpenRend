@@ -1,4 +1,5 @@
 using System.IO;
+using System.Windows;
 using OpenRend.App;
 using Xunit;
 
@@ -6,6 +7,23 @@ namespace OpenRend.Editor.Tests;
 
 public sealed class WorkspaceLayoutEditorTests
 {
+    [Fact]
+    public void FloatingPaneGeometryPreservesSizeWhenItsPriorMonitorIsGone()
+    {
+        var pane = new Int32Rect(-1700, 100, 770, 440);
+        Assert.Equal(new Int32Rect(0, 100, 770, 440),
+            WorkspacePaneGeometry.ConstrainToWorkArea(pane, new Int32Rect(0, 0, 1920, 1040)));
+    }
+
+    [Fact]
+    public void FloatingPaneGeometryFitsSmallerWorkAreasAtNegativeScreenCoordinates()
+    {
+        var work = new Int32Rect(-1536, 40, 1536, 824);
+        Assert.Equal(work, WorkspacePaneGeometry.ConstrainToWorkArea(new Int32Rect(-1600, 900, 1600, 1000), work));
+        var inside = new Int32Rect(-1230, 150, 640, 450);
+        Assert.Equal(inside, WorkspacePaneGeometry.ConstrainToWorkArea(inside, work));
+    }
+
     [Fact]
     public void BuiltInLayouts_ContainsFiveStandardVegasProPresets()
     {

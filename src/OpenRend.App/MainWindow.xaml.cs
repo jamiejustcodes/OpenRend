@@ -3895,6 +3895,11 @@ public partial class MainWindow : Window
     {
         if (message == 0x47) // WM_WINDOWPOSCHANGED also covers Windows monitor shortcuts.
             QueueMaximizedBoundsCheck();
+        if (message == 0x7e || (message == 0x1a && wparam == 0x2f)) // Display or work-area change.
+        {
+            QueueMaximizedBoundsCheck();
+            QueueFloatingPaneBoundsCheck();
+        }
         if (message != 0x24) return 0;
         var monitor = MonitorFromWindow(hwnd, 2);
         var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };

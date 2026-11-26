@@ -117,6 +117,13 @@ public sealed partial class EditorWorkflowTests
                 Assert.True(GetMonitorInfo(MonitorFromWindow(handle, 2), ref monitor));
                 var workArea = Rectangle.FromLTRB(monitor.Work.Left, monitor.Work.Top, monitor.Work.Right, monitor.Work.Bottom);
                 Assert.True(workArea.Contains(floating.BoundingRectangle), "The Trimmer was restored outside the monitor work area.");
+
+                const uint preserveSizeOrderAndFocus = 0x1 | 0x4 | 0x10;
+                Assert.True(SetWindowPos(handle, 0, 100_000, -100_000, 0, 0, preserveSizeOrderAndFocus));
+                WaitFor(() => !workArea.Contains(floating.BoundingRectangle), "The Trimmer did not move outside the test work area.");
+                var dimensions = (nint)((workArea.Height << 16) | workArea.Width);
+                Assert.True(PostMessage(window.Properties.NativeWindowHandle.Value, 0x7e, 32, dimensions));
+                WaitFor(() => workArea.Contains(floating.BoundingRectangle), "Display notification did not recover the open Trimmer.");
                 running.CloseGracefully();
             }
         }
@@ -260,4 +267,10 @@ public sealed partial class EditorWorkflowTests
 
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);
+
+    [DllImport("user32.dll")]
+    private static extern bool SetWindowPos(nint hwnd, nint insertAfter, int x, int y, int width, int height, uint flags);
+
+    [DllImport("user32.dll", CharSet = CharSet.Unicode)]
+    private static extern bool PostMessage(nint hwnd, uint message, nint wparam, nint lparam);
 }

@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Windows;
 
 namespace OpenRend.App;
 
@@ -82,4 +83,17 @@ public sealed record WorkspacePaneLayout(bool Floating, bool Visible, PaneBounds
 
 // Position uses physical screen coordinates. Size uses device-independent units.
 public sealed record PaneBounds(int Left, int Top, double Width, double Height);
+
+internal static class WorkspacePaneGeometry
+{
+    internal static Int32Rect ConstrainToWorkArea(Int32Rect bounds, Int32Rect workArea)
+    {
+        if (workArea.IsEmpty) return bounds;
+        var width = Math.Min(bounds.Width, workArea.Width);
+        var height = Math.Min(bounds.Height, workArea.Height);
+        return new Int32Rect(
+            Math.Clamp(bounds.X, workArea.X, workArea.X + workArea.Width - width),
+            Math.Clamp(bounds.Y, workArea.Y, workArea.Y + workArea.Height - height), width, height);
+    }
+}
 
