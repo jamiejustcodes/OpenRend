@@ -1,5 +1,6 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -135,6 +136,9 @@ public partial class MainWindow
         var audioItem = new TreeViewItem { Header = $"Audio ({audioCount})", Tag = "Audio" };
         var imageItem = new TreeViewItem { Header = $"Images ({imageCount})", Tag = "Images" };
         var missingItem = new TreeViewItem { Header = $"Missing Media ({missingCount})", Tag = "Missing" };
+
+        foreach (var filter in new[] { root, videoItem, audioItem, imageItem, missingItem })
+            AutomationProperties.SetAutomationId(filter, $"MediaFilter_{filter.Tag}");
 
         root.Items.Add(videoItem);
         root.Items.Add(audioItem);

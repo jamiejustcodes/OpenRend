@@ -438,7 +438,8 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
                 Assert.True(Find(window, "CopyButton").IsEnabled);
                 await VerifyPanCropAsync(window, projectPath);
                 for (var i = 0; i < 30; i++) Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);
-                WaitFor(() => Find(window, "Timecode").Name == "00:00:01:00", "Frame stepping did not reach frame 30.");
+                var expectedTimecode = TimecodeFormatter.Format(30, document.FrameRate, document.RulerFormat);
+                WaitFor(() => Find(window, "Timecode").Name == expectedTimecode, "Frame stepping did not reach frame 30.");
                 Chord(window, VirtualKeyShort.KEY_S);
                 WaitFor(() => Find(window, "UndoButton").IsEnabled, "Split did not create an undo transaction.");
                 Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_S);
@@ -634,7 +635,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         }
         Mouse.Drag(corner, new System.Drawing.Point(corner.X - (int)Math.Round(10 * sourceScale), corner.Y), MouseButton.Left);
         WaitFor(() => double.Parse(width.Text, System.Globalization.CultureInfo.InvariantCulture) > 170, "Dragging the upper-left crop handle did not resize the crop.");
-        var undoResize = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Undo crop edit"))); Assert.NotNull(undoResize); undoResize.AsButton().Invoke();
+        Find(crop, "UndoPanCrop").AsButton().Invoke();
         WaitFor(() => width.Text == "160", "Undo did not restore the corner resize.");
         preset.AsComboBox().Select(0);
         WaitFor(() => width.Text == "320", "Full-frame preset did not restore the source.");
@@ -649,7 +650,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => Find(crop, "CropHeight").AsTextBox().Text == "45", "Second crop key was not applied.");
         var angle = Find(crop, "CropRotationDegrees").AsTextBox(); angle.Focus(); angle.Text = "90"; frame.Focus();
         WaitFor(() => angle.Text == "90", "Crop angle was not committed.");
-        var lane = crop.FindFirstDescendant(c => c.ByName("Crop keyframe timeline")); Assert.NotNull(lane);
+        var lane = Find(crop, "CropKeyframeTimeline");
         var bounds = lane.BoundingRectangle;
         System.Drawing.Point KeyPoint(long at) => new((int)Math.Round(bounds.Left + 4 + (bounds.Width - 10) * at / 90.0), bounds.Top + 31);
         AutomationElement? curveMenu = null;
@@ -658,7 +659,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => (curveMenu = FindCurveMenu()) is not null, "The keyframe interpolation menu did not open.");
         Assert.NotNull(curveMenu);
         var modes = curveMenu.FindAllDescendants(c => c.ByControlType(ControlType.MenuItem));
-        Assert.Equal(new[] { "Linear", "Fast", "Slow", "Smooth", "Sharp", "Hold" }, modes.Select(item => item.Name));
+        Assert.Equal(new[] { "Linear", "Fast", "Slow", "Smooth", "Sharp", "Hold", "Copy Keyframe", "Paste Keyframe", "Delete" }, modes.Select(item => item.Name));
         Assert.True(modes[1].AsMenuItem().IsChecked);
         modes[4].AsMenuItem().Invoke();
         WaitFor(() => curve.AsComboBox().SelectedItem?.Text == "Sharp", "The menu did not apply its curve to the clicked key.");
@@ -680,8 +681,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => frame.Text == "0" && width.Text == "80", "Retiming onto an occupied frame did not keep the moved key.");
         frame.Focus(); frame.Text = "1"; Chord(crop, VirtualKeyShort.RETURN);
         WaitFor(() => width.Text == "160", "Retiming did not preserve the destination key on the next frame.");
-        var undoCrop = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Undo crop edit")));
-        Assert.NotNull(undoCrop); undoCrop.AsButton().Invoke();
+        Find(crop, "UndoPanCrop").AsButton().Invoke();
         frame.Focus(); frame.Text = "30"; Chord(crop, VirtualKeyShort.RETURN);
         WaitFor(() => keyTime.Text == "30" && width.Text == "80", "Undo did not restore the moved keyframe.");
         crop.Close(); SaveButton(window).Invoke();
@@ -695,8 +695,7 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => (crop = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event Pan/Crop")) is not null, "Saved Pan/Crop did not reopen.");
         Assert.NotNull(crop);
         Assert.Equal("80", Find(crop, "CropWidth").AsTextBox().Text);
-        var reset = crop.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Reset Pan/Crop")));
-        Assert.NotNull(reset); reset.AsButton().Invoke();
+        Find(crop, "ResetPanCrop").AsButton().Invoke();
         WaitFor(() => Find(crop, "CropWidth").AsTextBox().Text == "320", "Reset did not restore the source crop.");
         crop.Close(); Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.HOME); SaveButton(window).Invoke();
         WaitFor(() => ProjectStore.LoadAsync(projectPath).GetAwaiter().GetResult().Tracks[0].Clips[0].Crop is null, "Reset crop was not saved.");
@@ -773,9 +772,9 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
             var bounds = window.BoundingRectangle;
             Assert.True(bounds.Top >= monitor.Work.Top - 1 && bounds.Left >= monitor.Work.Left - 1
                 && bounds.Right <= monitor.Work.Right + 1 && bounds.Bottom <= monitor.Work.Bottom + 1, "The maximized workspace extends outside the monitor work area.");
-            foreach (var (filter, expected) in new[] { ("Video", 1), ("Audio", 1), ("Missing Media", 0), ("All Media", 1) })
+            foreach (var (filter, expected) in new[] { ("Video", 1), ("Audio", 0), ("Missing", 0), ("All", 1) })
             {
-                var item = Assert.Single(Find(window, "MediaTree").FindAllDescendants(c => c.ByControlType(ControlType.TreeItem).And(c.ByName(filter))));
+                var item = Find(window, $"MediaFilter_{filter}");
                 item.Patterns.SelectionItem.Pattern.Select();
                 WaitFor(() => library.Items.Length == expected, "Media filter did not update: " + filter);
             }
@@ -786,7 +785,8 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         }
         catch
         {
-            output.WriteLine(string.Join(Environment.NewLine, window.FindAllDescendants().Select(e => $"{e.ControlType} id={e.AutomationId} class={e.ClassName} name={e.Name}")));
+            output.WriteLine(string.Join(Environment.NewLine, window.FindAllDescendants().Select(e =>
+                $"{e.ControlType} id={e.Properties.AutomationId.ValueOrDefault} class={e.Properties.ClassName.ValueOrDefault} name={e.Properties.Name.ValueOrDefault}")));
             throw;
         }
     }

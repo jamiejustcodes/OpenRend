@@ -106,8 +106,10 @@ public sealed class PanCropWindow : Window
             if (activeTrack == PanCropTrack.Position) editor.ResetCrop(clipId);
             else editor.ResetMask(clipId);
         }));
+        AutomationProperties.SetAutomationId(reset, "ResetPanCrop");
         DockPanel.SetDock(reset, Dock.Right); top.Children.Add(reset);
         var undo = Button("Undo", "Undo edit", () => Edit(() => editor.Undo()));
+        AutomationProperties.SetAutomationId(undo, "UndoPanCrop");
         DockPanel.SetDock(undo, Dock.Right); top.Children.Add(undo);
         var redo = Button("Redo", "Redo edit", () => Edit(() => editor.Redo()));
         DockPanel.SetDock(redo, Dock.Right); top.Children.Add(redo);
@@ -1643,6 +1645,7 @@ internal sealed class CropKeyframeLane : FrameworkElement
     {
         ClipToBounds = true; Focusable = true;
         AutomationProperties.SetName(this, "Keyframe timeline");
+        AutomationProperties.SetAutomationId(this, "CropKeyframeTimeline");
         AutomationProperties.SetHelpText(this, "Click to seek. Drag keyframe diamond to move; right-click for interpolation menu.");
         ContextMenu = new ContextMenu();
         AutomationProperties.SetName(ContextMenu, "Keyframe interpolation");
