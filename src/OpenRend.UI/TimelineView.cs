@@ -65,6 +65,8 @@ public sealed partial class TimelineView : FrameworkElement
     public const double RulerHeight = 46;
     public const double TrackHeight = 69;
     public event Action<long>? SeekRequested;
+    public event Action<long>? ScrubMoved;
+    public event Action? ScrubEnded;
     public event Action? SelectionChanged;
     public event Action<ClipGesture>? EditRequested;
     public event Action? UnlinkRequested;
@@ -242,7 +244,8 @@ public sealed partial class TimelineView : FrameworkElement
         if (selectingLoop) loopRegion = loopBeforeDrag;
         selectingLoop = false;
         isDragging = false; alreadySelectedOnDown = false;
-        dragging = null; dragTrack = null; seeking = false; mode = ""; delta = 0;
+        FinishSeeking();
+        dragging = null; dragTrack = null; mode = ""; delta = 0;
         destinationIsNewTrack = false; movingClipIds = null; snappedFrame = null;
         lastReportedMoveStart = null; hoverFileDropActive = false;
         isMarqueeSelecting = false; marqueeRect = Rect.Empty;
@@ -1633,6 +1636,20 @@ public sealed partial class TimelineView : FrameworkElement
 
     public static string FormatTimecode(long frame, Rational rate) => TimecodeFormatter.FormatStandard(frame, rate);
     public static string FormatTimecode(long frame, Rational rate, RulerFormat format) => TimecodeFormatter.Format(frame, rate, format);
+
+    private void BeginSeeking(long frame)
+    {
+        SeekRequested?.Invoke(frame);
+        seeking = CaptureMouse();
+    }
+
+    private void FinishSeeking()
+    {
+        if (!seeking) return;
+        seeking = false;
+        ScrubEnded?.Invoke();
+    }
+
     protected override void OnMouseLeftButtonDown(MouseButtonEventArgs e)
     {
         base.OnMouseLeftButtonDown(e); Focus(); origin = e.GetPosition(this);
@@ -1806,6 +1823,12 @@ public sealed partial class TimelineView : FrameworkElement
             }
             return;
         }
+        if (origin.Y is >= 18 and <= 32 && Math.Abs(origin.X - X(Position)) <= 5)
+        {
+            BeginSeeking(Position);
+            e.Handled = true;
+            return;
+        }
         if (BeginLoopRegion(origin)) { e.Handled = true; return; }
         if (EditTool == EditToolMode.Zoom)
         {
@@ -1828,9 +1851,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (EditTool == EditToolMode.Envelope)
         {
-            seeking = true;
-            SeekRequested?.Invoke(FrameAt(origin.X));
-            CaptureMouse();
+            BeginSeeking(FrameAt(origin.X));
             e.Handled = true;
             return;
         }
@@ -1844,7 +1865,8 @@ public sealed partial class TimelineView : FrameworkElement
         dragTrack = hit?.Track; dragging = hit?.Clip;
         if (dragging is null)
         {
-            seeking = true; SeekRequested?.Invoke(FrameAt(origin.X)); CaptureMouse(); return;
+            BeginSeeking(FrameAt(origin.X));
+            return;
         }
         alreadySelectedOnDown = Selection.Contains(dragging.Id);
         if (!alreadySelectedOnDown || Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
@@ -1894,7 +1916,11 @@ public sealed partial class TimelineView : FrameworkElement
         if (selectingLoop) { UpdateLoopRegion(p); return; }
         if (pressedEventButton is not null) { UpdateHover(p); return; }
         if (adjustingLevel) { pendingLevel = LevelAt(p.X); InvalidateVisual(); return; }
-        if (seeking) { SeekRequested?.Invoke(FrameAt(p.X)); return; }
+        if (seeking)
+        {
+            (ScrubMoved ?? SeekRequested)?.Invoke(FrameAt(p.X));
+            return;
+        }
         if (dragging is null) { UpdateHover(p); return; }
 
         if (!isDragging)
@@ -2192,6 +2218,13 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (HandleEnvelopeMouseUp(e.GetPosition(this))) { e.Handled = true; return;
         }
+        if (seeking)
+        {
+            FinishSeeking();
+            ReleaseMouseCapture();
+            e.Handled = true;
+            return;
+        }
         var commitLevel = adjustingLevel;
         adjustingLevel = false;
         p = e.GetPosition(this);
@@ -2431,7 +2464,8 @@ public sealed partial class TimelineView : FrameworkElement
         if (selectingLoop) loopRegion = loopBeforeDrag;
         selectingLoop = false;
         pressedEventButton = null;
-        adjustingLevel = false; seeking = false;
+        adjustingLevel = false;
+        FinishSeeking();
         ClearHover();
         InvalidateVisual();
     }

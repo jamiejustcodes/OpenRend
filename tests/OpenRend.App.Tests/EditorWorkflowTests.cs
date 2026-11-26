@@ -69,6 +69,16 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
             var bounds = Find(window, $"Clip_{clip.Id:N}").BoundingRectangle;
             var scale = bounds.Height / 67;
+            var cursorX = (int)(bounds.Left + bounds.Width / 6);
+            var rulerY = (int)(bounds.Top - 10 * scale);
+            Mouse.Click(new System.Drawing.Point(cursorX, rulerY));
+            WaitFor(() => Find(window, "Timecode").Name == TimecodeFormatter.Format(15, new Rational(30, 1)),
+                "Clicking the ruler did not seek to frame 15.");
+            var playheadY = (int)(bounds.Top - 21 * scale);
+            Mouse.Drag(new System.Drawing.Point(cursorX, playheadY),
+                new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), playheadY), MouseButton.Left);
+            WaitFor(() => Find(window, "Timecode").Name == TimecodeFormatter.Format(45, new Rational(30, 1)),
+                "Dragging the playhead did not scrub to frame 45.");
             var y = (int)(bounds.Top - 46 * scale + 12 * scale);
             Mouse.Drag(new System.Drawing.Point((int)(bounds.Left + bounds.Width / 6), y),
                 new System.Drawing.Point((int)(bounds.Left + bounds.Width / 2), y), MouseButton.Left);

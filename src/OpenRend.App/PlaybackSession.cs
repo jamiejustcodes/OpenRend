@@ -140,20 +140,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         if (shuttleAudioBuffer is null)
             renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer);
         else
-        {
-            var window = PlaybackAudioResampling.Window(submittedSamples, count, Rate);
-            var firstAvailable = (long)Math.Ceiling(-originSeconds * MediaService.SampleRate - 1e-7);
-            var silence = (int)Math.Clamp(firstAvailable - window.StartFrame, 0, window.FrameCount);
-            var sourceStart = Math.Max(0, originSeconds + (double)(window.StartFrame + silence) / MediaService.SampleRate);
-            var sourceFrames = window.FrameCount - silence;
-            renderer.RenderAudio(project, sourceStart, sourceFrames, shuttleAudioBuffer);
-            if (silence > 0)
-            {
-                Array.Copy(shuttleAudioBuffer, 0, shuttleAudioBuffer, silence * MediaService.Channels, sourceFrames * MediaService.Channels);
-                Array.Clear(shuttleAudioBuffer, 0, silence * MediaService.Channels);
-            }
-            PlaybackAudioResampling.Resample(shuttleAudioBuffer, window.FirstSample, Rate, playbackAudioBuffer, count);
-        }
+            PlaybackAudioResampling.Render(renderer, project, originSeconds, submittedSamples, count, Rate, shuttleAudioBuffer, playbackAudioBuffer);
         cancellation.Token.ThrowIfCancellationRequested();
         var byteCount = count * MediaService.Channels * sizeof(float);
         Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, 0, byteCount);
@@ -202,6 +189,23 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
 
 internal static class PlaybackAudioResampling
 {
+    internal static void Render(TimelineRenderService renderer, ProjectDocument project, double originSeconds,
+        long submitted, int count, double rate, float[] source, float[] output)
+    {
+        var window = Window(submitted, count, rate);
+        var firstAvailable = (long)Math.Ceiling(-originSeconds * MediaService.SampleRate - 1e-7);
+        var silence = (int)Math.Clamp(firstAvailable - window.StartFrame, 0, window.FrameCount);
+        var sourceStart = Math.Max(0, originSeconds + (double)(window.StartFrame + silence) / MediaService.SampleRate);
+        var sourceFrames = window.FrameCount - silence;
+        renderer.RenderAudio(project, sourceStart, sourceFrames, source);
+        if (silence > 0)
+        {
+            Array.Copy(source, 0, source, silence * MediaService.Channels, sourceFrames * MediaService.Channels);
+            Array.Clear(source, 0, silence * MediaService.Channels);
+        }
+        Resample(source, window.FirstSample, rate, output, count);
+    }
+
     internal static (long StartFrame, int FrameCount, double FirstSample) Window(long submitted, int count, double rate)
     {
         // Reverse playback starts just inside the frame boundary.
@@ -228,9 +232,13 @@ internal static class PlaybackAudioResampling
             {
                 var input = sample + channel;
                 float value = 0;
+                float next = 0;
                 for (var tap = 0; tap < width; tap++, input += direction)
+                {
                     value += source[input];
-                destination[output + channel] = fraction == 0 ? value / width : value + fraction * (source[sample + channel + MediaService.Channels] - value);
+                    if (fraction != 0) next += source[input + MediaService.Channels];
+                }
+                destination[output + channel] = (value + fraction * (next - value)) / width;
             }
         }
     }

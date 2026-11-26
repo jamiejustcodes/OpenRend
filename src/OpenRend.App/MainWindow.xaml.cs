@@ -107,7 +107,9 @@ public partial class MainWindow : Window
             DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int));
         };
         DataContext = vm;
-        Timeline.SeekRequested += frame => Pause(frame);
+        Timeline.SeekRequested += SeekTimeline;
+        Timeline.ScrubMoved += ScrubTimeline;
+        Timeline.ScrubEnded += StopTimelineScrub;
         Timeline.SelectionChanged += () =>
         {
             var ignore = Timeline.IgnoreGroups || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
@@ -1630,6 +1632,7 @@ public partial class MainWindow : Window
     private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true, double rate = 1, bool shuttle = false)
     {
         if (vm.Project.DurationFrames == 0) return;
+        StopTimelineScrub();
         if (!shuttle && vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
         var project = vm.Project.DeepClone(); var start = vm.Position;
         if (rememberOrigin) playbackOrigin = start;
@@ -1639,6 +1642,8 @@ public partial class MainWindow : Window
         timelineShuttle = shuttle;
         try
         {
+            await scrubShutdown;
+            if (generation != playbackGeneration || !IsLoaded) return;
             var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
             try { session.Start(); }
@@ -1663,6 +1668,7 @@ public partial class MainWindow : Window
 
     private void Pause(long? seekTo = null)
     {
+        StopTimelineScrub();
         timer.Stop();
         playbackGeneration++; playbackStarting = false;
         ResetShuttleState();

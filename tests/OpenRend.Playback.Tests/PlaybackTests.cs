@@ -17,8 +17,11 @@ public sealed class PlaybackTests(ITestOutputHelper log)
     [InlineData(.25)]
     [InlineData(-.25)]
     [InlineData(.5)]
+    [InlineData(.75)]
     [InlineData(-1)]
+    [InlineData(-1.5)]
     [InlineData(2)]
+    [InlineData(3.25)]
     [InlineData(-4)]
     [InlineData(16)]
     public void ShuttleResamplingKeepsTheStereoSampleGridAcrossBlocks(double rate)
@@ -142,13 +145,7 @@ public sealed class PlaybackTests(ITestOutputHelper log)
         var path = Path.Combine(Path.GetTempPath(), $"openrend-playback-{Guid.NewGuid():N}.wav");
         try
         {
-            using (var writer = new WaveFileWriter(path, WaveFormat.CreateIeeeFloatWaveFormat(48000, 2)))
-            {
-                var samples = new float[48000 * 2];
-                for (var frame = 0; frame < 48000; frame++)
-                    samples[frame * 2] = samples[frame * 2 + 1] = (float)(.12 * Math.Sin(2 * Math.PI * 1733 * frame / 48000));
-                writer.WriteSamples(samples, 0, samples.Length);
-            }
+            WriteStereoTone(path);
             using var media = new MediaService();
             using var renderer = new TimelineRenderService(media);
             var asset = await media.ProbeAsync(path);
@@ -193,6 +190,51 @@ public sealed class PlaybackTests(ITestOutputHelper log)
             Assert.True(tone > neighbour * 5);
         }
         finally { File.Delete(path); }
+    }
+
+    [Fact]
+    [Trait("Category", "AudioDevice")]
+    public async Task TimelineScrubOutputsRecentAudioAndDisposesItsDevice()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"openrend-scrub-{Guid.NewGuid():N}.wav");
+        try
+        {
+            WriteStereoTone(path);
+            using var media = new MediaService();
+            using var renderer = new TimelineRenderService(media);
+            var asset = await media.ProbeAsync(path);
+            var project = new ProjectDocument
+            {
+                FrameRate = new Rational(30, 1), Media = [asset],
+                Tracks = [new TimelineTrack { Kind = TrackKind.Audio, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = 30 }] }]
+            };
+            using var capture = new WasapiLoopbackCapture();
+            var recorded = new ConcurrentQueue<byte[]>();
+            capture.DataAvailable += (_, args) => recorded.Enqueue(args.Buffer.AsSpan(0, args.BytesRecorded).ToArray());
+            capture.StartRecording();
+            await using (var scrub = new TimelineScrubSession(renderer, project, Task.CompletedTask))
+            {
+                for (var frame = 14; frame >= 4; frame--)
+                {
+                    Assert.True(scrub.Queue(frame, -.75, .75));
+                    await Task.Delay(35);
+                }
+                await Task.Delay(60);
+            }
+            capture.StopRecording();
+            var samples = MemoryMarshal.Cast<byte, float>(recorded.SelectMany(chunk => chunk).ToArray().AsSpan()).ToArray();
+            Assert.Contains(samples, sample => Math.Abs(sample) > .01f);
+        }
+        finally { File.Delete(path); }
+    }
+
+    private static void WriteStereoTone(string path)
+    {
+        using var writer = new WaveFileWriter(path, WaveFormat.CreateIeeeFloatWaveFormat(48000, 2));
+        var samples = new float[48000 * 2];
+        for (var frame = 0; frame < 48000; frame++)
+            samples[frame * 2] = samples[frame * 2 + 1] = (float)(.12 * Math.Sin(2 * Math.PI * 1733 * frame / 48000));
+        writer.WriteSamples(samples, 0, samples.Length);
     }
 
     private static double Amplitude(float[] samples, int channels, int rate, double frequency)
