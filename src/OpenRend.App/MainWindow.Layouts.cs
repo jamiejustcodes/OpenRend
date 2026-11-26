@@ -15,6 +15,7 @@ public partial class MainWindow
     private double sourceDockWidth = 568;
     private double sourcePreviewWidth = 565;
     private GridLength normalMasterBusWidth = new(80);
+    private double upperDockShare = .35;
 
     public string ActiveLayoutName
     {
@@ -43,6 +44,7 @@ public partial class MainWindow
         var sourceDock = layout.Trimmer?.SeparateDock == true;
         var defaultLayout = layout.IsBuiltIn && layout.Name == "Default Layout";
         ConfigureSourceWorkspace(sourceDock, layout.PreviewWidth);
+        RestoreUpperDockShare(layout.UpperDockShare);
         // 1. Arrange timeline position (top vs bottom)
         if (layout.TimelineOnTop)
         {
@@ -84,6 +86,7 @@ public partial class MainWindow
         // 3. Tab selections
         SelectWorkspaceTab(ToolsTabs, layout.ToolsTabIndex);
         SelectWorkspaceTab(PreviewDeckTabs, layout.PreviewDeckTabIndex);
+        SelectWorkspaceTab(UpperDockTabs, layout.UpperDockTabIndex);
 
         // 4. Auxiliary floating/dock windows
         if (layout.MixingConsoleOpen)
@@ -140,6 +143,8 @@ public partial class MainWindow
             PreviewWidth = HasSeparateTrimmerDock ? sourcePreviewWidth : PreviewWidth.Width.Value > 50 ? PreviewWidth.Width.Value : 980,
             ToolsTabIndex = ToolsTabs.SelectedIndex,
             PreviewDeckTabIndex = PreviewDeckTabs.SelectedIndex,
+            UpperDockTabIndex = UpperDockTabs.SelectedIndex,
+            UpperDockShare = upperDockShare,
             TimelineOnTop = timelineOnTop,
             MixingConsoleOpen = mixingConsoleWindow != null && mixingConsoleWindow.IsLoaded && mixingConsoleWindow.IsVisible,
             VideoScopesOpen = videoScopesWindow != null && videoScopesWindow.IsLoaded && videoScopesWindow.IsVisible,
@@ -148,6 +153,29 @@ public partial class MainWindow
             Panes = CaptureWorkspacePanes(),
             ShortcutSlot = shortcutSlot
         };
+    }
+
+    private void RestoreUpperDockShare(double? savedShare)
+    {
+        upperDockShare = savedShare is double value && double.IsFinite(value) ? Math.Clamp(value, .1, .9) : .35;
+        UpdateUpperDockRows();
+    }
+
+    private void UpdateUpperDockRows()
+    {
+        var visible = UpperDockTabs.Items.OfType<TabItem>().Any(tab => tab.Visibility == Visibility.Visible);
+        UpperDockTabs.Visibility = UpperDockSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        UpperDockRow.MinHeight = LowerDockRow.MinHeight = visible ? 100 : 0;
+        UpperDockRow.Height = visible ? new GridLength(upperDockShare, GridUnitType.Star) : new GridLength(0);
+        UpperDockSplitterRow.Height = new GridLength(visible ? UpperDockSplitter.Height : 0);
+        LowerDockRow.Height = new GridLength(visible ? 1 - upperDockShare : 1, GridUnitType.Star);
+    }
+
+    private void UpperDockSplitterCompleted(object sender, DragCompletedEventArgs e)
+    {
+        var total = UpperDockRow.Height.Value + LowerDockRow.Height.Value;
+        if (!e.Canceled && total > 0)
+            RestoreUpperDockShare(UpperDockRow.Height.Value / total);
     }
 
     private void ConfigureSourceWorkspace(bool enabled, double previewWidth)

@@ -3536,7 +3536,9 @@ public partial class MainWindow : Window
                 : null,
             CaptureWorkspacePanes(),
             ToolsTabs.SelectedIndex,
-            PreviewDeckTabs.SelectedIndex)));
+            PreviewDeckTabs.SelectedIndex,
+            UpperDockTabs.SelectedIndex,
+            upperDockShare)));
     }
     private void LoadWorkspace()
     {
@@ -3588,10 +3590,12 @@ public partial class MainWindow : Window
             }
 
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
+            RestoreUpperDockShare(settings.UpperDockShare);
             RestoreTrimmerPane(settings.Trimmer);
             RestoreWorkspacePanes(settings.Panes);
             SelectWorkspaceTab(ToolsTabs, settings.ToolsTabIndex ?? (sourceDock ? settings.SourceToolsTabIndex ?? 0 : null));
             SelectWorkspaceTab(PreviewDeckTabs, settings.PreviewDeckTabIndex);
+            SelectWorkspaceTab(UpperDockTabs, settings.UpperDockTabIndex);
             if (settings.PreviewDeckTabIndex is null && settings.TrimmerSelected && !sourceDock &&
                 TrimmerTab.Visibility == Visibility.Visible)
                 PreviewDeckTabs.SelectedItem = TrimmerTab;
@@ -3602,7 +3606,7 @@ public partial class MainWindow : Window
         double WorkspaceHeight, double Zoom, bool Maximized, TrimmerPaneLayout? Trimmer = null, bool TrimmerSelected = false,
         int? SourceToolsTabIndex = null, int? MonitorX = null, int? MonitorY = null, double? WorkspaceShare = null,
         Dictionary<string, WorkspacePaneLayout>? Panes = null,
-        int? ToolsTabIndex = null, int? PreviewDeckTabIndex = null);
+        int? ToolsTabIndex = null, int? PreviewDeckTabIndex = null, int? UpperDockTabIndex = null, double? UpperDockShare = null);
 
     private (float u, float v, float vpWidth, float vpHeight)? PreviewWindowToVideoCoords(int mouseX, int mouseY)
     {

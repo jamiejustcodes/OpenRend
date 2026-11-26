@@ -26,6 +26,8 @@ public sealed class WorkspaceLayout
     /// Active tab in the preview deck: 0=Video Preview, 1=Trimmer.
     /// </summary>
     public int PreviewDeckTabIndex { get; set; } = 0;
+    public int? UpperDockTabIndex { get; set; }
+    public double? UpperDockShare { get; set; }
 
     /// <summary>
     /// When true, inverts the layout placing the timeline track view at the top
@@ -61,6 +63,8 @@ public sealed class WorkspaceLayout
             PreviewWidth = PreviewWidth,
             ToolsTabIndex = ToolsTabIndex,
             PreviewDeckTabIndex = PreviewDeckTabIndex,
+            UpperDockTabIndex = UpperDockTabIndex,
+            UpperDockShare = UpperDockShare,
             TimelineOnTop = TimelineOnTop,
             VideoScopesOpen = VideoScopesOpen,
             MixingConsoleOpen = MixingConsoleOpen,

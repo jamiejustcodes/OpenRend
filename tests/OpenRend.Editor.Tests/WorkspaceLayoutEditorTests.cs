@@ -69,6 +69,8 @@ public sealed class WorkspaceLayoutEditorTests
                 PreviewWidth = 980,
                 ToolsTabIndex = 5,
                 PreviewDeckTabIndex = 0,
+                UpperDockTabIndex = 0,
+                UpperDockShare = .42,
                 TimelineOnTop = false,
                 VideoScopesOpen = true,
                 MixingConsoleOpen = false,
@@ -78,7 +80,7 @@ public sealed class WorkspaceLayoutEditorTests
                 Panes = new()
                 {
                     ["Explorer"] = new(true, true, new PaneBounds(200, 400, 450, 350)),
-                    ["ProjectMedia"] = new(false, true, null) { DockGroup = "PreviewDeckTabs" }
+                    ["ProjectMedia"] = new(false, true, null) { DockGroup = "UpperDockTabs" }
                 },
                 ShortcutSlot = 3
             };
@@ -93,6 +95,8 @@ public sealed class WorkspaceLayoutEditorTests
             Assert.Equal(420, retrieved.MediaWidth);
             Assert.Equal(980, retrieved.PreviewWidth);
             Assert.Equal(5, retrieved.ToolsTabIndex);
+            Assert.Equal(0, retrieved.UpperDockTabIndex);
+            Assert.Equal(.42, retrieved.UpperDockShare);
             Assert.True(retrieved.VideoScopesOpen);
             Assert.True(retrieved.EditDetailsOpen);
             Assert.Equal(custom.Trimmer, retrieved.Trimmer);

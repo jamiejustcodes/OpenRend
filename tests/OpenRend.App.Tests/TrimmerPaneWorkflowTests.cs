@@ -156,6 +156,7 @@ public sealed partial class EditorWorkflowTests
             }, projectPath);
 
             Rectangle savedMediaBounds;
+            int savedUpperHeight;
             using (var running = Launch(executable, projectPath, temporary))
             {
                 var window = running.Window;
@@ -185,6 +186,21 @@ public sealed partial class EditorWorkflowTests
                 WaitFor(() => Find(window, "PreviewInfo").Properties.HelpText.ValueOrDefault?.Contains("Direct3D 11") == true,
                     "The native preview did not initialize in its new dock.");
 
+                var transitions = FloatPane(window, "Transitions", scale);
+                var lower = Find(window, "ToolsTabs").BoundingRectangle;
+                var upperTarget = new Point(lower.Left + lower.Width / 2, lower.Top + (int)(12 * scale));
+                DockIn(window, transitions, "Transitions", "UpperDockTabs", scale, upperTarget);
+                DockIn(window, FloatPane(window, "Explorer", scale), "Explorer", "UpperDockTabs", scale);
+
+                var upper = Find(window, "UpperDockTabs");
+                var initialUpperHeight = upper.BoundingRectangle.Height;
+                var splitter = Find(window, "UpperDockSplitter").BoundingRectangle;
+                var grip = new Point(splitter.Left + splitter.Width / 2, splitter.Top + splitter.Height / 2);
+                DragTrimmer(grip, new Point(grip.X, grip.Y + (int)(44 * scale)));
+                WaitFor(() => upper.BoundingRectangle.Height > initialUpperHeight + 20,
+                    "Dragging the workspace splitter did not grow the upper group.");
+                savedUpperHeight = upper.BoundingRectangle.Height;
+
                 var projectMedia = FloatPane(window, "Project Media", scale);
                 savedMediaBounds = projectMedia.BoundingRectangle;
                 running.CloseGracefully();
@@ -196,6 +212,10 @@ public sealed partial class EditorWorkflowTests
                 WaitFor(() => DockTab(window, "PreviewDeckTabs", "Video FX")?.Patterns.SelectionItem.Pattern.IsSelected.Value == true,
                     "Restart did not restore Video FX as the active tab in the Preview group.");
                 Assert.NotNull(DockTab(window, "ToolsTabs", "Video Preview"));
+                Assert.NotNull(DockTab(window, "UpperDockTabs", "Transitions"));
+                WaitFor(() => DockTab(window, "UpperDockTabs", "Explorer")?.Patterns.SelectionItem.Pattern.IsSelected.Value == true,
+                    "Restart did not restore Explorer as the active tab in the upper group.");
+                Assert.InRange(Find(window, "UpperDockTabs").BoundingRectangle.Height, savedUpperHeight - 2, savedUpperHeight + 2);
                 WaitFor(() => FloatingPane(window, "Project Media")?.BoundingRectangle == savedMediaBounds,
                     "Restart did not restore the floating Project Media bounds.");
                 var floating = FloatingPane(window, "Project Media")!;
@@ -211,6 +231,17 @@ public sealed partial class EditorWorkflowTests
                 Find(window, "ShowPane_ProjectMedia").AsMenuItem().Invoke();
                 WaitFor(() => FloatingPane(window, "Project Media")?.BoundingRectangle == savedMediaBounds,
                     "The Window menu did not reopen Project Media at its prior bounds.");
+
+                var upper = Find(window, "UpperDockTabs");
+                var closeExplorer = upper.FindFirstDescendant(c => c.ByName("Close Explorer"));
+                Assert.NotNull(closeExplorer);
+                closeExplorer.AsButton().Invoke();
+                AutomationElement? closeTransitions = null;
+                WaitFor(() => (closeTransitions = upper.FindFirstDescendant(c => c.ByName("Close Transitions"))) is not null,
+                    "Closing Explorer did not expose the remaining upper tab.");
+                closeTransitions!.AsButton().Invoke();
+                WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("UpperDockTabs"))?.Properties.IsOffscreen.ValueOrDefault != false,
+                    "Closing the last upper pane did not collapse the group.");
                 running.CloseGracefully();
             }
 
@@ -228,16 +259,17 @@ public sealed partial class EditorWorkflowTests
                 return FloatingPane(window, name)!;
             }
 
-            static void DockIn(Window window, Window floating, string name, string group, double scale)
+            static void DockIn(Window window, Window floating, string name, string group, double scale, Point? drop = null)
             {
                 var bounds = floating.BoundingRectangle;
-                var dock = Find(window, group).BoundingRectangle;
                 var caption = new Point(bounds.Left + (int)(60 * scale), bounds.Top + (int)(16 * scale));
-                var target = new Point(dock.Left + dock.Width / 2, dock.Top + dock.Height / 2);
+                var target = drop ?? CenterOf(Find(window, group).BoundingRectangle);
                 using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
                     DragTrimmer(caption, target);
                 WaitFor(() => FloatingPane(window, name) is null && DockTab(window, group, name)?.Patterns.SelectionItem.Pattern.IsSelected.Value == true,
                     $"Ctrl-drag did not select {name} in {group}.");
+
+                static Point CenterOf(Rectangle dock) => new(dock.Left + dock.Width / 2, dock.Top + dock.Height / 2);
             }
 
             static TabItem? DockTab(Window window, string group, string name) => Find(window, group)

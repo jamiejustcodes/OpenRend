@@ -40,6 +40,8 @@ public partial class MainWindow
         public bool Started { get; set; }
     }
 
+    private sealed record PaneDockTarget(TabControl Dock, FrameworkElement OutlineOwner, Rect Outline);
+
     private void InitializeWorkspacePanes()
     {
         foreach (var group in new[] { ToolsTabs, PreviewDeckTabs, MasterBusTabs })
@@ -135,8 +137,7 @@ public partial class MainWindow
         else
         {
             pane.Tab.Visibility = Visibility.Visible;
-            if (pane == trimmerPane)
-                UpdateSourceDockColumns();
+            UpdatePaneDockLayout(pane);
             pane.Dock.SelectedItem = pane.Tab;
             pane.Tab.Focus();
         }
@@ -183,8 +184,15 @@ public partial class MainWindow
         pane.Tab.Visibility = Visibility.Collapsed;
         if (pane.Dock.SelectedItem == pane.Tab)
             pane.Dock.SelectedItem = pane.Dock.Items.OfType<TabItem>().FirstOrDefault(tab => tab.Visibility == Visibility.Visible);
+        UpdatePaneDockLayout(pane);
+    }
+
+    private void UpdatePaneDockLayout(DockablePane pane)
+    {
         if (pane == trimmerPane)
             UpdateSourceDockColumns();
+        else if (pane.Dock == UpperDockTabs)
+            UpdateUpperDockRows();
     }
 
     private TrimmerPaneLayout CaptureTrimmerPane() => new(trimmerPane.Floats,
@@ -234,6 +242,7 @@ public partial class MainWindow
             {
                 nameof(ToolsTabs) => ToolsTabs,
                 nameof(PreviewDeckTabs) => PreviewDeckTabs,
+                nameof(UpperDockTabs) => UpperDockTabs,
                 _ => pane.HomeDock
             };
             MovePaneToDock(pane, dock);
@@ -252,8 +261,7 @@ public partial class MainWindow
             pane.Tab.Visibility = Visibility.Visible;
             if (pane.Dock.SelectedItem is null)
                 pane.Dock.SelectedItem = pane.Tab;
-            if (pane == trimmerPane)
-                UpdateSourceDockColumns();
+            UpdatePaneDockLayout(pane);
         }
 
         if (floating && visible)
@@ -391,6 +399,8 @@ public partial class MainWindow
         while (index < target.Items.Count && workspaceTabOrder[(TabItem)target.Items[index]] < order)
             index++;
         target.Items.Insert(index, pane.Tab);
+        if (source == UpperDockTabs || target == UpperDockTabs)
+            UpdateUpperDockRows();
     }
 
     private static PaneBounds? ReadPaneBounds(DockablePane pane)
@@ -498,22 +508,35 @@ public partial class MainWindow
         ShowPaneDockOutline(GetPaneDockTarget(pane, pointer));
     }
 
-    private TabControl? GetPaneDockTarget(DockablePane pane, NativePoint pointer)
+    private PaneDockTarget? GetPaneDockTarget(DockablePane pane, NativePoint pointer)
     {
-        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || !IsVisible || WindowState == WindowState.Minimized)
+        if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || !Workspace.IsVisible || WindowState == WindowState.Minimized)
             return null;
+        var screen = new Point(pointer.X, pointer.Y);
         if (pane == trimmerPane)
-            return ContainsPointer(PreviewDeckTabs) ? PreviewDeckTabs : null;
-        if (ContainsPointer(ToolsTabs)) return ToolsTabs;
-        if (ContainsPointer(PreviewDeckTabs)) return PreviewDeckTabs;
-        return pane.HomeDock == MasterBusTabs && ContainsPointer(MasterBusTabs) ? MasterBusTabs : null;
+            return Hit(PreviewDeckTabs);
+        if (UpperDockTabs.IsVisible)
+        {
+            if (Hit(UpperDockTabs) is { } upper) return upper;
+        }
+        else
+        {
+            var workspaceTop = new Rect(0, 0, Workspace.ActualWidth, Math.Min(32, Workspace.ActualHeight * .15));
+            if (workspaceTop.Contains(Workspace.PointFromScreen(screen)))
+                return new(UpperDockTabs, Workspace,
+                    new Rect(0, 0, Workspace.ActualWidth, Math.Max(0, Workspace.ActualHeight - UpperDockSplitter.Height) * upperDockShare));
+        }
 
-        bool ContainsPointer(TabControl target) => target.IsVisible &&
-            new Rect(0, 0, target.ActualWidth, target.ActualHeight)
-                .Contains(target.PointFromScreen(new Point(pointer.X, pointer.Y)));
+        return Hit(ToolsTabs) ?? Hit(PreviewDeckTabs) ?? (pane.HomeDock == MasterBusTabs ? Hit(MasterBusTabs) : null);
+
+        PaneDockTarget? Hit(TabControl target)
+        {
+            var bounds = new Rect(target.RenderSize);
+            return target.IsVisible && bounds.Contains(target.PointFromScreen(screen)) ? new(target, target, bounds) : null;
+        }
     }
 
-    private void ShowPaneDockOutline(TabControl? target)
+    private void ShowPaneDockOutline(PaneDockTarget? target)
     {
         if (target is null)
         {
@@ -535,9 +558,11 @@ public partial class MainWindow
                 IsHitTestVisible = false
             }
         };
-        paneDockOutline.PlacementTarget = target;
-        paneDockOutline.Width = target.ActualWidth;
-        paneDockOutline.Height = target.ActualHeight;
+        paneDockOutline.PlacementTarget = target.OutlineOwner;
+        paneDockOutline.HorizontalOffset = target.Outline.X;
+        paneDockOutline.VerticalOffset = target.Outline.Y;
+        paneDockOutline.Width = target.Outline.Width;
+        paneDockOutline.Height = target.Outline.Height;
         paneDockOutline.IsOpen = true;
     }
 
@@ -560,7 +585,7 @@ public partial class MainWindow
         else if (cancel)
             DockFloatingPane(pane);
         else if (GetCursorPos(out var pointer) && GetPaneDockTarget(pane, pointer) is { } target)
-            DockFloatingPane(pane, target);
+            DockFloatingPane(pane, target.Dock);
         else
         {
             if (ReadPaneBounds(pane) is { } dropped)
