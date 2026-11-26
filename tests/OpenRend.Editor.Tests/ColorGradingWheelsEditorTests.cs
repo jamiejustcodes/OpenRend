@@ -1,7 +1,12 @@
 using System.Globalization;
 using System.Threading;
+using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
 using System.Windows.Media;
 using OpenRend.App;
+using OpenRend.Core;
+using OpenRend.Media;
 using Xunit;
 
 namespace OpenRend.Editor.Tests;
@@ -21,6 +26,49 @@ public sealed class ColorGradingWheelsEditorTests
         thread.Join();
         if (error is not null) throw new AggregateException(error);
     }
+
+    [Fact]
+    public void DockedGradeStartsWithTheFirstAdjustmentAsOneUndoStep() => Sta(() =>
+    {
+        var media = new MediaService();
+        var renderer = new TimelineRenderService(media);
+        var vm = new EditorViewModel(media, renderer, new ExportService(renderer));
+        var asset = new MediaAsset { Path = "source.mp4", HasVideo = true, DurationSeconds = 1 };
+        var clip = new TimelineClip { MediaId = asset.Id, DurationFrames = 30 };
+        vm.Replace(new ProjectDocument
+        {
+            Media = [asset], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }]
+        }, "grade.openrend");
+
+        var panel = new ColorGradingDockControl();
+        panel.Initialize(vm, () => { }, () => { });
+        vm.Changed += () => panel.BindToClip(vm.Project.Tracks[0].Clips[0]);
+        panel.BindToClip(clip);
+
+        Assert.Empty(clip.VideoEffects);
+        Assert.False(vm.Dirty);
+        Assert.False(vm.Editor.CanUndo);
+
+        var exposure = Assert.Single(DescendantSliders(panel), slider => AutomationProperties.GetAutomationId(slider) == "logExposure");
+        exposure.Value = 0.5;
+
+        var grade = Assert.Single(clip.VideoEffects);
+        Assert.Equal(VideoEffectKind.ColorGrading, grade.Kind);
+        Assert.Equal(0.5, grade.GetParameter("ExposureLnAdjust"));
+        Assert.True(vm.Editor.Undo());
+        Assert.Empty(vm.Project.Tracks[0].Clips[0].VideoEffects);
+        Assert.Equal(0, exposure.Value);
+        Assert.False(vm.Editor.CanUndo);
+
+        static IEnumerable<Slider> DescendantSliders(DependencyObject parent)
+        {
+            foreach (var child in LogicalTreeHelper.GetChildren(parent).OfType<DependencyObject>())
+            {
+                if (child is Slider slider) yield return slider;
+                foreach (var descendant in DescendantSliders(child)) yield return descendant;
+            }
+        }
+    });
 
     [Fact]
     public void ColorGradingWheel_NeutralDefaults_MapToCenterZeroAndRoundtrip()

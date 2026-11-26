@@ -11,7 +11,7 @@ using OpenRend.Core;
 namespace OpenRend.App;
 
 /// <summary>
-/// 1:1 Vegas Pro docked Color Grading panel hosted in MainWindow.
+/// Docked Color Grading panel hosted in MainWindow.
 /// Provides category navigation (LUTs, Color Wheels, Utilities, Curves),
 /// dual 3D LUT slots with built-in camera/look presets, interactive color wheels,
 /// curves, tone, levels, white balance, and HSL controls.
@@ -22,8 +22,8 @@ public sealed class ColorGradingDockControl : UserControl
     private Action? previewCallback;
     private Action? popoutCallback;
     private TimelineClip? activeClip;
-    private Guid activeEffectId = Guid.Empty;
     private bool updating;
+    private static readonly VideoEffect NeutralGrade = VideoEffect.Create(VideoEffectKind.ColorGrading);
 
     // Header controls
     private readonly TextBlock targetLabel;
@@ -93,7 +93,7 @@ public sealed class ColorGradingDockControl : UserControl
     private readonly ComboBox lookLutInterpCombo;
     private readonly CheckBox lookLutBypassCheck;
 
-    private VideoEffect? ActiveEffect => activeClip?.VideoEffects.FirstOrDefault(e => e.Id == activeEffectId);
+    private VideoEffect? ActiveEffect => activeClip?.VideoEffects.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
 
     public ColorGradingDockControl()
     {
@@ -108,7 +108,7 @@ public sealed class ColorGradingDockControl : UserControl
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) }); // Header
         root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Body
 
-        // --- 1. Top Header Bar (1:1 Vegas Pro) ---
+        // Header
         var header = new DockPanel { Background = headerBrush, Height = 32 };
         AutomationProperties.SetAutomationId(header, "ColorGradingHeader");
 
@@ -256,7 +256,7 @@ public sealed class ColorGradingDockControl : UserControl
 
         Content = root;
         SelectPage(0);
-        SetEnabled(false);
+        BindToClip(null);
     }
 
     private static ListBoxItem MakeNavItem(string label, string autoId)
@@ -281,37 +281,12 @@ public sealed class ColorGradingDockControl : UserControl
 
     public void BindToClip(TimelineClip? clip)
     {
-        activeClip = clip;
-        if (clip is null || vm is null)
-        {
-            targetLabel.Text = "Event FX:  (Not active)";
-            activeEffectId = Guid.Empty;
-            SetEnabled(false);
-            return;
-        }
-
-        targetLabel.Text = $"Event FX:  {clip.Name}";
-        var existing = clip.VideoEffects.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
-        if (existing is null)
-        {
-            var added = vm.Editor.AddScopedVideoEffect(EffectScope.Event, clip.Id, VideoEffectKind.ColorGrading);
-            activeEffectId = added.Id;
-        }
-        else
-        {
-            activeEffectId = existing.Id;
-        }
-
-        SetEnabled(true);
+        activeClip = clip is { IsLocked: false } && vm?.Project.Tracks.Any(track =>
+            track.Kind == TrackKind.Video && !track.IsLocked && track.Clips.Contains(clip)) == true ? clip : null;
+        targetLabel.Text = activeClip is { } target ? $"Event FX:  {target.Name}" : "Event FX:  (Not active)";
+        bypassBtn.IsEnabled = resetAllBtn.IsEnabled = ActiveEffect is not null;
+        presetCombo.IsEnabled = pageContainer.IsEnabled = activeClip is not null;
         UpdateControlsFromEffect();
-    }
-
-    private void SetEnabled(bool enabled)
-    {
-        bypassBtn.IsEnabled = enabled;
-        resetAllBtn.IsEnabled = enabled;
-        presetCombo.IsEnabled = enabled;
-        pageContainer.IsEnabled = enabled;
     }
 
     private void SelectPage(int index)
@@ -896,8 +871,7 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void UpdateControlsFromEffect()
     {
-        var fx = ActiveEffect;
-        if (fx is null) return;
+        var fx = ActiveEffect ?? NeutralGrade;
         updating = true;
         try
         {
@@ -993,60 +967,56 @@ public sealed class ColorGradingDockControl : UserControl
         }
     }
 
-    private void CommitSingleParam(string key, double value)
+    private void EditGrade(Func<VideoEffect, bool> edit)
     {
         if (updating || activeClip is null || vm is null) return;
-        var fx = ActiveEffect;
-        if (fx is null) return;
-        var dict = new Dictionary<string, double>(fx.Parameters, StringComparer.Ordinal)
+        var effects = vm.Editor.GetScopedVideoEffects(EffectScope.Event, activeClip.Id);
+        var index = effects.FindIndex(effect => effect.Kind == VideoEffectKind.ColorGrading);
+        var grade = index >= 0 ? effects[index].DeepClone() : VideoEffect.Create(VideoEffectKind.ColorGrading);
+        if (!edit(grade)) return;
+
+        // Insert a new grade with its first adjustment in the same undo step.
+        vm.Editor.Execute(_ =>
         {
-            [key] = value
-        };
-        vm.Editor.UpdateScopedVideoEffectParameters(EffectScope.Event, activeClip.Id, activeEffectId, dict, fx.IsEnabled);
+            if (index >= 0) effects[index] = grade;
+            else effects.Add(grade);
+        });
         previewCallback?.Invoke();
     }
 
-    private void ResetParams(Dictionary<string, double> resetDict)
+    private void CommitSingleParam(string key, double value) => EditGrade(grade =>
     {
-        if (updating || activeClip is null || vm is null) return;
-        var fx = ActiveEffect;
-        if (fx is null) return;
-        var dict = new Dictionary<string, double>(fx.Parameters, StringComparer.Ordinal);
-        foreach (var (k, v) in resetDict) dict[k] = v;
-        vm.Editor.UpdateScopedVideoEffectParameters(EffectScope.Event, activeClip.Id, activeEffectId, dict, fx.IsEnabled);
-        UpdateControlsFromEffect();
-        previewCallback?.Invoke();
+        if (grade.GetParameter(key) == value) return false;
+        grade.SetParameter(key, value);
+        return true;
+    });
+
+    private void ResetParams(Dictionary<string, double> values) => EditGrade(grade => SetParameters(grade, values));
+
+    private static bool SetParameters(VideoEffect grade, Dictionary<string, double> values)
+    {
+        if (values.All(pair => grade.GetParameter(pair.Key) == pair.Value)) return false;
+        foreach (var (key, value) in values) grade.SetParameter(key, value);
+        return true;
     }
 
-    private void CommitCurves()
+    private void CommitCurves() => EditGrade(grade =>
     {
-        if (updating || activeClip is null || vm is null) return;
-        var fx = ActiveEffect;
-        if (fx is null) return;
-        var effects = activeClip.VideoEffects.Select(e => e.DeepClone()).ToList();
-        var target = effects.FirstOrDefault(e => e.Id == activeEffectId);
-        if (target is not null)
-        {
-            target.Curves = curvesControl.Curves.DeepClone();
-            target.HSLCurves = hslCurvesControl.Curves.DeepClone();
-            vm.Editor.SetScopedVideoEffects(EffectScope.Event, activeClip.Id, effects);
-        }
-        previewCallback?.Invoke();
-    }
+        grade.Curves = curvesControl.Curves.DeepClone();
+        grade.HSLCurves = hslCurvesControl.Curves.DeepClone();
+        return true;
+    });
 
-    private void SetLutSlot(int slot, CubeLut? lut)
+    private void SetLutSlot(int slot, CubeLut? lut) => EditGrade(grade => SetLut(grade, slot, lut));
+
+    private static bool SetLut(VideoEffect grade, int slot, CubeLut? lut)
     {
-        if (activeClip is null || vm is null) return;
-        var effects = activeClip.VideoEffects.Select(e => e.DeepClone()).ToList();
-        var target = effects.FirstOrDefault(e => e.Id == activeEffectId);
-        if (target is not null)
-        {
-            if (slot == 0) target.Lut = lut;
-            else target.LookLut = lut;
-            vm.Editor.SetScopedVideoEffects(EffectScope.Event, activeClip.Id, effects);
-        }
-        UpdateControlsFromEffect();
-        previewCallback?.Invoke();
+        var current = slot == 0 ? grade.Lut : grade.LookLut;
+        if (current is null ? lut is null : current.ContentEquals(lut))
+            return false;
+        if (slot == 0) grade.Lut = lut;
+        else grade.LookLut = lut;
+        return true;
     }
 
     private void BrowseLutSlot(int slot)
@@ -1074,15 +1044,16 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void ResetLutSlot(int slot)
     {
-        if (activeClip is null || vm is null) return;
-        var prefix = slot == 0 ? "0" : "1";
-        ResetParams(new()
+        EditGrade(grade =>
         {
-            [$"LUTGain_{prefix}"] = 1.0,
-            [$"LUTInterpolation_{prefix}"] = 0,
-            [$"LUTEnable_{prefix}"] = 0
+            var cleared = SetLut(grade, slot, null);
+            return SetParameters(grade, new()
+            {
+                [$"LUTGain_{slot}"] = 1.0,
+                [$"LUTInterpolation_{slot}"] = 0,
+                [$"LUTEnable_{slot}"] = 0
+            }) || cleared;
         });
-        SetLutSlot(slot, null);
     }
 
     // --- Wheel Callbacks ---
@@ -1112,34 +1083,24 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void OnBypassClick(object sender, RoutedEventArgs e)
     {
-        if (activeClip is null || vm is null) return;
-        var fx = ActiveEffect;
-        if (fx is null) return;
-        var isEnabled = bypassBtn.IsChecked != true;
-        vm.Editor.UpdateScopedVideoEffectParameters(EffectScope.Event, activeClip.Id, activeEffectId, fx.Parameters, isEnabled);
-        previewCallback?.Invoke();
+        EditGrade(grade =>
+        {
+            grade.IsEnabled = bypassBtn.IsChecked != true;
+            return true;
+        });
     }
 
     private void OnResetAllClick(object sender, RoutedEventArgs e)
     {
-        if (activeClip is null || vm is null) return;
-        var fx = ActiveEffect;
-        if (fx is null) return;
-        var defaults = VideoEffectCatalog.Get(VideoEffectKind.ColorGrading).Parameters
-            .ToDictionary(p => p.Key, p => p.DefaultValue, StringComparer.Ordinal);
-        var effects = activeClip.VideoEffects.Select(e => e.DeepClone()).ToList();
-        var target = effects.FirstOrDefault(e => e.Id == activeEffectId);
-        if (target is not null)
+        EditGrade(grade =>
         {
-            target.Lut = null;
-            target.LookLut = null;
-            target.Curves = null;
-            target.HSLCurves = null;
-            target.Parameters = defaults;
-            vm.Editor.SetScopedVideoEffects(EffectScope.Event, activeClip.Id, effects);
-        }
-        UpdateControlsFromEffect();
-        previewCallback?.Invoke();
+            grade.Lut = null;
+            grade.LookLut = null;
+            grade.Curves = null;
+            grade.HSLCurves = null;
+            grade.Parameters = new(NeutralGrade.Parameters, StringComparer.Ordinal);
+            return true;
+        });
     }
 
     private void OnPresetComboChanged(object sender, SelectionChangedEventArgs e)

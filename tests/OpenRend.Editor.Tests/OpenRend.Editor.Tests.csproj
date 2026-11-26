@@ -22,7 +22,10 @@
     <Compile Include="../../src/OpenRend.App/VideoEffectChooserModel.cs" Link="VideoEffectChooserModel.cs" />
     <Compile Include="../../src/OpenRend.App/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
     <Compile Include="../../src/OpenRend.App/WorkspaceLayoutManager.cs" Link="WorkspaceLayoutManager.cs" />
+    <Compile Include="../../src/OpenRend.App/ColorGradingDockControl.cs" Link="ColorGradingDockControl.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingWheelControl.cs" Link="ColorGradingWheelControl.cs" />
+    <Compile Include="../../src/OpenRend.App/ColorCurvesControl.cs" Link="ColorCurvesControl.cs" />
+    <Compile Include="../../src/OpenRend.App/HSLCurvesControl.cs" Link="HSLCurvesControl.cs" />
     <Compile Include="../../src/OpenRend.App/InsertTimeDialog.cs" Link="InsertTimeDialog.cs" />
     <Compile Include="../../src/OpenRend.App/TrackMotionWindow.cs" Link="TrackMotionWindow.cs" />
   </ItemGroup>
