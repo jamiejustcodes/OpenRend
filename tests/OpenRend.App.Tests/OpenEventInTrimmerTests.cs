@@ -1,5 +1,6 @@
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
+using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
 using OpenRend.Project;
@@ -24,13 +25,14 @@ public sealed partial class EditorWorkflowTests
             var media = new MediaAsset
             {
                 Path = Path.Combine(root, "tests", "native", "fixture.mp4"),
-                Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true
+                Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true, HasAudio = true
             };
             var clip = new TimelineClip { MediaId = media.Id, SourceInFrame = 30, DurationFrames = 45 };
+            var audio = new TimelineTrack { Kind = TrackKind.Audio };
             await ProjectStore.SaveAsync(new ProjectDocument
             {
                 Name = "UI integration", Width = 320, Height = 180, FrameRate = new(30, 1),
-                Media = [media], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }]
+                Media = [media], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }, audio]
             }, path);
 
             using var running = Launch(executable, path, temporary);
@@ -58,6 +60,23 @@ public sealed partial class EditorWorkflowTests
             }
             var saved = Assert.Single((await ProjectStore.LoadAsync(path)).Tracks[0].Clips);
             Assert.Equal((clip.SourceInFrame, clip.DurationFrames), (saved.SourceInFrame, saved.DurationFrames));
+
+            var handle = Find(window, "TrimmerStream_AudioOnly").BoundingRectangle;
+            var eventBounds = Find(window, $"Clip_{clip.Id:N}").BoundingRectangle;
+            var audioBounds = Find(window, $"Track_{audio.Id:N}").BoundingRectangle;
+            var from = new System.Drawing.Point(handle.Left + handle.Width / 2, handle.Top + handle.Height / 2);
+            var to = new System.Drawing.Point(eventBounds.Left + eventBounds.Width / 3, audioBounds.Top + 20);
+            foreach (var point in new[] { from, to })
+                Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
+            Mouse.Drag(from, to, MouseButton.Left);
+            WaitFor(() => window.Title.Contains('*'), "Dragging the audio handle did not place a clip.");
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The stream-only Trimmer drop did not save.");
+            var placement = await ProjectStore.LoadAsync(path);
+            Assert.Single(placement.Tracks[0].Clips);
+            var sound = Assert.Single(placement.Tracks[1].Clips);
+            Assert.Equal((15L, 30L, 45L), (sound.StartFrame, sound.SourceInFrame, sound.DurationFrames));
+            Assert.Null(sound.GroupId);
             running.CloseGracefully();
         }
         finally { Directory.Delete(temporary, recursive: true); }

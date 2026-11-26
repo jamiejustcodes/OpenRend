@@ -358,7 +358,7 @@ public sealed class EditorViewModel : ObservableObject
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
     }
 
-    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio, double? playbackRate = null)
+    public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio, double? playbackRate = null, bool placeOnNewTrack = false)
     {
         var asset = Project.Media.Single(m => m.Id == mediaId);
         var start = at ?? Position;
@@ -380,11 +380,13 @@ public sealed class EditorViewModel : ObservableObject
             {
                 primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
             }
-            var target = chosen ?? p.Tracks.FirstOrDefault(t => t.Kind == primaryKind && !t.IsLocked);
+            if (chosen is not null && (chosen.Kind != primaryKind || chosen.IsAdjustmentTrack))
+                throw new InvalidOperationException("Choose a compatible track for the source stream.");
+            var target = placeOnNewTrack ? null : chosen ?? p.Tracks.FirstOrDefault(t => t.Kind == primaryKind && !t.IsLocked && !t.IsAdjustmentTrack);
             if (target is null)
             {
                 target = new TimelineTrack { Kind = primaryKind, Name = $"{primaryKind} {p.Tracks.Count(t => t.Kind == primaryKind) + 1}" };
-                if (primaryKind == TrackKind.Video) p.Tracks.Insert(0, target); else p.Tracks.Add(target);
+                if (primaryKind == TrackKind.Video && !placeOnNewTrack) p.Tracks.Insert(0, target); else p.Tracks.Add(target);
             }
             if (target.IsLocked) throw new InvalidOperationException("Unlock the track before placing media.");
             if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
@@ -472,8 +474,9 @@ public sealed class EditorViewModel : ObservableObject
 
     public void PlaceSubclipUpToCursor(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio)
     {
-        var start = Math.Max(0, Position - duration);
-        PlaceSubclip(mediaId, sourceIn, duration, trackId, at: start, advanceCursor: false, stream: stream);
+        var available = Math.Min(Position, duration);
+        if (available <= 0) return;
+        PlaceSubclip(mediaId, checked(sourceIn + duration - available), available, trackId, at: Position - available, advanceCursor: false, stream: stream);
     }
 
     public void PlaceSubclipFitToFill(Guid mediaId, long sourceIn, long sourceDuration, FrameRange targetRange, Guid? trackId = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio)

@@ -2,10 +2,12 @@ using System;
 using System.IO;
 using System.Linq;
 using System.Threading;
+using System.Windows;
 using OpenRend.App;
 using OpenRend.Core;
 using OpenRend.Media;
 using OpenRend.Timeline;
+using OpenRend.UI;
 using Xunit;
 
 namespace OpenRend.Editor.Tests;
@@ -74,6 +76,54 @@ public sealed class TrimmerEditorTests
         Assert.Equal(30, vm.Project.Tracks[0].Clips[0].SourceInFrame);
         Assert.Equal(45, vm.Project.Tracks[0].Clips[0].DurationFrames);
     }
+
+    [Fact]
+    public void StreamDropTargetsRequireACompatibleUnlockedTrackAndPreserveTheSourceRange() => RunSta(() =>
+    {
+        var asset = new MediaAsset { Path = "fixture.mp4", DurationSeconds = 3, HasVideo = true, HasAudio = true };
+        var video = new TimelineTrack { Kind = TrackKind.Video };
+        var audio = new TimelineTrack { Kind = TrackKind.Audio };
+        var project = new ProjectDocument { Media = [asset], Tracks = [video, audio] };
+        var vm = CreateViewModel();
+        vm.Replace(project, null);
+        var timeline = new TimelineView { Project = project };
+        var range = new FrameRange(30, 19);
+        var drag = new TrimmerRangeDrag(asset.Id, range, TrackKind.Audio);
+        var point = new Point(330, TimelineView.RulerHeight + TimelineView.TrackHeight + 10);
+        Assert.Null(timeline.TrimmerDropAsset(drag, point, video));
+        audio.IsLocked = true;
+        Assert.Null(timeline.TrimmerDropAsset(drag, point, audio));
+        audio.IsLocked = false;
+        Assert.Same(asset, timeline.TrimmerDropAsset(drag, point, audio));
+        Assert.Null(timeline.TrimmerDropAsset(drag with { SourceRange = new FrameRange(80, 20) }, point, audio));
+
+        Assert.Throws<InvalidOperationException>(() => vm.PlaceSubclip(asset.Id, range.StartFrame, range.FrameCount, video.Id,
+            at: 54, stream: TrimmerPlacementStream.AudioOnly));
+        Assert.False(vm.Editor.CanUndo);
+        vm.PlaceSubclip(asset.Id, range.StartFrame, range.FrameCount, at: 54, stream: TrimmerPlacementStream.AudioOnly, placeOnNewTrack: true);
+        Assert.Equal(3, vm.Project.Tracks.Count);
+        var destination = vm.Project.Tracks[2];
+        Assert.Equal(TrackKind.Audio, destination.Kind);
+        var clip = Assert.Single(destination.Clips);
+        Assert.Equal((54L, 30L, 19L), (clip.StartFrame, clip.SourceInFrame, clip.DurationFrames));
+        Assert.Null(clip.GroupId);
+        vm.Editor.Undo();
+        Assert.Equal(2, vm.Project.Tracks.Count);
+    });
+
+    [Fact]
+    public void TrimmerPlacementUpToACursorNearStartKeepsTheSourceOutPoint() => RunSta(() =>
+    {
+        var asset = new MediaAsset { Path = "fixture.mp4", DurationSeconds = 3, HasVideo = true };
+        var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = 90 }] };
+        var vm = CreateViewModel();
+        vm.Replace(new ProjectDocument { Media = [asset], Tracks = [track] }, null);
+        vm.Position = 6;
+        vm.PlaceSubclipUpToCursor(asset.Id, sourceIn: 20, duration: 30);
+        var placed = track.Clips.Last();
+        Assert.Equal((0L, 44L, 6L), (placed.StartFrame, placed.SourceInFrame, placed.DurationFrames));
+        Assert.Equal(6, vm.Position);
+    });
 
     [Fact]
     public void TrimmerControl_LoadMedia_CalculatesTotalFramesAndInitializesPoints() => RunSta(() =>

@@ -85,6 +85,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<TrackLevelGesture>? TrackLevelRequested;
     public event Action<Guid, Guid, long>? MediaDropped;
     public event Action<string[], Guid?, long>? FilesDropped;
+    public event Action<TrimmerRangeDrag, Guid?, long>? TrimmerRangeDropped;
     public event Action<TransitionGesture>? TransitionDropped;
     public event Action<Guid, long>? ClipMoveHover;
     public event Action<Guid, Guid>? OverlapToCutRequested;
@@ -300,6 +301,12 @@ public sealed partial class TimelineView : FrameworkElement
             var p = e.GetPosition(this);
             var track = TrackAt(p.Y);
             var frame = Math.Max(0, FrameAt(p.X));
+            if (e.Data.GetData(typeof(TrimmerRangeDrag)) is TrimmerRangeDrag trimmed)
+            {
+                if (TrimmerDropAsset(trimmed, p, track) is not null) TrimmerRangeDropped?.Invoke(trimmed, track?.Id, frame);
+                e.Handled = true;
+                return;
+            }
             if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
                 FilesDropped?.Invoke(files, track?.Id, frame);
@@ -328,6 +335,27 @@ public sealed partial class TimelineView : FrameworkElement
         {
             if (hoverFileDropActive) { hoverFileDropActive = false; InvalidateVisual(); }
             e.Effects = DragDropEffects.None;
+            return;
+        }
+
+        hoverDropDuration = null;
+        if (e.Data.GetData(typeof(TrimmerRangeDrag)) is TrimmerRangeDrag trimmed)
+        {
+            var target = TrackAt(p.Y);
+            var asset = TrimmerDropAsset(trimmed, p, target);
+            e.Effects = asset is null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
+            hoverFileDropActive = asset is not null;
+            if (asset is not null)
+            {
+                hoverFileDropFrame = Math.Max(0, FrameAt(p.X));
+                hoverFileDropTrack = target;
+                hoverFileDropName = $"{trimmed.Stream} · {asset.Name}";
+                hoverFileDropNewTrackKind = trimmed.Stream;
+                hoverFileDropIsNewTrack = target is null;
+                hoverDropDuration = trimmed.SourceRange.FrameCount;
+            }
+            InvalidateVisual();
             return;
         }
 
@@ -366,6 +394,21 @@ public sealed partial class TimelineView : FrameworkElement
         }
 
         if (hoverFileDropActive) { hoverFileDropActive = false; InvalidateVisual(); }
+    }
+
+    private long? hoverDropDuration;
+
+    internal MediaAsset? TrimmerDropAsset(TrimmerRangeDrag drag, Point point, TimelineTrack? track)
+    {
+        if (point.X < HeaderWidth || point.Y < RulerHeight || track is { IsLocked: true } or { IsAdjustmentTrack: true } ||
+            (track is not null && track.Kind != drag.Stream)) return null;
+        if (track is null && point.Y < RulerHeight + TotalTimelineContentHeight - VerticalOffset) return null;
+        var asset = Project.Media.FirstOrDefault(item => item.Id == drag.MediaId);
+        if (asset is null || (drag.Stream == TrackKind.Video ? !asset.HasVideo : !asset.HasAudio)) return null;
+        var source = drag.SourceRange;
+        var duration = Math.Max(1, Project.FrameRate.Frames(asset.DurationSeconds));
+        return source.StartFrame >= 0 && source.StartFrame < duration && source.FrameCount > 0 && source.FrameCount <= duration - source.StartFrame
+            ? asset : null;
     }
 
     protected override AutomationPeer OnCreateAutomationPeer() => new TimelineAutomationPeer(this);
@@ -1277,7 +1320,7 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var ghostFrame = hoverFileDropFrame;
             var ghostX = X(ghostFrame);
-            var ghostWidth = Math.Max(90.0, 5.0 * PixelsPerSecond);
+            var ghostWidth = hoverDropDuration is long span ? Math.Max(2, Project.FrameRate.Seconds(span) * PixelsPerSecond) : Math.Max(90.0, 5.0 * PixelsPerSecond);
             double ghostY;
             var ghostHeight = TrackHeight;
             if (hoverFileDropTrack != null)

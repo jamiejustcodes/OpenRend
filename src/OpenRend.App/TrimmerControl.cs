@@ -319,6 +319,8 @@ public sealed class TrimmerControl : UserControl
         var range = sourceRange ?? new FrameRange(0, frameCount);
         range.Validate(frameCount);
         activeMedia = media;
+        if (!SupportsStream(streamMode)) streamMode = TrimmerPlacementStream.VideoAndAudio;
+        UpdateStreamButtons();
         var loadId = ++mediaLoadId;
         ++previewRequestId;
         previewImage.Source = null;
@@ -473,15 +475,26 @@ public sealed class TrimmerControl : UserControl
 
     public void SetPlacementStream(TrimmerPlacementStream stream)
     {
+        if (!SupportsStream(stream)) return;
         streamMode = stream;
         UpdateStreamButtons();
     }
+
+    private bool SupportsStream(TrimmerPlacementStream stream) => stream switch
+    {
+        TrimmerPlacementStream.VideoOnly => activeMedia?.HasVideo == true,
+        TrimmerPlacementStream.AudioOnly => activeMedia?.HasAudio == true,
+        _ => activeMedia is not null
+    };
 
     private void UpdateStreamButtons()
     {
         ApplyStreamBtnStyle(streamBothBtn, streamMode == TrimmerPlacementStream.VideoAndAudio);
         ApplyStreamBtnStyle(streamVideoBtn, streamMode == TrimmerPlacementStream.VideoOnly);
         ApplyStreamBtnStyle(streamAudioBtn, streamMode == TrimmerPlacementStream.AudioOnly);
+        streamBothBtn.IsEnabled = SupportsStream(TrimmerPlacementStream.VideoAndAudio);
+        streamVideoBtn.IsEnabled = SupportsStream(TrimmerPlacementStream.VideoOnly);
+        streamAudioBtn.IsEnabled = SupportsStream(TrimmerPlacementStream.AudioOnly);
     }
 
     private static void ApplyStreamBtnStyle(Button btn, bool active)
@@ -505,24 +518,46 @@ public sealed class TrimmerControl : UserControl
             ToolTip = tooltip
         };
         btn.Click += (_, _) => SetPlacementStream(mode);
+        AutomationProperties.SetAutomationId(btn, $"TrimmerStream_{mode}");
+        if (mode != TrimmerPlacementStream.VideoAndAudio)
+        {
+            Point? dragOrigin = null;
+            var kind = mode == TrimmerPlacementStream.VideoOnly ? TrackKind.Video : TrackKind.Audio;
+            btn.ToolTip = $"Click to select {label.ToLowerInvariant()} only. Drag to place the source range.";
+            btn.PreviewMouseLeftButtonDown += (_, e) => dragOrigin = e.GetPosition(btn);
+            btn.PreviewMouseLeftButtonUp += (_, _) => dragOrigin = null;
+            btn.PreviewMouseMove += (_, e) =>
+            {
+                if (e.LeftButton != MouseButtonState.Pressed || dragOrigin is not { } origin || activeMedia is not { } media) return;
+                var delta = e.GetPosition(btn) - origin;
+                if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                    Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+                dragOrigin = null;
+                var data = new DataObject(typeof(TrimmerRangeDrag), new TrimmerRangeDrag(media.Id, PlacementRange, kind));
+                DragDrop.DoDragDrop(btn, data, DragDropEffects.Copy);
+            };
+        }
         return btn;
     }
+
+    private FrameRange PlacementRange => outFrame > inFrame ? new(inFrame, outFrame - inFrame) : new(0, totalFrames);
 
     public void AddSubclipToTimeline()
     {
         if (activeMedia is null || vm is null) return;
-        var duration = Math.Max(1, outFrame - inFrame);
-        AddToTimelineRequested?.Invoke(activeMedia.Id, inFrame, duration);
-        vm.PlaceSubclip(activeMedia.Id, inFrame, duration, stream: streamMode);
-        vm.Status = $"Placed subclip '{activeMedia.Name}' [{inFrame}..{outFrame}] on timeline ({streamMode}).";
+        var source = PlacementRange;
+        AddToTimelineRequested?.Invoke(activeMedia.Id, source.StartFrame, source.FrameCount);
+        vm.PlaceSubclip(activeMedia.Id, source.StartFrame, source.FrameCount, stream: streamMode);
+        vm.Status = $"Placed subclip '{activeMedia.Name}' [{source.StartFrame}..{source.EndFrame}] on timeline ({streamMode}).";
     }
 
     public void AddMediaUpToCursor()
     {
         if (activeMedia is null || vm is null) return;
-        var duration = Math.Max(1, outFrame - inFrame);
-        vm.PlaceSubclipUpToCursor(activeMedia.Id, inFrame, duration, stream: streamMode);
-        vm.Status = $"Placed subclip '{activeMedia.Name}' up to cursor [{inFrame}..{outFrame}] on timeline ({streamMode}).";
+        if (vm.Position <= 0) { vm.Status = "Move the cursor beyond the start to place media up to it."; return; }
+        var source = PlacementRange;
+        vm.PlaceSubclipUpToCursor(activeMedia.Id, source.StartFrame, source.FrameCount, stream: streamMode);
+        vm.Status = $"Placed subclip '{activeMedia.Name}' up to the timeline cursor ({streamMode}).";
     }
 
     public void FitToFill()

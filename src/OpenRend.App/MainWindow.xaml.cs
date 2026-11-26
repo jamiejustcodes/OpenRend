@@ -147,6 +147,13 @@ public partial class MainWindow : Window
             vm.Editor.SetTrackAutomationMode(id, mode);
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.TrimmerRangeDropped += (drag, track, frame) => Guard(() =>
+        {
+            Pause();
+            var stream = drag.Stream == TrackKind.Video ? TrimmerPlacementStream.VideoOnly : TrimmerPlacementStream.AudioOnly;
+            vm.PlaceSubclip(drag.MediaId, drag.SourceRange.StartFrame, drag.SourceRange.FrameCount, track, frame, advanceCursor: false,
+                stream: stream, placeOnNewTrack: track is null);
+        });
         Timeline.FilesDropped += async (files, track, frame) =>
         {
             Pause();
@@ -3266,7 +3273,8 @@ public partial class MainWindow : Window
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         if (HandleLayoutChordKey(e)) return;
         if (HandleTrimmerShortcut(e)) return;
-        if (TrimmerDeck.IsKeyboardFocusWithin && !ctrl && key is Key.Space or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q)
+        if (TrimmerDeck.IsKeyboardFocusWithin && TrimmerDeck.ActiveMedia is not null &&
+            (key == Key.A && !alt || !ctrl && key is Key.Space or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q))
             return;
         if (HandleShuttleKeyDown(e)) return;
         if (alt && !ctrl && !shift && key == Key.D)
