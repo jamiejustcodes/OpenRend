@@ -3,21 +3,29 @@ using OpenRend.Media;
 namespace OpenRend.App;
 
 internal sealed record MasterMeterReading(double Left, double Right, double HeldLeft, double HeldRight,
-    bool LeftClipped, bool RightClipped, double MomentaryLufs, double ShortTermLufs, double TruePeakDb)
+    bool LeftClipped, bool RightClipped, double MomentaryLufs, double ShortTermLufs, double IntegratedLufs, double TruePeakDb)
 {
-    public static MasterMeterReading Empty { get; } = new(0, 0, 0, 0, false, false, double.NaN, double.NaN, double.NegativeInfinity);
+    public static MasterMeterReading Empty { get; } = new(0, 0, 0, 0, false, false, double.NaN, double.NaN,
+        double.NaN, double.NegativeInfinity);
 }
 
 internal sealed class MasterAudioMeter
 {
     private const int MomentaryFrames = MediaService.SampleRate * 2 / 5;
     private const int ShortTermFrames = MediaService.SampleRate * 3;
+    private const int GateHopFrames = MomentaryFrames / 4;
     private const int TapCount = 12;
+    private static readonly double AbsoluteGatePower = Math.Pow(10, (-70 + .691) / 10);
     private readonly Channel left = new();
     private readonly Channel right = new();
     private readonly double[] energy = new double[ShortTermFrames];
+    private readonly List<double> gatedBlocks = [];
     private double momentarySum, shortTermSum;
+    private double absoluteGatedSum;
+    private double integratedLufs = double.NaN;
     private long frames;
+    private long nextGateFrame = MomentaryFrames;
+    private long nextIntegratedReading = MomentaryFrames;
     private int energyIndex;
     private PeakHold leftHold, rightHold, truePeakHold;
     private bool leftClipped, rightClipped;
@@ -39,19 +47,51 @@ internal sealed class MasterAudioMeter
             shortTermSum += power - energy[energyIndex];
             energy[energyIndex] = power;
             if (++energyIndex == ShortTermFrames) energyIndex = 0;
+            if (++frames == nextGateFrame)
+            {
+                nextGateFrame += GateHopFrames;
+                var blockPower = momentarySum / MomentaryFrames;
+                if (double.IsFinite(blockPower) && blockPower > AbsoluteGatePower)
+                {
+                    gatedBlocks.Add(blockPower);
+                    absoluteGatedSum += blockPower;
+                }
+            }
         }
 
-        frames += stereo.Length / 2;
+        // Read the exact relative gate once per second rather than rescanning on every audio buffer.
+        if (frames >= nextIntegratedReading)
+        {
+            integratedLufs = ReadIntegratedLoudness();
+            nextIntegratedReading += ((frames - nextIntegratedReading) / MediaService.SampleRate + 1) * MediaService.SampleRate;
+        }
         leftClipped |= Math.Max(leftPeak, leftTruePeak) > 1;
         rightClipped |= Math.Max(rightPeak, rightTruePeak) > 1;
         var heldTruePeak = truePeakHold.Update(Math.Max(leftTruePeak, rightTruePeak), frames);
         return new(leftPeak, rightPeak, leftHold.Update(leftPeak, frames), rightHold.Update(rightPeak, frames), leftClipped, rightClipped,
-            Loudness(momentarySum, MomentaryFrames), Loudness(shortTermSum, ShortTermFrames), 20 * Math.Log10(heldTruePeak));
+            Loudness(momentarySum, MomentaryFrames), Loudness(shortTermSum, ShortTermFrames), integratedLufs, 20 * Math.Log10(heldTruePeak));
     }
 
     internal void ClearClips() => leftClipped = rightClipped = false;
 
-    private double Loudness(double sum, int count) => frames < count ? double.NaN : -0.691 + 10 * Math.Log10(Math.Max(0, sum / count));
+    internal double ReadIntegratedLoudness()
+    {
+        if (frames < MomentaryFrames) return double.NaN;
+        if (gatedBlocks.Count == 0) return double.NegativeInfinity;
+        var threshold = absoluteGatedSum / gatedBlocks.Count / 10;
+        double sum = 0;
+        var count = 0;
+        foreach (var power in gatedBlocks)
+        {
+            if (power <= threshold) continue;
+            sum += power;
+            count++;
+        }
+        return ToLufs(sum / count);
+    }
+
+    private double Loudness(double sum, int count) => frames < count ? double.NaN : ToLufs(Math.Max(0, sum / count));
+    private static double ToLufs(double power) => -.691 + 10 * Math.Log10(power);
 
     private struct PeakHold
     {

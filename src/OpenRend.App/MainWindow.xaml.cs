@@ -1685,16 +1685,20 @@ public partial class MainWindow : Window
         timer.Stop();
         playbackGeneration++; playbackStarting = false;
         ResetShuttleState();
+        var reading = MasterMeterReading.Empty;
         if (playback is not null)
         {
-            playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null;
+            playback.Dispose();
+            reading = reading with { IntegratedLufs = playback.ReadIntegratedLoudness() };
+            vm.Position = playback.CurrentFrame;
+            playback = null;
         }
         if (seekTo is long frame) vm.Position = frame;
         UpdatePosition();
         PlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         PlaybackRate.Text = "Rate: 0.00";
-        UpdateMasterMeter(MasterMeterReading.Empty);
+        UpdateMasterMeter(reading);
         mixingConsoleWindow?.ResetMeters();
         RequestPreview();
     }

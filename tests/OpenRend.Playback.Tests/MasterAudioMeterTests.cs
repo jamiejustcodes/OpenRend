@@ -11,7 +11,7 @@ public sealed class MasterAudioMeterTests
     [Theory]
     [InlineData(-23)]
     [InlineData(-33)]
-    public void StereoCalibrationToneMatchesMomentaryAndShortTermLoudness(double level)
+    public void StereoCalibrationToneMatchesAllThreeLoudnessReadings(double level)
     {
         var stereo = StereoTone(1000, Math.Pow(10, level / 20), 0, MediaService.SampleRate * 4);
         var meter = new MasterAudioMeter();
@@ -19,6 +19,27 @@ public sealed class MasterAudioMeterTests
         var reading = meter.Measure(stereo.AsSpan(MediaService.SampleRate / 2));
         Assert.InRange(reading.MomentaryLufs, level - .1, level + .1);
         Assert.InRange(reading.ShortTermLufs, level - .1, level + .1);
+        Assert.InRange(reading.IntegratedLufs, level - .1, level + .1);
+    }
+
+    [Fact]
+    public void IntegratedLoudnessAppliesBothGatesAcrossAudioBufferBoundaries()
+    {
+        var audio = StereoTone(1000, Math.Pow(10, -23 / 20.0), 0, MediaService.SampleRate * 8)
+            .Concat(StereoTone(1000, Math.Pow(10, -45 / 20.0), 0, MediaService.SampleRate * 2))
+            .Concat(StereoTone(1000, Math.Pow(10, -85 / 20.0), 0, MediaService.SampleRate * 6)).ToArray();
+        var whole = new MasterAudioMeter();
+        var partitioned = new MasterAudioMeter();
+        whole.Measure(audio);
+        foreach (var buffer in audio.Chunk(4094)) partitioned.Measure(buffer);
+
+        var integrated = whole.ReadIntegratedLoudness();
+        Assert.InRange(integrated, -23.15, -22.95);
+        Assert.Equal(integrated, partitioned.ReadIntegratedLoudness(), 8);
+
+        var silent = new MasterAudioMeter();
+        Assert.True(double.IsNaN(silent.Measure(new float[MediaService.SampleRate / 2]).IntegratedLufs));
+        Assert.True(double.IsNegativeInfinity(silent.Measure(new float[MediaService.SampleRate]).IntegratedLufs));
     }
 
     [Fact]

@@ -33,6 +33,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
 
     public double Rate { get; }
     internal MasterMeterReading MeterReading => buffer.MeterReading;
+    internal double ReadIntegratedLoudness() => buffer.ReadIntegratedLoudness();
     internal void ClearMeterClips() => buffer.ClearMeterClips();
     internal void UpdateMasterControls(ProjectDocument document) => Volatile.Write(ref programGain, TimelineRenderService.MasterOutputGain(document));
     public double MasterGain
@@ -343,6 +344,11 @@ internal sealed class TimelineAudioBuffer(Func<double> gain, Func<float>? progra
             meter.ClearClips();
             Volatile.Write(ref meterReading, meterReading with { LeftClipped = false, RightClipped = false });
         }
+    }
+
+    public double ReadIntegratedLoudness()
+    {
+        lock (clockGate) return meter.ReadIntegratedLoudness();
     }
 
     public long PlayedSourceSamples(long deviceSample)

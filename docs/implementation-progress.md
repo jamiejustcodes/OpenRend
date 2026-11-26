@@ -22,6 +22,8 @@ The resizable Master Bus pane measures the stereo program before the playback ce
 
 Project master gain, Dim and Mute apply to queued WASAPI audio as playback continues. The live meter follows these controls. Preview and export apply program gain after the shared automation and effects stage. The workspace's monitor gain controls the playback device separately. The desktop workflow exercised Dim and Mute during playback and verified both saved project settings.
 
+The Master Bus also displays integrated loudness for the current playback pass. It applies both BS.1770 gates to overlapping 400 ms stereo blocks and scans the measured blocks once per second. Stopping playback displays the final reading for that pass. Managed tests checked the gating against mixed-level calibration tones and audio buffer boundaries. The integrated readout's desktop workflow is pending. [ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en)
+
 ## Source workflows
 
 Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. Shift+A ends the placement at the timeline cursor and retains the selected source Out point if the placement reaches the project start. Core and editor tests cover the drop target, source range, and undo. The physical drag workflow remains pending.

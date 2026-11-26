@@ -31,6 +31,7 @@ public sealed partial class EditorWorkflowTests
             var window = running.Window;
             var momentary = Find(window, "MasterMomentaryLoudness");
             var shortTerm = Find(window, "MasterShortTermLoudness");
+            var integrated = Find(window, "MasterIntegratedLoudness");
             var truePeak = Find(window, "MasterTruePeak");
             var monitorMute = window.FindFirstDescendant(c => c.ByName("Mute monitor"));
             Assert.NotNull(monitorMute);
@@ -41,6 +42,7 @@ public sealed partial class EditorWorkflowTests
             WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("MasterClipping"))?.IsOffscreen == false,
                 "The master overload indicator did not latch.");
             WaitFor(() => shortTerm.Name.StartsWith("S 1"), "Short-term master loudness did not fill its three-second window.");
+            Assert.StartsWith("I 1", integrated.Name);
             Find(window, "MasterDimBtn").AsButton().Invoke();
             WaitFor(() => momentary.Name.StartsWith("M -18."), "Master Dim did not attenuate the playing mix by 20 dB.");
             Find(window, "MasterMuteBtn").AsButton().Invoke();
@@ -48,6 +50,8 @@ public sealed partial class EditorWorkflowTests
                 "Master Mute did not silence the mix while playback continued.");
             transport.Invoke();
             WaitFor(() => momentary.Name == "M — LUFS" && truePeak.Name == "−∞ dBTP", "Stopping did not reset the master readouts.");
+            Assert.EndsWith(" LUFS", integrated.Name);
+            Assert.DoesNotContain('—', integrated.Name);
             SaveButton(window).Invoke();
             WaitFor(() => !window.Title.Contains('*'), "The master controls did not save.");
             var saved = await ProjectStore.LoadAsync(path);

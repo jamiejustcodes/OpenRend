@@ -24,6 +24,7 @@ public partial class MainWindow
         MasterMeter.Update(reading);
         MasterMomentaryLoudness.Text = $"M {FormatMeterValue(reading.MomentaryLufs)} LUFS";
         MasterShortTermLoudness.Text = $"S {FormatMeterValue(reading.ShortTermLufs)} LUFS";
+        MasterIntegratedLoudness.Text = $"I {FormatMeterValue(reading.IntegratedLufs)} LUFS";
         MasterTruePeak.Text = $"{FormatMeterValue(reading.TruePeakDb)} dBTP";
         var clip = (reading.LeftClipped, reading.RightClipped) switch
         {
