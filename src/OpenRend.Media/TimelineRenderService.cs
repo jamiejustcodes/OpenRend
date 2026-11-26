@@ -470,7 +470,10 @@ public sealed partial class TimelineRenderService : IDisposable
         return output;
     }
 
-    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output)
+    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output) =>
+        RenderAudio(project, seconds, frames, output, clampOutput: true);
+
+    public void RenderAudio(ProjectDocument project, double seconds, int frames, float[] output, bool clampOutput)
     {
         ObjectDisposedException.ThrowIf(Volatile.Read(ref disposed), this);
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
@@ -758,7 +761,8 @@ public sealed partial class TimelineRenderService : IDisposable
                 }
             }
 
-            for (var i = 0; i < totalSamples; i++) output[i] = Math.Clamp(output[i], -1f, 1f);
+            if (clampOutput)
+                for (var i = 0; i < totalSamples; i++) output[i] = Math.Clamp(output[i], -1f, 1f);
         }
         finally
         {

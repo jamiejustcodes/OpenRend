@@ -31,8 +31,8 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     private readonly float[]? cachedLoop;
 
     public double Rate { get; }
-    public float PeakLeft => buffer.PeakLeft;
-    public float PeakRight => buffer.PeakRight;
+    internal MasterMeterReading MeterReading => buffer.MeterReading;
+    internal void ClearMeterClips() => buffer.ClearMeterClips();
     public double MasterGain
     {
         get => Volatile.Read(ref masterGain);
@@ -89,7 +89,10 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
             loop = new TimelinePlaybackLoop(range, project.FrameRate, startFrame);
             // Short sounds can wrap many times in one device block. Render their mix once.
             if (loop.SampleCount <= MediaService.SampleRate / 2)
-                cachedLoop = renderer.RenderAudio(project, loop.SecondsAt(0), (int)loop.SampleCount);
+            {
+                cachedLoop = new float[(int)loop.SampleCount * MediaService.Channels];
+                renderer.RenderAudio(project, loop.SecondsAt(0), (int)loop.SampleCount, cachedLoop, clampOutput: false);
+            }
         }
         totalSamples = loop is not null ? long.MaxValue : checked((long)Math.Ceiling(project.FrameRate.Seconds(Math.Abs(endFrame - startFrame)) * MediaService.SampleRate / Math.Abs(Rate)));
         if (rate != 1)
@@ -158,7 +161,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
                 var (offset, length) = loop.Window(submittedSamples + written, count - written);
                 if (cachedLoop is null)
                 {
-                    renderer.RenderAudio(project, loop.SecondsAt(offset), length, playbackAudioBuffer);
+                    renderer.RenderAudio(project, loop.SecondsAt(offset), length, playbackAudioBuffer, clampOutput: false);
                     Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, written * frameBytes, length * frameBytes);
                 }
                 else
@@ -171,7 +174,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         else
         {
             if (shuttleAudioBuffer is null)
-                renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer);
+                renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer, clampOutput: false);
             else
                 PlaybackAudioResampling.Render(renderer, project, originSeconds, submittedSamples, count, Rate, shuttleAudioBuffer, playbackAudioBuffer);
             Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, 0, count * frameBytes);
@@ -285,14 +288,15 @@ internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
     { BufferDuration = TimeSpan.FromSeconds(2), DiscardOnBufferOverflow = false, ReadFully = false };
     private readonly object clockGate = new();
     private readonly Queue<(long Start, long End)> gaps = new();
+    private readonly MasterAudioMeter meter = new();
+    private MasterMeterReading meterReading = MasterMeterReading.Empty;
     private long queuedSamples;
     private long elapsedGaps;
     private long lastDeviceSample;
     public Func<long>? DevicePosition { get; set; }
     public WaveFormat WaveFormat => buffer.WaveFormat;
     public int BufferedSamples => buffer.BufferedBytes / 8;
-    public float PeakLeft { get; private set; }
-    public float PeakRight { get; private set; }
+    public MasterMeterReading MeterReading => Volatile.Read(ref meterReading);
 
     public void AddSamples(byte[] bytes) => buffer.AddSamples(bytes, 0, bytes.Length);
     public void AddSamples(byte[] bytes, int offset, int count) => buffer.AddSamples(bytes, offset, count);
@@ -316,17 +320,20 @@ internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
             queuedSamples += count / 8;
             var level = (float)gain();
             var samples = System.Runtime.InteropServices.MemoryMarshal.Cast<byte, float>(destination.AsSpan(offset, count));
-            float left = 0, right = 0;
-            for (var sample = 0; sample < samples.Length; sample += 2)
-            {
-                samples[sample] = Math.Clamp(samples[sample] * level, -1, 1);
-                samples[sample + 1] = Math.Clamp(samples[sample + 1] * level, -1, 1);
-                left = Math.Max(left, Math.Abs(samples[sample]));
-                right = Math.Max(right, Math.Abs(samples[sample + 1]));
-            }
-            PeakLeft = left;
-            PeakRight = right;
+            Volatile.Write(ref meterReading, meter.Measure(samples));
+            // Keep the program ceiling at the same point as export, before monitor gain.
+            for (var sample = 0; sample < samples.Length; sample++)
+                samples[sample] = Math.Clamp(Math.Clamp(samples[sample], -1, 1) * level, -1, 1);
             return count;
+        }
+    }
+
+    public void ClearMeterClips()
+    {
+        lock (clockGate)
+        {
+            meter.ClearClips();
+            Volatile.Write(ref meterReading, meterReading with { LeftClipped = false, RightClipped = false });
         }
     }
 

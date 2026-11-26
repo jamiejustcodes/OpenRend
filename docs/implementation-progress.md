@@ -16,6 +16,10 @@ Use Track height on a track header's context menu to minimize, expand, or restor
 
 Loop Playback repeats the selected frame range, with the project bounds as the default. Audio and the playhead wrap on the same rational sample grid within one WASAPI stream. Toggling loop playback while playing starts playback with the new bounds. Tests cover repeated wraps and uninterrupted tone output on the active endpoint at 29.97 fps, plus cursor selection and wrap through the desktop shortcut.
 
+## Master Bus meters
+
+The resizable Master Bus pane measures the stereo program before the playback ceiling and monitor gain. It shows sample peaks with one-second hold, per-channel clipping indicators, momentary loudness over 400 ms, short-term loudness over three seconds, and estimated true peak with 4× oversampling. The clear control resets overload indicators while playing. Tests measured calibration tones at −23 and −33 LUFS and an intersample peak near −6 dBTP. A desktop workflow verified loudness and an overload from two summed audio tracks while the monitor was muted. The live pane measures the current playback session. [ITU-R BS.1770-5](https://www.itu.int/rec/R-REC-BS.1770-5-202311-I/en), [EBU Tech 3341](https://tech.ebu.ch/publications/tech3341/)
+
 ## Requested addition: startup and project creation
 
 Status: functional startup slice, full parity open. OpenRend has its own welcome artwork/branding, New/Open/Getting Started pages, sizing/rate choices and startup preference. Complete advanced project controls, factory defaults and exact visual matching remain open.
