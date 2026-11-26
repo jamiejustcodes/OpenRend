@@ -20,6 +20,8 @@ Alt-drag changes the source In point while keeping the event on its original pro
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.
 
+Track envelopes follow events in all three modes. Affected Tracks limits the automation shift to edited tracks. The desktop workflow moves the same event again in Affected Tracks mode and verifies that its opacity point moves another ten frames while the region stays at its previous bounds.
+
 ## Timeline track height
 
 Use Track height on a track header's context menu to minimize, expand, or restore that row. The view recalculates event, drop target, automation envelope, and accessibility bounds together. These choices apply to the current project session. Focused layout and accessibility tests passed, followed by all 27 current-executable desktop workflows, including the track header context menu.

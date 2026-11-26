@@ -798,36 +798,10 @@ public sealed partial class TimelineEditor
                 var (_, clip) = FindClip(clipId);
                 clip.StartFrame = newFrame;
             }
-            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
-                ShiftRulerAnnotations(Project, oldEnd, delta);
             if (source != target) { source.Clips.Remove(primary); target.Clips.Add(primary); }
 
             if (ripple && delta != 0)
-            {
-                var affectedTrackIds = selected.Select(s => s.Track.Id).Append(targetTrackId).ToHashSet();
-                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                }
-                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks)
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.MasterAudioEnvelopes != null)
-                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
-                }
-            }
+                ShiftRippleAutomationAndRuler(Project, selected.Select(item => item.Track.Id).Append(targetTrackId).ToHashSet(), rippleMode, oldEnd, delta);
         });
     }
 
@@ -909,8 +883,6 @@ public sealed partial class TimelineEditor
                 var (_, clip) = FindClip(clipId);
                 clip.StartFrame = newFrame;
             }
-            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
-                ShiftRulerAnnotations(Project, oldEnd, delta);
             foreach (var clip in clipsToMove)
             {
                 source.Clips.Remove(clip);
@@ -918,31 +890,7 @@ public sealed partial class TimelineEditor
             }
 
             if (ripple && delta != 0)
-            {
-                var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
-                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                }
-                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks)
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.MasterAudioEnvelopes != null)
-                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
-                }
-            }
+                ShiftRippleAutomationAndRuler(Project, selected.Select(item => item.Track.Id).ToHashSet(), rippleMode, oldEnd, delta);
         });
         return newTrack;
     }
@@ -1030,35 +978,9 @@ public sealed partial class TimelineEditor
             foreach (var track in Project.Tracks)
                 foreach (var clip in track.Clips)
                     if (shifts.TryGetValue(clip.Id, out var pos)) clip.StartFrame = pos;
-            if (ripple && delta != 0 && rippleMode != AutoRippleMode.AffectedTracks)
-                ShiftRulerAnnotations(Project, oldEnd, delta);
 
             if (ripple && delta != 0)
-            {
-                var affectedTrackIds = selected.Select(s => s.Track.Id).ToHashSet();
-                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks.Where(t => affectedTrackIds.Contains(t.Id)))
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                }
-                else if (rippleMode == AutoRippleMode.AllTracksAndMarkers)
-                {
-                    foreach (var track in Project.Tracks)
-                        if (track.Envelopes != null)
-                            foreach (var env in track.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.AudioBuses != null)
-                        foreach (var bus in Project.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(oldEnd, delta);
-                    if (Project.MasterAudioEnvelopes != null)
-                        foreach (var env in Project.MasterAudioEnvelopes) env.ShiftPoints(oldEnd, delta);
-                }
-            }
+                ShiftRippleAutomationAndRuler(Project, selected.Select(item => item.Track.Id).ToHashSet(), rippleMode, oldEnd, delta);
         });
     }
 
@@ -1196,7 +1118,7 @@ public sealed partial class TimelineEditor
 
             if (ripple)
             {
-                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                if (rippleMode is AutoRippleMode.AffectedTracks or AutoRippleMode.AffectedTracksAndMarkers)
                 {
                     foreach (var trackGroup in selected.GroupBy(item => item.Track))
                     {
@@ -1207,6 +1129,9 @@ public sealed partial class TimelineEditor
                             foreach (var env in track.Envelopes) env.RippleForSpans(spans);
                         }
                     }
+                }
+                if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
+                {
                     var allAffectedSpans = CollapseSpans(selected.Select(item => item.Clip));
                     if (Project.AudioBuses != null)
                     {

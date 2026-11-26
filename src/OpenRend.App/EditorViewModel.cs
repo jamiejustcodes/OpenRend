@@ -426,45 +426,13 @@ public sealed class EditorViewModel : ObservableObject
             {
                 var affectedTrackIds = new HashSet<Guid> { target.Id };
                 if (audioTrack is not null) affectedTrackIds.Add(audioTrack.Id);
-                if (mode != AutoRippleMode.AffectedTracks)
-                    TimelineEditor.ShiftRulerAnnotations(p, start, duration);
-
-                if (mode == AutoRippleMode.AffectedTracks)
-                {
-                    foreach (var t in p.Tracks.Where(tr => affectedTrackIds.Contains(tr.Id)))
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
-                            c.StartFrame += duration;
-                }
-                else if (mode == AutoRippleMode.AffectedTracksAndMarkers)
-                {
-                    foreach (var t in p.Tracks.Where(tr => affectedTrackIds.Contains(tr.Id)))
-                    {
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
-                            c.StartFrame += duration;
-                        if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(start, duration);
-                    }
-                    if (p.AudioBuses != null)
-                        foreach (var bus in p.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
-                }
-                else // AllTracksAndMarkers
-                {
-                    foreach (var t in p.Tracks)
-                    {
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= start))
-                            c.StartFrame += duration;
-                        if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(start, duration);
-                    }
-                    if (p.AudioBuses != null)
-                        foreach (var bus in p.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(start, duration);
-                    if (p.MasterAudioEnvelopes != null)
-                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(start, duration);
-                }
+                var tracks = mode == AutoRippleMode.AllTracksAndMarkers
+                    ? p.Tracks
+                    : p.Tracks.Where(track => affectedTrackIds.Contains(track.Id));
+                foreach (var track in tracks)
+                    foreach (var downstream in track.Clips.Where(clip => clip.StartFrame >= start))
+                        downstream.StartFrame = checked(downstream.StartFrame + duration);
+                TimelineEditor.ShiftRippleAutomationAndRuler(p, affectedTrackIds, mode, start, duration);
             }
 
             var rate = playbackRate.HasValue ? Math.Clamp(playbackRate.Value, 0.05, 10.0) : 1.0;
@@ -770,46 +738,15 @@ public sealed class EditorViewModel : ObservableObject
             var shouldRipple = (forceInsertRipple || Ripple) && totalPasteSpan > 0;
             if (shouldRipple)
             {
-                var destinationTrackIds = destinations.Values.Select(d => d.Id).ToHashSet();
+                var destinationTrackIds = destinations.Values.Select(track => track.Id).ToHashSet();
                 var rippleMode = forceInsertRipple && !Ripple ? AutoRippleMode.AffectedTracks : RippleMode;
-                if (rippleMode != AutoRippleMode.AffectedTracks)
-                    TimelineEditor.ShiftRulerAnnotations(p, at, totalPasteSpan);
-                if (rippleMode == AutoRippleMode.AffectedTracks)
-                {
-                    foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += totalPasteSpan;
-                }
-                else if (rippleMode == AutoRippleMode.AffectedTracksAndMarkers)
-                {
-                    foreach (var t in p.Tracks.Where(tr => destinationTrackIds.Contains(tr.Id)))
-                    {
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += totalPasteSpan;
-                        if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(at, totalPasteSpan);
-                    }
-                    if (p.AudioBuses != null)
-                        foreach (var bus in p.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
-                }
-                else // AllTracksAndMarkers
-                {
-                    foreach (var t in p.Tracks)
-                    {
-                        foreach (var c in t.Clips.Where(cl => cl.StartFrame >= at))
-                            c.StartFrame += totalPasteSpan;
-                        if (t.Envelopes != null)
-                            foreach (var env in t.Envelopes) env.ShiftPoints(at, totalPasteSpan);
-                    }
-                    if (p.AudioBuses != null)
-                        foreach (var bus in p.AudioBuses)
-                            if (bus.Envelopes != null)
-                                foreach (var env in bus.Envelopes) env.ShiftPoints(at, totalPasteSpan);
-                    if (p.MasterAudioEnvelopes != null)
-                        foreach (var env in p.MasterAudioEnvelopes) env.ShiftPoints(at, totalPasteSpan);
-                }
+                var tracks = rippleMode == AutoRippleMode.AllTracksAndMarkers
+                    ? p.Tracks
+                    : p.Tracks.Where(track => destinationTrackIds.Contains(track.Id));
+                foreach (var track in tracks)
+                    foreach (var clip in track.Clips.Where(clip => clip.StartFrame >= at))
+                        clip.StartFrame = checked(clip.StartFrame + totalPasteSpan);
+                TimelineEditor.ShiftRippleAutomationAndRuler(p, destinationTrackIds, rippleMode, at, totalPasteSpan);
             }
 
             for (int r = 0; r < repeatCount; r++)

@@ -308,14 +308,16 @@ public sealed class AutoRippleTimeEditingTests
     [InlineData(AutoRippleMode.AffectedTracks, false)]
     [InlineData(AutoRippleMode.AffectedTracksAndMarkers, true)]
     [InlineData(AutoRippleMode.AllTracksAndMarkers, true)]
-    public void EventMoveAndTrimRippleTheRulerOnlyInTheRulerModes(AutoRippleMode mode, bool ripplesRuler)
+    public void EventMoveAndTrimRippleAffectedEnvelopesAndScopeTheRuler(AutoRippleMode mode, bool ripplesRuler)
     {
         var media = new MediaAsset { Path = "sample.mp4", DurationSeconds = 20, HasVideo = true };
         var clip = new TimelineClip { MediaId = media.Id, StartFrame = 20, DurationFrames = 40 };
         var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [clip] };
+        track.Envelopes = [OpacityAt(65)];
+        var otherTrack = new TimelineTrack { Kind = TrackKind.Video, Envelopes = [OpacityAt(65)] };
         var doc = new ProjectDocument
         {
-            Media = [media], Tracks = [track], Markers = [new() { Frame = 60 }],
+            Media = [media], Tracks = [track, otherTrack], Markers = [new() { Frame = 60 }],
             Regions = [new() { StartFrame = 10, EndFrame = 60 }, new() { StartFrame = 55, EndFrame = 70 },
                 new() { StartFrame = 60, EndFrame = 90 }]
         };
@@ -328,6 +330,7 @@ public sealed class AutoRippleTimeEditingTests
         Assert.True(editor.Undo());
         Assert.Equal(initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
         Assert.Equal(60, Assert.Single(doc.Markers).Frame);
+        Assert.Equal(65, doc.Tracks[0].Envelopes!.Single().Points.Single().Frame);
 
         editor.TrimSelection(clip.Id, 20, 0, 50, ripple: true, rippleMode: mode);
         CheckShift();
@@ -336,16 +339,21 @@ public sealed class AutoRippleTimeEditingTests
         {
             Assert.Equal(ripplesRuler ? shiftedRanges : initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
             Assert.Equal(ripplesRuler ? 70 : 60, Assert.Single(doc.Markers).Frame);
+            Assert.Equal(75, doc.Tracks[0].Envelopes!.Single().Points.Single().Frame);
+            Assert.Equal(mode == AutoRippleMode.AllTracksAndMarkers ? 75 : 65, doc.Tracks[1].Envelopes!.Single().Points.Single().Frame);
         }
     }
 
-    [Fact]
-    public void DeleteEventsRipplesRegionsThroughDisjointRemovedSpans()
+    [Theory]
+    [InlineData(AutoRippleMode.AffectedTracks, false)]
+    [InlineData(AutoRippleMode.AllTracksAndMarkers, true)]
+    public void DeleteEventsRipplesTrackEnvelopesAndProjectsRegionsThroughDisjointSpans(AutoRippleMode mode, bool ripplesRuler)
     {
         var media = new MediaAsset { Path = "sample.mp4", DurationSeconds = 20, HasVideo = true };
         var first = new TimelineClip { MediaId = media.Id, StartFrame = 20, DurationFrames = 20 };
         var second = new TimelineClip { MediaId = media.Id, StartFrame = 50, DurationFrames = 10 };
         var track = new TimelineTrack { Kind = TrackKind.Video, Clips = [first, second] };
+        track.Envelopes = [OpacityAt(65)];
         var doc = new ProjectDocument
         {
             Media = [media], Tracks = [track],
@@ -360,16 +368,25 @@ public sealed class AutoRippleTimeEditingTests
         var editor = new TimelineEditor(doc);
         var initialRanges = doc.Regions.Select(region => (region.StartFrame, region.EndFrame)).ToArray();
 
-        editor.DeleteSelection([first.Id, second.Id], ripple: true, rippleMode: AutoRippleMode.AllTracksAndMarkers);
+        editor.DeleteSelection([first.Id, second.Id], ripple: true, rippleMode: mode);
 
         (long Start, long End)[] expected = [(15, 30), (25, 35), (30, 50)];
-        Assert.Equal(expected, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+        Assert.Equal(ripplesRuler ? expected : initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
+        Assert.Equal(35, doc.Tracks[0].Envelopes!.Single().Points.Single().Frame);
         Assert.True(editor.Undo());
         Assert.Equal(initialRanges, doc.Regions.Select(region => (region.StartFrame, region.EndFrame)));
     }
 
-    [Fact]
-    public void PlaceSubclipAndPasteRippleRegionsTrackAndBusEnvelopes() => RunSta(() =>
+    private static ClipEnvelope OpacityAt(long frame) => new()
+    {
+        IsEnabled = true, Type = EnvelopeType.Composite, Points = [new() { Frame = frame, Value = 0.5 }]
+    };
+
+    [Theory]
+    [InlineData(AutoRippleMode.AffectedTracks, false)]
+    [InlineData(AutoRippleMode.AffectedTracksAndMarkers, true)]
+    [InlineData(AutoRippleMode.AllTracksAndMarkers, true)]
+    public void PlaceSubclipAndPasteAlwaysRippleAffectedTrackEnvelopes(AutoRippleMode mode, bool ripplesRuler) => RunSta(() =>
     {
         var mediaService = new MediaService();
         var renderer = new TimelineRenderService(mediaService);
@@ -419,7 +436,7 @@ public sealed class AutoRippleTimeEditingTests
         vm.Project.Regions = [new() { StartFrame = 30, EndFrame = 50 }];
 
         vm.Ripple = true;
-        vm.RippleMode = AutoRippleMode.AllTracksAndMarkers;
+        vm.RippleMode = mode;
 
         // Place subclip at 35 with duration 15
         vm.PlaceSubclip(media.Id, sourceIn: 0, duration: 15, trackId: track.Id, at: 35, advanceCursor: false);
@@ -427,16 +444,16 @@ public sealed class AutoRippleTimeEditingTests
         var t = vm.Project.Tracks[0];
         Assert.Equal(55, t.Clips.First(c => c.Id == clip2.Id).StartFrame); // 40 + 15 = 55
         Assert.Equal(60, t.Envelopes![0].Points[1].Frame); // 45 + 15 = 60
-        Assert.Equal(65, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame); // 50 + 15 = 65
-        Assert.Equal((30L, 65L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
+        Assert.Equal(ripplesRuler ? 65 : 50, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame);
+        Assert.Equal((30L, ripplesRuler ? 65L : 50L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
 
         vm.Copy();
         vm.Position = 30;
         vm.Paste();
 
-        Assert.Equal((45L, 80L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
+        Assert.Equal(ripplesRuler ? (45L, 80L) : (30L, 50L), vm.Project.Regions.Select(region => (region.StartFrame, region.EndFrame)).Single());
         Assert.Equal(75, t.Envelopes![0].Points[1].Frame);
-        Assert.Equal(80, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame);
+        Assert.Equal(ripplesRuler ? 80 : 50, vm.Project.AudioBuses![0].Envelopes![0].Points[0].Frame);
     });
 
     [Fact]

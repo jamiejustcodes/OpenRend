@@ -7,8 +7,32 @@ namespace OpenRend.Timeline;
 
 public sealed partial class TimelineEditor
 {
-    // Invoke inside the edit transaction so the ruler moves and undoes with the events.
-    public static void ShiftRulerAnnotations(ProjectDocument project, long fromFrame, long delta)
+    // Apply within the event edit so timeline-dependent data shares its undo step.
+    public static void ShiftRippleAutomationAndRuler(ProjectDocument project, IReadOnlySet<Guid> affectedTrackIds,
+        AutoRippleMode mode, long fromFrame, long delta)
+    {
+        var tracks = mode == AutoRippleMode.AllTracksAndMarkers
+            ? project.Tracks
+            : project.Tracks.Where(track => affectedTrackIds.Contains(track.Id));
+        foreach (var track in tracks)
+            if (track.Envelopes is { } envelopes)
+                foreach (var envelope in envelopes)
+                    envelope.ShiftPoints(fromFrame, delta);
+
+        if (mode == AutoRippleMode.AffectedTracks) return;
+        ShiftRulerAnnotations(project, fromFrame, delta);
+        if (project.AudioBuses is { } buses)
+            foreach (var bus in buses)
+                if (bus.Envelopes is { } busEnvelopes)
+                    foreach (var envelope in busEnvelopes)
+                        envelope.ShiftPoints(fromFrame, delta);
+
+        if (mode == AutoRippleMode.AllTracksAndMarkers && project.MasterAudioEnvelopes is { } master)
+            foreach (var envelope in master)
+                envelope.ShiftPoints(fromFrame, delta);
+    }
+
+    private static void ShiftRulerAnnotations(ProjectDocument project, long fromFrame, long delta)
     {
         foreach (var marker in project.Markers)
             if (marker.Frame >= fromFrame)

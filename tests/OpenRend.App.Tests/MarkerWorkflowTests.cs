@@ -42,7 +42,11 @@ public sealed partial class EditorWorkflowTests
             Tracks =
             [
                 new() { Kind = TrackKind.Video, Clips = [clip] },
-                new() { Kind = TrackKind.Video, Clips = [rippleClip] }
+                new()
+                {
+                    Kind = TrackKind.Video, Clips = [rippleClip],
+                    Envelopes = [new() { Type = EnvelopeType.Composite, IsEnabled = true, Points = [new() { Frame = 65, Value = 1 }] }]
+                }
             ]
         }, path);
 
@@ -98,30 +102,48 @@ public sealed partial class EditorWorkflowTests
 
                 var window = running.Window;
                 FitTimeline(window);
-                var options = window.FindFirstDescendant(c => c.ByName("Options").And(c.ByControlType(ControlType.MenuItem)));
-                Assert.NotNull(options);
-                options.AsMenuItem().Expand();
-                Find(window, "AutoRippleModeMenu").AsMenuItem().Expand();
-                Find(window, "RippleAllTracksMarkersMenu").AsMenuItem().Invoke();
+                SelectRippleMode("RippleAllTracksMarkersMenu");
                 Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_L);
                 WaitFor(() => Find(window, "RippleToggle").Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.On,
                     "Ctrl+L did not enable Auto Ripple.");
 
-                var bounds = Find(window, $"Clip_{rippleClip.Id:N}").BoundingRectangle;
-                var from = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height * 2 / 3);
-                var to = new Point(from.X + bounds.Width / 3, from.Y);
-                foreach (var point in new[] { from, to })
-                    Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
-                DragTrimmer(from, to);
-                WaitFor(() => window.Title.Contains('*'), "The ripple drag did not edit the project.");
-                SaveButton(window).Invoke();
-                WaitFor(() => !window.Title.Contains('*'), "The ripple edit did not save.");
-                var rippled = await ProjectStore.LoadAsync(path);
+                var rippled = await DragAndSaveRippleEdit();
                 Assert.Equal(10, Assert.Single(rippled.Tracks[1].Clips).StartFrame);
                 var region = Assert.Single(rippled.Regions);
                 Assert.Equal((18L, 70L), (region.StartFrame, region.EndFrame));
                 Assert.Equal(0, Assert.Single(rippled.Markers).Frame);
+                Assert.Equal(75, rippled.Tracks[1].Envelopes!.Single().Points.Single().Frame);
+
+                SelectRippleMode("RippleAffectedTracksMenu");
+                rippled = await DragAndSaveRippleEdit();
+                Assert.Equal(20, Assert.Single(rippled.Tracks[1].Clips).StartFrame);
+                region = Assert.Single(rippled.Regions);
+                Assert.Equal((18L, 70L), (region.StartFrame, region.EndFrame));
+                Assert.Equal(85, rippled.Tracks[1].Envelopes!.Single().Points.Single().Frame);
                 running.CloseGracefully();
+
+                void SelectRippleMode(string automationId)
+                {
+                    var options = window.FindFirstDescendant(c => c.ByName("Options").And(c.ByControlType(ControlType.MenuItem)));
+                    Assert.NotNull(options);
+                    options.AsMenuItem().Expand();
+                    Find(window, "AutoRippleModeMenu").AsMenuItem().Expand();
+                    Find(window, automationId).AsMenuItem().Invoke();
+                }
+
+                async Task<ProjectDocument> DragAndSaveRippleEdit()
+                {
+                    var bounds = Find(window, $"Clip_{rippleClip.Id:N}").BoundingRectangle;
+                    var from = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height * 2 / 3);
+                    var to = new Point(from.X + bounds.Width / 3, from.Y);
+                    foreach (var point in new[] { from, to })
+                        Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
+                    DragTrimmer(from, to);
+                    WaitFor(() => window.Title.Contains('*'), "The ripple drag did not edit the project.");
+                    SaveButton(window).Invoke();
+                    WaitFor(() => !window.Title.Contains('*'), "The ripple edit did not save.");
+                    return await ProjectStore.LoadAsync(path);
+                }
             }
         }
         finally
