@@ -5,9 +5,9 @@
     <Grid.RowDefinitions>
       <RowDefinition Height="32"/>
       <RowDefinition Height="34"/>
-      <RowDefinition x:Name="WorkspaceHeight" Height="1.35*" MinHeight="280"/>
+      <RowDefinition x:Name="WorkspaceHeight" Height="595*" MinHeight="280"/>
       <RowDefinition Height="5"/>
-      <RowDefinition x:Name="TimelineRowHeight" Height="0.85*" MinHeight="140"/>
+      <RowDefinition x:Name="TimelineRowHeight" Height="300*" MinHeight="60"/>
       <RowDefinition Height="34"/>
       <RowDefinition Height="20"/>
     </Grid.RowDefinitions>
@@ -263,7 +263,7 @@
     </Border>
     <Grid Grid.Row="2" x:Name="Workspace" Margin="4,0">
       <Grid.ColumnDefinitions>
-        <ColumnDefinition x:Name="MediaWidth" Width="0.65*" MinWidth="220" MaxWidth="600"/>
+        <ColumnDefinition x:Name="MediaWidth" Width="0.65*" MinWidth="220"/>
         <ColumnDefinition Width="5"/>
         <ColumnDefinition x:Name="PreviewWidth" Width="1.85*" MinWidth="480"/>
         <ColumnDefinition Width="5"/>
@@ -887,7 +887,15 @@
           </ScrollViewer>
         </TabItem>
       </TabControl>
-      <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE"/>
+      <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" DragCompleted="SourceSplitterCompleted"/>
+      <Grid Grid.Column="2">
+        <Grid.ColumnDefinitions>
+          <ColumnDefinition x:Name="SourceWidth" Width="0"/>
+          <ColumnDefinition x:Name="SourceSplitterWidth" Width="0"/>
+          <ColumnDefinition x:Name="ProgramWidth" Width="*"/>
+        </Grid.ColumnDefinitions>
+        <TabControl x:Name="SourceDeckTabs" TabStripPlacement="Bottom" Visibility="Collapsed"/>
+        <GridSplitter x:Name="SourceSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" Visibility="Collapsed" DragCompleted="SourceSplitterCompleted"/>
       <TabControl x:Name="PreviewDeckTabs" Grid.Column="2" TabStripPlacement="Bottom">
         <TabItem Header="Video Preview">
         <Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="*"/><RowDefinition Height="32"/><RowDefinition Height="28"/></Grid.RowDefinitions>
@@ -927,11 +935,30 @@
           </Border>
         </Grid>
       </TabItem>
-      <TabItem x:Name="TrimmerTab" Header="Trimmer">
+      <TabItem x:Name="TrimmerTab" AutomationProperties.Name="Trimmer" AutomationProperties.AutomationId="TrimmerTab">
+        <TabItem.Header>
+          <StackPanel Orientation="Horizontal">
+            <TextBlock x:Name="TrimmerTabLabel" Text="Trimmer" VerticalAlignment="Center"/>
+            <Button Click="CloseTrimmerClick" AutomationProperties.Name="Close Trimmer" Width="18" Height="18" Padding="0" Margin="4,0,0,0">
+              <Button.Style>
+                <Style TargetType="Button" BasedOn="{StaticResource CaptionButton}">
+                  <Setter Property="Visibility" Value="Collapsed"/>
+                  <Style.Triggers>
+                    <DataTrigger Binding="{Binding IsSelected, ElementName=TrimmerTab}" Value="True">
+                      <Setter Property="Visibility" Value="Visible"/>
+                    </DataTrigger>
+                  </Style.Triggers>
+                </Style>
+              </Button.Style>
+              <Image Source="{StaticResource Icon.Close}" Width="8" Height="8"/>
+            </Button>
+          </StackPanel>
+        </TabItem.Header>
         <local:TrimmerControl x:Name="TrimmerDeck"/>
       </TabItem>
     </TabControl>
-      <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE"/>
+      </Grid>
+      <GridSplitter Grid.Column="3" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" DragCompleted="SourceSplitterCompleted"/>
       <TabControl Grid.Column="4" TabStripPlacement="Bottom"><TabItem Header="Master Bus"><Grid Background="#262626"><Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="24"/><RowDefinition Height="28"/><RowDefinition Height="*"/><RowDefinition Height="14"/></Grid.RowDefinitions>
         <StackPanel Orientation="Horizontal"><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Reset monitor gain" ToolTip="Reset monitor gain to 0 dB" Click="ResetMasterClick"><Image Source="{StaticResource Icon.Settings}"/></Button><Button Style="{StaticResource ToolbarButton}" AutomationProperties.Name="Mute monitor" ToolTip="Mute monitor" Click="MuteMasterClick"><Image Source="{StaticResource Icon.Pause}"/></Button></StackPanel>
         <TextBlock Grid.Row="1" Text="Master" Margin="8,0" FontSize="11"/>

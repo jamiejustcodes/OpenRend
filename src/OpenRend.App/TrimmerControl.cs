@@ -16,7 +16,7 @@ using OpenRend.UI;
 namespace OpenRend.App;
 
 /// <summary>
-/// 1:1 Vegas Pro Trimmer window/dock control for source media preview, subclip marking,
+/// Trimmer control for source media preview, subclip marking,
 /// 2-point, 3-point, and 4-point (Fit to Fill) editing, audio waveform scrubbing,
 /// and J-K-L shuttle playback.
 /// </summary>
@@ -103,7 +103,7 @@ public sealed class TrimmerControl : UserControl
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) }); // Header
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Preview
         rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(42) }); // Scrub ruler with waveform
-        rootGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(38) }); // Transport toolbar
+        rootGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto, MinHeight = 38 }); // Transport toolbar
 
         // 1. Header Bar
         var headerBorder = new Border
@@ -195,11 +195,7 @@ public sealed class TrimmerControl : UserControl
             BorderThickness = new Thickness(0, 1, 0, 0),
             Padding = new Thickness(6, 3, 6, 3)
         };
-        var toolbarDock = new DockPanel { LastChildFill = true };
-
-        // Insertion actions on right
-        var actionStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-        DockPanel.SetDock(actionStack, Dock.Right);
+        var toolbar = new WrapPanel { VerticalAlignment = VerticalAlignment.Center };
 
         createSubclipBtn = new Button
         {
@@ -250,15 +246,6 @@ public sealed class TrimmerControl : UserControl
         };
         addToTimelineBtn.Click += (_, _) => AddSubclipToTimeline();
 
-        actionStack.Children.Add(createSubclipBtn);
-        actionStack.Children.Add(fitToFillBtn);
-        actionStack.Children.Add(addUpToCursorBtn);
-        actionStack.Children.Add(addToTimelineBtn);
-        toolbarDock.Children.Add(actionStack);
-
-        // Transport & Trim markers on left
-        var transportStack = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
-
         markInBtn = CreateToolbarBtn("[", "Mark In (I)", (_, _) => MarkIn());
         markOutBtn = CreateToolbarBtn("]", "Mark Out (O)", (_, _) => MarkOut());
         clearPointsBtn = CreateToolbarBtn("✕", "Clear In/Out Points", (_, _) => ClearPoints());
@@ -302,27 +289,15 @@ public sealed class TrimmerControl : UserControl
         streamAudioBtn = CreateStreamToggleBtn("Audio", "Place Audio track only", TrimmerPlacementStream.AudioOnly);
         UpdateStreamButtons();
 
-        transportStack.Children.Add(markInBtn);
-        transportStack.Children.Add(markOutBtn);
-        transportStack.Children.Add(clearPointsBtn);
-        transportStack.Children.Add(selectAllBtn);
-        transportStack.Children.Add(new Separator { Margin = new Thickness(4, 4, 4, 4), Background = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)) });
-        transportStack.Children.Add(jumpStartBtn);
-        transportStack.Children.Add(shuttleRevBtn);
-        transportStack.Children.Add(prevFrameBtn);
-        transportStack.Children.Add(playPauseBtn);
-        transportStack.Children.Add(nextFrameBtn);
-        transportStack.Children.Add(shuttleFwdBtn);
-        transportStack.Children.Add(jumpEndBtn);
-        transportStack.Children.Add(loopToggle);
-        transportStack.Children.Add(shuttleStatus);
-        transportStack.Children.Add(new Separator { Margin = new Thickness(4, 4, 4, 4), Background = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)) });
-        transportStack.Children.Add(streamBothBtn);
-        transportStack.Children.Add(streamVideoBtn);
-        transportStack.Children.Add(streamAudioBtn);
-
-        toolbarDock.Children.Add(transportStack);
-        toolbarBorder.Child = toolbarDock;
+        foreach (var control in new UIElement[]
+        {
+            markInBtn, markOutBtn, clearPointsBtn, selectAllBtn, jumpStartBtn, shuttleRevBtn,
+            prevFrameBtn, playPauseBtn, nextFrameBtn, shuttleFwdBtn, jumpEndBtn, loopToggle,
+            shuttleStatus, streamBothBtn, streamVideoBtn, streamAudioBtn,
+            createSubclipBtn, fitToFillBtn, addUpToCursorBtn, addToTimelineBtn
+        })
+            toolbar.Children.Add(control);
+        toolbarBorder.Child = toolbar;
         Grid.SetRow(toolbarBorder, 3);
         rootGrid.Children.Add(toolbarBorder);
 

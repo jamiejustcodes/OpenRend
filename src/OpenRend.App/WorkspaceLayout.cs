@@ -3,8 +3,7 @@ using System.Text.Json.Serialization;
 namespace OpenRend.App;
 
 /// <summary>
-/// Represents a window docking and workspace geometry layout configuration matching Vegas Pro
-/// window layout presets (Default, Audio Mixing, Color Correction, Source Window, Timeline Top, Custom).
+/// Stores workspace geometry, tab selection and tool window state for a layout preset.
 /// </summary>
 public sealed class WorkspaceLayout
 {
@@ -39,6 +38,8 @@ public sealed class WorkspaceLayout
 
     public bool EditDetailsOpen { get; set; } = false;
 
+    public TrimmerPaneLayout? Trimmer { get; set; }
+
     /// <summary>
     /// Numbered shortcut slot 0 through 9 (triggerable via Alt+D, 0-9), or null if unassigned.
     /// </summary>
@@ -61,9 +62,19 @@ public sealed class WorkspaceLayout
             VideoScopesOpen = VideoScopesOpen,
             MixingConsoleOpen = MixingConsoleOpen,
             EditDetailsOpen = EditDetailsOpen,
+            Trimmer = Trimmer,
             ShortcutSlot = ShortcutSlot,
             IsBuiltIn = false
         };
     }
 }
+
+public sealed record TrimmerPaneLayout(bool Floating, bool Visible, PaneBounds? Bounds)
+{
+    public bool SeparateDock { get; init; }
+    public double DockWidth { get; init; } = 568;
+}
+
+// Position uses physical screen coordinates. Size uses device-independent units.
+public sealed record PaneBounds(int Left, int Top, double Width, double Height);
 

@@ -29,7 +29,8 @@ public sealed class WorkspaceLayoutEditorTests
         Assert.Equal(5, colorCorrection.ToolsTabIndex); // Color Grading tab
 
         var sourceWindow = builtIns.First(l => l.Name == "Source Window Layout");
-        Assert.Equal(1, sourceWindow.PreviewDeckTabIndex); // Trimmer dock tab
+        Assert.Equal(0, sourceWindow.PreviewDeckTabIndex);
+        Assert.True(sourceWindow.Trimmer?.SeparateDock);
         Assert.Equal(0, sourceWindow.ToolsTabIndex); // Explorer tab
 
         var timelineTop = builtIns.First(l => l.Name == "Timeline Top Layout");
@@ -54,6 +55,8 @@ public sealed class WorkspaceLayoutEditorTests
                 VideoScopesOpen = true,
                 MixingConsoleOpen = false,
                 EditDetailsOpen = true,
+                Trimmer = new TrimmerPaneLayout(true, false, new PaneBounds(-1600, 180, 600, 450))
+                    { SeparateDock = true, DockWidth = 500 },
                 ShortcutSlot = 3
             };
 
@@ -69,6 +72,7 @@ public sealed class WorkspaceLayoutEditorTests
             Assert.Equal(5, retrieved.ToolsTabIndex);
             Assert.True(retrieved.VideoScopesOpen);
             Assert.True(retrieved.EditDetailsOpen);
+            Assert.Equal(custom.Trimmer, retrieved.Trimmer);
             Assert.Equal(3, retrieved.ShortcutSlot);
 
             var slotLayout = WorkspaceLayoutManager.GetLayoutBySlot(3, tempDir);
@@ -149,6 +153,7 @@ public sealed class WorkspaceLayoutEditorTests
             MixingConsoleOpen = true,
             VideoScopesOpen = true,
             EditDetailsOpen = true,
+            Trimmer = new TrimmerPaneLayout(true, true, new PaneBounds(120, 160, 600, 450)),
             ShortcutSlot = 5,
             IsBuiltIn = true
         };
@@ -165,6 +170,7 @@ public sealed class WorkspaceLayoutEditorTests
         Assert.True(clone.MixingConsoleOpen);
         Assert.True(clone.VideoScopesOpen);
         Assert.True(clone.EditDetailsOpen);
+        Assert.Equal(original.Trimmer, clone.Trimmer);
         Assert.Equal(5, clone.ShortcutSlot);
     }
 }

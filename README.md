@@ -9,7 +9,6 @@
 <p align="center">
   <a href="https://github.com/jamiejustcodes/OpenRend/actions/workflows/build.yml"><img src="https://img.shields.io/github/actions/workflow/status/jamiejustcodes/OpenRend/build.yml?branch=main&style=flat-square&logo=githubactions&logoColor=white&label=CI%20Build" alt="CI Build Status" /></a>
   <a href="https://github.com/jamiejustcodes/OpenRend/releases/latest"><img src="https://img.shields.io/github/v/release/jamiejustcodes/OpenRend?style=flat-square&color=0284c7&label=Release" alt="Latest Release" /></a>
-  <img src="https://img.shields.io/badge/Tests-1%2C045%20Passing-16a34a?style=flat-square&logo=checkmarx&logoColor=white" alt="Test Gate" />
   <img src="https://img.shields.io/badge/Platform-Windows%20x64-7c3aed?style=flat-square&logo=windows&logoColor=white" alt="Platform: Windows x64" />
   <img src="https://img.shields.io/badge/.NET-10.0-512BD4?style=flat-square&logo=dotnet&logoColor=white" alt=".NET 10" />
   <img src="https://img.shields.io/badge/C%2B%2B-20-00599C?style=flat-square&logo=c%2B%2B&logoColor=white" alt="C++20" />
@@ -48,7 +47,7 @@ Unlike traditional editors that approximate preview quality or decouple the play
 | Studio Workspace & Multi-Track Timeline | 3-Way Color Grading Suite |
 | :---: | :---: |
 | [![OpenRend Studio Workspace](assets/screenshots/workspace.png)](assets/screenshots/workspace.png) | [![OpenRend Color Grading](assets/screenshots/color_grading.png)](assets/screenshots/color_grading.png) |
-| *Docked project media, 1080p preview, master audio bus dB meter, and multi-track timeline.* | *Interactive Lift, Gamma, Gain, and Offset color wheels with tone and level adjustments.* |
+| *Tabbed project media, 1080p preview, master audio bus dB meter, and multi-track timeline.* | *Interactive Lift, Gamma, Gain, and Offset color wheels with tone and level adjustments.* |
 
 | Video Event Pan / Crop & Keyframing | Pyramidal Lucas-Kanade Motion Tracking |
 | :---: | :---: |
@@ -161,7 +160,7 @@ cd OpenRend
 ```mermaid
 flowchart TD
     subgraph UI ["Managed UI (.NET 10 / WPF)"]
-        MainWindow["MainWindow (Dockable Studio Workspace)"]
+        MainWindow["MainWindow (Studio Workspace)"]
         TimelineView["TimelineView (Sub-Frame Virtualized Tracks)"]
         VideoPreview["DirectX 11 Preview Viewport"]
         Inspector["Color Wheels / Pan & Crop / Effects Host"]

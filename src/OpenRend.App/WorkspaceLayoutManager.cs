@@ -25,7 +25,7 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Default Layout",
-            WorkspaceHeight = 520,
+            WorkspaceHeight = 595,
             MediaWidth = 360,
             PreviewWidth = 980,
             ToolsTabIndex = 1, // Project Media
@@ -67,11 +67,11 @@ public static class WorkspaceLayoutManager
         new()
         {
             Name = "Source Window Layout",
-            WorkspaceHeight = 520,
-            MediaWidth = 360,
-            PreviewWidth = 980,
+            WorkspaceHeight = 562,
+            PreviewWidth = 565,
             ToolsTabIndex = 0, // Explorer
-            PreviewDeckTabIndex = 1, // Trimmer deck
+            PreviewDeckTabIndex = 0,
+            Trimmer = new TrimmerPaneLayout(false, true, null) { SeparateDock = true },
             TimelineOnTop = false,
             VideoScopesOpen = false,
             MixingConsoleOpen = false,

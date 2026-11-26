@@ -89,10 +89,12 @@ public partial class MainWindow : Window
         vm = viewModel;
         InitializeComponent();
         SizeChanged += (_, _) => ApplyLayoutConstraints();
+        LocationChanged += (_, _) => QueueMaximizedBoundsCheck();
         StateChanged += (_, _) =>
         {
             UpdateMaximizedMargin();
             ApplyLayoutConstraints();
+            QueueMaximizedBoundsCheck();
         };
         SourceInitialized += (_, _) =>
         {
@@ -623,6 +625,7 @@ public partial class MainWindow : Window
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
         Timeline.LoopRegionChanged += range => vm.LoopRegion = range;
         TrimmerDeck.Initialize(vm);
+        InitializeTrimmerPane();
         vm.Changed += Refresh;
         vm.Changed += () =>
         {
@@ -2950,17 +2953,15 @@ public partial class MainWindow : Window
     }
     private void TrimmerClick(object sender, RoutedEventArgs e)
     {
-        PreviewDeckTabs.SelectedItem = TrimmerTab;
-        TrimmerDeck.Focus();
+        ShowTrimmerPane();
     }
 
     private void OpenInTrimmerClick(object sender, RoutedEventArgs e)
     {
         if (SelectedLibraryItem is MediaItem item)
         {
-            PreviewDeckTabs.SelectedItem = TrimmerTab;
             TrimmerDeck.LoadMedia(item.Asset);
-            TrimmerDeck.Focus();
+            ShowTrimmerPane();
         }
     }
 
@@ -3226,11 +3227,17 @@ public partial class MainWindow : Window
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
     private void WindowKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && CancelTrimmerDrag())
+        {
+            e.Handled = true;
+            return;
+        }
         if (vm.Busy) return;
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         if (HandleLayoutChordKey(e)) return;
+        if (HandleTrimmerShortcut(e)) return;
         if (alt && !ctrl && !shift && key == Key.D)
         {
             isAltDChordPending = true;
@@ -3309,8 +3316,6 @@ public partial class MainWindow : Window
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
-            Key.D2 when !ctrl && alt && !shift => () => TrimmerClick(this, e),
-            Key.NumPad2 when !ctrl && alt && !shift => () => TrimmerClick(this, e),
             Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
             Key.D4 when ctrl && alt => () => EditDetailsClick(this, e),
@@ -3380,39 +3385,88 @@ public partial class MainWindow : Window
     {
         if (ActualHeight > 0)
         {
-            var totalNonWorkspaceHeight = 32 + 34 + 5 + 140 + 34 + 20; // 265px
-            var maxWorkspaceHeight = Math.Max(280, ActualHeight - totalNonWorkspaceHeight);
-            if (WorkspaceHeight.Height.IsAbsolute && WorkspaceHeight.Height.Value > maxWorkspaceHeight)
-            {
-                WorkspaceHeight.Height = new GridLength(maxWorkspaceHeight);
-            }
+            var totalNonWorkspaceHeight = 32 + 34 + 5 + TimelineRowHeight.MinHeight + 34 + 20;
+            WorkspaceHeight.MaxHeight = Grid.GetRow(Workspace) == 2
+                ? Math.Max(WorkspaceHeight.MinHeight, ActualHeight - RootGrid.Margin.Top - RootGrid.Margin.Bottom - totalNonWorkspaceHeight)
+                : double.PositiveInfinity;
         }
 
-        if (ActualWidth > 0)
+        if (HasSeparateTrimmerDock)
+        {
+            PreviewWidth.MaxWidth = double.PositiveInfinity;
+            UpdateSourceDockColumns();
+        }
+        else if (ActualWidth > 0)
         {
             var totalNonPreviewWidth = 220 + 10 + 80 + 16; // 326px
             var maxPreviewWidth = Math.Max(480, ActualWidth - totalNonPreviewWidth);
-            if (PreviewWidth.Width.IsAbsolute && PreviewWidth.Width.Value > maxPreviewWidth)
-            {
-                PreviewWidth.Width = new GridLength(maxPreviewWidth);
-            }
+            PreviewWidth.MaxWidth = maxPreviewWidth;
         }
     }
 
     private string WorkspacePath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "workspace.json");
+    private DispatcherTimer? maximizedBoundsTimer;
+
+    private void QueueMaximizedBoundsCheck()
+    {
+        if (WindowState != WindowState.Maximized)
+            return;
+        if (maximizedBoundsTimer is null)
+        {
+            maximizedBoundsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(150) };
+            maximizedBoundsTimer.Tick += CheckMaximizedBounds;
+        }
+        maximizedBoundsTimer.Stop();
+        maximizedBoundsTimer.Start();
+    }
+
+    private void CheckMaximizedBounds(object? sender, EventArgs e)
+    {
+        maximizedBoundsTimer?.Stop();
+        if (WindowState != WindowState.Maximized)
+            return;
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        if (GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref info) && GetWindowRect(hwnd, out var bounds) &&
+            (bounds.Left != info.Work.Left || bounds.Top != info.Work.Top ||
+             bounds.Right != info.Work.Right || bounds.Bottom != info.Work.Bottom))
+            SetWindowPos(hwnd, 0, info.Work.Left, info.Work.Top,
+                info.Work.Right - info.Work.Left, info.Work.Bottom - info.Work.Top, 0x4 | 0x10);
+    }
+
+    private void SetWorkspaceShare(double share)
+    {
+        share = Math.Clamp(share, 0.15, 0.9);
+        WorkspaceHeight.Height = new GridLength(share, GridUnitType.Star);
+        TimelineRowHeight.Height = new GridLength(1 - share, GridUnitType.Star);
+    }
+
     private void SaveWorkspace()
     {
         Directory.CreateDirectory(Path.GetDirectoryName(WorkspacePath)!);
         var w = RestoreBounds.Width > 0 ? RestoreBounds.Width : (Width > 0 ? Width : 1400);
         var h = RestoreBounds.Height > 0 ? RestoreBounds.Height : (Height > 0 ? Height : 900);
+        var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+        var monitor = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+        NativePoint? screen = GetMonitorInfo(MonitorFromWindow(hwnd, 2), ref monitor)
+            ? new NativePoint(monitor.Work.Left + (monitor.Work.Right - monitor.Work.Left) / 2,
+                monitor.Work.Top + (monitor.Work.Bottom - monitor.Work.Top) / 2)
+            : null;
         File.WriteAllText(WorkspacePath, System.Text.Json.JsonSerializer.Serialize(new WorkspaceSettings(
             4,
             w,
             h,
-            PreviewWidth.ActualWidth,
-            WorkspaceHeight.ActualHeight,
+            HasSeparateTrimmerDock ? sourcePreviewWidth : PreviewWidth.Width.IsAbsolute ? PreviewWidth.Width.Value : PreviewWidth.ActualWidth,
+            WorkspaceHeight.Height.IsAbsolute ? WorkspaceHeight.Height.Value : WorkspaceHeight.ActualHeight,
             Timeline.PixelsPerSecond,
-            WindowState == WindowState.Maximized)));
+            WindowState == WindowState.Maximized,
+            CaptureTrimmerPane(),
+            PreviewDeckTabs.SelectedItem == TrimmerTab,
+            HasSeparateTrimmerDock ? ToolsTabs.SelectedIndex : null,
+            screen?.X, screen?.Y,
+            WorkspaceHeight.Height.IsStar && TimelineRowHeight.Height.IsStar
+                ? WorkspaceHeight.Height.Value / (WorkspaceHeight.Height.Value + TimelineRowHeight.Height.Value)
+                : null)));
     }
     private void LoadWorkspace()
     {
@@ -3424,39 +3478,58 @@ public partial class MainWindow : Window
             if (settings.LayoutVersion != 4) return;
             Width = Math.Clamp(settings.Width, MinWidth, SystemParameters.WorkArea.Width);
             Height = Math.Clamp(settings.Height, MinHeight, SystemParameters.WorkArea.Height);
-            WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
-            UpdateMaximizedMargin();
-
-            var effWidth = ActualWidth > 0 ? ActualWidth : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Width : Width);
-            var effHeight = ActualHeight > 0 ? ActualHeight : (WindowState == WindowState.Maximized ? SystemParameters.WorkArea.Height : Height);
-
-            var maxAllowedPreview = Math.Max(480, effWidth - 326);
-            if (settings.PreviewWidth > 0 && settings.PreviewWidth < effWidth * 0.85)
+            if (settings.MonitorX is int x && settings.MonitorY is int y)
             {
-                PreviewWidth.Width = new GridLength(Math.Clamp(settings.PreviewWidth, 480, maxAllowedPreview));
+                var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
+                if (GetMonitorInfo(MonitorFromPoint(new NativePoint(x, y), 2), ref info))
+                {
+                    WindowState = WindowState.Normal;
+                    var hwnd = new System.Windows.Interop.WindowInteropHelper(this).Handle;
+                    const uint moveOnly = 0x1 | 0x4 | 0x10; // Keep size, stacking and activation.
+                    SetWindowPos(hwnd, 0, info.Work.Left, info.Work.Top, 0, 0, moveOnly);
+                    var dpi = System.Windows.Media.VisualTreeHelper.GetDpi(this);
+                    Width = Math.Clamp(settings.Width, MinWidth, Math.Max(MinWidth, (info.Work.Right - info.Work.Left) / dpi.DpiScaleX));
+                    Height = Math.Clamp(settings.Height, MinHeight, Math.Max(MinHeight, (info.Work.Bottom - info.Work.Top) / dpi.DpiScaleY));
+                }
             }
-            else
+            WindowState = settings.Maximized ? WindowState.Maximized : WindowState.Normal;
+            QueueMaximizedBoundsCheck();
+            UpdateMaximizedMargin();
+            var sourceDock = settings.Trimmer?.SeparateDock == true;
+            ConfigureSourceWorkspace(sourceDock, settings.PreviewWidth);
+
+            if (!sourceDock && settings.PreviewWidth > 0)
+            {
+                PreviewWidth.Width = new GridLength(Math.Max(480, settings.PreviewWidth));
+            }
+            else if (!sourceDock)
             {
                 PreviewWidth.Width = new GridLength(1.85, GridUnitType.Star);
                 MediaWidth.Width = new GridLength(0.65, GridUnitType.Star);
             }
 
-            var maxAllowedWorkspace = Math.Max(280, effHeight - 265);
-            if (settings.WorkspaceHeight > 0 && settings.WorkspaceHeight < effHeight * 0.75)
+            if (settings.WorkspaceShare is > 0 and < 1)
+                SetWorkspaceShare(settings.WorkspaceShare.Value);
+            else if (!sourceDock && settings.WorkspaceHeight > 0)
+                SetWorkspaceShare(settings.WorkspaceHeight / 895);
+            else if (settings.WorkspaceHeight > 0)
             {
-                WorkspaceHeight.Height = new GridLength(Math.Clamp(settings.WorkspaceHeight, 280, maxAllowedWorkspace));
-            }
-            else
-            {
-                WorkspaceHeight.Height = new GridLength(1.35, GridUnitType.Star);
-                TimelineRowHeight.Height = new GridLength(0.85, GridUnitType.Star);
+                WorkspaceHeight.Height = new GridLength(Math.Max(280, settings.WorkspaceHeight));
             }
 
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
+            RestoreTrimmerPane(settings.Trimmer);
+            if (sourceDock)
+                ToolsTabs.SelectedIndex = settings.SourceToolsTabIndex is >= 0 && settings.SourceToolsTabIndex < ToolsTabs.Items.Count
+                    ? settings.SourceToolsTabIndex.Value : 0;
+            if (settings.TrimmerSelected && TrimmerTab.Visibility == Visibility.Visible)
+                PreviewDeckTabs.SelectedItem = TrimmerTab;
         }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
     }
-    private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth, double WorkspaceHeight, double Zoom, bool Maximized);
+    private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth,
+        double WorkspaceHeight, double Zoom, bool Maximized, TrimmerPaneLayout? Trimmer = null, bool TrimmerSelected = false,
+        int? SourceToolsTabIndex = null, int? MonitorX = null, int? MonitorY = null, double? WorkspaceShare = null);
 
     private (float u, float v, float vpWidth, float vpHeight)? PreviewWindowToVideoCoords(int mouseX, int mouseY)
     {
@@ -3749,8 +3822,10 @@ public partial class MainWindow : Window
         }
     }
 
-    private static nint WindowMessage(nint hwnd, int message, nint wparam, nint lparam, ref bool handled)
+    private nint WindowMessage(nint hwnd, int message, nint wparam, nint lparam, ref bool handled)
     {
+        if (message == 0x47) // WM_WINDOWPOSCHANGED also covers Windows monitor shortcuts.
+            QueueMaximizedBoundsCheck();
         if (message != 0x24) return 0;
         var monitor = MonitorFromWindow(hwnd, 2);
         var info = new MonitorInfo { Size = System.Runtime.InteropServices.Marshal.SizeOf<MonitorInfo>() };
@@ -3773,6 +3848,8 @@ public partial class MainWindow : Window
     private struct MonitorInfo { public int Size; public NativeRect Monitor, Work; public uint Flags; }
     [System.Runtime.InteropServices.DllImport("user32.dll")]
     private static extern nint MonitorFromWindow(nint hwnd, uint flags);
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern nint MonitorFromPoint(NativePoint point, uint flags);
     [System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
     private static extern bool GetMonitorInfo(nint monitor, ref MonitorInfo info);
     [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
