@@ -510,6 +510,20 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 0.00" && PresentedFrame(window) == 0, "Stop did not present the exact cursor frame.");
         Assert.True(PreviewDifference(first, SamplePreview(preview)) < .5, "A late playback render replaced the stopped frame.");
         output.WriteLine($"Visible native preview changed through playback frames {firstPlayingFrame} and {laterPlayingFrame}; Stop restored frame 0.");
+        Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.RIGHT);
+        WaitFor(() => PresentedFrame(window) == 1, "The start frame for the keyboard transport did not render.");
+        Chord(window, VirtualKeyShort.SPACE);
+        WaitFor(() => PresentedFrame(window) >= 8, "Space did not start playback.");
+        Chord(window, VirtualKeyShort.SPACE);
+        WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 0.00" && PresentedFrame(window) == 1,
+            "Space did not return to the playback start frame.");
+        Chord(window, VirtualKeyShort.RETURN);
+        WaitFor(() => PresentedFrame(window) >= 8, "Enter did not start playback.");
+        Chord(window, VirtualKeyShort.RETURN);
+        WaitFor(() => Find(window, "PlaybackRate").Name == "Rate: 0.00" && PresentedFrame(window) >= 8,
+            "Enter did not pause at the current frame.");
+        Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.HOME);
+        WaitFor(() => PresentedFrame(window) == 0, "Home did not restore the project start.");
     }
 
     private static long PresentedFrame(Window window)

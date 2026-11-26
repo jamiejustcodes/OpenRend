@@ -25,6 +25,7 @@ public partial class MainWindow : Window
     private readonly DispatcherTimer recoverySaveTimer = new() { Interval = TimeSpan.FromSeconds(3) };
     private GeneralPreferences generalPreferences = new();
     private PlaybackSession? playback;
+    private long playbackOrigin;
     private CancellationTokenSource? exportCancellation;
     private long revision;
     private ProjectDocument? cachedPreviewProject;
@@ -104,7 +105,7 @@ public partial class MainWindow : Window
             DwmSetWindowAttribute(handle, 20, ref enabled, sizeof(int));
         };
         DataContext = vm;
-        Timeline.SeekRequested += frame => { Pause(); vm.Position = frame; UpdatePosition(); RequestPreview(); };
+        Timeline.SeekRequested += frame => Pause(frame);
         Timeline.SelectionChanged += () =>
         {
             var ignore = Timeline.IgnoreGroups || Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
@@ -649,26 +650,24 @@ public partial class MainWindow : Window
         };
         timer.Tick += async (_, _) =>
         {
-            if (playback is null) return;
+            if (playback is not { } session) return;
             try
             {
-                await playback.CheckAsync();
-                vm.Position = playback.CurrentFrame; UpdatePosition();
+                await session.CheckAsync();
+                if (playback != session) return;
+                vm.Position = session.CurrentFrame; UpdatePosition();
                 var meterHeight = Math.Max(0, MeterArea.ActualHeight);
                 static double MeterPosition(double peak) => peak <= .001 ? 0 : Math.Clamp((20 * Math.Log10(peak) + 60) / 60, 0, 1);
-                LeftMeter.Height = meterHeight * MeterPosition(playback.PeakLeft);
-                RightMeter.Height = meterHeight * MeterPosition(playback.PeakRight);
-                if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(playback.PeakLeft, playback.PeakRight);
+                LeftMeter.Height = meterHeight * MeterPosition(session.PeakLeft);
+                RightMeter.Height = meterHeight * MeterPosition(session.PeakRight);
+                if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(session.PeakLeft, session.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
-                if (playback.IsFinished || vm.Position >= vm.Project.DurationFrames)
+                if (session.IsFinished || vm.Position >= vm.Project.DurationFrames)
                 {
                     if (loopPlayback && vm.Project.DurationFrames > 0)
                     {
-                        Pause();
-                        vm.Position = 0;
-                        UpdatePosition();
-                        RequestPreview();
-                        PlayClick(this, new RoutedEventArgs());
+                        Pause(0);
+                        await StartTimelinePlaybackAsync(rememberOrigin: false);
                     }
                     else
                     {
@@ -1616,13 +1615,22 @@ public partial class MainWindow : Window
             }
         }
     });
-    private async void PlayClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
+    private void PlayClick(object sender, RoutedEventArgs e) => ToggleTimelinePlayback(returnToOrigin: false);
+
+    private async void ToggleTimelinePlayback(bool returnToOrigin) => await GuardAsync(async () =>
     {
-        if (playbackStarting) { Pause(); return; }
-        if (playback is not null) { Pause(); return; }
+        if (playbackStarting || playback is not null)
+            Pause(returnToOrigin ? playbackOrigin : null);
+        else
+            await StartTimelinePlaybackAsync();
+    });
+
+    private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true)
+    {
         if (vm.Project.DurationFrames == 0) return;
         if (vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
         var project = vm.Project.DeepClone(); var start = vm.Position;
+        if (rememberOrigin) playbackOrigin = start;
         var masterGain = masterMuted ? 0 : MasterGain.Value;
         var generation = ++playbackGeneration; playbackStarting = true;
         try
@@ -1635,15 +1643,18 @@ public partial class MainWindow : Window
             PlaybackRate.Text = "Rate: 1.00"; timer.Start(); vm.Status = "Playing timeline.";
         }
         finally { if (generation == playbackGeneration) playbackStarting = false; }
-    });
-    private void Pause()
+    }
+
+    private void Pause(long? seekTo = null)
     {
         timer.Stop();
         playbackGeneration++; playbackStarting = false;
         if (playback is not null)
         {
-            playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null; UpdatePosition();
+            playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null;
         }
+        if (seekTo is long frame) vm.Position = frame;
+        UpdatePosition();
         PlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_play");
         PlaybackRate.Text = "Rate: 0.00";
@@ -1653,9 +1664,9 @@ public partial class MainWindow : Window
     }
     private void PauseClick(object sender, RoutedEventArgs e) => Pause();
     private void PlayFromStartClick(object sender, RoutedEventArgs e) { StartClick(sender, e); PlayClick(sender, e); }
-    private void StopClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
-    private void StartClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = 0; UpdatePosition(); RequestPreview(); }
-    private void EndClick(object sender, RoutedEventArgs e) { Pause(); vm.Position = vm.Project.DurationFrames; UpdatePosition(); RequestPreview(); }
+    private void StopClick(object sender, RoutedEventArgs e) => Pause(0);
+    private void StartClick(object sender, RoutedEventArgs e) => Pause(0);
+    private void EndClick(object sender, RoutedEventArgs e) => Pause(vm.Project.DurationFrames);
     private void PreviousClick(object sender, RoutedEventArgs e) { Pause(); vm.Position--; UpdatePosition(); RequestPreview(); }
     private void NextClick(object sender, RoutedEventArgs e) { Pause(); vm.Position++; UpdatePosition(); RequestPreview(); }
     private void MasterGainChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
@@ -2725,6 +2736,12 @@ public partial class MainWindow : Window
     private void ZoomOutClick(object sender, RoutedEventArgs e) { Timeline.PixelsPerSecond = Math.Max(5, Timeline.PixelsPerSecond / 1.25); Refresh(); }
     private void FitClick(object sender, RoutedEventArgs e) { Timeline.Offset = 0; TimelineScroll.Value = 0; Timeline.PixelsPerSecond = Math.Clamp((Timeline.ActualWidth - TimelineView.HeaderWidth - 25) / Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames)), 5, 1200); Refresh(); }
     private void TimelineScrollChanged(object sender, RoutedPropertyChangedEventArgs<double> e) { if (Timeline is null) return; Timeline.Offset = e.NewValue; Timeline.InvalidateVisual(); }
+    private void ScrollTimelinePage(int direction)
+    {
+        var viewport = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
+        TimelineScroll.Value = Timeline.Offset = Math.Clamp(Timeline.Offset + direction * viewport,
+            0, Math.Max(0, TimelineScroll.Maximum - viewport));
+    }
     private void QualityChanged(object sender, SelectionChangedEventArgs e) { if (initialized) { revision++; RequestPreview(); } }
     private void GuidesClick(object sender, RoutedEventArgs e)
     {
@@ -3209,7 +3226,7 @@ public partial class MainWindow : Window
         }
         Refresh();
     }
-    private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / pause\nEnter  Pause\nEsc  Stop\nAlt+Left / Alt+Right  Step one frame\nCtrl+Home / Ctrl+End  Timeline bounds\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
+    private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / stop at playback start\nEnter  Play / pause at current frame\nEsc  Stop\nLeft / Right  Step one frame\nShift+Left / Shift+Right  Step one project second\nCtrl+Left / Ctrl+Right  Select adjacent clips\nHome / End  Timeline bounds\nPage Up / Page Down  Scroll one timeline view\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
     private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, $"OpenRend v{AppVersion.CurrentVersionString}\nWindows video and audio editor\nGPL-3.0-or-later\nhttps://github.com/jamiejustcodes/OpenRend\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
     private void WindowKeyDown(object sender, KeyEventArgs e)
@@ -3225,6 +3242,8 @@ public partial class MainWindow : Window
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         if (HandleLayoutChordKey(e)) return;
         if (HandleTrimmerShortcut(e)) return;
+        if (TrimmerDeck.IsKeyboardFocusWithin && !ctrl && key is Key.Space or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q)
+            return;
         if (alt && !ctrl && !shift && key == Key.D)
         {
             isAltDChordPending = true;
@@ -3323,13 +3342,16 @@ public partial class MainWindow : Window
             Key.X when ctrl => () => CutClick(this, e),
             Key.V when ctrl => () => PasteClick(this, e),
             Key.F when ctrl => () => FitClick(this, e),
-            Key.Home when ctrl => () => StartClick(this, e),
-            Key.End when ctrl => () => EndClick(this, e),
+            Key.Home when ctrl || (!alt && !shift && !Timeline.IsKeyboardFocusWithin) => () => StartClick(this, e),
+            Key.End when ctrl || (!alt && !shift && !Timeline.IsKeyboardFocusWithin) => () => EndClick(this, e),
+            Key.PageUp when !ctrl && !shift && !alt => () => ScrollTimelinePage(-1),
+            Key.PageDown when !ctrl && !shift && !alt => () => ScrollTimelinePage(1),
             Key.Left when alt => () => PreviousClick(this, e),
             Key.Right when alt => () => NextClick(this, e),
             Key.Enter when alt => () => SettingsClick(this, e),
-            Key.Enter => Pause,
-            Key.Space => () => PlayClick(this, e),
+            Key.Enter when !ctrl && !shift => () => { if (!e.IsRepeat) ToggleTimelinePlayback(returnToOrigin: false); },
+            Key.Space when shift && !ctrl && !alt => () => { if (!e.IsRepeat) PlayFromStartClick(this, e); },
+            Key.Space when !ctrl && !alt => () => { if (!e.IsRepeat) ToggleTimelinePlayback(returnToOrigin: true); },
             Key.Escape => () => { Timeline.CancelPointerInput(); StopClick(this, e); },
             Key.S => () => SplitClick(this, e),
             Key.Delete when ctrl && shift => () => DeleteTimeClick(this, e),

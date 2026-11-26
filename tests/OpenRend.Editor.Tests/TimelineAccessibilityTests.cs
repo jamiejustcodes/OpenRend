@@ -82,7 +82,7 @@ public sealed class TimelineAccessibilityTests
         view.HandleKeyboardInput(Key.Home, ModifierKeys.None); Assert.Equal(0, editor.Project.Tracks[0].Opacity);
         view.HandleKeyboardInput(Key.End, ModifierKeys.None); Assert.Equal(1, editor.Project.Tracks[0].Opacity);
         view.HandleKeyboardInput(Key.Escape, ModifierKeys.None);
-        view.HandleKeyboardInput(Key.Right, ModifierKeys.None); Assert.Single(view.Selection);
+        view.HandleKeyboardInput(Key.Right, ModifierKeys.Control); Assert.Single(view.Selection);
     });
 
     [Fact]
@@ -168,16 +168,16 @@ public sealed class TimelineAccessibilityTests
     public void KeyboardNavigationSelectsChronologicalClipsAndExtendsTheSelection() => Sta(() =>
     {
         var (view, editor) = Create();
-        Assert.True(view.HandleKeyboardInput(Key.Right, ModifierKeys.None));
+        Assert.True(view.HandleKeyboardInput(Key.Right, ModifierKeys.Control));
         Assert.Equal("First", editor.Project.Tracks[0].Clips.Single(c => view.Selection.Contains(c.Id)).Name);
-        view.HandleKeyboardInput(Key.Right, ModifierKeys.Shift);
-        view.HandleKeyboardInput(Key.Right, ModifierKeys.Shift);
+        view.HandleKeyboardInput(Key.Right, ModifierKeys.Control | ModifierKeys.Shift);
+        view.HandleKeyboardInput(Key.Right, ModifierKeys.Control | ModifierKeys.Shift);
         Assert.Equal(3, view.Selection.Count);
-        view.HandleKeyboardInput(Key.Left, ModifierKeys.None);
+        view.HandleKeyboardInput(Key.Left, ModifierKeys.Control);
         Assert.Equal("Second", editor.Project.Tracks[0].Clips.Single(c => view.Selection.Contains(c.Id)).Name);
         view.HandleKeyboardInput(Key.Down, ModifierKeys.None);
         Assert.Equal(1, view.ActiveTrackIndex);
-        view.HandleKeyboardInput(Key.Right, ModifierKeys.None);
+        view.HandleKeyboardInput(Key.Right, ModifierKeys.Control);
         Assert.Equal(editor.Project.Tracks[1].Clips[0].Id, Assert.Single(view.Selection));
         Assert.False(view.HandleKeyboardInput(Key.V, ModifierKeys.None));
         view.HandleKeyboardInput(Key.Up, ModifierKeys.None);
@@ -191,6 +191,26 @@ public sealed class TimelineAccessibilityTests
         Assert.False(editor.Project.Tracks[0].IsVisible);
         Assert.False(view.HandleKeyboardInput(Key.Right, ModifierKeys.Alt));
         Assert.False(view.HandleKeyboardInput(Key.A, ModifierKeys.Control));
+    });
+
+    [Fact]
+    public void TimelineCursorKeysSeekOnTheRationalFrameGrid() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        editor.Project.FrameRate = new Rational(30000, 1001);
+        view.SeekRequested += frame => view.Position = frame;
+        view.Position = 10;
+        Assert.True(view.HandleKeyboardInput(Key.Right, ModifierKeys.None));
+        Assert.Equal(11, view.Position);
+        Assert.True(view.HandleKeyboardInput(Key.Right, ModifierKeys.Shift));
+        Assert.Equal(41, view.Position);
+        Assert.True(view.HandleKeyboardInput(Key.Left, ModifierKeys.Shift));
+        Assert.Equal(11, view.Position);
+        Assert.True(view.HandleKeyboardInput(Key.End, ModifierKeys.None));
+        Assert.Equal(editor.Project.DurationFrames, view.Position);
+        Assert.True(view.HandleKeyboardInput(Key.Home, ModifierKeys.None));
+        Assert.Equal(0, view.Position);
+        Assert.Empty(view.Selection);
     });
 
     [Fact]

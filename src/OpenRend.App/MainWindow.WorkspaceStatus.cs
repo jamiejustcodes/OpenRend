@@ -20,7 +20,7 @@ public partial class MainWindow
 
     private void UpdateWorkspaceSelectionDuration()
     {
-        var range = vm.LoopRegion;
+        var range = Timeline.LoopRegion;
         WorkspaceSelectionDuration.Visibility = range.HasValue ? Visibility.Visible : Visibility.Collapsed;
         if (range is { } selection)
         {

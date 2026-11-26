@@ -396,7 +396,32 @@ public sealed partial class TimelineView : FrameworkElement
                 return true;
             }
         }
+        if ((key is Key.Left or Key.Right) && (modifiers & ~ModifierKeys.Shift) == ModifierKeys.Control)
+            return SelectAdjacentClip(key, modifiers.HasFlag(ModifierKeys.Shift));
         if ((modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0) return false;
+        if (levelTrack is { } levelId && levelKind is { } level && key is Key.Left or Key.Right or Key.Home or Key.End)
+        {
+            if (Project.Tracks.Single(t => t.Id == levelId).IsLocked) return true;
+            var current = ReadTrackLevel(levelId, level);
+            var min = level == "Pan" ? -1 : 0; var max = level == "Gain" ? Math.Max(4, current) : 1;
+            var value = key switch { Key.Home => min, Key.End => max, _ => current + (key == Key.Left ? -.01 : .01) };
+            SetTrackLevel(levelId, level, Math.Clamp(value, min, max));
+            return true;
+        }
+        if (key is Key.Left or Key.Right or Key.Home or Key.End)
+        {
+            var step = modifiers == ModifierKeys.Shift ? Math.Max(1, Project.FrameRate.Frames(1)) : 1;
+            var cursor = Math.Clamp(Position, 0, Project.DurationFrames);
+            var destination = key switch
+            {
+                Key.Home => 0,
+                Key.End => Project.DurationFrames,
+                Key.Left => Math.Max(0, cursor - step),
+                _ => cursor + Math.Min(step, Project.DurationFrames - cursor)
+            };
+            SeekRequested?.Invoke(destination);
+            return true;
+        }
         if (Project.Tracks.Count == 0) return false;
         if (modifiers == ModifierKeys.None && key is Key.I or Key.O)
         {
@@ -407,15 +432,6 @@ public sealed partial class TimelineView : FrameworkElement
             LoopRegion = end > start ? new FrameRange(start, end - start) : null;
             return true;
         }
-        if (levelTrack is { } levelId && levelKind is { } level && key is Key.Left or Key.Right or Key.Home or Key.End)
-        {
-            if (Project.Tracks.Single(t => t.Id == levelId).IsLocked) return true;
-            var current = ReadTrackLevel(levelId, level);
-            var min = level == "Pan" ? -1 : 0; var max = level == "Gain" ? Math.Max(4, current) : 1;
-            var value = key switch { Key.Home => min, Key.End => max, _ => current + (key == Key.Left ? -.01 : .01) };
-            SetTrackLevel(levelId, level, Math.Clamp(value, min, max));
-            return true;
-        }
         if (key == Key.Escape) { CancelPointerInput(); return true; }
         if (key is Key.Up or Key.Down)
         {
@@ -423,19 +439,6 @@ public sealed partial class TimelineView : FrameworkElement
             return true;
         }
         var track = Project.Tracks[ActiveTrackIndex];
-        if (key is Key.Left or Key.Right)
-        {
-            var clips = track.Clips.OrderBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray();
-            if (clips.Length == 0) return true;
-            var current = Array.FindIndex(clips, c => c.Id == activeClipId);
-            if (current < 0) current = Array.FindIndex(clips, c => Selection.Contains(c.Id));
-            var next = current >= 0 ? Math.Clamp(current + (key == Key.Right ? 1 : -1), 0, clips.Length - 1)
-                : key == Key.Right ? Array.FindIndex(clips, c => c.EndFrame > Position) : Array.FindLastIndex(clips, c => c.StartFrame < Position);
-            if (next < 0) next = key == Key.Right ? clips.Length - 1 : 0;
-            SelectClip(clips[next].Id, modifiers.HasFlag(ModifierKeys.Shift));
-            return true;
-        }
-        if (modifiers.HasFlag(ModifierKeys.Control)) return false;
         var action = key switch
         {
             Key.M => modifiers.HasFlag(ModifierKeys.Shift) ? "Solo" : "Mute",
@@ -447,6 +450,20 @@ public sealed partial class TimelineView : FrameworkElement
         if (key == Key.S) { SplitRequested?.Invoke(); return true; }
         if (key == Key.Delete) { DeleteRequested?.Invoke(); return true; }
         return false;
+    }
+
+    private bool SelectAdjacentClip(Key key, bool extendSelection)
+    {
+        if (Project.Tracks.Count == 0) return false;
+        var clips = Project.Tracks[ActiveTrackIndex].Clips.OrderBy(c => c.StartFrame).ThenBy(c => c.Id).ToArray();
+        if (clips.Length == 0) return true;
+        var current = Array.FindIndex(clips, c => c.Id == activeClipId);
+        if (current < 0) current = Array.FindIndex(clips, c => Selection.Contains(c.Id));
+        var next = current >= 0 ? Math.Clamp(current + (key == Key.Right ? 1 : -1), 0, clips.Length - 1)
+            : key == Key.Right ? Array.FindIndex(clips, c => c.EndFrame > Position) : Array.FindLastIndex(clips, c => c.StartFrame < Position);
+        if (next < 0) next = key == Key.Right ? clips.Length - 1 : 0;
+        SelectClip(clips[next].Id, extendSelection);
+        return true;
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
