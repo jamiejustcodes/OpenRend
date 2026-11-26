@@ -82,16 +82,8 @@ public partial class MainWindow
         ApplyLayoutConstraints();
 
         // 3. Tab selections
-        if (layout.ToolsTabIndex >= 0 && layout.ToolsTabIndex < ToolsTabs.Items.Count &&
-            ToolsTabs.Items[layout.ToolsTabIndex] is TabItem { Visibility: Visibility.Visible } toolsTab)
-        {
-            ToolsTabs.SelectedItem = toolsTab;
-        }
-        if (layout.PreviewDeckTabIndex >= 0 && layout.PreviewDeckTabIndex < PreviewDeckTabs.Items.Count &&
-            PreviewDeckTabs.Items[layout.PreviewDeckTabIndex] is TabItem { Visibility: Visibility.Visible } previewTab)
-        {
-            PreviewDeckTabs.SelectedItem = previewTab;
-        }
+        SelectWorkspaceTab(ToolsTabs, layout.ToolsTabIndex);
+        SelectWorkspaceTab(PreviewDeckTabs, layout.PreviewDeckTabIndex);
 
         // 4. Auxiliary floating/dock windows
         if (layout.MixingConsoleOpen)
@@ -126,6 +118,13 @@ public partial class MainWindow
         UpdateLayoutSlotsMenu();
         Refresh();
         RequestPreview();
+    }
+
+    private static void SelectWorkspaceTab(TabControl dock, int? selectedIndex)
+    {
+        if (selectedIndex is int index && index >= 0 && index < dock.Items.Count &&
+            dock.Items[index] is TabItem { Visibility: Visibility.Visible } tab)
+            dock.SelectedItem = tab;
     }
 
     public WorkspaceLayout CaptureCurrentWorkspaceLayout(string name = "Custom Layout", int? shortcutSlot = null)

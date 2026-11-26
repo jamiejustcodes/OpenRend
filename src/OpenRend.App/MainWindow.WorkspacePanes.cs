@@ -16,6 +16,7 @@ public partial class MainWindow
 {
     private DockablePane trimmerPane = null!;
     private readonly Dictionary<string, DockablePane> workspacePanes = new(StringComparer.Ordinal);
+    private readonly Dictionary<TabItem, int> workspaceTabOrder = [];
     private bool HasSeparateTrimmerDock { get; set; }
     private Popup? paneDockOutline;
     private PaneDrag? paneDrag;
@@ -24,6 +25,7 @@ public partial class MainWindow
     private sealed class DockablePane(string name, TabControl dock, TabItem tab, Action? onHidden = null)
     {
         public string Name { get; } = name;
+        public TabControl HomeDock { get; } = dock;
         public TabControl Dock { get; set; } = dock;
         public TabItem Tab { get; } = tab;
         public Action? OnHidden { get; } = onHidden;
@@ -40,6 +42,10 @@ public partial class MainWindow
 
     private void InitializeWorkspacePanes()
     {
+        foreach (var group in new[] { ToolsTabs, PreviewDeckTabs, MasterBusTabs })
+        foreach (var tab in group.Items.OfType<TabItem>())
+            workspaceTabOrder.Add(tab, workspaceTabOrder.Count);
+
         trimmerPane = new DockablePane("Trimmer", PreviewDeckTabs, TrimmerTab, TrimmerDeck.StopPlayback);
         BindPaneDrag(trimmerPane, TrimmerTabLabel);
         AttachPaneDragHandlers(this);
@@ -194,8 +200,9 @@ public partial class MainWindow
         foreach (var (key, pane) in workspacePanes)
         {
             var bounds = ReadPaneBounds(pane) ?? pane.Bounds;
-            if (pane.Floats || !pane.IsDocked || bounds is not null)
-                layouts.Add(key, new(pane.Floats, pane.Window is not null || pane.IsDocked, bounds));
+            var dockGroup = pane.Dock == pane.HomeDock ? null : pane.Dock.Name;
+            if (pane.Floats || !pane.IsDocked || bounds is not null || dockGroup is not null)
+                layouts.Add(key, new(pane.Floats, pane.Window is not null || pane.IsDocked, bounds) { DockGroup = dockGroup });
         }
         return layouts.Count > 0 ? layouts : null;
     }
@@ -207,10 +214,8 @@ public partial class MainWindow
         var separateDock = layout?.SeparateDock == true;
         if (separateDock != HasSeparateTrimmerDock)
         {
-            trimmerPane.Dock.Items.Remove(TrimmerTab);
             HasSeparateTrimmerDock = separateDock;
-            trimmerPane.Dock = separateDock ? SourceDeckTabs : PreviewDeckTabs;
-            trimmerPane.Dock.Items.Add(TrimmerTab);
+            MovePaneToDock(trimmerPane, separateDock ? SourceDeckTabs : PreviewDeckTabs);
         }
 
         sourceDockWidth = layout is { DockWidth: >= 240 } && double.IsFinite(layout.DockWidth) ? layout.DockWidth : 568;
@@ -225,6 +230,13 @@ public partial class MainWindow
         {
             CloseFloatingPane(pane);
             var layout = layouts?.GetValueOrDefault(key);
+            var dock = layout?.DockGroup switch
+            {
+                nameof(ToolsTabs) => ToolsTabs,
+                nameof(PreviewDeckTabs) => PreviewDeckTabs,
+                _ => pane.HomeDock
+            };
+            MovePaneToDock(pane, dock);
             RestorePane(pane, layout?.Floating == true, layout?.Visible != false, layout?.Bounds);
         }
     }
@@ -354,11 +366,30 @@ public partial class MainWindow
         pane.Window?.Close();
     }
 
-    private void DockFloatingPane(DockablePane pane)
+    private void DockFloatingPane(DockablePane pane, TabControl? target = null)
     {
         CloseFloatingPane(pane);
+        if (target is not null && pane != trimmerPane)
+            MovePaneToDock(pane, target);
         Activate();
         ShowPane(pane);
+    }
+
+    private void MovePaneToDock(DockablePane pane, TabControl target)
+    {
+        var source = pane.Dock;
+        if (source == target) return;
+
+        source.Items.Remove(pane.Tab);
+        if (source.SelectedItem is not TabItem { Visibility: Visibility.Visible })
+            source.SelectedItem = source.Items.OfType<TabItem>().FirstOrDefault(tab => tab.Visibility == Visibility.Visible);
+        pane.Dock = target;
+        // Fixed order keeps saved active-tab indexes stable after restoring pane groups.
+        var order = workspaceTabOrder[pane.Tab];
+        var index = 0;
+        while (index < target.Items.Count && workspaceTabOrder[(TabItem)target.Items[index]] < order)
+            index++;
+        target.Items.Insert(index, pane.Tab);
     }
 
     private static PaneBounds? ReadPaneBounds(DockablePane pane)
@@ -470,9 +501,15 @@ public partial class MainWindow
     {
         if ((Keyboard.Modifiers & ModifierKeys.Control) == 0 || !IsVisible || WindowState == WindowState.Minimized)
             return null;
-        var target = pane == trimmerPane ? PreviewDeckTabs : pane.Dock;
-        var local = target.PointFromScreen(new Point(pointer.X, pointer.Y));
-        return new Rect(0, 0, target.ActualWidth, target.ActualHeight).Contains(local) ? target : null;
+        if (pane == trimmerPane)
+            return ContainsPointer(PreviewDeckTabs) ? PreviewDeckTabs : null;
+        if (ContainsPointer(ToolsTabs)) return ToolsTabs;
+        if (ContainsPointer(PreviewDeckTabs)) return PreviewDeckTabs;
+        return pane.HomeDock == MasterBusTabs && ContainsPointer(MasterBusTabs) ? MasterBusTabs : null;
+
+        bool ContainsPointer(TabControl target) => target.IsVisible &&
+            new Rect(0, 0, target.ActualWidth, target.ActualHeight)
+                .Contains(target.PointFromScreen(new Point(pointer.X, pointer.Y)));
     }
 
     private void ShowPaneDockOutline(TabControl? target)
@@ -493,6 +530,7 @@ public partial class MainWindow
             {
                 BorderThickness = new Thickness(3),
                 BorderBrush = (Brush)FindResource("AccentBrush"),
+                Background = new SolidColorBrush(((SolidColorBrush)FindResource("AccentBrush")).Color) { Opacity = 0.14 },
                 IsHitTestVisible = false
             }
         };
@@ -518,8 +556,10 @@ public partial class MainWindow
             return true;
         if (cancel && drag.Bounds is { } original)
             PlacePane(pane, original.Left, original.Top, clampToMonitor: true);
-        else if (cancel || (GetCursorPos(out var pointer) && GetPaneDockTarget(pane, pointer) is not null))
+        else if (cancel)
             DockFloatingPane(pane);
+        else if (GetCursorPos(out var pointer) && GetPaneDockTarget(pane, pointer) is { } target)
+            DockFloatingPane(pane, target);
         else
         {
             if (ReadPaneBounds(pane) is { } dropped)

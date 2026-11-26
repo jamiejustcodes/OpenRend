@@ -173,16 +173,15 @@ public sealed partial class EditorWorkflowTests
                         WaitFor(() => movedControl.Properties.HelpText.ValueOrDefault?.Contains("Direct3D 11") == true,
                             "The native display did not initialize in the floating preview.");
 
-                    var bounds = floating.BoundingRectangle;
-                    var home = Find(window, dock).BoundingRectangle;
-                    var caption = new Point(bounds.Left + (int)(60 * scale), bounds.Top + (int)(16 * scale));
-                    var target = new Point(home.Left + home.Width / 2, home.Top + home.Height / 2);
-                    using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
-                        DragTrimmer(caption, target);
-                    WaitFor(() => FloatingPane(window, name) is null && DockedPane(window, name) is not null,
-                        $"Ctrl-drag did not redock {name}.");
+                    DockIn(window, floating, name, dock, scale);
                     Find(window, control);
                 }
+
+                DockIn(window, FloatPane(window, "Video FX", scale), "Video FX", "PreviewDeckTabs", scale);
+                Find(window, "VideoFxPlugIns");
+                DockIn(window, FloatPane(window, "Video Preview", scale), "Video Preview", "ToolsTabs", scale);
+                WaitFor(() => Find(window, "PreviewInfo").Properties.HelpText.ValueOrDefault?.Contains("Direct3D 11") == true,
+                    "The native preview did not initialize in its new dock.");
 
                 var projectMedia = FloatPane(window, "Project Media", scale);
                 savedMediaBounds = projectMedia.BoundingRectangle;
@@ -192,6 +191,9 @@ public sealed partial class EditorWorkflowTests
             using (var running = Launch(executable, projectPath, temporary))
             {
                 var window = running.Window;
+                WaitFor(() => DockTab(window, "PreviewDeckTabs", "Video FX")?.Patterns.SelectionItem.Pattern.IsSelected.Value == true,
+                    "Restart did not restore Video FX as the active tab in the Preview group.");
+                Assert.NotNull(DockTab(window, "ToolsTabs", "Video Preview"));
                 WaitFor(() => FloatingPane(window, "Project Media")?.BoundingRectangle == savedMediaBounds,
                     "Restart did not restore the floating Project Media bounds.");
                 var floating = FloatingPane(window, "Project Media")!;
@@ -223,6 +225,21 @@ public sealed partial class EditorWorkflowTests
                 WaitFor(() => FloatingPane(window, name) is not null, $"Dragging the tab did not float {name}.");
                 return FloatingPane(window, name)!;
             }
+
+            static void DockIn(Window window, Window floating, string name, string group, double scale)
+            {
+                var bounds = floating.BoundingRectangle;
+                var dock = Find(window, group).BoundingRectangle;
+                var caption = new Point(bounds.Left + (int)(60 * scale), bounds.Top + (int)(16 * scale));
+                var target = new Point(dock.Left + dock.Width / 2, dock.Top + dock.Height / 2);
+                using (Keyboard.Pressing(VirtualKeyShort.CONTROL))
+                    DragTrimmer(caption, target);
+                WaitFor(() => FloatingPane(window, name) is null && DockTab(window, group, name)?.Patterns.SelectionItem.Pattern.IsSelected.Value == true,
+                    $"Ctrl-drag did not select {name} in {group}.");
+            }
+
+            static TabItem? DockTab(Window window, string group, string name) => Find(window, group)
+                .FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName(name)))?.AsTabItem();
         }
         finally { Directory.Delete(temporary, recursive: true); }
     }

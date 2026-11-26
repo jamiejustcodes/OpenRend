@@ -3529,7 +3529,9 @@ public partial class MainWindow : Window
             WorkspaceHeight.Height.IsStar && TimelineRowHeight.Height.IsStar
                 ? WorkspaceHeight.Height.Value / (WorkspaceHeight.Height.Value + TimelineRowHeight.Height.Value)
                 : null,
-            CaptureWorkspacePanes())));
+            CaptureWorkspacePanes(),
+            ToolsTabs.SelectedIndex,
+            PreviewDeckTabs.SelectedIndex)));
     }
     private void LoadWorkspace()
     {
@@ -3583,14 +3585,10 @@ public partial class MainWindow : Window
             Timeline.PixelsPerSecond = Math.Clamp(settings.Zoom, 5, 1200);
             RestoreTrimmerPane(settings.Trimmer);
             RestoreWorkspacePanes(settings.Panes);
-            if (sourceDock)
-            {
-                var toolsIndex = settings.SourceToolsTabIndex ?? 0;
-                if (toolsIndex >= 0 && toolsIndex < ToolsTabs.Items.Count &&
-                    ToolsTabs.Items[toolsIndex] is TabItem { Visibility: Visibility.Visible } toolsTab)
-                    ToolsTabs.SelectedItem = toolsTab;
-            }
-            if (settings.TrimmerSelected && TrimmerTab.Visibility == Visibility.Visible)
+            SelectWorkspaceTab(ToolsTabs, settings.ToolsTabIndex ?? (sourceDock ? settings.SourceToolsTabIndex ?? 0 : null));
+            SelectWorkspaceTab(PreviewDeckTabs, settings.PreviewDeckTabIndex);
+            if (settings.PreviewDeckTabIndex is null && settings.TrimmerSelected && !sourceDock &&
+                TrimmerTab.Visibility == Visibility.Visible)
                 PreviewDeckTabs.SelectedItem = TrimmerTab;
         }
         catch (Exception ex) when (ex is IOException or System.Text.Json.JsonException or ArgumentException) { vm.Status = "Workspace preferences could not be restored."; }
@@ -3598,7 +3596,8 @@ public partial class MainWindow : Window
     private sealed record WorkspaceSettings(int LayoutVersion, double Width, double Height, double PreviewWidth,
         double WorkspaceHeight, double Zoom, bool Maximized, TrimmerPaneLayout? Trimmer = null, bool TrimmerSelected = false,
         int? SourceToolsTabIndex = null, int? MonitorX = null, int? MonitorY = null, double? WorkspaceShare = null,
-        Dictionary<string, WorkspacePaneLayout>? Panes = null);
+        Dictionary<string, WorkspacePaneLayout>? Panes = null,
+        int? ToolsTabIndex = null, int? PreviewDeckTabIndex = null);
 
     private (float u, float v, float vpWidth, float vpHeight)? PreviewWindowToVideoCoords(int mouseX, int mouseY)
     {

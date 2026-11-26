@@ -79,7 +79,11 @@ public sealed record TrimmerPaneLayout(bool Floating, bool Visible, PaneBounds? 
     public double DockWidth { get; init; } = 568;
 }
 
-public sealed record WorkspacePaneLayout(bool Floating, bool Visible, PaneBounds? Bounds);
+public sealed record WorkspacePaneLayout(bool Floating, bool Visible, PaneBounds? Bounds)
+{
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DockGroup { get; init; }
+}
 
 // Position uses physical screen coordinates. Size uses device-independent units.
 public sealed record PaneBounds(int Left, int Top, double Width, double Height);

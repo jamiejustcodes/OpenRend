@@ -75,7 +75,11 @@ public sealed class WorkspaceLayoutEditorTests
                 EditDetailsOpen = true,
                 Trimmer = new TrimmerPaneLayout(true, false, new PaneBounds(-1600, 180, 600, 450))
                     { SeparateDock = true, DockWidth = 500 },
-                Panes = new() { ["Explorer"] = new(true, true, new PaneBounds(200, 400, 450, 350)) },
+                Panes = new()
+                {
+                    ["Explorer"] = new(true, true, new PaneBounds(200, 400, 450, 350)),
+                    ["ProjectMedia"] = new(false, true, null) { DockGroup = "PreviewDeckTabs" }
+                },
                 ShortcutSlot = 3
             };
 
@@ -93,6 +97,7 @@ public sealed class WorkspaceLayoutEditorTests
             Assert.True(retrieved.EditDetailsOpen);
             Assert.Equal(custom.Trimmer, retrieved.Trimmer);
             Assert.Equal(custom.Panes["Explorer"], retrieved.Panes?["Explorer"]);
+            Assert.Equal(custom.Panes["ProjectMedia"], retrieved.Panes?["ProjectMedia"]);
             Assert.Equal(3, retrieved.ShortcutSlot);
 
             var slotLayout = WorkspaceLayoutManager.GetLayoutBySlot(3, tempDir);
