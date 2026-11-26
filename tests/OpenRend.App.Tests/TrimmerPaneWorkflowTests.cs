@@ -40,6 +40,7 @@ public sealed partial class EditorWorkflowTests
             using (var running = Launch(executable, projectPath, temporary))
             {
                 var window = running.Window;
+                AssertPerMonitorDpi(window);
                 FocusTrimmerWindow(window);
                 WaitFor(() => DockedTrimmer(window) is not null, "The Trimmer tab was not exposed.");
                 Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.KEY_2);
@@ -59,6 +60,7 @@ public sealed partial class EditorWorkflowTests
                 DragTrimmer(start, target);
                 WaitFor(() => FloatingTrimmer(window) is not null, "Dragging the tab did not float the Trimmer.");
                 var floating = FloatingTrimmer(window)!;
+                AssertPerMonitorDpi(floating);
                 floatingBounds = floating.BoundingRectangle;
                 var close = floating.FindFirstDescendant(c => c.ByName("Close Trimmer"));
                 Assert.NotNull(close);
@@ -279,8 +281,21 @@ public sealed partial class EditorWorkflowTests
         WaitFor(() => GetForegroundWindow() == handle, "The Trimmer test window did not receive foreground input.");
     }
 
+    private static void AssertPerMonitorDpi(Window window)
+    {
+        var context = GetWindowDpiAwarenessContext(window.Properties.NativeWindowHandle.Value);
+        Assert.True(AreDpiAwarenessContextsEqual(context, (nint)(-4)), $"{window.Title} must use per-monitor v2 DPI awareness.");
+    }
+
     [DllImport("user32.dll")]
     private static extern nint GetForegroundWindow();
+
+    [DllImport("user32.dll")]
+    private static extern nint GetWindowDpiAwarenessContext(nint window);
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AreDpiAwarenessContextsEqual(nint first, nint second);
 
     [DllImport("user32.dll")]
     private static extern bool SetCursorPos(int x, int y);

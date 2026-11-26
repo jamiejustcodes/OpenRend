@@ -12,6 +12,8 @@ Layout presets and restart settings preserve dock groups, active tabs, visibilit
 
 Open floating panes also recheck their work area when Windows reports a display or work-area change. Geometry tests cover recovery from a removed negative-coordinate monitor and fitting to a smaller work area. A simulated Windows display-change notification recovered an open Trimmer in the desktop test. Physical display removal remains unverified.
 
+OpenRend declares per-monitor v2 DPI awareness. After WPF processes a DPI change, the editor rechecks floating and maximized bounds against the Windows work area. The Direct3D preview sizes its renderer from the native child window's client pixels. The desktop workflow verifies the main and floating Trimmer window contexts at 96 DPI. A transition between displays at different scale factors remains unverified.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

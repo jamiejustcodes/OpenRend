@@ -324,6 +324,7 @@ public partial class MainWindow
         panel.Children.Add(title);
         panel.Children.Add(content);
         window.Content = panel;
+        window.DpiChanged += (_, _) => QueueFloatingPaneBoundsCheck();
         window.Closing += (_, _) => pane.Bounds = ReadPaneBounds(pane) ?? pane.Bounds;
         window.Closed += (_, _) =>
         {

@@ -93,6 +93,11 @@ public partial class MainWindow : Window
         Deactivated += EndHeldShuttle;
         SizeChanged += (_, _) => ApplyLayoutConstraints();
         LocationChanged += (_, _) => QueueMaximizedBoundsCheck();
+        DpiChanged += (_, _) =>
+        {
+            QueueMaximizedBoundsCheck();
+            QueueFloatingPaneBoundsCheck();
+        };
         StateChanged += (_, _) =>
         {
             UpdateMaximizedMargin();

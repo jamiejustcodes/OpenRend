@@ -69,8 +69,8 @@ public sealed class PreviewHost : HwndHost
     protected override void OnWindowPositionChanged(Rect bounds)
     {
         base.OnWindowPositionChanged(bounds);
-        if (renderer != 0 && bounds.Width >= 1 && bounds.Height >= 1)
-            Native.or_renderer_resize(renderer, (int)Math.Ceiling(bounds.Width), (int)Math.Ceiling(bounds.Height));
+        if (renderer != 0 && Native.GetClientRect(child, out var client) && client.Right > 0 && client.Bottom > 0)
+            Native.or_renderer_resize(renderer, client.Right, client.Bottom);
     }
     protected override void DestroyWindowCore(HandleRef hwnd)
     {
