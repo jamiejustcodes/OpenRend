@@ -41,7 +41,7 @@ public sealed partial class EditorWorkflowTests
 
             using var running = Launch(executable, path, temporary);
             var window = running.Window;
-            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_F);
+            FitTimeline(window);
             var grouping = Find(window, "IgnoreGroupsToggle").Patterns.Toggle.Pattern;
 
             DragEvent(5, VirtualKeyShort.ALT);
@@ -54,15 +54,17 @@ public sealed partial class EditorWorkflowTests
             var slid = await Save();
             Assert.Equal(26, Clip(slid, video.Id).StartFrame);
             Assert.Equal(26, Clip(slid, audio.Id).StartFrame);
-            Assert.Equal((56L, 6L, 24L), (Clip(slid, touching.Id).StartFrame, Clip(slid, touching.Id).SourceInFrame, Clip(slid, touching.Id).DurationFrames));
+            Assert.Equal(21, Clip(slid, video.Id).SourceInFrame);
+            Assert.Equal(21, Clip(slid, audio.Id).SourceInFrame);
+            Assert.Equal((50L, 0L, 30L), (Clip(slid, touching.Id).StartFrame, Clip(slid, touching.Id).SourceInFrame, Clip(slid, touching.Id).DurationFrames));
             Assert.Equal((90L, 20L), (Clip(slid, acrossGap.Id).StartFrame, Clip(slid, acrossGap.Id).DurationFrames));
 
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_U);
             WaitFor(() => grouping.ToggleState.Value == ToggleState.On, "Ctrl+Shift+U did not ignore event grouping.");
             DragEvent(5, VirtualKeyShort.ALT);
             var unlinkedSlip = await Save();
-            Assert.Equal(20, Clip(unlinkedSlip, video.Id).SourceInFrame);
-            Assert.Equal(15, Clip(unlinkedSlip, audio.Id).SourceInFrame);
+            Assert.Equal(26, Clip(unlinkedSlip, video.Id).SourceInFrame);
+            Assert.Equal(21, Clip(unlinkedSlip, audio.Id).SourceInFrame);
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.SHIFT, VirtualKeyShort.KEY_U);
             WaitFor(() => grouping.ToggleState.Value == ToggleState.Off, "Ctrl+Shift+U did not restore event grouping.");
             running.CloseGracefully();

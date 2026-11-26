@@ -15,6 +15,9 @@ public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnl
 
 public static class TimelineEvaluator
 {
+    internal static int MediaUnderSampleStep(TimelineClip clip) => clip.UnderSampleRate is > .001 and < .999
+        ? Math.Max(1, (int)Math.Round(1 / clip.UnderSampleRate)) : 1;
+
     private static readonly Comparison<TimelineClip> ClipFadeOrderComparison = static (a, b) =>
     {
         var offsetA = a.StartFrame - a.FadeOffsetFrames;
@@ -214,15 +217,8 @@ public static class TimelineEvaluator
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
 
-                // Vegas Pro Undersample Rate (stop-motion / strobe effect)
-                if (clip.UnderSampleRate > 0.001 && clip.UnderSampleRate < 0.999)
-                {
-                    var underStep = Math.Max(1, (int)Math.Round(1.0 / clip.UnderSampleRate));
-                    if (underStep > 1)
-                    {
-                        local = (local / underStep) * underStep;
-                    }
-                }
+                var underStep = MediaUnderSampleStep(clip);
+                if (underStep > 1) local = local / underStep * underStep;
 
                 var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
                 var sourceFrame = FindEnabledEnvelope(clip.Envelopes, EnvelopeType.Velocity) is { } velocityEnv

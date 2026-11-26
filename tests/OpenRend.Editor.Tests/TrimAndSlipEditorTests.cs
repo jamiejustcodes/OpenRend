@@ -84,7 +84,7 @@ public sealed class TrimAndSlipEditorTests
     }
 
     [Fact]
-    public void SlideClip_AdjustsAdjacentClipsWhileKeepingTargetMediaAndDurationLocked()
+    public void SlideMovesTheEventWindowOverFixedSourceMediaAndLeavesNeighborsUnedited()
     {
         var (editor, media, track) = CreateEditorWithMedia();
         var clipA = new TimelineClip { MediaId = media.Id, StartFrame = 0, DurationFrames = 50 };
@@ -94,39 +94,28 @@ public sealed class TrimAndSlipEditorTests
         track.Clips.Add(clipB);
         track.Clips.Add(clipC);
 
-        // Slide clip B to the right by +10 frames
+        var before = TimelineEvaluator.Evaluate(editor.Project, 70).Video.Single(layer => layer.Clip.Id == clipB.Id).SourceFrame;
         editor.SlideClip(clipB.Id, 10);
 
         var clips = editor.Project.Tracks[0].Clips;
-        // Predecessor (A) extends by 10 frames
-        Assert.Equal(0, clips[0].StartFrame);
-        Assert.Equal(60, clips[0].DurationFrames);
-
-        // Clip B moves 10 frames, media in-point and length intact
-        Assert.Equal(60, clips[1].StartFrame);
-        Assert.Equal(50, clips[1].DurationFrames);
-        Assert.Equal(10, clips[1].SourceInFrame);
-
-        // Successor (C) shrinks from head by 10 frames
-        Assert.Equal(110, clips[2].StartFrame);
-        Assert.Equal(10, clips[2].SourceInFrame);
-        Assert.Equal(40, clips[2].DurationFrames);
-
-        // Net timeline endpoint is unchanged (150 frames)
-        Assert.Equal(150, clips[2].EndFrame);
+        Assert.Equal((0L, 0L, 50L), (clips[0].StartFrame, clips[0].SourceInFrame, clips[0].DurationFrames));
+        Assert.Equal((60L, 20L, 50L), (clips[1].StartFrame, clips[1].SourceInFrame, clips[1].DurationFrames));
+        Assert.Equal((100L, 0L, 50L), (clips[2].StartFrame, clips[2].SourceInFrame, clips[2].DurationFrames));
+        Assert.Equal(before, TimelineEvaluator.Evaluate(editor.Project, 70).Video.Single(layer => layer.Clip.Id == clipB.Id).SourceFrame);
 
         // Test Undo
         editor.Undo();
         var undone = editor.Project.Tracks[0].Clips;
         Assert.Equal(50, undone[0].DurationFrames);
         Assert.Equal(50, undone[1].StartFrame);
+        Assert.Equal(10, undone[1].SourceInFrame);
         Assert.Equal(100, undone[2].StartFrame);
         Assert.Equal(0, undone[2].SourceInFrame);
         Assert.Equal(50, undone[2].DurationFrames);
     }
 
     [Fact]
-    public void SlideMovesLinkedEventsAndLeavesClipsAcrossGapsUntouched()
+    public void SlideMovesLinkedWindowsAndLeavesAdjacentAndSeparatedClipsUntouched()
     {
         var (editor, media, track) = CreateEditorWithMedia();
         var group = Guid.NewGuid();
@@ -140,15 +129,55 @@ public sealed class TrimAndSlipEditorTests
 
         editor.SlideClip(first.Id, 6);
 
-        Assert.Equal((56L, 7L), (first.StartFrame, first.SourceInFrame));
-        Assert.Equal((56L, 17L), (linked.StartFrame, linked.SourceInFrame));
-        Assert.Equal((106L, 6L, 34L), (touching.StartFrame, touching.SourceInFrame, touching.DurationFrames));
+        Assert.Equal((56L, 13L), (first.StartFrame, first.SourceInFrame));
+        Assert.Equal((56L, 23L), (linked.StartFrame, linked.SourceInFrame));
+        Assert.Equal((100L, 0L, 40L), (touching.StartFrame, touching.SourceInFrame, touching.DurationFrames));
         Assert.Equal(30, beforeGap.DurationFrames);
         Assert.Equal((120L, 35L), (afterGap.StartFrame, afterGap.DurationFrames));
         Assert.True(editor.Undo());
         Assert.False(editor.CanUndo);
         Assert.Equal(50, editor.Project.Tracks[0].Clips[1].StartFrame);
         Assert.Equal(50, editor.Project.Tracks[1].Clips[0].StartFrame);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void SlideMaintainsHalfSpeedVideoPhaseOnAnAlignedShift(bool reversed)
+    {
+        var (editor, media, track) = CreateEditorWithMedia();
+        var clip = new TimelineClip { MediaId = media.Id, StartFrame = 20, SourceInFrame = 15,
+            DurationFrames = 50, PlaybackRate = .5, IsReversed = reversed };
+        track.Clips.Add(clip);
+        var overlap = Enumerable.Range(24, 46).ToArray();
+        long SourceFrame(int frame) => TimelineEvaluator.Evaluate(editor.Project, frame).Video.Single().SourceFrame;
+        var before = overlap.Select(SourceFrame).ToArray();
+
+        Assert.Throws<InvalidOperationException>(() => editor.SlideClip(clip.Id, 1));
+        Assert.False(editor.CanUndo);
+        editor.SlideClip(clip.Id, 4);
+
+        Assert.Equal(before, overlap.Select(SourceFrame));
+        Assert.Equal(reversed ? 13 : 17, clip.SourceInFrame);
+    }
+
+    [Fact]
+    public void SlideRejectsAnInvalidLinkedSourceWithoutEditingEitherEvent()
+    {
+        var (editor, media, track) = CreateEditorWithMedia();
+        var group = Guid.NewGuid();
+        var clip = new TimelineClip { MediaId = media.Id, GroupId = group, StartFrame = 30, SourceInFrame = 20, DurationFrames = 40 };
+        var linked = new TimelineClip { MediaId = media.Id, GroupId = group, StartFrame = 100, DurationFrames = 40 };
+        track.Clips.AddRange([clip, linked]);
+        Assert.Throws<ArgumentOutOfRangeException>(() => editor.SlideClip(clip.Id, -5));
+        Assert.Equal((30L, 20L), (clip.StartFrame, clip.SourceInFrame));
+        Assert.Equal((100L, 0L), (linked.StartFrame, linked.SourceInFrame));
+        Assert.False(editor.CanUndo);
+
+        editor.SlideClip(clip.Id, 5);
+
+        Assert.Equal((35L, 25L), (clip.StartFrame, clip.SourceInFrame));
+        Assert.Equal((105L, 5L), (linked.StartFrame, linked.SourceInFrame));
     }
 
     [Fact]

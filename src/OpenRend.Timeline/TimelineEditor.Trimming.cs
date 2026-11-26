@@ -28,71 +28,63 @@ public sealed partial class TimelineEditor
     }
 
     /// <summary>
-    /// Moves events together and shifts the shared cuts with touching neighbors.
+    /// Slides each selected event window while its underlying media stays fixed on the timeline.
     /// </summary>
     public void SlideClip(Guid clipId, long delta, bool ignoreGroups = false)
     {
         if (delta == 0) return;
         var selected = SelectedClips([clipId], ignoreGroups);
         if (selected.Count == 0) throw new KeyNotFoundException("Clip was not found.");
-        var moving = selected.Select(item => item.Clip.Id).ToHashSet();
-        var cuts = new Dictionary<TimelineClip, (long Start, long End)>();
+        var changes = new List<(TimelineClip Clip, TimelineClip Slid)>(selected.Count);
         foreach (var (track, clip) in selected)
         {
             EnsureUnlocked(track, clip);
-            cuts.Add(clip, (delta, delta));
-            if (track.Clips.LastOrDefault(candidate => !moving.Contains(candidate.Id) && candidate.EndFrame == clip.StartFrame) is { } before)
+            var slid = clip.DeepClone();
+            slid.StartFrame = checked(clip.StartFrame + delta);
+            slid.SourceInFrame = checked(clip.SourceInFrame + SlideSourceDelta(track, clip, delta));
+            EnsureTimelineBounds(slid);
+            var media = Project.Media.Single(asset => asset.Id == slid.MediaId);
+            EnsureSourceBounds(slid, media);
+            if (track.Kind == TrackKind.Audio && slid.SourceInFrame < 0)
+                throw new InvalidOperationException("The slide would place audio before the start of its source.");
+            var available = Project.FrameRate.Frames(media.DurationSeconds);
+            if (track.Kind == TrackKind.Video && clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0)
             {
-                EnsureUnlocked(track, before);
-                cuts[before] = (cuts.GetValueOrDefault(before).Start, delta);
+                var span = Math.Round((slid.DurationFrames - 1) * Math.Abs(slid.PlaybackRate));
+                var earlier = slid.PlaybackRate < 0 && !slid.IsReversed ? -span : 0;
+                var later = earlier < 0 ? 0 : span;
+                if (slid.SourceInFrame + earlier < 0 || slid.SourceInFrame + later >= available)
+                    throw new InvalidOperationException("The slide would extend the window beyond its source.");
             }
-            if (track.Clips.LastOrDefault(candidate => !moving.Contains(candidate.Id) && candidate.StartFrame == clip.EndFrame) is { } after)
-            {
-                EnsureUnlocked(track, after);
-                cuts[after] = (delta, cuts.GetValueOrDefault(after).End);
-            }
-        }
-
-        var changes = new Dictionary<TimelineClip, TimelineClip>();
-        foreach (var (clip, (start, end)) in cuts)
-        {
-            var changed = clip.DeepClone();
-            changed.StartFrame = checked(changed.StartFrame + start);
-            if (!moving.Contains(clip.Id))
-            {
-                changed.DurationFrames = checked(changed.DurationFrames + end - start);
-                var sourceDelta = (clip.IsReversed ? -(double)end : start) * Math.Abs(clip.PlaybackRate);
-                changed.SourceInFrame = checked(changed.SourceInFrame + (long)Math.Round(sourceDelta));
-                if (clip.VideoSourceMode == VideoSourceMode.HoldLastFrame)
-                    changed.SourceInFrame = Math.Max(0, changed.SourceInFrame);
-                if (changed.Crop is not null)
-                    changed.CropOffsetFrames = checked(changed.CropOffsetFrames + start);
-
-                // Reset the fade envelope just as an ordinary edge trim does.
-                changed.FadeInFrames = Math.Min(changed.FadeInFrames, changed.DurationFrames);
-                changed.FadeOutFrames = Math.Min(changed.FadeOutFrames, changed.DurationFrames - changed.FadeInFrames);
-                changed.FadeDurationFrames = null;
-                changed.FadeOffsetFrames = 0;
-            }
-            EnsureTimelineBounds(changed);
-            EnsureSourceBounds(changed, Project.Media.Single(media => media.Id == changed.MediaId));
-            changes.Add(clip, changed);
+            changes.Add((clip, slid));
         }
 
         Execute(_ =>
         {
-            foreach (var (clip, changed) in changes)
+            foreach (var (clip, slid) in changes)
             {
-                clip.StartFrame = changed.StartFrame;
-                clip.DurationFrames = changed.DurationFrames;
-                clip.SourceInFrame = changed.SourceInFrame;
-                clip.CropOffsetFrames = changed.CropOffsetFrames;
-                clip.FadeInFrames = changed.FadeInFrames;
-                clip.FadeOutFrames = changed.FadeOutFrames;
-                clip.FadeDurationFrames = changed.FadeDurationFrames;
-                clip.FadeOffsetFrames = changed.FadeOffsetFrames;
+                clip.StartFrame = slid.StartFrame;
+                clip.SourceInFrame = slid.SourceInFrame;
             }
         });
+    }
+
+    private static long SlideSourceDelta(TimelineTrack track, TimelineClip clip, long delta)
+    {
+        if (clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) == true)
+            throw new InvalidOperationException("Slide requires constant source speed. The event has a velocity envelope.");
+        if (track.Kind == TrackKind.Audio && (clip.PlaybackRate != 1 || clip.IsReversed))
+            throw new InvalidOperationException("Slide requires forward audio at normal speed.");
+        if (delta % TimelineEvaluator.MediaUnderSampleStep(clip) != 0)
+            throw new InvalidOperationException("Slide must align with the event's undersampled frame grid.");
+
+        var rate = clip.IsReversed ? -Math.Abs(clip.PlaybackRate) : clip.PlaybackRate;
+        if (rate == Math.Truncate(rate)) return checked(delta * (long)rate);
+        var sourceDelta = delta * rate;
+        // An even integer offset also preserves the evaluator's round-to-even half-frame ties.
+        if (sourceDelta % 2 != 0)
+            throw new InvalidOperationException("Slide cannot align this edit to the event's source frame grid.");
+        return checked((long)sourceDelta);
     }
 
     /// <summary>

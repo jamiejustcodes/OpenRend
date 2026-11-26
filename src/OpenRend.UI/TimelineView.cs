@@ -1179,6 +1179,8 @@ public sealed partial class TimelineView : FrameworkElement
                 var rowHeight = item.Height;
                 var isPrimaryDragged = isDragging && dragging?.Id == clip.Id;
                 var isMovingMember = isDragging && dragging is not null && mode == "Move" && movingClipIds is not null && movingClipIds.Contains(clip.Id);
+                var isSlidingMember = isDragging && mode == "Slide" && (isPrimaryDragged ||
+                    (!IgnoreGroups && dragging?.GroupId is Guid groupId && clip.GroupId == groupId));
 
                 if (isMovingMember)
                 {
@@ -1190,6 +1192,10 @@ public sealed partial class TimelineView : FrameworkElement
                             : GetTrackY(destination);
                         rowHeight = destinationIsNewTrack ? TrackHeight : GetTrackHeight(destination);
                     }
+                }
+                else if (isSlidingMember)
+                {
+                    start += delta;
                 }
                 else if (isPrimaryDragged)
                 {
@@ -2103,7 +2109,10 @@ public sealed partial class TimelineView : FrameworkElement
         }
         else if (mode == "Slide")
         {
-            delta = Math.Clamp(delta, -dragging.StartFrame, long.MaxValue - dragging.StartFrame);
+            var minStart = !IgnoreGroups && dragging.GroupId is { } groupId
+                ? Project.Tracks.SelectMany(track => track.Clips).Where(clip => clip.GroupId == groupId).Min(clip => clip.StartFrame)
+                : dragging.StartFrame;
+            delta = Math.Clamp(delta, -minStart, long.MaxValue - dragging.EndFrame);
         }
         else if (mode is "TimeStretchLeft" or "TimeStretchRight")
         {
