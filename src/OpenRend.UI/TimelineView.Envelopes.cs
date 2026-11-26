@@ -252,23 +252,25 @@ public partial class TimelineView
 
         if (Project?.Tracks == null) return false;
 
+        var layout = ComputeTrackLayout();
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var track = Project.Tracks[i];
             if (track.Kind != TrackKind.Video) continue;
 
-            var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            if (p.Y < y || p.Y > y + TrackHeight) continue;
+            var y = layout.Tracks[i].Y;
+            var rowHeight = layout.Tracks[i].Height;
+            if (rowHeight < TrackHeight || p.Y < y || p.Y > y + rowHeight) continue;
 
             var top = y + (ShowEventHeaders ? 20.0 : 4.0);
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
             foreach (var clip in track.Clips)
             {
                 if (clip.Envelopes == null || clip.Envelopes.Count == 0) continue;
 
-                var rect = new Rect(X(clip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), TrackHeight - 2);
+                var rect = new Rect(X(clip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), rowHeight - 2);
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
 
                 foreach (var env in clip.Envelopes)
@@ -306,16 +308,18 @@ public partial class TimelineView
 
         if (Project?.Tracks == null) return false;
 
+        var layout = ComputeTrackLayout();
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var track = Project.Tracks[i];
             if (track.Envelopes == null || track.Envelopes.Count == 0) continue;
 
-            var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            if (p.Y < y || p.Y > y + TrackHeight) continue;
+            var y = layout.Tracks[i].Y;
+            var rowHeight = layout.Tracks[i].Height;
+            if (rowHeight < TrackHeight || p.Y < y || p.Y > y + rowHeight) continue;
 
             var top = y + 4.0;
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
             foreach (var env in track.Envelopes)
@@ -354,23 +358,25 @@ public partial class TimelineView
 
         if (Project?.Tracks == null) return false;
 
+        var layout = ComputeTrackLayout();
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var track = Project.Tracks[i];
             if (track.Kind != TrackKind.Video) continue;
 
-            var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            if (p.Y < y || p.Y > y + TrackHeight) continue;
+            var y = layout.Tracks[i].Y;
+            var rowHeight = layout.Tracks[i].Height;
+            if (rowHeight < TrackHeight || p.Y < y || p.Y > y + rowHeight) continue;
 
             var top = y + (ShowEventHeaders ? 20.0 : 4.0);
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
             foreach (var clip in track.Clips)
             {
                 if (clip.Envelopes == null || clip.Envelopes.Count == 0) continue;
 
-                var rect = new Rect(X(clip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), TrackHeight - 2);
+                var rect = new Rect(X(clip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond), rowHeight - 2);
                 if (!rect.Contains(p)) continue;
 
                 var relX = (p.X - rect.Left) / rect.Width;
@@ -409,16 +415,18 @@ public partial class TimelineView
 
         if (Project?.Tracks == null) return false;
 
+        var layout = ComputeTrackLayout();
         for (var i = 0; i < Project.Tracks.Count; i++)
         {
             var track = Project.Tracks[i];
             if (track.Envelopes == null || track.Envelopes.Count == 0) continue;
 
-            var y = RulerHeight + i * TrackHeight - VerticalOffset;
-            if (p.Y < y || p.Y > y + TrackHeight) continue;
+            var y = layout.Tracks[i].Y;
+            var rowHeight = layout.Tracks[i].Height;
+            if (rowHeight < TrackHeight || p.Y < y || p.Y > y + rowHeight) continue;
 
             var top = y + 4.0;
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
             var frame = FrameAt(p.X);
@@ -503,12 +511,14 @@ public partial class TimelineView
         if (draggingEnvClip != null)
         {
             var trackIndex = Project.Tracks.IndexOf(Project.Tracks.First(t => t.Clips.Any(c => c.Id == draggingEnvClip.Id)));
-            var y = RulerHeight + trackIndex * TrackHeight - VerticalOffset;
+            var y = GetTrackY(trackIndex);
+            var rowHeight = GetTrackHeight(trackIndex);
+            if (rowHeight < TrackHeight) return true;
             var top = y + (ShowEventHeaders ? 20.0 : 4.0);
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
-            var rect = new Rect(X(draggingEnvClip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(draggingEnvClip.DurationFrames) * PixelsPerSecond), TrackHeight - 2);
+            var rect = new Rect(X(draggingEnvClip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(draggingEnvClip.DurationFrames) * PixelsPerSecond), rowHeight - 2);
 
             var progress = Math.Clamp((p.X - rect.Left) / rect.Width, 0.0, 1.0);
             var newFrame = (long)Math.Round(progress * draggingEnvClip.DurationFrames);
@@ -539,9 +549,11 @@ public partial class TimelineView
         if (draggingEnvTrack != null)
         {
             var trackIndex = Project.Tracks.IndexOf(draggingEnvTrack);
-            var y = RulerHeight + trackIndex * TrackHeight - VerticalOffset;
+            var y = GetTrackY(trackIndex);
+            var rowHeight = GetTrackHeight(trackIndex);
+            if (rowHeight < TrackHeight) return true;
             var top = y + 4.0;
-            var bottom = y + TrackHeight - 4.0;
+            var bottom = y + rowHeight - 4.0;
             var height = Math.Max(12.0, bottom - top);
 
             var newFrame = Math.Max(0, FrameAt(p.X));

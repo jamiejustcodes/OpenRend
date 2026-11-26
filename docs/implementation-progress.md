@@ -8,6 +8,10 @@ Source Window Layout shows the existing Trimmer beside Video Preview. Explorer t
 
 OpenRend has tools, preview and master bus tab groups with resizable splitters. Five built-in presets and saved layouts can set splitter sizes and active tabs, move the timeline above the tab groups, and open separate tool windows. Drag the Trimmer, Video Preview, Explorer, Project Media, Video FX, Transitions or Master Bus tab upward to float it. Hold Ctrl and drag its title into the home group to redock it. View > Window opens closed tools, and Alt+2 toggles the Trimmer. Restart restores saved visibility and floating bounds, with an off-screen position moved into a connected monitor's work area. Layout tests cover preset definitions, serialization and shortcut slots. Arbitrary dock targets and mixed-DPI display changes remain open. Test counts in the history below describe individual runs.
 
+## Timeline track height
+
+Use Track height on a track header's context menu to minimize, expand, or restore that row. The view recalculates event, drop target, automation envelope, and accessibility bounds together. These choices apply to the current project session. Focused layout and accessibility tests passed, followed by all 27 current-executable desktop workflows, including the track header context menu.
+
 ## Requested addition: startup and project creation
 
 Status: functional startup slice, full parity open. OpenRend has its own welcome artwork/branding, New/Open/Getting Started pages, sizing/rate choices and startup preference. Complete advanced project controls, factory defaults and exact visual matching remain open.

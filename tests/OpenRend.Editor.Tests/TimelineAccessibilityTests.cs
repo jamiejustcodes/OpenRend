@@ -70,6 +70,35 @@ public sealed class TimelineAccessibilityTests
     });
 
     [Fact]
+    public void TrackSizesUpdateEventsDropTargetsAndAccessibleControlsWithoutEditing() => Sta(() =>
+    {
+        var (view, editor) = Create();
+        view.Measure(new Size(900, 350));
+        view.Arrange(new Rect(0, 0, 900, 350));
+        var picture = editor.Project.Tracks[0];
+        var sound = editor.Project.Tracks[1];
+        var picturePeer = UIElementAutomationPeer.CreatePeerForElement(view).GetChildren()[0];
+        var regular = view.GetTrackHeight(0);
+
+        view.SetTrackRowSize(picture.Id, TrackRowSize.Minimized);
+        view.SetTrackRowSize(sound.Id, TrackRowSize.Expanded);
+        var compact = view.GetTrackHeight(0);
+        Assert.True(compact < regular);
+        Assert.Equal(regular * 2, view.GetTrackHeight(1));
+        Assert.Equal(TimelineView.RulerHeight + compact, view.GetTrackY(1));
+        Assert.Equal(compact - 2, view.ClipBounds(picture.Id, picture.Clips[0]).Height);
+        Assert.Equal(compact + regular * 2, view.TotalTimelineContentHeight);
+        Assert.Equal((false, 0, TrackKind.Video), view.EvaluateDragTarget(view.GetTrackY(0) + compact / 2, TrackKind.Video));
+        Assert.Equal((false, 1, TrackKind.Audio), view.EvaluateDragTarget(view.GetTrackY(1) + regular, TrackKind.Audio));
+        Assert.DoesNotContain(picturePeer.GetChildren(), child => child.GetAutomationControlType() == AutomationControlType.Slider);
+
+        view.SetTrackRowSize(picture.Id, TrackRowSize.Normal);
+        Assert.Equal(regular, view.GetTrackHeight(0));
+        Assert.Contains(picturePeer.GetChildren(), child => child.GetAutomationControlType() == AutomationControlType.Slider);
+        Assert.False(editor.CanUndo);
+    });
+
+    [Fact]
     public void FocusedTrackLevelAcceptsKeyboardAdjustmentsWithoutSelectingClips() => Sta(() =>
     {
         var (view, editor) = Create();

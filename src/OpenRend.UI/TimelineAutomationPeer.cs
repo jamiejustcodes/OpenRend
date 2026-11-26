@@ -63,6 +63,11 @@ public sealed class TimelineAutomationPeer(TimelineView owner) : FrameworkElemen
         foreach (var track in tracks.Values) track.RefreshGeometry();
         InvalidatePeer();
     }
+
+    internal void RefreshTrackControls(Guid id)
+    {
+        if (tracks.TryGetValue(id, out var track)) track.ResetChildrenCache();
+    }
 }
 
 internal abstract class TimelineChildAutomationPeer(TimelineAutomationPeer timeline) : AutomationPeer
@@ -112,7 +117,8 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
     protected override Rect GetBoundingRectangleCore()
     {
         var index = View.Project.Tracks.FindIndex(t => t.Id == id);
-        return index < 0 ? Rect.Empty : View.ToScreenBounds(new Rect(0, TimelineView.RulerHeight + index * TimelineView.TrackHeight - View.VerticalOffset, View.ActualWidth, TimelineView.TrackHeight));
+        var height = View.GetTrackHeight(index);
+        return index < 0 || height == 0 ? Rect.Empty : View.ToScreenBounds(new Rect(0, View.GetTrackY(index), View.ActualWidth, height));
     }
     protected override void SetFocusCore() { EnsureEnabled(); View.ActivateTrack(View.Project.Tracks.FindIndex(t => t.Id == id)); View.Focus(); }
     public override object? GetPattern(PatternInterface patternInterface) => null;
@@ -122,11 +128,13 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
         var children = new List<AutomationPeer>();
         foreach (var action in Track.Kind == TrackKind.Video ? new[] { "Mute", "Solo", "Lock", "Visible" } : new[] { "Mute", "Solo", "Lock", "Arm" })
         {
+            if (View.TrackButtonBounds(id, action).IsEmpty) continue;
             if (!buttons.TryGetValue(action, out var button)) buttons.Add(action, button = new TimelineTrackButtonAutomationPeer(Timeline, id, action));
             children.Add(button);
         }
         foreach (var level in Track.Kind == TrackKind.Video ? new[] { "Opacity" } : new[] { "Gain", "Pan" })
         {
+            if (View.TrackLevelBounds(id, level).IsEmpty) continue;
             if (!levels.TryGetValue(level, out var slider)) levels.Add(level, slider = new TimelineTrackLevelAutomationPeer(Timeline, id, level));
             children.Add(slider);
         }
@@ -163,7 +171,7 @@ internal sealed class TimelineTrackAutomationPeer(TimelineAutomationPeer timelin
     internal void NotifyLevelFocus(string level)
     {
         _ = GetChildrenCore();
-        levels[level].NotifyFocus();
+        if (levels.TryGetValue(level, out var slider)) slider.NotifyFocus();
     }
 }
 
@@ -171,7 +179,7 @@ internal sealed class TimelineTrackLevelAutomationPeer(TimelineAutomationPeer ti
 {
     private double previous = timeline.View.ReadTrackLevel(trackId, level);
     private TimelineTrack Track => View.Project.Tracks.FirstOrDefault(t => t.Id == trackId) ?? throw new ElementNotAvailableException();
-    public bool IsReadOnly => Track.IsLocked || !View.IsEnabled;
+    public bool IsReadOnly => Track.IsLocked || !View.IsEnabled || View.TrackLevelBounds(trackId, level).IsEmpty;
     public double Minimum => level == "Pan" ? -1 : 0;
     public double Maximum => level == "Gain" ? Math.Max(4, Value) : 1;
     public double SmallChange => .01;

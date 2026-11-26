@@ -25,6 +25,11 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var replaced = !ReferenceEquals(project, value);
             project = value ?? throw new ArgumentNullException(nameof(value));
+            if (replaced)
+            {
+                trackSizes.Clear();
+                verticalOffset = 0;
+            }
             if (replaced || loopRegion is { } range && range.EndFrame > project.DurationFrames) LoopRegion = null;
             if (levelTrack is { } levelId && project.Tracks.All(t => t.Id != levelId)) CancelTrackLevelInput();
             ActiveTrackIndex = Math.Clamp(ActiveTrackIndex, 0, Math.Max(0, project.Tracks.Count - 1));
@@ -483,10 +488,11 @@ public sealed partial class TimelineView : FrameworkElement
         if (index < 0 || index >= Project.Tracks.Count) return;
         ActiveTrackIndex = index;
         if (levelTrack != Project.Tracks[index].Id) { levelTrack = null; levelKind = null; }
-        var top = RulerHeight + index * TrackHeight;
-        if (top - VerticalOffset < RulerHeight) VerticalOffset = index * TrackHeight;
-        else if (ActualHeight > RulerHeight && top + TrackHeight - VerticalOffset > ActualHeight)
-            VerticalOffset = Math.Max(0, top + TrackHeight - ActualHeight);
+        var top = GetTrackY(index);
+        var height = Math.Min(GetTrackHeight(index), Math.Max(0, ActualHeight - RulerHeight));
+        if (top < RulerHeight) VerticalOffset = Math.Max(0, VerticalOffset + top - RulerHeight);
+        else if (height > 0 && top + height > ActualHeight)
+            VerticalOffset = Math.Min(MaximumVerticalOffset, VerticalOffset + top + height - ActualHeight);
         InvalidateVisual();
         (UIElementAutomationPeer.FromElement(this) as TimelineAutomationPeer)?.InvalidatePeer();
     }
@@ -661,16 +667,17 @@ public sealed partial class TimelineView : FrameworkElement
                     var groupTopY = currentY;
                     for (var k = firstIdx; k <= lastIdx; k++)
                     {
+                        var height = UncollapsedTrackHeight(tracks[k].Id);
                         trackItems[k] = new TrackLayoutItem
                         {
                             Index = k,
                             TrackId = tracks[k].Id,
                             Y = currentY,
-                            Height = TrackHeight,
+                            Height = height,
                             IsCollapsed = false,
                             Group = group
                         };
-                        currentY += TrackHeight;
+                        currentY += height;
                     }
                     var groupTotalH = currentY - groupTopY;
                     var grpLayout = new TrackGroupLayoutItem
@@ -692,16 +699,17 @@ public sealed partial class TimelineView : FrameworkElement
             }
             else
             {
+                var height = UncollapsedTrackHeight(track.Id);
                 trackItems[i] = new TrackLayoutItem
                 {
                     Index = i,
                     TrackId = track.Id,
                     Y = currentY,
-                    Height = TrackHeight,
+                    Height = height,
                     IsCollapsed = false,
                     Group = null
                 };
-                currentY += TrackHeight;
+                currentY += height;
                 i++;
             }
         }
@@ -715,6 +723,9 @@ public sealed partial class TimelineView : FrameworkElement
     }
 
     internal double TotalTimelineContentHeight => ComputeTrackLayout().TotalHeight;
+
+    private double TrackInsertionY(int index) => index >= Project.Tracks.Count
+        ? RulerHeight + TotalTimelineContentHeight - VerticalOffset : GetTrackY(index);
 
     internal double GetTrackY(int index)
     {
@@ -744,6 +755,9 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackButtonBounds(Guid trackId, string action)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
+        var height = GetTrackHeight(index);
+        if (index < 0 || height == 0 || (height < TrackHeight && action is "Motion" or "CompChild" or "Visible" or "Arm" or "Phase"))
+            return Rect.Empty;
         var y = GetTrackY(index);
         return action switch
         {
@@ -764,6 +778,7 @@ public sealed partial class TimelineView : FrameworkElement
     internal Rect TrackLevelBounds(Guid trackId, string level)
     {
         var index = Project.Tracks.FindIndex(t => t.Id == trackId);
+        if (index < 0 || GetTrackHeight(index) < TrackHeight) return Rect.Empty;
         var y = GetTrackY(index);
         return level switch { "Opacity" => new Rect(116, y + 25, 124, 20), "Gain" => new Rect(108, y + 25, 90, 20), _ => new Rect(108, y + 46, 90, 18) };
     }
@@ -865,9 +880,9 @@ public sealed partial class TimelineView : FrameworkElement
     }
     internal (bool IsNewTrack, int TrackIndex, TrackKind NewTrackKind) EvaluateDragTarget(double y, TrackKind sourceTrackKind, int? sourceTrackIndex = null)
     {
-        const double boundaryThreshold = 18.0;
+        var layout = ComputeTrackLayout();
         var timelineTop = RulerHeight - VerticalOffset;
-        var timelineBottom = RulerHeight + TotalTimelineContentHeight - VerticalOffset;
+        var timelineBottom = timelineTop + layout.TotalHeight;
 
         if (Project.Tracks.Count == 0)
         {
@@ -884,11 +899,18 @@ public sealed partial class TimelineView : FrameworkElement
             return (true, Project.Tracks.Count, sourceTrackKind);
         }
 
-        var rawIndex = (int)Math.Floor((y - timelineTop) / TrackHeight);
-        var trackIndex = Math.Clamp(rawIndex, 0, Project.Tracks.Count - 1);
+        var trackIndex = Array.FindIndex(layout.Tracks, row => !row.IsCollapsed && y >= row.Y && y < row.Y + row.Height);
+        if (trackIndex < 0)
+        {
+            var group = layout.Groups.FirstOrDefault(row => row.Group.IsCollapsed && y >= row.Y && y < row.Y + row.Height);
+            var slot = group.Height == 0 ? Project.Tracks.Count :
+                y < group.Y + group.Height / 2 ? group.FirstTrackIndex : group.LastTrackIndex + 1;
+            return (true, slot, sourceTrackKind);
+        }
         var track = Project.Tracks[trackIndex];
-        var trackTop = timelineTop + trackIndex * TrackHeight;
-        var offsetInTrack = y - trackTop;
+        var row = layout.Tracks[trackIndex];
+        var offsetInTrack = y - row.Y;
+        var boundaryThreshold = Math.Min(18, row.Height / 3);
 
         if (track.Kind == sourceTrackKind)
         {
@@ -903,7 +925,7 @@ public sealed partial class TimelineView : FrameworkElement
                 {
                     return (true, trackIndex, sourceTrackKind);
                 }
-                if (offsetInTrack > TrackHeight - interTrackMargin)
+                if (offsetInTrack > row.Height - interTrackMargin)
                 {
                     return (true, trackIndex + 1, sourceTrackKind);
                 }
@@ -914,7 +936,7 @@ public sealed partial class TimelineView : FrameworkElement
             {
                 return (true, trackIndex, sourceTrackKind);
             }
-            if (offsetInTrack > TrackHeight - boundaryThreshold)
+            if (offsetInTrack > row.Height - boundaryThreshold)
             {
                 return (true, trackIndex + 1, sourceTrackKind);
             }
@@ -922,7 +944,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
 
         // Incompatible track: upper half inserts above, lower half inserts below
-        var insertIndex = offsetInTrack < TrackHeight / 2.0 ? trackIndex : trackIndex + 1;
+        var insertIndex = offsetInTrack < row.Height / 2.0 ? trackIndex : trackIndex + 1;
         return (true, insertIndex, sourceTrackKind);
     }
     private HashSet<Guid> GetMovingClipIds(TimelineClip primary)
@@ -1054,7 +1076,7 @@ public sealed partial class TimelineView : FrameworkElement
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
         {
             var pSlot = Math.Clamp(destinationNewTrackIndex, 0, Project.Tracks.Count);
-            insertionY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
+            insertionY = TrackInsertionY(pSlot);
 
             if (pSlot == Project.Tracks.Count)
             {
@@ -1085,12 +1107,12 @@ public sealed partial class TimelineView : FrameworkElement
             var item = layout.Tracks[i];
             if (item.IsCollapsed || item.Height <= 0) continue;
             var y = item.Y;
-            if (y + TrackHeight < RulerHeight || y > ActualHeight) continue;
-            dc.DrawLine(FrozenPen("#111111", 3), new Point(HeaderWidth, y + TrackHeight), new Point(ActualWidth, y + TrackHeight));
+            if (y + item.Height < RulerHeight || y > ActualHeight) continue;
+            dc.DrawLine(FrozenPen("#111111", 3), new Point(HeaderWidth, y + item.Height), new Point(ActualWidth, y + item.Height));
 
             if (!destinationIsNewTrack && destination == i && isDragging && dragging is not null && mode == "Move" && track.Kind == dragTrack?.Kind)
             {
-                dc.DrawRectangle(null, FrozenPen("#00D2FF", 1.5), new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
+                dc.DrawRectangle(null, FrozenPen("#00D2FF", 1.5), new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), item.Height - 2));
             }
 
             foreach (var clip in track.Clips)
@@ -1098,6 +1120,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var start = clip.StartFrame;
                 var duration = clip.DurationFrames;
                 var cy = y;
+                var rowHeight = item.Height;
                 var isPrimaryDragged = isDragging && dragging?.Id == clip.Id;
                 var isMovingMember = isDragging && dragging is not null && mode == "Move" && movingClipIds is not null && movingClipIds.Contains(clip.Id);
 
@@ -1108,7 +1131,8 @@ public sealed partial class TimelineView : FrameworkElement
                     {
                         cy = destinationIsNewTrack
                             ? (destinationNewTrackIndex == Project.Tracks.Count ? insertionY : insertionY - TrackHeight / 2)
-                            : RulerHeight + destination * TrackHeight - VerticalOffset;
+                            : GetTrackY(destination);
+                        rowHeight = destinationIsNewTrack ? TrackHeight : GetTrackHeight(destination);
                     }
                 }
                 else if (isPrimaryDragged)
@@ -1116,7 +1140,8 @@ public sealed partial class TimelineView : FrameworkElement
                     if (mode == "TrimLeft") { start += delta; duration -= delta; }
                     if (mode == "TrimRight") duration += delta;
                 }
-                var rect = new Rect(X(start), cy + 1, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), TrackHeight - 2);
+                if (rowHeight <= 2) continue;
+                var rect = new Rect(X(start), cy + 1, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), rowHeight - 2);
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
                 var isMuted = clip.IsMuted || track.IsMuted;
                 var selected = Selection.Contains(clip.Id);
@@ -1164,15 +1189,15 @@ public sealed partial class TimelineView : FrameworkElement
                         : $"Start: {formattedStart}  ({(delta >= 0 ? "+" : "")}{delta})";
                     Text(dc, badgeText, rect.X + headerOffset, rect.Y + 20, Brush("#00E5FF"), 10, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 }
-                if (rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
+                if (rowHeight >= TrackHeight && rect.Width > 4 && track.Kind == TrackKind.Video && Thumbnails.TryGetValue(clip.MediaId, out var image))
                 {
-                    var height = TrackHeight - 22;
+                    var height = rowHeight - 22;
                     var width = Math.Max(1, height * image.Width / image.Height);
                     var firstImage = Math.Max(0, Math.Floor((HeaderWidth - rect.X) / width));
                     for (var x = rect.X + firstImage * width; x < Math.Min(rect.Right, ActualWidth); x += width)
                         dc.DrawImage(image, new Rect(x, rect.Y + 19, width, height));
                 }
-                if (track.Kind == TrackKind.Audio && Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
+                if (rowHeight >= TrackHeight && track.Kind == TrackKind.Audio && Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
                 {
                     MediaAsset? media = null;
                     for (var mIdx = 0; mIdx < Project.Media.Count; mIdx++)
@@ -1181,7 +1206,7 @@ public sealed partial class TimelineView : FrameworkElement
                     }
                     if (media is not null && media.DurationSeconds > 0)
                     {
-                        var mid = rect.Y + 42;
+                        var mid = rect.Y + (rowHeight + 15) / 2;
                         var wp = FrozenPen("#A5D3B5", 1);
                         var startPx = Math.Max(0.0, HeaderWidth - rect.X);
                         var endPx = Math.Min(rect.Width, ActualWidth - rect.X);
@@ -1189,7 +1214,7 @@ public sealed partial class TimelineView : FrameworkElement
                         {
                             var t = Project.FrameRate.Seconds(clip.SourceInFrame) + px / PixelsPerSecond;
                             var index = (int)(t / media.DurationSeconds * peaks.Length);
-                            var amplitude = index >= 0 && index < peaks.Length ? Math.Min(1, peaks[index] * clip.Gain) * 24 : 0;
+                            var amplitude = index >= 0 && index < peaks.Length ? Math.Min(1, peaks[index] * clip.Gain) * (rowHeight - 21) / 2 : 0;
                             dc.DrawLine(wp, new Point(rect.X + px, mid - amplitude), new Point(rect.X + px, mid + amplitude));
                         }
                     }
@@ -1197,7 +1222,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var fadePen = FrozenPen("#E4E4E4", 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));
-                DrawEnvelopes(dc, track, clip, rect);
+                if (rowHeight >= TrackHeight) DrawEnvelopes(dc, track, clip, rect);
 
                 // 1:1 Vegas Pro Snap Offset Handle & Indicator
                 if (clip.SnapOffsetFrames >= 0 && clip.SnapOffsetFrames < clip.DurationFrames)
@@ -1231,24 +1256,27 @@ public sealed partial class TimelineView : FrameworkElement
                 if (dragging is null) DrawEventButtons(dc, track, clip, rect);
                 dc.Pop();
             }
-            DrawTrackEnvelopes(dc, track, new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2));
+            if (item.Height >= TrackHeight)
+                DrawTrackEnvelopes(dc, track, new Rect(HeaderWidth, y + 1, Math.Max(0, ActualWidth - HeaderWidth), item.Height - 2));
         }
 
         if (hoverFileDropActive)
         {
             var ghostFrame = hoverFileDropFrame;
-            var ghostX = HeaderWidth + (ghostFrame - Offset) * PixelsPerSecond / Project.FrameRate.Value;
+            var ghostX = X(ghostFrame);
             var ghostWidth = Math.Max(90.0, 5.0 * PixelsPerSecond);
             double ghostY;
+            var ghostHeight = TrackHeight;
             if (hoverFileDropTrack != null)
             {
                 var tIdx = Project.Tracks.IndexOf(hoverFileDropTrack);
-                ghostY = RulerHeight + tIdx * TrackHeight - VerticalOffset;
+                ghostY = GetTrackY(tIdx);
+                ghostHeight = Math.Max(MinimizedTrackHeight, GetTrackHeight(tIdx));
             }
             else
             {
                 var pSlot = Project.Tracks.Count;
-                ghostY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
+                ghostY = TrackInsertionY(pSlot);
                 var phantomTrackRect = new Rect(HeaderWidth, ghostY + 1, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight - 2);
                 dc.DrawRectangle(Brush(hoverFileDropNewTrackKind == TrackKind.Video ? "#152433" : "#132E2B"),
                     FrozenDashedPen("#00D2FF", 1.5, [4, 4]), phantomTrackRect);
@@ -1256,7 +1284,7 @@ public sealed partial class TimelineView : FrameworkElement
                     HeaderWidth + 20, ghostY + TrackHeight / 2 - 6, Brush("#4D7790"), 11);
             }
 
-            var ghostRect = new Rect(ghostX, ghostY + 2, ghostWidth, TrackHeight - 4);
+            var ghostRect = new Rect(ghostX, ghostY + 2, ghostWidth, ghostHeight - 4);
             dc.DrawRoundedRectangle(Brush("#400078D4"), FrozenPen("#0078D4", 1.5), ghostRect, 2, 2);
             var ghostBanner = new Rect(ghostX, ghostY + 2, ghostWidth, 18);
             dc.DrawRoundedRectangle(Brush("#800078D4"), null, ghostBanner, 2, 2);
@@ -1324,11 +1352,10 @@ public sealed partial class TimelineView : FrameworkElement
             var trackAccentColor = !string.IsNullOrEmpty(t.TrackColor) ? t.TrackColor : VegasTrackColors.Palette[(i % 8) + 1].Hex;
             var isTrackActive = IsKeyboardFocusWithin && (i == ActiveTrackIndex || SelectedTrackIndices.Contains(i));
             var trackBg = t.IsLocked ? "#202020" : isTrackActive ? "#333333" : "#2A2A2A";
-            dc.DrawRectangle(Brush(trackBg), FrozenPen("#161616", 1), new Rect(0, y + 1, HeaderWidth - 3, TrackHeight - 1));
-            // 1:1 Vegas Pro 4px color accent bar on far left
-            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 4, TrackHeight - 1));
+            dc.DrawRectangle(Brush(trackBg), FrozenPen("#161616", 1), new Rect(0, y + 1, HeaderWidth - 3, item.Height - 1));
+            dc.DrawRectangle(Brush(trackAccentColor), null, new Rect(0, y + 1, 4, item.Height - 1));
             if (isTrackActive)
-                dc.DrawRectangle(null, FrozenPen("#83C9FF", 1), new Rect(4, y + 3, HeaderWidth - 9, TrackHeight - 5));
+                dc.DrawRectangle(null, FrozenPen("#83C9FF", 1), new Rect(4, y + 3, HeaderWidth - 9, item.Height - 5));
 
             // If track is in a group, draw grouping bracket on left edge
             if (item.Group != null)
@@ -1338,7 +1365,7 @@ public sealed partial class TimelineView : FrameworkElement
                 var grpLayout = layout.Groups.FirstOrDefault(g => g.Group.Id == item.Group.Id);
 
                 // Vertical bracket line at x = 2
-                dc.DrawLine(bracketPen, new Point(2, y + 1), new Point(2, y + TrackHeight));
+                dc.DrawLine(bracketPen, new Point(2, y + 1), new Point(2, y + item.Height));
 
                 if (i == grpLayout.FirstTrackIndex)
                 {
@@ -1354,7 +1381,7 @@ public sealed partial class TimelineView : FrameworkElement
                 if (i == grpLayout.LastTrackIndex)
                 {
                     // Bottom hook └
-                    dc.DrawLine(bracketPen, new Point(2, y + TrackHeight - 1), new Point(8, y + TrackHeight - 1));
+                    dc.DrawLine(bracketPen, new Point(2, y + item.Height - 1), new Point(8, y + item.Height - 1));
                 }
             }
 
@@ -1367,8 +1394,8 @@ public sealed partial class TimelineView : FrameworkElement
             {
                 var branchPen = FrozenPen("#666666", 1.2);
                 var branchX = 24 + (t.CompositeNestingLevel - 1) * 14 + 7 + (item.Group != null ? 12 : 0);
-                dc.DrawLine(branchPen, new Point(branchX, y), new Point(branchX, y + TrackHeight / 2));
-                dc.DrawLine(branchPen, new Point(branchX, y + TrackHeight / 2), new Point(branchX + 7, y + TrackHeight / 2));
+                dc.DrawLine(branchPen, new Point(branchX, y), new Point(branchX, y + item.Height / 2));
+                dc.DrawLine(branchPen, new Point(branchX, y + item.Height / 2), new Point(branchX + 7, y + item.Height / 2));
             }
             if (t.IsAdjustmentTrack)
             {
@@ -1426,6 +1453,11 @@ public sealed partial class TimelineView : FrameworkElement
                     Text(dc, label, bounds.X + 5, bounds.Y + 1, Brush("#B8B8B8"), 11);
                 }
             }
+            var fxBounds = TrackButtonBounds(t.Id, "FX");
+            var hasFx = t.Kind == TrackKind.Video ? t.VideoEffects.Count > 0 : t.AudioEffects.Count > 0;
+            dc.DrawRoundedRectangle(Brush(hasFx ? "#2E7D32" : "#242424"), FrozenPen(hasFx ? "#181818" : "#383838", 1), fxBounds, 1, 1);
+            Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
+            if (item.Height < TrackHeight) continue;
             var gain = ReadTrackLevel(t.Id, "Gain"); var opacity = ReadTrackLevel(t.Id, "Opacity"); var pan = ReadTrackLevel(t.Id, "Pan");
             if (t.Kind == TrackKind.Video)
             {
@@ -1478,17 +1510,6 @@ public sealed partial class TimelineView : FrameworkElement
                 dc.DrawRectangle(null, mPen, new Rect(mx, my, 11, 10));
                 dc.DrawLine(mPen, new Point(mx + 3, my + 3), new Point(mx + 8, my + 3));
                 dc.DrawLine(mPen, new Point(mx + 3, my + 7), new Point(mx + 8, my + 7));
-                var fxBounds = TrackButtonBounds(t.Id, "FX");
-                var hasFx = t.VideoEffects.Count > 0;
-                if (hasFx)
-                {
-                    dc.DrawRoundedRectangle(Brush("#2E7D32"), FrozenPen("#181818", 1), fxBounds, 1, 1);
-                }
-                else
-                {
-                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), fxBounds, 1, 1);
-                }
-                Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
                 var visBounds = TrackButtonBounds(t.Id, "Visible");
                 dc.DrawRoundedRectangle(Brush(t.IsVisible ? "#438AC8" : "#242424"), FrozenPen(t.IsVisible ? "#181818" : "#383838", 1), visBounds, 1, 1);
                 Text(dc, "V", visBounds.X + 5, visBounds.Y + 1, t.IsVisible ? Brush("#FFFFFF") : Brush("#888888"), 11);
@@ -1527,19 +1548,6 @@ public sealed partial class TimelineView : FrameworkElement
                         Text(dc, $"[{bus.Name}]", 82, y + 5, Brush("#00D2FF"), 9.5);
                     }
                 }
-                // Track Audio FX button [fx] at x = 161
-                var fxBounds = TrackButtonBounds(t.Id, "FX");
-                var hasFx = t.AudioEffects.Count > 0;
-                if (hasFx)
-                {
-                    dc.DrawRoundedRectangle(Brush("#2E7D32"), FrozenPen("#181818", 1), fxBounds, 1, 1);
-                }
-                else
-                {
-                    dc.DrawRoundedRectangle(Brush("#242424"), FrozenPen("#383838", 1), fxBounds, 1, 1);
-                }
-                Text(dc, "fx", fxBounds.X + 4, fxBounds.Y + 1, hasFx ? Brush("#FFFFFF") : Brush("#C4C4C4"), 11);
-
                 // Arm for Record button [●] at x = 207, y + 46
                 var armBounds = TrackButtonBounds(t.Id, "Arm");
                 if (t.ArmRecord)
@@ -1570,7 +1578,7 @@ public sealed partial class TimelineView : FrameworkElement
         if (destinationIsNewTrack && isDragging && dragging is not null && mode == "Move")
         {
             var pSlot = Math.Clamp(destinationNewTrackIndex, 0, Project.Tracks.Count);
-            var headerY = RulerHeight + pSlot * TrackHeight - VerticalOffset;
+            var headerY = TrackInsertionY(pSlot);
 
             if (pSlot == Project.Tracks.Count)
             {
@@ -1934,8 +1942,7 @@ public sealed partial class TimelineView : FrameworkElement
         else if (p.X < HeaderWidth + 30 && Offset > 0) Offset = Math.Max(0, Offset - 15);
         if (p.Y > ActualHeight - 20)
         {
-            var maxV = Math.Max(0, Project.Tracks.Count * TrackHeight - ActualHeight + RulerHeight);
-            VerticalOffset = Math.Min(maxV, VerticalOffset + 15);
+            VerticalOffset = Math.Min(MaximumVerticalOffset, VerticalOffset + 15);
         }
         else if (p.Y < RulerHeight + 20 && VerticalOffset > 0) VerticalOffset = Math.Max(0, VerticalOffset - 15);
 
@@ -2124,18 +2131,21 @@ public sealed partial class TimelineView : FrameworkElement
             if ((p - marqueeStart).Length >= DragDistanceThreshold && box.Width > 2 && box.Height > 2)
             {
                 var hitClips = new HashSet<Guid>();
+                var layout = ComputeTrackLayout();
                 for (int tIdx = 0; tIdx < Project.Tracks.Count; tIdx++)
                 {
                     var track = Project.Tracks[tIdx];
-                    var trackY = RulerHeight + tIdx * TrackHeight - VerticalOffset;
-                    var trackRect = new Rect(HeaderWidth, trackY, Math.Max(0, ActualWidth - HeaderWidth), TrackHeight);
+                    var trackY = layout.Tracks[tIdx].Y;
+                    var height = layout.Tracks[tIdx].Height;
+                    if (height <= 0) continue;
+                    var trackRect = new Rect(HeaderWidth, trackY, Math.Max(0, ActualWidth - HeaderWidth), height);
                     if (!box.IntersectsWith(trackRect)) continue;
 
                     foreach (var clip in track.Clips)
                     {
                         var clipX = X(clip.StartFrame);
                         var clipW = Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond);
-                        var clipRect = new Rect(clipX, trackY + 1, clipW, TrackHeight - 2);
+                        var clipRect = new Rect(clipX, trackY + 1, clipW, height - 2);
                         if (box.IntersectsWith(clipRect))
                         {
                             hitClips.Add(clip.Id);
@@ -2483,7 +2493,7 @@ public sealed partial class TimelineView : FrameworkElement
             Offset = Math.Max(0, time * PixelsPerSecond - p.X + HeaderWidth);
         }
         else if (Keyboard.Modifiers.HasFlag(ModifierKeys.Shift)) Offset = Math.Max(0, Offset - e.Delta);
-        else VerticalOffset = Math.Clamp(VerticalOffset - e.Delta / 2, 0, Math.Max(0, Project.Tracks.Count * TrackHeight - ActualHeight + RulerHeight));
+        else VerticalOffset = Math.Clamp(VerticalOffset - e.Delta / 2, 0, MaximumVerticalOffset);
         InvalidateVisual(); e.Handled = true;
     }
     public void OpenRulerContextMenu()
@@ -2633,6 +2643,7 @@ public sealed partial class TimelineView : FrameworkElement
             if (track is not null)
             {
                 menu.Items.Add(new Separator());
+                menu.Items.Add(TrackSizeMenu(track));
 
                 var dup = new MenuItem { Header = "Duplicate Track" };
                 dup.Click += (_, _) => DuplicateTrackRequested?.Invoke(track.Id);

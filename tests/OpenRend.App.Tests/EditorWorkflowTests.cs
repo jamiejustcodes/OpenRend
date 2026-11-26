@@ -636,6 +636,34 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         Chord(window, VirtualKeyShort.ESCAPE);
         Chord(window, VirtualKeyShort.LEFT);
         Assert.Equal(1, opacity.Patterns.RangeValue.Pattern.Value.Value);
+
+        var track = Assert.Single(timeline.FindAllDescendants(c => c.ByClassName("TimelineTrack")));
+        var height = track.BoundingRectangle.Height;
+        var originalTitle = window.Title;
+        var undoState = Find(window, "UndoButton").IsEnabled;
+        SetTrackHeight("Minimized");
+        WaitFor(() => track.BoundingRectangle.Height < height, "Minimize did not shrink the track header.");
+        SetTrackHeight("Expanded");
+        WaitFor(() => track.BoundingRectangle.Height > height, "Expand did not enlarge the track header.");
+        SetTrackHeight("Normal");
+        WaitFor(() => track.BoundingRectangle.Height == height, "Restore did not return the track header to its original height.");
+        Assert.Equal(originalTitle, window.Title);
+        Assert.Equal(undoState, Find(window, "UndoButton").IsEnabled);
+
+        void SetTrackHeight(string size)
+        {
+            var bounds = track.BoundingRectangle;
+            Mouse.Click(new System.Drawing.Point(bounds.Left + 80, bounds.Top + 12), MouseButton.Right);
+            AutomationElement? item = null;
+            var desktop = window.Automation.GetDesktop();
+            var process = window.Properties.ProcessId.Value;
+            WaitFor(() => (item = desktop.FindFirstDescendant(c => c.ByAutomationId("TrackHeightMenu").And(c.ByProcessId(process)))) is not null,
+                "The track-height menu did not open.");
+            item!.AsMenuItem().Expand();
+            WaitFor(() => (item = desktop.FindFirstDescendant(c => c.ByAutomationId($"TrackHeight_{size}").And(c.ByProcessId(process)))) is not null,
+                $"The track-height menu did not expose {size}.");
+            item!.AsMenuItem().Invoke();
+        }
     }
 
     private async Task VerifyPanCropAsync(Window window, string projectPath)
