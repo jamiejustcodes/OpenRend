@@ -89,6 +89,8 @@ public partial class MainWindow : Window
     {
         vm = viewModel;
         InitializeComponent();
+        PreviewKeyUp += ShuttleKeyUp;
+        Deactivated += EndHeldShuttle;
         SizeChanged += (_, _) => ApplyLayoutConstraints();
         LocationChanged += (_, _) => QueueMaximizedBoundsCheck();
         StateChanged += (_, _) =>
@@ -662,9 +664,9 @@ public partial class MainWindow : Window
                 RightMeter.Height = meterHeight * MeterPosition(session.PeakRight);
                 if (mixingConsoleWindow is { IsLoaded: true }) mixingConsoleWindow.UpdateMeters(session.PeakLeft, session.PeakRight);
                 if (vm.Position != lastPreview) RequestPreview();
-                if (session.IsFinished || vm.Position >= vm.Project.DurationFrames)
+                if (session.IsFinished)
                 {
-                    if (loopPlayback && vm.Project.DurationFrames > 0)
+                    if (loopPlayback && !timelineShuttle && vm.Project.DurationFrames > 0)
                     {
                         Pause(0);
                         await StartTimelinePlaybackAsync(rememberOrigin: false);
@@ -1625,30 +1627,45 @@ public partial class MainWindow : Window
             await StartTimelinePlaybackAsync();
     });
 
-    private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true)
+    private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true, double rate = 1, bool shuttle = false)
     {
         if (vm.Project.DurationFrames == 0) return;
-        if (vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
+        if (!shuttle && vm.Position >= vm.Project.DurationFrames) vm.Position = 0;
         var project = vm.Project.DeepClone(); var start = vm.Position;
         if (rememberOrigin) playbackOrigin = start;
         var masterGain = masterMuted ? 0 : MasterGain.Value;
         var generation = ++playbackGeneration; playbackStarting = true;
+        activeTimelineRate = rate;
+        timelineShuttle = shuttle;
         try
         {
-            var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain));
+            var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
+            try { session.Start(); }
+            catch { await session.DisposeAsync(); throw; }
             playback = session;
             PlayButton.ContentTemplate = (DataTemplate)FindResource("ic_pause");
             if (PreviewPlayButton is not null) PreviewPlayButton.ContentTemplate = (DataTemplate)FindResource("ic_pause");
-            PlaybackRate.Text = "Rate: 1.00"; timer.Start(); vm.Status = "Playing timeline.";
+            PlaybackRate.Text = "Rate: " + rate.ToString("0.00", CultureInfo.InvariantCulture);
+            timer.Start();
+            vm.Status = shuttle ? "Shuttling timeline." : "Playing timeline.";
         }
-        finally { if (generation == playbackGeneration) playbackStarting = false; }
+        catch when (generation != playbackGeneration) { }
+        finally
+        {
+            if (generation == playbackGeneration)
+            {
+                playbackStarting = false;
+                if (playback is null) ResetShuttleState();
+            }
+        }
     }
 
     private void Pause(long? seekTo = null)
     {
         timer.Stop();
         playbackGeneration++; playbackStarting = false;
+        ResetShuttleState();
         if (playback is not null)
         {
             playback.Dispose(); vm.Position = playback.CurrentFrame; playback = null;
@@ -3226,7 +3243,7 @@ public partial class MainWindow : Window
         }
         Refresh();
     }
-    private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / stop at playback start\nEnter  Play / pause at current frame\nEsc  Stop\nLeft / Right  Step one frame\nShift+Left / Shift+Right  Step one project second\nCtrl+Left / Ctrl+Right  Select adjacent clips\nHome / End  Timeline bounds\nPage Up / Page Down  Scroll one timeline view\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
+    private void ShortcutsClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, "Ctrl+I  Import media\nCtrl+O / Ctrl+S  Open / save project\nCtrl+Shift+E  Render timeline\nSpace  Play / stop at playback start\nEnter  Play / pause at current frame\nJ / K / L  Reverse / pause / forward shuttle\nHold K+J / K+L  Quarter-speed shuttle\nEsc  Stop\nLeft / Right  Step one frame\nShift+Left / Shift+Right  Step one project second\nCtrl+Left / Ctrl+Right  Select adjacent clips\nHome / End  Timeline bounds\nPage Up / Page Down  Scroll one timeline view\nS  Split selected clips at cursor\nDelete  Delete selected clips\nCtrl+Z / Ctrl+Y  Undo / redo\nCtrl+A  Select all clips\nN  Toggle snapping\nCtrl+wheel  Zoom timeline\nShift+wheel  Scroll time\nWheel  Scroll tracks\nDrag clip edges  Trim\nCtrl+click  Add to selection", "Keyboard shortcuts");
     private void AboutClick(object sender, RoutedEventArgs e) => MessageBox.Show(this, $"OpenRend v{AppVersion.CurrentVersionString}\nWindows video and audio editor\nGPL-3.0-or-later\nhttps://github.com/jamiejustcodes/OpenRend\n\nUses FFmpeg, CommunityToolkit.Mvvm, NAudio and Microsoft.Extensions.DependencyInjection.\nSee THIRD-PARTY-NOTICES.md in the distribution.", "About OpenRend");
     private void ExitClick(object sender, RoutedEventArgs e) => Close();
     private void WindowKeyDown(object sender, KeyEventArgs e)
@@ -3244,6 +3261,7 @@ public partial class MainWindow : Window
         if (HandleTrimmerShortcut(e)) return;
         if (TrimmerDeck.IsKeyboardFocusWithin && !ctrl && key is Key.Space or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q)
             return;
+        if (HandleShuttleKeyDown(e)) return;
         if (alt && !ctrl && !shift && key == Key.D)
         {
             isAltDChordPending = true;

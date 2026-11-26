@@ -13,6 +13,45 @@ namespace OpenRend.Playback.Tests;
 
 public sealed class PlaybackTests(ITestOutputHelper log)
 {
+    [Theory]
+    [InlineData(.25)]
+    [InlineData(-.25)]
+    [InlineData(.5)]
+    [InlineData(-1)]
+    [InlineData(2)]
+    [InlineData(-4)]
+    [InlineData(16)]
+    public void ShuttleResamplingKeepsTheStereoSampleGridAcrossBlocks(double rate)
+    {
+        const int duration = 19;
+        var whole = Resample(0, duration);
+        var first = Resample(0, 7);
+        var second = Resample(7, duration - 7);
+        Assert.Equal(whole, first.Concat(second));
+
+        var averageOffset = Math.Sign(rate) * (Math.Max(1, (int)Math.Abs(rate)) - 1) / 2.0;
+        for (var frame = 0; frame < duration; frame++)
+        {
+            var expected = frame * rate - (rate < 0 ? 1 : 0) + averageOffset;
+            Assert.Equal(expected, whole[frame * 2]);
+            Assert.Equal(-expected, whole[frame * 2 + 1]);
+        }
+
+        float[] Resample(long submitted, int count)
+        {
+            var window = PlaybackAudioResampling.Window(submitted, count, rate);
+            var input = new float[window.FrameCount * 2];
+            for (var frame = 0; frame < window.FrameCount; frame++)
+            {
+                input[frame * 2] = window.StartFrame + frame;
+                input[frame * 2 + 1] = -input[frame * 2];
+            }
+            var samples = new float[count * 2];
+            PlaybackAudioResampling.Resample(input, window.FirstSample, rate, samples, count);
+            return samples;
+        }
+    }
+
     [Fact]
     public void ProviderClockFreezesAcrossInsertedSilenceAndResumesAtTheNextSourceSample()
     {
@@ -93,9 +132,12 @@ public sealed class PlaybackTests(ITestOutputHelper log)
         log.WriteLine($"Final12 frames drained in {drain.ElapsedMilliseconds}ms and clock reached {resumed.CurrentFrame}.");
     }
 
-    [Fact]
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    [InlineData(-.5)]
     [Trait("Category", "AudioDevice")]
-    public async Task WasapiLoopbackContainsTheTimelineTone()
+    public async Task WasapiLoopbackContainsTheTimelineTone(double speed)
     {
         var path = Path.Combine(Path.GetTempPath(), $"openrend-playback-{Guid.NewGuid():N}.wav");
         try
@@ -119,9 +161,12 @@ public sealed class PlaybackTests(ITestOutputHelper log)
             using var capture = new WasapiLoopbackCapture();
             var recorded = new ConcurrentQueue<byte[]>();
             capture.DataAvailable += (_, args) => recorded.Enqueue(args.Buffer.AsSpan(0, args.BytesRecorded).ToArray());
-            capture.StartRecording();
-            await using (var playback = new PlaybackSession(renderer, project, 0, .6))
+            var origin = speed > 0 ? 0 : project.DurationFrames;
+            await using (var playback = new PlaybackSession(renderer, project, origin, .6, speed, startImmediately: false))
             {
+                Assert.Equal(origin, playback.CurrentFrame);
+                capture.StartRecording();
+                playback.Start();
                 var timeout = Stopwatch.StartNew();
                 while (!playback.IsFinished && timeout.Elapsed < TimeSpan.FromSeconds(3))
                 {
@@ -129,6 +174,7 @@ public sealed class PlaybackTests(ITestOutputHelper log)
                     await Task.Delay(10);
                 }
                 Assert.True(playback.IsFinished);
+                Assert.Equal(speed > 0 ? project.DurationFrames : 0, playback.CurrentFrame);
                 await Task.Delay(100);
             }
             capture.StopRecording();
@@ -138,9 +184,11 @@ public sealed class PlaybackTests(ITestOutputHelper log)
             var captured = MemoryMarshal.Cast<byte, float>(bytes.AsSpan()).ToArray();
             var channels = capture.WaveFormat.Channels;
             var rate = capture.WaveFormat.SampleRate;
-            var tone = Amplitude(captured, channels, rate, 1733);
-            var neighbour = Math.Max(Amplitude(captured, channels, rate, 1400), Amplitude(captured, channels, rate, 2100));
-            log.WriteLine($"Loopback {rate}Hz/{channels}ch, samples={captured.Length / channels}, tone1733 amplitude={tone:F5}, neighbour={neighbour:F5}");
+            var frequency = 1733 * Math.Abs(speed);
+            var tone = Amplitude(captured, channels, rate, frequency);
+            var neighbour = Math.Max(Amplitude(captured, channels, rate, 1400 * Math.Abs(speed)),
+                Amplitude(captured, channels, rate, 2100 * Math.Abs(speed)));
+            log.WriteLine($"Loopback {rate}Hz/{channels}ch, samples={captured.Length / channels}, tone{frequency} amplitude={tone:F5}, neighbour={neighbour:F5}");
             Assert.True(tone > .005, $"Timeline tone missing from loopback: amplitude={tone}");
             Assert.True(tone > neighbour * 5);
         }

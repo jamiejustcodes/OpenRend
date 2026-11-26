@@ -331,7 +331,11 @@ public partial class MainWindow
             };
         }
         else
+        {
             window.PreviewKeyDown += WindowKeyDown;
+            window.PreviewKeyUp += ShuttleKeyUp;
+            window.Deactivated += EndHeldShuttle;
+        }
         AttachPaneDragHandlers(caption);
         pane.Window = window;
         window.Show();

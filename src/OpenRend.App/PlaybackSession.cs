@@ -16,14 +16,19 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     private readonly long startFrame;
     private readonly ProjectDocument project;
     private readonly long totalSamples;
+    private readonly long endFrame;
+    private readonly double originSeconds;
     private long submittedSamples;
     private long lastFrame;
     private double masterGain;
     private int disposed;
+    private bool started;
     private Exception? outputError;
     private readonly float[] playbackAudioBuffer = new float[BlockFrames * MediaService.Channels];
     private readonly byte[] playbackByteBuffer = new byte[BlockFrames * MediaService.Channels * sizeof(float)];
+    private readonly float[]? shuttleAudioBuffer;
 
+    public double Rate { get; }
     public float PeakLeft => buffer.PeakLeft;
     public float PeakRight => buffer.PeakRight;
     public double MasterGain
@@ -42,17 +47,12 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         {
             lock (lifecycleGate)
             {
-                if (Volatile.Read(ref disposed) != 0) return Interlocked.Read(ref lastFrame);
+                if (Volatile.Read(ref disposed) != 0 || !started) return lastFrame;
                 var samples = PlayedSamples();
-                var frame = samples >= totalSamples ? project.DurationFrames : startFrame + (long)Math.Floor((double)samples / MediaService.SampleRate * project.FrameRate.Value + 1e-7);
-                var previous = Interlocked.Read(ref lastFrame);
-                while (frame > previous)
-                {
-                    var observed = Interlocked.CompareExchange(ref lastFrame, frame, previous);
-                    if (observed == previous) return frame;
-                    previous = observed;
-                }
-                return previous;
+                var elapsed = (long)Math.Floor(samples * Math.Abs(Rate) / MediaService.SampleRate * project.FrameRate.Value + 1e-7);
+                var frame = samples >= totalSamples ? endFrame : startFrame + Math.Sign(Rate) * elapsed;
+                lastFrame = Rate > 0 ? Math.Max(lastFrame, frame) : Math.Min(lastFrame, frame);
+                return lastFrame;
             }
         }
     }
@@ -66,15 +66,22 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         }
     }
 
-    public PlaybackSession(TimelineRenderService renderer, ProjectDocument document, long start, double masterGain = 1)
+    public PlaybackSession(TimelineRenderService renderer, ProjectDocument document, long start, double masterGain = 1,
+        double rate = 1, bool startImmediately = true)
     {
         ArgumentNullException.ThrowIfNull(renderer);
         ArgumentNullException.ThrowIfNull(document);
         if (start < 0 || start > document.DurationFrames) throw new ArgumentOutOfRangeException(nameof(start));
+        if (Math.Abs(rate) is not (.25 or .5 or 1 or 2 or 4 or 8 or 16)) throw new ArgumentOutOfRangeException(nameof(rate));
         project = document;
         startFrame = lastFrame = start;
+        endFrame = rate > 0 ? project.DurationFrames : 0;
+        originSeconds = project.FrameRate.Seconds(startFrame);
+        Rate = rate;
         MasterGain = masterGain;
-        totalSamples = checked((long)Math.Ceiling(project.FrameRate.Seconds(project.DurationFrames - start) * MediaService.SampleRate));
+        totalSamples = checked((long)Math.Ceiling(project.FrameRate.Seconds(Math.Abs(endFrame - startFrame)) * MediaService.SampleRate / Math.Abs(Rate)));
+        if (rate != 1)
+            shuttleAudioBuffer = new float[PlaybackAudioResampling.Window(0, BlockFrames, rate).FrameCount * MediaService.Channels + MediaService.Channels];
         buffer = new TimelineAudioBuffer(() => MasterGain);
         output = new WasapiOut(AudioClientShareMode.Shared, false, 60);
         try
@@ -83,7 +90,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
             buffer.DevicePosition = DeviceSamples;
             output.PlaybackStopped += (_, args) => { if (args.Exception != null) Volatile.Write(ref outputError, args.Exception); };
             // Decode before the device starts so decoder startup cannot shift the timeline.
-            var prefill = Math.Min(totalSamples, MediaService.SampleRate / 2);
+            var prefill = Math.Min(totalSamples, rate == 1 ? MediaService.SampleRate / 2 : MediaService.SampleRate / 10);
             while (submittedSamples < prefill) Submit(renderer, (int)Math.Min(BlockFrames, prefill - submittedSamples));
             producer = Task.Run(async () =>
             {
@@ -98,7 +105,7 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
                     Submit(renderer, (int)Math.Min(BlockFrames, totalSamples - submittedSamples));
                 }
             });
-            if (totalSamples > 0) output.Play();
+            if (startImmediately) Start();
         }
         catch
         {
@@ -107,6 +114,17 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
             try { producer.GetAwaiter().GetResult(); } catch (OperationCanceledException) { }
             cancellation.Dispose();
             throw;
+        }
+    }
+
+    public void Start()
+    {
+        lock (lifecycleGate)
+        {
+            ObjectDisposedException.ThrowIf(disposed != 0, this);
+            if (started) return;
+            if (totalSamples > 0) output.Play();
+            started = true;
         }
     }
 
@@ -119,8 +137,23 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
     private void Submit(TimelineRenderService renderer, int count)
     {
         cancellation.Token.ThrowIfCancellationRequested();
-        var seconds = project.FrameRate.Seconds(startFrame) + (double)submittedSamples / MediaService.SampleRate;
-        renderer.RenderAudio(project, seconds, count, playbackAudioBuffer);
+        if (shuttleAudioBuffer is null)
+            renderer.RenderAudio(project, originSeconds + (double)submittedSamples / MediaService.SampleRate, count, playbackAudioBuffer);
+        else
+        {
+            var window = PlaybackAudioResampling.Window(submittedSamples, count, Rate);
+            var firstAvailable = (long)Math.Ceiling(-originSeconds * MediaService.SampleRate - 1e-7);
+            var silence = (int)Math.Clamp(firstAvailable - window.StartFrame, 0, window.FrameCount);
+            var sourceStart = Math.Max(0, originSeconds + (double)(window.StartFrame + silence) / MediaService.SampleRate);
+            var sourceFrames = window.FrameCount - silence;
+            renderer.RenderAudio(project, sourceStart, sourceFrames, shuttleAudioBuffer);
+            if (silence > 0)
+            {
+                Array.Copy(shuttleAudioBuffer, 0, shuttleAudioBuffer, silence * MediaService.Channels, sourceFrames * MediaService.Channels);
+                Array.Clear(shuttleAudioBuffer, 0, silence * MediaService.Channels);
+            }
+            PlaybackAudioResampling.Resample(shuttleAudioBuffer, window.FirstSample, Rate, playbackAudioBuffer, count);
+        }
         cancellation.Token.ThrowIfCancellationRequested();
         var byteCount = count * MediaService.Channels * sizeof(float);
         Buffer.BlockCopy(playbackAudioBuffer, 0, playbackByteBuffer, 0, byteCount);
@@ -165,6 +198,44 @@ public sealed class PlaybackSession : IDisposable, IAsyncDisposable
         catch (Exception error) { Volatile.Write(ref outputError, error); }
         finally { cancellation.Dispose(); }
     }
+}
+
+internal static class PlaybackAudioResampling
+{
+    internal static (long StartFrame, int FrameCount, double FirstSample) Window(long submitted, int count, double rate)
+    {
+        // Reverse playback starts just inside the frame boundary.
+        var first = submitted * rate - (rate < 0 ? 1 : 0);
+        var last = first + (count - 1) * rate + Math.Sign(rate) * (FilterWidth(rate) - 1);
+        var start = (long)Math.Floor(Math.Min(first, last));
+        var end = (long)Math.Ceiling(Math.Max(first, last));
+        return (start, checked((int)(end - start + 1)), first - start);
+    }
+
+    internal static void Resample(float[] source, double firstSample, double rate, float[] destination, int count)
+    {
+        var width = FilterWidth(rate);
+        var direction = Math.Sign(rate) * MediaService.Channels;
+        for (var index = 0; index < count; index++)
+        {
+            var position = firstSample + index * rate;
+            var frame = (int)Math.Floor(position);
+            var fraction = (float)(position - frame);
+            var sample = frame * MediaService.Channels;
+            var output = index * MediaService.Channels;
+            // Average each source interval when speeding up. Interpolate between samples when slowing down.
+            for (var channel = 0; channel < MediaService.Channels; channel++)
+            {
+                var input = sample + channel;
+                float value = 0;
+                for (var tap = 0; tap < width; tap++, input += direction)
+                    value += source[input];
+                destination[output + channel] = fraction == 0 ? value / width : value + fraction * (source[sample + channel + MediaService.Channels] - value);
+            }
+        }
+    }
+
+    private static int FilterWidth(double rate) => Math.Max(1, (int)Math.Abs(rate));
 }
 
 internal sealed class TimelineAudioBuffer(Func<double> gain) : IWaveProvider
