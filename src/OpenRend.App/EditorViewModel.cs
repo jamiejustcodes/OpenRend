@@ -356,6 +356,8 @@ public sealed class EditorViewModel : ObservableObject
         Status = $"Imported {media.Name}. Double-click to add at the cursor, or drag to a track.";
         return media;
     }
+    public bool LoopNewEvents { get; set; }
+
     public void Place(Guid mediaId, Guid? trackId = null, long? at = null, bool advanceCursor = true)
     {
         var asset = Project.Media.Single(m => m.Id == mediaId);
@@ -375,7 +377,7 @@ public sealed class EditorViewModel : ObservableObject
             if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
                 throw new InvalidOperationException("This media has no stream for the selected track.");
             var clip = new TimelineClip { MediaId = mediaId, Name = asset.Name, StartFrame = start, DurationFrames = duration };
-            if (primaryKind == TrackKind.Audio && asset.HasFiniteAudioSource) clip.AudioSourceMode = AudioSourceMode.PadSilence;
+            ApplyPlacementSourceMode(clip, asset, primaryKind);
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
             if (primaryKind == TrackKind.Video && asset.HasAudio)
             {
@@ -384,7 +386,7 @@ public sealed class EditorViewModel : ObservableObject
                 if (audio is null) { audio = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audio); }
                 var sound = clip.DeepClone();
                 sound.Id = Guid.NewGuid();
-                if (asset.HasFiniteAudioSource) sound.AudioSourceMode = AudioSourceMode.PadSilence;
+                ApplyPlacementSourceMode(sound, asset, TrackKind.Audio);
                 audio.Clips.Add(sound);
                 Selection.Add(sound.Id);
             }
@@ -456,7 +458,7 @@ public sealed class EditorViewModel : ObservableObject
                 DurationFrames = Math.Max(1, duration),
                 PlaybackRate = rate
             };
-            if (primaryKind == TrackKind.Audio && asset.HasFiniteAudioSource) clip.AudioSourceMode = AudioSourceMode.PadSilence;
+            ApplyPlacementSourceMode(clip, asset, primaryKind);
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
             if (audioTrack is not null)
             {
@@ -466,12 +468,21 @@ public sealed class EditorViewModel : ObservableObject
                 sound.Id = Guid.NewGuid();
                 sound.GroupId = group;
                 sound.PlaybackRate = rate;
-                if (asset.HasFiniteAudioSource) sound.AudioSourceMode = AudioSourceMode.PadSilence;
+                ApplyPlacementSourceMode(sound, asset, TrackKind.Audio);
                 audioTrack.Clips.Add(sound);
                 Selection.Add(sound.Id);
             }
         });
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
+    }
+
+    private void ApplyPlacementSourceMode(TimelineClip clip, MediaAsset asset, TrackKind kind)
+    {
+        clip.VideoSourceMode = kind == TrackKind.Video && LoopNewEvents && asset.HasFiniteVideoSource
+            ? VideoSourceMode.Loop : VideoSourceMode.Bounded;
+        clip.AudioSourceMode = kind == TrackKind.Audio && asset.HasFiniteAudioSource
+            ? LoopNewEvents ? AudioSourceMode.Loop : AudioSourceMode.PadSilence
+            : AudioSourceMode.Bounded;
     }
 
     public void PlaceSubclipUpToCursor(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio)
@@ -786,7 +797,7 @@ public sealed class EditorViewModel : ObservableObject
                     clip.StartFrame = checked(iterationAt + offset);
                     clip.SourceInFrame = ConvertFrame(copied.Clip.SourceInFrame);
                     var available = p.FrameRate.Frames(clipboardMedia.Single(m => m.Id == copied.Clip.MediaId).DurationSeconds);
-                    if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0)
+                    if (!clip.CanExtendSource && available > 0)
                     {
                         clip.DurationFrames = Math.Min(clip.DurationFrames, available);
                         clip.SourceInFrame = Math.Min(clip.SourceInFrame, available - clip.DurationFrames);

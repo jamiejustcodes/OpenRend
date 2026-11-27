@@ -728,6 +728,7 @@ public partial class MainWindow : Window
             LoadWorkspace();
             ApplyLayoutConstraints();
             LoadGeneralPreferences();
+            LoadNewEventLoopPreference();
             InitializeLayoutManager();
             InitializeTransitionBrowser();
             InitializeToolsViews();

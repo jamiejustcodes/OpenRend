@@ -58,8 +58,10 @@ public sealed class TrimmerEditorTests
         return new EditorViewModel(media, renderer, new ExportService(renderer));
     }
 
-    [Fact]
-    public void EditorViewModel_PlaceSubclip_InsertsClipWithSourceInAndDuration_SupportsUndoRedo()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void EditorViewModel_PlaceSubclip_InsertsClipWithSourceInAndDuration_SupportsUndoRedo(bool loop)
     {
         var doc = new ProjectDocument();
         var media = new MediaAsset { Path = "test_video.mp4", DurationSeconds = 10, HasVideo = true, HasAudio = true };
@@ -69,6 +71,7 @@ public sealed class TrimmerEditorTests
 
         var vm = CreateViewModel();
         vm.Replace(doc, null);
+        vm.LoopNewEvents = loop;
         vm.Position = 60; // timeline project frame 60
 
         // Place subclip with SourceIn = 30, Duration = 45 frames
@@ -79,6 +82,7 @@ public sealed class TrimmerEditorTests
         Assert.Equal(60, placedVideo.StartFrame);
         Assert.Equal(30, placedVideo.SourceInFrame);
         Assert.Equal(45, placedVideo.DurationFrames);
+        Assert.Equal(loop ? VideoSourceMode.Loop : VideoSourceMode.Bounded, placedVideo.VideoSourceMode);
 
         // Verify linked audio track clip was created with identical subclip bounds
         var audioTrack = vm.Project.Tracks.Single(t => t.Kind == TrackKind.Audio);
@@ -86,6 +90,8 @@ public sealed class TrimmerEditorTests
         Assert.Equal(30, placedAudio.SourceInFrame);
         Assert.Equal(45, placedAudio.DurationFrames);
         Assert.Equal(placedVideo.GroupId, placedAudio.GroupId);
+        Assert.Equal(VideoSourceMode.Bounded, placedAudio.VideoSourceMode);
+        Assert.Equal(loop ? AudioSourceMode.Loop : AudioSourceMode.PadSilence, placedAudio.AudioSourceMode);
 
         // Verify Undo restores project state
         Assert.True(vm.Editor.CanUndo);

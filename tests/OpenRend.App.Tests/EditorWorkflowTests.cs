@@ -976,10 +976,16 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
     private sealed class RunningApplication(Application app, UIA3Automation automation, Window window) : IDisposable
     {
         public Window Window { get; } = window;
-        public void CloseGracefully(bool waitForRender = true)
+        public void CloseGracefully(bool waitForRender = true, bool useCaptionButton = false)
         {
             if (waitForRender) WaitFor(() => Find(Window, "RenderButton").IsEnabled, "Render did not finish before closing.");
-            Window.Close();
+            if (useCaptionButton)
+            {
+                var close = Window.FindFirstDescendant(c => c.ByControlType(ControlType.Button).And(c.ByName("Close")));
+                Assert.NotNull(close);
+                close.AsButton().Invoke();
+            }
+            else Window.Close();
             WaitFor(() => app.HasExited, "The clean project did not close gracefully.");
         }
         public void Dispose()

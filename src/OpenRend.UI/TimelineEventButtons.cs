@@ -682,8 +682,7 @@ public sealed partial class TimelineView
             var switchEvent = video.Length == 1 ? video[0] : singleTarget;
             var source = switchEvent.Clip is { } sourceEvent ? Project.Media.SingleOrDefault(media => media.Id == sourceEvent.MediaId) : null;
             var audio = switchEvent.Track?.Kind == TrackKind.Audio;
-            var supportsLoop = audio ? source?.HasFiniteAudioSource == true :
-                source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
+            var supportsLoop = audio ? source?.HasFiniteAudioSource == true : source?.HasFiniteVideoSource == true;
             switches.Visibility = supportsLoop
                 ? Visibility.Visible : Visibility.Collapsed;
             switches.IsEnabled = IsEnabled && supportsLoop && switchEvent.Track?.IsLocked == false;

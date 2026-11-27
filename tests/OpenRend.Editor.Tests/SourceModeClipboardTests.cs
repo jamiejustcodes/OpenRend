@@ -68,4 +68,24 @@ public sealed class SourceModeClipboardTests
         var pasted = Assert.Single(vm.Project.Tracks[0].Clips);
         Assert.Equal(VideoSourceMode.Bounded, pasted.VideoSourceMode); Assert.Equal(23, pasted.SourceInFrame); Assert.Equal(1, pasted.DurationFrames); vm.Project.Validate();
     }
+
+    [Theory]
+    [InlineData(AudioSourceMode.Loop)]
+    [InlineData(AudioSourceMode.PadSilence)]
+    public void PastingExtendedAudioPreservesItsSourceModeAndDuration(AudioSourceMode mode)
+    {
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, false);
+        var vm = new EditorViewModel(media, renderer, new ExportService(renderer)) { LoopNewEvents = true };
+        var source = new MediaAsset { Path = "clipboard-extended-audio.wav", HasAudio = true, DurationSeconds = .95 };
+        var clip = new TimelineClip { MediaId = source.Id, SourceInFrame = 5, DurationFrames = 55, AudioSourceMode = mode };
+        vm.Replace(new ProjectDocument { FrameRate = new(30000, 1001), Media = [source],
+            Tracks = [new() { Kind = TrackKind.Audio, Clips = [clip] }] }, "clipboard-source.openrend");
+        vm.Selection.Add(clip.Id);
+        vm.Copy();
+        vm.Replace(new ProjectDocument { FrameRate = new(60000, 1001) }, "clipboard-target.openrend");
+        vm.Paste();
+        var pasted = Assert.Single(Assert.Single(vm.Project.Tracks).Clips);
+        Assert.Equal((mode, 10L, 110L), (pasted.AudioSourceMode, pasted.SourceInFrame, pasted.DurationFrames));
+    }
 }

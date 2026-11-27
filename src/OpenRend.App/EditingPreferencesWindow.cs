@@ -173,17 +173,28 @@ public sealed class EditingPreferencesWindow : Window
         Grid.SetRow(alignmentLabel, 1); fields.Children.Add(alignmentLabel);
         Grid.SetRow(alignment, 1); Grid.SetColumn(alignment, 1); fields.Children.Add(alignment);
 
+        var loopNewEvents = new CheckBox
+        {
+            Content = "_Enable looping on new events",
+            IsChecked = settings.LoopNewEvents,
+            Foreground = TextBrush(),
+            Margin = new Thickness(12, 8, 12, 4)
+        };
+        AutomationProperties.SetAutomationId(loopNewEvents, "LoopNewEvents");
+        var editingFields = new StackPanel { Margin = new Thickness(8) };
+        editingFields.Children.Add(loopNewEvents);
+        editingFields.Children.Add(new GroupBox
+        {
+            Header = "Cut-to-overlap conversion",
+            Style = FindStyle("PreferencesGroup"),
+            Content = fields,
+            Margin = new Thickness(0, 8, 0, 0)
+        });
         var editingTab = new TabItem
         {
             Header = "Editing",
             IsSelected = true,
-            Content = new GroupBox
-            {
-                Header = "Cut-to-overlap conversion",
-                Style = FindStyle("PreferencesGroup"),
-                Content = fields,
-                Margin = new Thickness(8)
-            }
+            Content = editingFields
         };
         tabs.Items.Add(editingTab);
 
@@ -386,7 +397,12 @@ public sealed class EditingPreferencesWindow : Window
                 intervalVal is < 1 or > 120)
             { error.Text = "AutoSave interval must be between 1 and 120 minutes."; autoSaveInterval.Focus(); return; }
 
-            Result = new EditingPreferences { CutOverlapSeconds = value, CutOverlapAlignment = (CutTransitionAlignment)alignment.SelectedIndex };
+            Result = new EditingPreferences
+            {
+                CutOverlapSeconds = value,
+                CutOverlapAlignment = (CutTransitionAlignment)alignment.SelectedIndex,
+                LoopNewEvents = loopNewEvents.IsChecked == true
+            };
             GeneralResult = new GeneralPreferences
             {
                 EnableAutoSave = enableAutoSave.IsChecked == true,

@@ -123,10 +123,20 @@ public partial class MainWindow
         var dialog = new EditingPreferencesWindow(editing, general) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         EditingPreferencesStore.Save(dialog.Result, EditingPreferencesPath);
+        vm.LoopNewEvents = dialog.Result.LoopNewEvents;
         GeneralPreferencesStore.Save(dialog.GeneralResult, GeneralPreferencesPath);
         ApplyGeneralPreferences(dialog.GeneralResult);
         vm.Status = "Preferences saved.";
     });
+
+    private void LoadNewEventLoopPreference()
+    {
+        try { vm.LoopNewEvents = EditingPreferencesStore.Load(EditingPreferencesPath).LoopNewEvents; }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            vm.LoopNewEvents = false;
+        }
+    }
 
     private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
         => RefreshTransitionBrowser();

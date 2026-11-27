@@ -473,7 +473,7 @@ public sealed class ProjectDocument
                 var source = mediaById[clip.MediaId];
                 if (track.Kind == TrackKind.Video && !source.HasVideo || track.Kind == TrackKind.Audio && !source.HasAudio) throw new InvalidDataException("A clip has no compatible media stream.");
                 if (!Enum.IsDefined(clip.VideoSourceMode) || clip.VideoSourceMode != VideoSourceMode.Bounded &&
-                    (track.Kind != TrackKind.Video || source.DurationSeconds < 1e-28 || source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
+                    (track.Kind != TrackKind.Video || !source.HasFiniteVideoSource))
                     throw new InvalidDataException("Source playback modes require a finite video source.");
                 if (!Enum.IsDefined(clip.AudioSourceMode) || clip.AudioSourceMode != AudioSourceMode.Bounded &&
                     (track.Kind != TrackKind.Audio || !source.HasFiniteAudioSource))
@@ -620,6 +620,8 @@ public sealed class MediaAsset
     public double FrameRate { get; set; }
     public bool HasVideo { get; set; }
     public bool HasAudio { get; set; }
+    [JsonIgnore] public bool HasFiniteVideoSource => HasVideo && double.IsFinite(DurationSeconds) && DurationSeconds >= 1e-28 &&
+        !Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
     [JsonIgnore] public bool HasFiniteAudioSource => HasAudio && double.IsFinite(DurationSeconds) && DurationSeconds > 0 &&
         !Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]

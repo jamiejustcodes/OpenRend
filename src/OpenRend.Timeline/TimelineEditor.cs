@@ -1813,8 +1813,7 @@ public sealed partial class TimelineEditor
     private void EnsureSourceBounds(TimelineClip clip, MediaAsset media)
     {
         if (clip.DurationFrames <= 0 || clip.SourceInFrame < 0 && clip.VideoSourceMode != VideoSourceMode.Loop || clip.SourceInFrame > long.MaxValue - clip.DurationFrames) throw new ArgumentOutOfRangeException(nameof(clip), "Clip source range is invalid.");
-        if (clip.VideoSourceMode != VideoSourceMode.Bounded &&
-            (!media.HasVideo || media.DurationSeconds < 1e-28 || media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
+        if (clip.VideoSourceMode != VideoSourceMode.Bounded && !media.HasFiniteVideoSource)
             throw new InvalidOperationException("Source playback modes require a finite video source.");
         if (clip.AudioSourceMode != AudioSourceMode.Bounded && !media.HasFiniteAudioSource)
             throw new InvalidOperationException("Audio source playback modes require a finite audio source.");

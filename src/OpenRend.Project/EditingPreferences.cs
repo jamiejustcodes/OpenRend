@@ -8,6 +8,8 @@ public sealed record EditingPreferences
 {
     public double CutOverlapSeconds { get; init; } = .25;
     public CutTransitionAlignment CutOverlapAlignment { get; init; } = CutTransitionAlignment.CenteredOnCut;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool LoopNewEvents { get; init; }
 
     public void Validate()
     {
