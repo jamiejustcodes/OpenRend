@@ -10,9 +10,7 @@ using OpenRend.Core;
 namespace OpenRend.App;
 
 /// <summary>
-/// 1:1 Vegas Pro HSL Curves interactive canvas.
-/// Supports Hue vs Hue, Hue vs Sat, Hue vs Lum, Sat vs Sat, and Lum vs Sat curves
-/// with multi-point displacement, spectrum background gradient, and periodic hue interpolation.
+/// Interactive HSL curves with periodic interpolation for hue.
 /// </summary>
 public sealed class HSLCurvesControl : FrameworkElement
 {
@@ -23,9 +21,11 @@ public sealed class HSLCurvesControl : FrameworkElement
     private HSLCurveMode activeMode = HSLCurveMode.HueVsSat;
     private HSLCurvesData curves = new();
     private int selectedPointIndex = -1;
-    private bool isDragging;
+    private HSLCurvesData? beforeDrag;
+    internal bool IsDragging => beforeDrag is not null;
 
     public event Action? CurvesChanged;
+    internal event Action? CurvePreviewChanged;
     public event Action<string>? PointSelected;
 
     public HSLCurveMode ActiveMode
@@ -35,6 +35,7 @@ public sealed class HSLCurvesControl : FrameworkElement
         {
             if (activeMode != value)
             {
+                CancelDrag();
                 activeMode = value;
                 selectedPointIndex = -1;
                 InvalidateVisual();
@@ -48,6 +49,7 @@ public sealed class HSLCurvesControl : FrameworkElement
         get => curves;
         set
         {
+            CancelDrag();
             curves = value ?? new HSLCurvesData();
             selectedPointIndex = -1;
             InvalidateVisual();
@@ -77,6 +79,7 @@ public sealed class HSLCurvesControl : FrameworkElement
 
     public void ResetActive()
     {
+        CancelDrag();
         var fresh = IsHueMode ? HSLCurve.CreateDefaultHue() : HSLCurve.CreateDefaultLinear();
         switch (activeMode)
         {
@@ -94,6 +97,7 @@ public sealed class HSLCurvesControl : FrameworkElement
 
     public void ResetAll()
     {
+        CancelDrag();
         curves = new HSLCurvesData();
         selectedPointIndex = -1;
         InvalidateVisual();
@@ -270,37 +274,32 @@ public sealed class HSLCurvesControl : FrameworkElement
                 return;
             }
 
-            if (hitIdx >= 0)
-            {
-                selectedPointIndex = hitIdx;
-                isDragging = true;
-                CaptureMouse();
-                InvalidateVisual();
-                UpdateReadout();
-            }
-            else
+            if (!CaptureMouse()) return;
+            beforeDrag = curves.DeepClone();
+            selectedPointIndex = hitIdx;
+            if (hitIdx < 0)
             {
                 // Click on curve adds new point
                 var newPt = new HSLCurvePoint(norm.X, norm.Y);
                 pts.Add(newPt);
                 pts.Sort((a, b) => a.X.CompareTo(b.X));
                 selectedPointIndex = pts.IndexOf(newPt);
-                isDragging = true;
-                CaptureMouse();
-                InvalidateVisual();
-                UpdateReadout();
+                CurvePreviewChanged?.Invoke();
             }
+            InvalidateVisual();
+            UpdateReadout();
         }
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (isDragging && selectedPointIndex >= 0 && selectedPointIndex < ActiveCurve.Points.Count)
+        if (IsDragging && selectedPointIndex >= 0 && selectedPointIndex < ActiveCurve.Points.Count)
         {
             var pos = e.GetPosition(this);
             var norm = ScreenToNormalized(pos);
             var pts = ActiveCurve.Points;
             var pt = pts[selectedPointIndex];
+            var previous = (pt.X, pt.Y);
 
             pt.Y = norm.Y;
 
@@ -318,34 +317,54 @@ public sealed class HSLCurvesControl : FrameworkElement
                 }
             }
 
-            InvalidateVisual();
-            UpdateReadout();
+            if (previous != (pt.X, pt.Y))
+            {
+                InvalidateVisual();
+                UpdateReadout();
+                CurvePreviewChanged?.Invoke();
+            }
         }
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || !isDragging) return;
+        if (e.ChangedButton != MouseButton.Left || !IsDragging) return;
         e.Handled = true;
-        FinishDrag();
+        beforeDrag = null;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        CurvesChanged?.Invoke();
+        CurvePreviewChanged?.Invoke();
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
-        FinishDrag();
+        CancelDrag();
     }
 
-    private void FinishDrag()
+    internal void CancelDrag()
     {
-        if (!isDragging) return;
-        isDragging = false;
+        if (beforeDrag is not { } previous) return;
+        beforeDrag = null;
+        curves = previous;
+        selectedPointIndex = -1;
         if (IsMouseCaptured) ReleaseMouseCapture();
-        CurvesChanged?.Invoke();
+        InvalidateVisual();
+        UpdateReadout();
+        CurvePreviewChanged?.Invoke();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (IsDragging)
+        {
+            if (e.Key == Key.Escape || e.Key == Key.Delete)
+            {
+                if (e.Key == Key.Escape) CancelDrag();
+                e.Handled = true;
+            }
+            return;
+        }
         if (e.Key == Key.Delete && selectedPointIndex >= 0 && ActiveCurve.Points.Count > 2)
         {
             ActiveCurve.Points.RemoveAt(selectedPointIndex);

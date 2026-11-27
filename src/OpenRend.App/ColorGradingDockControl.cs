@@ -11,6 +11,24 @@ using OpenRend.Media;
 
 namespace OpenRend.App;
 
+internal sealed record CurvePreview(EffectScope Scope, Guid Target, Guid? Grade, ColorCurvesData? Rgb, HSLCurvesData? Hsl)
+{
+    public void Apply(ProjectDocument snapshot)
+    {
+        var (effects, _) = ColorGradingDockControl.FindTarget(snapshot, Scope, Target);
+        if (effects is null) return;
+        var grade = effects.FirstOrDefault(effect => effect.Kind == VideoEffectKind.ColorGrading &&
+            (Grade is null || effect.Id == Grade));
+        if (grade is null)
+        {
+            grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+            effects.Add(grade);
+        }
+        if (Rgb is not null) grade.Curves = Rgb;
+        if (Hsl is not null) grade.HSLCurves = Hsl;
+    }
+}
+
 /// <summary>
 /// Shared Color Grading controls for docked and scoped editing.
 /// Provides category navigation (LUTs, Color Wheels, Utilities, Curves),
@@ -27,6 +45,9 @@ public sealed class ColorGradingDockControl : UserControl
     private Guid? effectId;
     private List<VideoEffect>? targetEffects;
     private bool updating;
+    private bool showingCurvePreview;
+
+    internal event Action<CurvePreview?>? CurvePreviewRequested;
     private static readonly VideoEffect NeutralGrade = VideoEffect.Create(VideoEffectKind.ColorGrading);
     private static readonly ColorCurvesData NeutralRgb = new();
     private static readonly HSLCurvesData NeutralHsl = new();
@@ -246,6 +267,7 @@ public sealed class ColorGradingDockControl : UserControl
         Content = root;
         SelectPage(0);
         BindToClip(null);
+        Unloaded += (_, _) => CancelCurveDrags();
 
         Button AddWindowAction(string title, string id, Action action)
         {
@@ -298,7 +320,8 @@ public sealed class ColorGradingDockControl : UserControl
 
     internal void RefreshTarget()
     {
-        var (effects, name) = FindTarget(vm?.Project);
+        CancelCurveDrags();
+        var (effects, name) = FindTarget(vm?.Project, scope, targetId);
         var targetChanged = !ReferenceEquals(targetEffects, effects);
         targetEffects = effects;
         targetLabel.Text = name;
@@ -310,7 +333,7 @@ public sealed class ColorGradingDockControl : UserControl
         UpdateControlsFromEffect(targetChanged);
     }
 
-    private (List<VideoEffect>? Effects, string Name) FindTarget(ProjectDocument? project)
+    internal static (List<VideoEffect>? Effects, string Name) FindTarget(ProjectDocument? project, EffectScope? scope, Guid targetId)
     {
         if (project is null || scope is null) return (null, "Select one unlocked video event");
         switch (scope)
@@ -343,6 +366,7 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void SelectPage(int index)
     {
+        if (index != 4) CancelCurveDrags();
         lutsPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         wheelsPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         toneLevelsPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
@@ -733,6 +757,7 @@ public sealed class ColorGradingDockControl : UserControl
 
         btnTabColor.Click += (_, _) =>
         {
+            CancelCurveDrags();
             colorGrid.Visibility = Visibility.Visible;
             hslGrid.Visibility = Visibility.Collapsed;
             btnTabColor.FontWeight = FontWeights.Bold;
@@ -740,6 +765,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         btnTabHsl.Click += (_, _) =>
         {
+            CancelCurveDrags();
             colorGrid.Visibility = Visibility.Collapsed;
             hslGrid.Visibility = Visibility.Visible;
             btnTabColor.FontWeight = FontWeights.Normal;
@@ -786,6 +812,7 @@ public sealed class ColorGradingDockControl : UserControl
         rstAllBtn.Click += (_, _) => c.ResetAll();
         smoothBtn.Click += (_, _) => c.SmoothActive();
         ctrl.CurvesChanged += CommitRgbCurves;
+        ctrl.CurvePreviewChanged += PreviewCurves;
 
         var rgbStatus = new TextBlock { Text = "Master curve", Margin = new Thickness(0, 0, 0, 4) };
         rgbStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
@@ -839,6 +866,7 @@ public sealed class ColorGradingDockControl : UserControl
         rstHslModeBtn.Click += (_, _) => hc.ResetActive();
         rstAllHslBtn.Click += (_, _) => hc.ResetAll();
         hslCtrl.CurvesChanged += CommitHslCurves;
+        hslCtrl.CurvePreviewChanged += PreviewCurves;
 
         var hslStatus = new TextBlock { Text = "Hue vs saturation", Margin = new Thickness(0, 0, 0, 4) };
         hslStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
@@ -1000,7 +1028,7 @@ public sealed class ColorGradingDockControl : UserControl
         var selectedTarget = targetId;
         var existing = ActiveEffect;
         var snapshot = viewModel.Project.DeepClone();
-        var (effects, _) = FindTarget(snapshot);
+        var (effects, _) = FindTarget(snapshot, selectedScope, selectedTarget);
         if (effects is null) return;
 
         var grade = existing is null ? null : effects.FirstOrDefault(effect => effect.Id == existing.Id);
@@ -1039,6 +1067,29 @@ public sealed class ColorGradingDockControl : UserControl
         if (values.All(pair => grade.GetParameter(pair.Key) == pair.Value)) return false;
         foreach (var (key, value) in values) grade.SetParameter(key, value);
         return true;
+    }
+
+    private void CancelCurveDrags()
+    {
+        curvesControl.CancelDrag();
+        hslCurvesControl.CancelDrag();
+    }
+
+    private void PreviewCurves()
+    {
+        if (CurvePreviewRequested is not { } request) return;
+        if (scope is { } current && targetEffects is not null && (curvesControl.IsDragging || hslCurvesControl.IsDragging))
+        {
+            showingCurvePreview = true;
+            request(new(current, targetId, ActiveEffect?.Id ?? effectId,
+                curvesControl.IsDragging ? curvesControl.Curves.DeepClone() : null,
+                hslCurvesControl.IsDragging ? hslCurvesControl.Curves.DeepClone() : null));
+        }
+        else if (showingCurvePreview)
+        {
+            showingCurvePreview = false;
+            request(null);
+        }
     }
 
     private void CommitRgbCurves() => EditGrade(grade =>

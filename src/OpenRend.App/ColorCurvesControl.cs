@@ -16,9 +16,7 @@ public enum CurveChannel
 }
 
 /// <summary>
-/// Vegas Pro 1:1 Color Curves 2D interactive canvas.
-/// Supports Master (W), Red (R), Green (G), and Blue (B) curves with draggable control points,
-/// cubic bezier interpolation, point addition/removal, and real-time live preview.
+/// Interactive master and RGB curves with editable control points.
 /// </summary>
 public sealed class ColorCurvesControl : FrameworkElement
 {
@@ -29,9 +27,11 @@ public sealed class ColorCurvesControl : FrameworkElement
     private CurveChannel activeChannel = CurveChannel.Master;
     private ColorCurvesData curves = new();
     private int selectedPointIndex = -1;
-    private bool isDragging;
+    private ColorCurvesData? beforeDrag;
+    internal bool IsDragging => beforeDrag is not null;
 
     public event Action? CurvesChanged;
+    internal event Action? CurvePreviewChanged;
     public event Action<string>? PointSelected;
 
     public CurveChannel ActiveChannel
@@ -41,6 +41,7 @@ public sealed class ColorCurvesControl : FrameworkElement
         {
             if (activeChannel != value)
             {
+                CancelDrag();
                 activeChannel = value;
                 selectedPointIndex = -1;
                 InvalidateVisual();
@@ -54,6 +55,7 @@ public sealed class ColorCurvesControl : FrameworkElement
         get => curves;
         set
         {
+            CancelDrag();
             curves = value ?? new ColorCurvesData();
             selectedPointIndex = -1;
             InvalidateVisual();
@@ -79,6 +81,7 @@ public sealed class ColorCurvesControl : FrameworkElement
 
     public void ResetActive()
     {
+        CancelDrag();
         var fresh = ColorCurve.CreateDefault();
         switch (activeChannel)
         {
@@ -95,6 +98,7 @@ public sealed class ColorCurvesControl : FrameworkElement
 
     public void ResetAll()
     {
+        CancelDrag();
         curves = new ColorCurvesData();
         selectedPointIndex = -1;
         InvalidateVisual();
@@ -104,6 +108,7 @@ public sealed class ColorCurvesControl : FrameworkElement
 
     public void SmoothActive()
     {
+        CancelDrag();
         var pts = ActiveCurve.Points;
         if (pts.Count <= 2) return;
 
@@ -260,37 +265,32 @@ public sealed class ColorCurvesControl : FrameworkElement
                 return;
             }
 
-            if (hitIdx >= 0)
-            {
-                selectedPointIndex = hitIdx;
-                isDragging = true;
-                CaptureMouse();
-                InvalidateVisual();
-                UpdateReadout();
-            }
-            else
+            if (!CaptureMouse()) return;
+            beforeDrag = curves.DeepClone();
+            selectedPointIndex = hitIdx;
+            if (hitIdx < 0)
             {
                 // Click on curve: add new control point
                 var newPt = new CurvePoint(norm.X, norm.Y);
                 pts.Add(newPt);
                 pts.Sort((a, b) => a.X.CompareTo(b.X));
                 selectedPointIndex = pts.IndexOf(newPt);
-                isDragging = true;
-                CaptureMouse();
-                InvalidateVisual();
-                UpdateReadout();
+                CurvePreviewChanged?.Invoke();
             }
+            InvalidateVisual();
+            UpdateReadout();
         }
     }
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
-        if (isDragging && selectedPointIndex >= 0 && selectedPointIndex < ActiveCurve.Points.Count)
+        if (IsDragging && selectedPointIndex >= 0 && selectedPointIndex < ActiveCurve.Points.Count)
         {
             var pos = e.GetPosition(this);
             var norm = ScreenToNormalized(pos);
             var pts = ActiveCurve.Points;
             var pt = pts[selectedPointIndex];
+            var previous = (pt.X, pt.Y);
 
             // Endpoints are clamped to X=0 and X=1
             if (selectedPointIndex == 0)
@@ -312,34 +312,54 @@ public sealed class ColorCurvesControl : FrameworkElement
                 pt.Y = norm.Y;
             }
 
-            InvalidateVisual();
-            UpdateReadout();
+            if (previous != (pt.X, pt.Y))
+            {
+                InvalidateVisual();
+                UpdateReadout();
+                CurvePreviewChanged?.Invoke();
+            }
         }
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || !isDragging) return;
+        if (e.ChangedButton != MouseButton.Left || !IsDragging) return;
         e.Handled = true;
-        FinishDrag();
+        beforeDrag = null;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        CurvesChanged?.Invoke();
+        CurvePreviewChanged?.Invoke();
     }
 
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
-        FinishDrag();
+        CancelDrag();
     }
 
-    private void FinishDrag()
+    internal void CancelDrag()
     {
-        if (!isDragging) return;
-        isDragging = false;
+        if (beforeDrag is not { } previous) return;
+        beforeDrag = null;
+        curves = previous;
+        selectedPointIndex = -1;
         if (IsMouseCaptured) ReleaseMouseCapture();
-        CurvesChanged?.Invoke();
+        InvalidateVisual();
+        UpdateReadout();
+        CurvePreviewChanged?.Invoke();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (IsDragging)
+        {
+            if (e.Key == Key.Escape || e.Key == Key.Delete)
+            {
+                if (e.Key == Key.Escape) CancelDrag();
+                e.Handled = true;
+            }
+            return;
+        }
         if (e.Key == Key.Delete && selectedPointIndex > 0 && selectedPointIndex < ActiveCurve.Points.Count - 1)
         {
             ActiveCurve.Points.RemoveAt(selectedPointIndex);

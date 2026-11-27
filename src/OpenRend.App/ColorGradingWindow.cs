@@ -6,6 +6,8 @@ namespace OpenRend.App;
 
 public sealed class ColorGradingWindow : Window
 {
+    internal event Action<CurvePreview?>? CurvePreviewRequested;
+
     public ColorGradingWindow(EditorViewModel viewModel, EffectScope scope, Guid targetId, Guid? effectId = null, Action? onPreview = null)
     {
         SetResourceReference(StyleProperty, typeof(Window));
@@ -18,6 +20,7 @@ public sealed class ColorGradingWindow : Window
         AutomationProperties.SetAutomationId(this, "ColorGradingWindow");
 
         var panel = new ColorGradingDockControl();
+        panel.CurvePreviewRequested += preview => CurvePreviewRequested?.Invoke(preview);
         panel.BindScope(viewModel, scope, targetId, effectId, onPreview);
         Content = panel;
         Loaded += OnLoaded;
