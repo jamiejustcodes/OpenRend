@@ -403,10 +403,13 @@ public sealed partial class EditorWorkflowTests(ITestOutputHelper output)
         var artifact = Path.Combine(root, ".local", "desktop-validation"); Directory.CreateDirectory(artifact);
         using (var screenshot = Capture.Element(chooser)) screenshot.ToFile(Path.Combine(artifact, "fx-chooser.png"));
         Find(chooser, "FxChooserAccept").AsButton().Invoke();
-        WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 1, "Accept did not apply the staged chain.");
+        WaitFor(() => effects.ModalWindows.Length == 0 && EffectCount() == 1, "Accept did not apply the staged chain.");
         Assert.Contains("Gaussian Blur", Find(effects, "VideoEffectChain").AsListBox().Items[0].Text);
         Find(effects, "UndoVideoEffect").AsButton().Invoke();
-        WaitFor(() => Find(effects, "VideoEffectChain").AsListBox().Items.Length == 0, "One undo did not restore the complete chain from before the chooser.");
+        WaitFor(() => EffectCount() == 0, "One undo did not restore the complete chain from before the chooser.");
+
+        int? EffectCount() => effects.FindFirstDescendant(condition => condition.ByAutomationId("VideoEffectChain"))
+            ?.AsListBox().Items.Length;
     }
 
     [WindowsDesktopFact]
