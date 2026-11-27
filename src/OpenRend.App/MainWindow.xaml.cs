@@ -228,11 +228,10 @@ public partial class MainWindow : Window
             vm.Status = "Overlap converted to cut.";
         });
         Timeline.PanCropRequested += () => PanCropClick(this, new RoutedEventArgs());
-        Timeline.OpenInTrimmerRequested += (media, range) => Guard(() =>
-        {
-            TrimmerDeck.LoadMedia(media, range);
-            TrimmerClick(this, new RoutedEventArgs());
-        });
+        Timeline.OpenInTrimmerRequested += (media, range) => Guard(() => OpenSourceInTrimmer(media, range));
+        Timeline.CreateSubclipRequested += (media, range) => Guard(() => CreateSubclipDialog.Create(vm, media.Id, range, this));
+        Timeline.OpenParentInTrimmerRequested += async media => await GuardAsync(() => OpenParentInTrimmerAsync(media, selectRange: false));
+        TrimmerDeck.SelectParentMediaRequested += async media => await GuardAsync(() => OpenParentInTrimmerAsync(media, selectRange: true));
         Timeline.VideoEffectsRequested += () => VideoEffectsClick(this, new RoutedEventArgs());
         Timeline.TrackFxRequested += id => OpenTrackEffects(id);
         Timeline.TrackAudioFxRequested += id => OpenTrackAudioEffects(id);
@@ -2990,11 +2989,7 @@ public partial class MainWindow : Window
 
     private void OpenInTrimmerClick(object sender, RoutedEventArgs e)
     {
-        if (SelectedLibraryItem is MediaItem item)
-        {
-            TrimmerDeck.LoadMedia(item.Asset);
-            ShowTrimmerPane();
-        }
+        if (OpenTrimmerMenuItem(sender) is { } item) OpenSourceInTrimmer(item.Asset);
     }
 
     private void VideoScopesClick(object sender, RoutedEventArgs e)

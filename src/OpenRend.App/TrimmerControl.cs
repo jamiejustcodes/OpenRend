@@ -84,6 +84,7 @@ public sealed partial class TrimmerControl : UserControl
     private readonly Button createSubclipBtn;
 
     public MediaAsset? ActiveMedia => activeMedia;
+    public event Action<MediaAsset>? SelectParentMediaRequested;
     public long CurrentFrame => currentFrame;
     public long InFrame => inFrame;
     public long OutFrame => outFrame;
@@ -311,6 +312,17 @@ public sealed partial class TrimmerControl : UserControl
         rootGrid.Children.Add(toolbarBorder);
 
         Content = rootGrid;
+
+        var selectParent = new MenuItem { Header = "Select Parent Media" };
+        AutomationProperties.SetAutomationId(selectParent, "TrimmerSelectParentMedia");
+        selectParent.Click += (_, _) =>
+        {
+            if (activeMedia is { SourceRange: not null } subclip) SelectParentMediaRequested?.Invoke(subclip);
+        };
+        ContextMenu = new ContextMenu { Items = { selectParent } };
+        ContextMenuOpening += (_, args) =>
+            args.Handled = activeMedia is not { SourceRange: not null } subclip ||
+                SelectParentMediaRequested is null || !File.Exists(subclip.Path);
 
         KeyDown += OnTrimmerKeyDown;
     }
@@ -609,45 +621,7 @@ public sealed partial class TrimmerControl : UserControl
     public void CreateSubclip(string? customName = null)
     {
         if (activeMedia is null || vm is null) return;
-        var editor = vm.Editor;
-        var source = editor.Project.Media.FirstOrDefault(asset => asset.Id == activeMedia.Id);
-        if (source is null || source.IsGenerated || outFrame <= inFrame)
-        {
-            vm.Status = "Choose a nonempty range in a file from Project Media.";
-            return;
-        }
-        var rate = vm.Project.FrameRate;
-        var range = new FrameRange(inFrame, outFrame - inFrame);
-
-        var existingCount = vm.Project.Media.Count(m => m.SourceRange is not null &&
-            string.Equals(m.Path, source.Path, StringComparison.OrdinalIgnoreCase));
-        var defaultName = customName ?? $"{source.Name} - Subclip {existingCount + 1}";
-        var subclipName = defaultName;
-
-        var parentWindow = Window.GetWindow(this);
-        if (parentWindow != null)
-        {
-            var inTc = TimelineView.FormatTimecode(inFrame, rate);
-            var outTc = TimelineView.FormatTimecode(outFrame, rate);
-            var lenTc = TimelineView.FormatTimecode(range.FrameCount, rate);
-            var dlg = new CreateSubclipDialog(defaultName, source.Name, inTc, outTc, lenTc)
-            {
-                Owner = parentWindow
-            };
-            if (dlg.ShowDialog() != true) return;
-            subclipName = dlg.SubclipName;
-        }
-
-        if (!ReferenceEquals(editor, vm.Editor)) return;
-        try
-        {
-            var subclip = editor.CreateSubclip(source.Id, range, subclipName);
-            vm.Status = $"Created subclip '{subclip.Name}' in Project Media.";
-        }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException or KeyNotFoundException or OverflowException)
-        {
-            vm.Status = error.Message;
-        }
+        CreateSubclipDialog.Create(vm, activeMedia.Id, new(inFrame, outFrame - inFrame), Window.GetWindow(this), customName);
     }
 
     private void OnPlaybackTick(object? sender, EventArgs e)

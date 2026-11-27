@@ -8,6 +8,14 @@ public readonly record struct MediaSourceRange(long StartTick, long TickCount, l
     [JsonIgnore] public double EndSeconds => (double)checked(StartTick + TickCount) / TicksPerSecond;
     [JsonIgnore] public double DurationSeconds => (double)TickCount / TicksPerSecond;
 
+    public FrameRange OnFrameGrid(Rational rate)
+    {
+        var divisor = (Int128)TicksPerSecond * rate.Denominator;
+        long FrameAt(long tick) => checked((long)(((Int128)tick * rate.Numerator + divisor / 2) / divisor));
+        var start = FrameAt(StartTick);
+        return new(start, FrameAt(checked(StartTick + TickCount)) - start);
+    }
+
     public static MediaSourceRange FromFrames(FrameRange frames, Rational rate, MediaSourceRange? parent = null)
     {
         var parentRate = parent?.TicksPerSecond ?? 1;

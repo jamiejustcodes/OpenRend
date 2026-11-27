@@ -195,7 +195,7 @@ public sealed partial class EditorWorkflowTests
         finally { Directory.Delete(temporary, recursive: true); }
     }
 
-    private static AutomationElement OpenInTrimmerCommand(Window window, Guid clipId)
+    private static AutomationElement OpenInTrimmerCommand(Window window, Guid clipId, string automationId = "OpenEventInTrimmer")
     {
         FitTimeline(window);
         AutomationElement? clip = null;
@@ -207,8 +207,8 @@ public sealed partial class EditorWorkflowTests
         Mouse.Click(point, MouseButton.Right);
         AutomationElement? command = null;
         WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(c =>
-            c.ByAutomationId("OpenEventInTrimmer").And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
-            "The timeline did not expose Open in Trimmer.");
+            c.ByAutomationId(automationId).And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
+            $"The timeline did not expose {automationId}.");
         Assert.True(command!.IsEnabled);
         return command;
     }

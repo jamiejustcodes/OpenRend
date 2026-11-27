@@ -94,6 +94,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? SplitRequested;
     public event Action? PanCropRequested;
     public event Action<MediaAsset, FrameRange>? OpenInTrimmerRequested;
+    public event Action<MediaAsset, FrameRange>? CreateSubclipRequested;
+    public event Action<MediaAsset>? OpenParentInTrimmerRequested;
     public event Action? VideoEffectsRequested;
     public event Action? ColorGradingRequested;
     public event Action<Guid>? TransitionPropertiesRequested;

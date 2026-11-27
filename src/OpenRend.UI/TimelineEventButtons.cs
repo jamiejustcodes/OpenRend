@@ -133,10 +133,13 @@ public sealed partial class TimelineView
             var item = new MenuItem { Header = label };
             item.Click += (_, _) => action(); menu.Items.Add(item); return item;
         }
-        (MediaAsset Media, FrameRange Range)? TrimmerSource()
+        TimelineClip? TargetEvent()
         {
             var targetId = clipId ?? (Selection.Count == 1 ? Selection.First() : Guid.Empty);
-            var clip = Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.Id == targetId);
+            return Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.Id == targetId);
+        }
+        (MediaAsset Media, FrameRange Range)? TrimmerSource(TimelineClip? clip)
+        {
             if (clip is not { IsAdjustmentEvent: false, IsReversed: false, PlaybackRate: 1, SourceInFrame: >= 0, DurationFrames: > 0 } ||
                 clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) == true)
                 return null;
@@ -153,10 +156,24 @@ public sealed partial class TimelineView
         }
         var openInTrimmer = Add("Open in Trimmer", () =>
         {
-            if (IsEnabled && TrimmerSource() is { } source)
+            if (IsEnabled && TrimmerSource(TargetEvent()) is { } source)
                 OpenInTrimmerRequested?.Invoke(source.Media, source.Range);
         });
         AutomationProperties.SetAutomationId(openInTrimmer, "OpenEventInTrimmer");
+        var createSubclip = Add("Create Subclip…", () =>
+        {
+            if (IsEnabled && TrimmerSource(TargetEvent()) is { } source)
+                CreateSubclipRequested?.Invoke(source.Media, source.Range);
+        });
+        AutomationProperties.SetAutomationId(createSubclip, "CreateEventSubclip");
+        MediaAsset? ParentSource(TimelineClip? clip) => Project.Media.FirstOrDefault(asset =>
+            asset.Id == clip?.MediaId && asset.SourceRange is not null && File.Exists(asset.Path));
+        var openParent = Add("Open Parent Media in Trimmer", () =>
+        {
+            if (IsEnabled && ParentSource(TargetEvent()) is { } source)
+                OpenParentInTrimmerRequested?.Invoke(source);
+        });
+        AutomationProperties.SetAutomationId(openParent, "OpenEventParentInTrimmer");
         MenuItem? editText = null;
         if (clipId is { } id && Project.Tracks.SelectMany(t => t.Clips).Any(c => c.Id == id && Project.Media.Any(m => m.Id == c.MediaId && m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))))
         {
@@ -623,7 +640,12 @@ public sealed partial class TimelineView
         menu.Opened += (_, _) =>
         {
             if (clipId is { } id && Project.Tracks.Any(t => t.Clips.Any(c => c.Id == id))) SelectClip(id, false, ensureVisible: false);
-            openInTrimmer.IsEnabled = IsEnabled && OpenInTrimmerRequested is not null && TrimmerSource() is not null;
+            var target = TargetEvent();
+            var hasRange = IsEnabled && TrimmerSource(target) is not null;
+            openInTrimmer.IsEnabled = hasRange && OpenInTrimmerRequested is not null;
+            createSubclip.IsEnabled = hasRange && CreateSubclipRequested is not null;
+            openParent.Visibility = ParentSource(target) is null ? Visibility.Collapsed : Visibility.Visible;
+            openParent.IsEnabled = IsEnabled && OpenParentInTrimmerRequested is not null;
             var selected = Project.Tracks.SelectMany(t => t.Clips.Where(c => Selection.Contains(c.Id)).Select(c => (Track: t, Clip: c))).ToArray();
             var targetClips = selected.Where(item => clipId is null || item.Clip.Id == clipId).ToArray();
             var singleTarget = targetClips.Length == 1 ? targetClips[0] : (Track: (TimelineTrack?)null, Clip: (TimelineClip?)null);

@@ -1,6 +1,16 @@
 <Window x:Class="OpenRend.App.MainWindow" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:OpenRend.App" xmlns:ui="clr-namespace:OpenRend.UI;assembly=OpenRend.UI" xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework" Style="{StaticResource {x:Type Window}}" Title="{Binding Title}" Width="1400" Height="900" MinWidth="960" MinHeight="600" WindowStyle="None" WindowState="Maximized" WindowStartupLocation="CenterScreen" AllowDrop="True" PreviewKeyDown="WindowKeyDown" Drop="WindowDrop" Closing="WindowClosing">
   <shell:WindowChrome.WindowChrome><shell:WindowChrome CaptionHeight="32" ResizeBorderThickness="5" GlassFrameThickness="0" CornerRadius="0" UseAeroCaptionButtons="False"/></shell:WindowChrome.WindowChrome>
   <Window.Icon><BitmapImage UriSource="OpenRend.ico"/></Window.Icon>
+  <Window.Resources>
+    <ContextMenu x:Key="ProjectMediaMenu" x:Shared="False" Opened="ProjectMediaMenuOpened">
+      <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick" AutomationProperties.AutomationId="OpenMediaInTrimmer"/>
+      <MenuItem Header="Open Parent Media in Trimmer" Click="OpenMediaParentInTrimmerClick" AutomationProperties.AutomationId="OpenMediaParentInTrimmer"/>
+      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
+      <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
+      <MenuItem Header="Media Color Grading…" Click="MediaColorGradingClick"/>
+      <MenuItem Header="Media Properties…" Click="MediaPropertiesClick"/>
+    </ContextMenu>
+  </Window.Resources>
   <Grid x:Name="RootGrid">
     <Grid.RowDefinitions>
       <RowDefinition Height="32"/>
@@ -443,16 +453,7 @@
               <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
               <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
                 <!-- Mode 1: Thumbnails View (Default) -->
-                <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch" Background="{StaticResource ColorBG}" BorderThickness="0">
-                  <ListBox.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
-                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
-                      <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
-                      <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
-                      <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>
-                    </ContextMenu>
-                  </ListBox.ContextMenu>
+                <ListBox x:Name="MediaList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" ScrollViewer.HorizontalScrollBarVisibility="Disabled" VerticalAlignment="Stretch" Background="{StaticResource ColorBG}" BorderThickness="0" ContextMenu="{StaticResource ProjectMediaMenu}">
                   <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
                   <ListBox.ItemContainerStyle>
                     <Style TargetType="ListBoxItem">
@@ -483,16 +484,7 @@
                 </ListBox>
 
                 <!-- Mode 2: Details DataGrid/ListView -->
-                <ListView x:Name="MediaDetailsList" Style="{StaticResource DetailsTable}" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" BorderThickness="0">
-                  <ListView.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
-                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
-                      <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
-                      <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
-                      <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>
-                    </ContextMenu>
-                  </ListView.ContextMenu>
+                <ListView x:Name="MediaDetailsList" Style="{StaticResource DetailsTable}" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" BorderThickness="0" ContextMenu="{StaticResource ProjectMediaMenu}">
                   <ListView.View>
                     <GridView ColumnHeaderContainerStyle="{StaticResource DetailsColumnHeader}">
                       <GridViewColumn Header="Name" Width="160">
@@ -519,16 +511,7 @@
                 </ListView>
 
                 <!-- Mode 3: Compact List -->
-                <ListBox x:Name="MediaCompactList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" Background="{StaticResource ColorBG}" BorderThickness="0">
-                  <ListBox.ContextMenu>
-                    <ContextMenu>
-                      <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
-                      <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
-                      <MenuItem Header="Media FX&#x2026;" Click="MediaEffectsClick"/>
-                      <MenuItem Header="Media Color Grading&#x2026;" Click="MediaColorGradingClick"/>
-                      <MenuItem Header="Media Properties&#x2026;" Click="MediaPropertiesClick"/>
-                    </ContextMenu>
-                  </ListBox.ContextMenu>
+                <ListBox x:Name="MediaCompactList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" Background="{StaticResource ColorBG}" BorderThickness="0" ContextMenu="{StaticResource ProjectMediaMenu}">
                   <ListBox.ItemTemplate>
                     <DataTemplate>
                       <StackPanel Orientation="Horizontal" Margin="2">

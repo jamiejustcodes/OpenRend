@@ -244,6 +244,8 @@ public sealed class TrimmerEditorTests
         vm.Editor.Execute(project => project.FrameRate = new(24000, 1001));
         var nested = vm.Editor.CreateSubclip(parent.Id, new(1, 24), "Nested");
         Assert.Equal(new MediaSourceRange(25801, 24024, 24000), nested.SourceRange);
+        Assert.Equal(new FrameRange(25, 48), parent.SourceRange!.Value.OnFrameGrid(vm.Project.FrameRate));
+        Assert.Equal(new FrameRange(26, 24), nested.SourceRange!.Value.OnFrameGrid(vm.Project.FrameRate));
         Assert.Equal(original.Path, nested.Path);
         Assert.Equal(2, parent.DurationSeconds);
     });

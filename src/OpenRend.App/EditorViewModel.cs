@@ -342,12 +342,16 @@ public sealed class EditorViewModel : ObservableObject
     public async Task<MediaAsset> ImportAsync(string path, CancellationToken cancellationToken = default)
     {
         var full = Path.GetFullPath(path);
-        var existing = Project.Media.FirstOrDefault(m => m.SourceRange is null && string.Equals(m.Path, full, StringComparison.OrdinalIgnoreCase));
+        MediaAsset? FindOriginal() => Project.Media.FirstOrDefault(m =>
+            m.SourceRange is null && string.Equals(m.Path, full, StringComparison.OrdinalIgnoreCase));
+        var existing = FindOriginal();
         if (existing is not null) return existing;
         var editor = Editor;
         Status = $"Importing {Path.GetFileName(path)}…";
         var media = await Media.ProbeAsync(full, cancellationToken);
         if (!ReferenceEquals(Editor, editor)) throw new OperationCanceledException("The project changed while importing media.");
+        existing = FindOriginal();
+        if (existing is not null) return existing;
         Editor.AddMedia(media);
         Status = $"Imported {media.Name}. Double-click to add at the cursor, or drag to a track.";
         return media;

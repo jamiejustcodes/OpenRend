@@ -1,5 +1,8 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using Microsoft.Win32;
 using OpenRend.Core;
 
@@ -7,6 +10,57 @@ namespace OpenRend.App;
 
 public partial class MainWindow
 {
+    private void OpenSourceInTrimmer(MediaAsset media, FrameRange? range = null)
+    {
+        TrimmerDeck.LoadMedia(media, range);
+        ShowTrimmerPane();
+    }
+
+    private void ProjectMediaMenuOpened(object sender, RoutedEventArgs e)
+    {
+        var menu = (ContextMenu)sender;
+        var selected = (menu.PlacementTarget as Selector)?.SelectedItem as MediaItem;
+        var openParent = menu.Items.OfType<MenuItem>()
+            .Single(item => AutomationProperties.GetAutomationId(item) == "OpenMediaParentInTrimmer");
+        openParent.Visibility = selected?.Asset.SourceRange is not null ? Visibility.Visible : Visibility.Collapsed;
+        openParent.IsEnabled = selected is not null && File.Exists(selected.Asset.Path);
+    }
+
+    private async void OpenMediaParentInTrimmerClick(object sender, RoutedEventArgs e)
+    {
+        if (OpenTrimmerMenuItem(sender) is { } item)
+            await GuardAsync(() => OpenParentInTrimmerAsync(item.Asset, selectRange: false));
+    }
+
+    private static MediaItem? OpenTrimmerMenuItem(object sender) =>
+        sender is MenuItem menuItem &&
+        ItemsControl.ItemsControlFromItemContainer(menuItem) is ContextMenu { PlacementTarget: Selector selector }
+            ? selector.SelectedItem as MediaItem : null;
+
+    private async Task OpenParentInTrimmerAsync(MediaAsset subclip, bool selectRange)
+    {
+        if (subclip.SourceRange is not { } stored) return;
+        var path = subclip.Path;
+        var project = vm.Project;
+        var original = await vm.ImportAsync(path);
+        if (!ReferenceEquals(project, vm.Project) ||
+            !project.Media.Any(asset => asset.Id == subclip.Id && asset.Path == path && asset.SourceRange == stored) ||
+            (selectRange && TrimmerDeck.ActiveMedia?.Id != subclip.Id)) return;
+
+        FrameRange? selection = null;
+        if (selectRange)
+        {
+            var rate = project.FrameRate;
+            var length = Math.Max(1, rate.Frames(original.DurationSeconds));
+            var mapped = stored.OnFrameGrid(rate);
+            var start = Math.Clamp(mapped.StartFrame, 0, length - 1);
+            var end = Math.Clamp(mapped.EndFrame, start + 1, length);
+            selection = new(start, end - start);
+        }
+        OpenSourceInTrimmer(original, selection);
+        vm.Status = selectRange ? $"Selected the subclip range in '{original.Name}'." : $"Opened '{original.Name}' in the Trimmer.";
+    }
+
     private async void ReplaceMediaClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         if (SelectedLibraryItem is not MediaItem item) { vm.Status = "Select a file in Project Media."; return; }
