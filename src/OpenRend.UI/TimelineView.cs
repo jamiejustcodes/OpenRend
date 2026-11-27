@@ -1240,7 +1240,8 @@ public sealed partial class TimelineView : FrameworkElement
                 var phaseSuffix = clip.InvertPhase ? " [Phase \u00D8]" : "";
                 var channelSuffix = clip.ChannelMode != AudioChannelMode.Both ? $" [{clip.ChannelMode}]" : "";
                 var pitchSuffix = Math.Abs(clip.PitchSemis) > 0.001 ? $" [{(clip.PitchSemis > 0 ? "+" : "")}{clip.PitchSemis:0.#} semis]" : "";
-                var snapSuffix = clip.SnapOffsetFrames > 0 ? $" [Snap: +{clip.SnapOffsetFrames}]" : "";
+                var snapOffset = isPrimaryDragged && mode == "SnapOffset" ? clip.SnapOffsetFrames + delta : clip.SnapOffsetFrames;
+                var snapSuffix = snapOffset > 0 ? $" [Snap: +{snapOffset}]" : "";
                 var displayName = $"{adjPrefix}{groupPrefix}{takePrefix}{reversePrefix}{clip.Name}{rateSuffix}{phaseSuffix}{channelSuffix}{pitchSuffix}{snapSuffix}{mutedSuffix}";
                 if (ShowEventNames) Text(dc, displayName, rect.X + headerOffset, rect.Y + 1, size: 11, maxWidth: Math.Max(1, rect.Width - headerOffset - 3));
                 if (isPrimaryDragged && mode == "Move")
@@ -1287,14 +1288,14 @@ public sealed partial class TimelineView : FrameworkElement
                 if (rowHeight >= TrackHeight) DrawEnvelopes(dc, track, clip, rect);
 
                 // 1:1 Vegas Pro Snap Offset Handle & Indicator
-                if (clip.SnapOffsetFrames >= 0 && clip.SnapOffsetFrames < clip.DurationFrames)
+                if (snapOffset >= 0 && snapOffset < clip.DurationFrames)
                 {
-                    var snapOffsetSec = Project.FrameRate.Seconds(clip.SnapOffsetFrames);
+                    var snapOffsetSec = Project.FrameRate.Seconds(snapOffset);
                     var snapHandleX = rect.Left + snapOffsetSec * PixelsPerSecond;
                     if (snapHandleX >= rect.Left && snapHandleX <= rect.Right)
                     {
                         var isSnapHover = hoverClipId == clip.Id && hoverMode == "SnapOffset";
-                        var snapColor = isSnapHover ? "#FFD700" : clip.SnapOffsetFrames > 0 ? "#00E5FF" : "#7090A0";
+                        var snapColor = isSnapHover ? "#FFD700" : snapOffset > 0 ? "#00E5FF" : "#7090A0";
                         var snapPen = FrozenPen(snapColor, 1.5);
                         dc.DrawLine(snapPen, new Point(snapHandleX, rect.Bottom - 8), new Point(snapHandleX, rect.Bottom));
                         var triGeo = new StreamGeometry();
@@ -1927,7 +1928,8 @@ public sealed partial class TimelineView : FrameworkElement
         var hit = HitClip(origin);
         if (e.ClickCount == 2 && hit?.Mode == "SnapOffset")
         {
-            ClipSnapOffsetRequested?.Invoke(hit.Value.Clip.Id, 0);
+            if (!hit.Value.Track.IsLocked && !hit.Value.Clip.IsLocked)
+                ClipSnapOffsetRequested?.Invoke(hit.Value.Clip.Id, 0);
             e.Handled = true;
             return;
         }
@@ -2097,7 +2099,7 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var targetFrame = FrameAt(p.X);
             var newOffset = Math.Clamp(targetFrame - dragging.StartFrame, 0, Math.Max(0, dragging.DurationFrames - 1));
-            dragging.SnapOffsetFrames = newOffset;
+            delta = newOffset - dragging.SnapOffsetFrames;
             var formatted = TimecodeFormatter.Format(newOffset, Project.FrameRate, RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames);
             ToolTip = $"Snap Offset: {newOffset} frames ({formatted})";
             InvalidateVisual();
@@ -2366,7 +2368,8 @@ public sealed partial class TimelineView : FrameworkElement
             }
             else if (commitMode == "SnapOffset")
             {
-                ClipSnapOffsetRequested?.Invoke(clip.Id, clip.SnapOffsetFrames);
+                if (commitDelta != 0)
+                    ClipSnapOffsetRequested?.Invoke(clip.Id, clip.SnapOffsetFrames + commitDelta);
             }
             else if (commitMode == "Move")
             {
