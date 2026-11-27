@@ -483,7 +483,7 @@
                 </ListBox>
 
                 <!-- Mode 2: Details DataGrid/ListView -->
-                <ListView x:Name="MediaDetailsList" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" Background="{StaticResource ColorBG}" BorderThickness="0" Foreground="{StaticResource TextColor}">
+                <ListView x:Name="MediaDetailsList" Style="{StaticResource DetailsTable}" ItemsSource="{Binding Library}" MouseDoubleClick="MediaDoubleClick" PreviewMouseMove="MediaMouseMove" SelectionChanged="MediaSelectionChanged" Visibility="Collapsed" BorderThickness="0">
                   <ListView.ContextMenu>
                     <ContextMenu>
                       <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick"/>
@@ -494,7 +494,7 @@
                     </ContextMenu>
                   </ListView.ContextMenu>
                   <ListView.View>
-                    <GridView>
+                    <GridView ColumnHeaderContainerStyle="{StaticResource DetailsColumnHeader}">
                       <GridViewColumn Header="Name" Width="160">
                         <GridViewColumn.CellTemplate>
                           <DataTemplate>

@@ -123,14 +123,11 @@ public sealed class OrganizeLayoutsWindow : Window
         layoutListView = new ListView
         {
             ItemsSource = items,
-            Background = new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26)),
-            Foreground = Foreground,
-            BorderBrush = new SolidColorBrush(Color.FromRgb(0x3E, 0x3E, 0x42)),
-            BorderThickness = new Thickness(1),
+            Style = TryFindResource("DetailsTable") as Style,
             SelectionMode = SelectionMode.Single
         };
 
-        var gridView = new GridView();
+        var gridView = new GridView { ColumnHeaderContainerStyle = TryFindResource("DetailsColumnHeader") as Style };
         gridView.Columns.Add(new GridViewColumn
         {
             Header = "Name",

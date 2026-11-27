@@ -2,6 +2,7 @@ using System.Globalization;
 using System.IO;
 using System.Text;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
@@ -69,10 +70,8 @@ public sealed class EditDetailsWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         var bgBrush = TryFindResource("PanelBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x1E, 0x1E, 0x1E));
-        var darkBrush = TryFindResource("HeaderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x25, 0x25, 0x26));
         var textBrush = TryFindResource("TextBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0xDC, 0xDC, 0xDC));
         var borderBrush = TryFindResource("BorderBrush") as Brush ?? new SolidColorBrush(Color.FromRgb(0x3E, 0x3E, 0x42));
-        var activeBlueBrush = new SolidColorBrush(Color.FromRgb(0x2A, 0x62, 0x9A));
 
         Background = bgBrush;
         Foreground = textBrush;
@@ -179,55 +178,22 @@ public sealed class EditDetailsWindow : Window
         Grid.SetRow(topBar, 0);
         root.Children.Add(topBar);
 
-        // Grid Column Header Style
-        var headerStyle = new Style(typeof(GridViewColumnHeader));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.BackgroundProperty, darkBrush));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.ForegroundProperty, textBrush));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.BorderBrushProperty, borderBrush));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.BorderThicknessProperty, new Thickness(0, 0, 1, 1)));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.PaddingProperty, new Thickness(6, 4, 6, 4)));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.FontWeightProperty, FontWeights.SemiBold));
-        headerStyle.Setters.Add(new Setter(GridViewColumnHeader.FontSizeProperty, 11.0));
-
-        // ListView Item Style with selection and hover
-        var itemStyle = new Style(typeof(ListViewItem));
-        itemStyle.Setters.Add(new Setter(ListViewItem.ForegroundProperty, textBrush));
-        itemStyle.Setters.Add(new Setter(ListViewItem.HorizontalContentAlignmentProperty, HorizontalAlignment.Stretch));
-        itemStyle.Setters.Add(new Setter(ListViewItem.PaddingProperty, new Thickness(4, 2, 4, 2)));
-
-        var template = new ControlTemplate(typeof(ListViewItem));
-        var borderFactory = new FrameworkElementFactory(typeof(Border));
-        borderFactory.Name = "Bd";
-        borderFactory.SetValue(Border.BackgroundProperty, Brushes.Transparent);
-        borderFactory.SetValue(Border.PaddingProperty, new Thickness(2, 1, 2, 1));
-
-        var presenterFactory = new FrameworkElementFactory(typeof(GridViewRowPresenter));
-        borderFactory.AppendChild(presenterFactory);
-        template.VisualTree = borderFactory;
-
-        var mouseOverTrigger = new Trigger { Property = ListViewItem.IsMouseOverProperty, Value = true };
-        mouseOverTrigger.Setters.Add(new Setter(Border.BackgroundProperty, new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x30)), "Bd"));
-        template.Triggers.Add(mouseOverTrigger);
-
-        var selectedTrigger = new Trigger { Property = ListViewItem.IsSelectedProperty, Value = true };
-        selectedTrigger.Setters.Add(new Setter(Border.BackgroundProperty, activeBlueBrush, "Bd"));
-        selectedTrigger.Setters.Add(new Setter(ListViewItem.ForegroundProperty, Brushes.White));
-        template.Triggers.Add(selectedTrigger);
-
-        itemStyle.Setters.Add(new Setter(ListViewItem.TemplateProperty, template));
+        var headerStyle = TryFindResource("DetailsColumnHeader") as Style;
+        var tableStyle = TryFindResource("DetailsTable") as Style;
+        ListView CreateTable(string automationId, Visibility visibility = Visibility.Collapsed)
+        {
+            var list = new ListView
+            {
+                Style = tableStyle,
+                SelectionMode = SelectionMode.Extended,
+                Visibility = visibility
+            };
+            AutomationProperties.SetAutomationId(list, automationId);
+            return list;
+        }
 
         // 2. Events ListView
-        eventsListView = new ListView
-        {
-            Background = bgBrush,
-            Foreground = textBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            SelectionMode = SelectionMode.Extended,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 11,
-            ItemContainerStyle = itemStyle
-        };
+        eventsListView = CreateTable("DetailEvents", Visibility.Visible);
 
         var eventsGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
         eventsGridView.Columns.Add(new GridViewColumn { Header = "Track", Width = 90, DisplayMemberBinding = new Binding("TrackDisplay") });
@@ -250,18 +216,7 @@ public sealed class EditDetailsWindow : Window
         eventsListView.ContextMenu = CreateEventsContextMenu();
 
         // 3. Markers ListView
-        markersListView = new ListView
-        {
-            Background = bgBrush,
-            Foreground = textBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            SelectionMode = SelectionMode.Extended,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 11,
-            ItemContainerStyle = itemStyle,
-            Visibility = Visibility.Collapsed
-        };
+        markersListView = CreateTable("DetailMarkers");
 
         var markersGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
         markersGridView.Columns.Add(new GridViewColumn { Header = "Marker", Width = 60, DisplayMemberBinding = new Binding("Index") });
@@ -276,18 +231,7 @@ public sealed class EditDetailsWindow : Window
         markersListView.ContextMenu = CreateMarkersContextMenu();
 
         // 3b. Regions ListView
-        regionsListView = new ListView
-        {
-            Background = bgBrush,
-            Foreground = textBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            SelectionMode = SelectionMode.Extended,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 11,
-            ItemContainerStyle = itemStyle,
-            Visibility = Visibility.Collapsed
-        };
+        regionsListView = CreateTable("DetailRegions");
 
         var regionsGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
         regionsGridView.Columns.Add(new GridViewColumn { Header = "Region", Width = 60, DisplayMemberBinding = new Binding("Index") });
@@ -303,18 +247,7 @@ public sealed class EditDetailsWindow : Window
         regionsListView.ContextMenu = CreateRegionsContextMenu();
 
         // 3c. Track Groups ListView
-        trackGroupsListView = new ListView
-        {
-            Background = bgBrush,
-            Foreground = textBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            SelectionMode = SelectionMode.Extended,
-            FontFamily = new FontFamily("Segoe UI"),
-            FontSize = 11,
-            ItemContainerStyle = itemStyle,
-            Visibility = Visibility.Collapsed
-        };
+        trackGroupsListView = CreateTable("DetailTrackGroups");
 
         var trackGroupsGridView = new GridView { ColumnHeaderContainerStyle = headerStyle };
         trackGroupsGridView.Columns.Add(new GridViewColumn { Header = "Group", Width = 60, DisplayMemberBinding = new Binding("GroupIndex") });

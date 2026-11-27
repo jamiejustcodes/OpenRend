@@ -20,6 +20,8 @@ Standard tool and dialog title bars use the same OpenRend colors as the workspac
 
 The shared tab template follows the control's configured placement. Settings tabs appear above the form, and workspace tabs stay below each pane. The selected and focused tab indicator sits next to the page it controls. The desktop workflow measures the tabs and fields in Project Properties and the Project Media tab and list in the workspace.
 
+Edit Details, Project Media Details and Organize Layouts share row, selection and column header styles. The header keeps the Windows resize handle and drag preview. The desktop workflow resizes and reorders Edit Details columns, double-clicks an event to seek the timeline and verifies the Project Media Details view shows the source file.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.
