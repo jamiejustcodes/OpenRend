@@ -92,6 +92,12 @@ public abstract class TimelineEditDialog : Window
 
     protected void FocusOnOpen(TextBox input) => Loaded += (_, _) => FocusField(input);
 
+    protected void ClearValidation()
+    {
+        error.Text = string.Empty;
+        error.Visibility = Visibility.Collapsed;
+    }
+
     protected bool Reject(TextBox input, string message)
     {
         error.Text = message;

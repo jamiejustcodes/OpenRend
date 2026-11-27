@@ -173,6 +173,47 @@ public sealed class SceneDetectionEditorTests
     }
 
     [Fact]
+    public void SceneCutsFollowTheSelectedEventAndKeepItsEditState()
+    {
+        var (editor, clip, audio) = CreateTestProject();
+        var other = new TimelineClip { MediaId = clip.MediaId, Name = "Same source, different event", DurationFrames = 300 };
+        editor.Project.Tracks.Insert(0, new() { Kind = TrackKind.Video, Clips = [other] });
+        clip.FadeInFrames = 12;
+        clip.FadeOutFrames = 50;
+        clip.SnapOffsetFrames = 124;
+        clip.ResampleMode = VideoResampleMode.Disable;
+        clip.Takes = [new() { MediaId = clip.MediaId, Name = clip.Name, SnapOffsetFrames = 124 }];
+        var cuts = new SceneCut[]
+        {
+            new(1, 100, 0, 75, SceneCutType.HardCut),
+            new(100, 100, 0, 75, SceneCutType.HardCut),
+            new(200, 200, 0, 75, SceneCutType.HardCut)
+        };
+
+        var result = editor.ApplySceneDetection(clip.Id, cuts, SceneDetectionMode.SplitOnTimeline, baseName: "Interview");
+
+        Assert.Same(other, Assert.Single(editor.Project.Tracks[0].Clips));
+        Assert.Equal("Same source, different event", other.Name);
+        Assert.Equal(2, result.CutCount);
+        Assert.Equal(new long[] { 0, 100, 200 }, result.ResultClips.Select(piece => piece.SourceInFrame));
+        Assert.Equal(new long[] { 0, 100, 200 }, result.ResultClips.Select(piece => piece.FadeOffsetFrames));
+        Assert.Equal("Interview [Scene 2]", result.ResultClips[1].Name);
+        Assert.Equal(new long[] { 99, 24, 0 }, result.ResultClips.Select(piece => piece.SnapOffsetFrames));
+        Assert.All(result.ResultClips, piece =>
+        {
+            Assert.Equal(VideoResampleMode.Disable, piece.ResampleMode);
+            var take = Assert.Single(piece.Takes!);
+            Assert.Equal((piece.Name, piece.SourceInFrame, piece.SnapOffsetFrames), (take.Name, take.SourceInFrame, take.SnapOffsetFrames));
+        });
+        Assert.Equal(3, editor.Project.Tracks[2].Clips.Count);
+        Assert.Equal(audio.GroupId, editor.Project.Tracks[2].Clips[2].GroupId);
+        Assert.True(editor.Undo());
+        Assert.Single(editor.Project.Tracks[1].Clips);
+        Assert.Single(editor.Project.Tracks[2].Clips);
+        Assert.False(editor.CanUndo);
+    }
+
+    [Fact]
     public void ApplySceneDetection_AddRegionMarkers_CreatesTimelineRegionsWithoutSplittingClips()
     {
         var (editor, videoClip, _) = CreateTestProject();

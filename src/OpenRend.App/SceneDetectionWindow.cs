@@ -1,283 +1,237 @@
-using System;
-using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
-using System.Linq;
-using System.Threading;
-using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using OpenRend.Core;
 using OpenRend.Media;
 
 namespace OpenRend.App;
 
-/// <summary>
-/// Video cut and scene transition detection matching 1:1 Vegas Pro Tools -> Scene Detection (SceneDetectionCmd).
-/// Analyzes frame-to-frame luminance and chromatic deltas, identifies camera cut boundaries,
-/// and splits the timeline event into individual scenes, creates timeline regions, or generates media pool subclips.
-/// </summary>
-public sealed class SceneDetectionWindow : Window
+public sealed class SceneDetectionWindow : TimelineEditDialog
 {
+    private sealed record Candidate(TimelineClip Clip, MediaAsset Media, string Label)
+    {
+        public override string ToString() => Label;
+    }
+    private sealed record CutChoice(SceneCut Cut, CheckBox Include);
+
     private readonly EditorViewModel vm;
-    private readonly ComboBox targetClipComboBox = new() { Width = 380 };
-    private readonly ComboBox modeComboBox = new() { Width = 380 };
-    private readonly Slider sensitivitySlider = new() { Minimum = 10, Maximum = 95, Value = 65, Width = 180, TickFrequency = 5, IsSnapToTickEnabled = true };
-    private readonly TextBlock sensitivityLabel = new() { Text = "Sensitivity: Medium (65%)", VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBox minLengthTextBox = new() { Width = 60, Text = "500", TextAlignment = TextAlignment.Center };
-    private readonly CheckBox splitGroupedCheckBox = new() { Content = "Split linked and grouped audio tracks in lockstep", IsChecked = true, Margin = new Thickness(0, 4, 0, 4) };
-    private readonly CheckBox hardCutsCheckBox = new() { Content = "Detect Hard Cuts (abrupt camera/scene changes)", IsChecked = true, Margin = new Thickness(0, 2, 0, 4) };
-    private readonly ProgressBar progressBar = new() { Height = 18, Margin = new Thickness(0, 8, 0, 8), Visibility = Visibility.Collapsed };
-    private readonly TextBlock statusText = new() { Text = "Select a video event and click Detect Scenes.", TextWrapping = TextWrapping.Wrap };
-    private readonly Button detectButton = new() { Content = "Detect Scenes", Width = 140, Height = 28 };
-    private readonly Button cancelButton = new() { Content = "Cancel", Width = 80, Height = 28, IsCancel = true };
-    private CancellationTokenSource? cts;
+    private readonly ComboBox events = new() { DisplayMemberPath = nameof(Candidate.Label) };
+    private readonly ComboBox action = new() { Items = { "Split selected event", "Add scene regions" }, SelectedIndex = 0 };
+    private readonly Slider sensitivity = new() { Minimum = 10, Maximum = 95, Value = 65, TickFrequency = 5, IsSnapToTickEnabled = true };
+    private readonly TextBox minimumLength = TimeField("500");
+    private readonly CheckBox grouped = new() { Content = "Split linked and grouped events at each cut", IsChecked = true };
+    private readonly Button analyze = new() { Content = "Analyze", MinWidth = 80 };
+    private readonly TextBlock status = new() { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) };
+    private readonly ProgressBar progress = new() { Height = 8, Visibility = Visibility.Collapsed, Margin = new Thickness(0, 0, 0, 8) };
+    private readonly StackPanel inputs = new();
+    private readonly StackPanel review = new();
+    private readonly StackPanel actionField;
+    private readonly List<CutChoice> choices = [];
+    private CancellationTokenSource? scan;
+    private bool closed;
 
-    private readonly List<(TimelineTrack Track, TimelineClip Clip, MediaAsset Media)> videoClips = [];
-
-    public SceneDetectionWindow(EditorViewModel viewModel, TimelineClip? initialClip = null)
+    public SceneDetectionWindow(EditorViewModel viewModel, TimelineClip? initialClip = null) : base("Scene Detection", 510)
     {
-        vm = viewModel ?? throw new ArgumentNullException(nameof(viewModel));
-        Style = (Style)FindResource(typeof(Window));
-        Title = "Scene Detection";
-        Width = 490;
-        Height = 440;
-        MinWidth = 420;
-        MinHeight = 380;
-        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        vm = viewModel;
+        var candidates = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
+            .Join(vm.Project.Media, pair => pair.Clip.MediaId, media => media.Id, (pair, media) => (pair.Track, pair.Clip, Media: media))
+            .Where(pair => pair.Media.HasVideo && !pair.Media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase))
+            .Select(pair => new Candidate(pair.Clip, pair.Media, $"{pair.Clip.Name} · {pair.Track.Name}")).ToArray();
+        events.ItemsSource = candidates;
+        events.SelectedItem = candidates.FirstOrDefault(candidate => initialClip?.Id == candidate.Clip.Id)
+            ?? candidates.FirstOrDefault(candidate => vm.Selection.Contains(candidate.Clip.Id))
+            ?? candidates.FirstOrDefault();
 
-        var panelBrush = (System.Windows.Media.Brush)FindResource("PanelBrush");
+        AutomationProperties.SetAutomationId(events, "SceneDetectionEvent");
+        AutomationProperties.SetAutomationId(action, "SceneDetectionAction");
+        AutomationProperties.SetAutomationId(minimumLength, "MinimumSceneLength");
+        AutomationProperties.SetAutomationId(analyze, "AnalyzeScenes");
+        AutomationProperties.SetAutomationId(AcceptButton, "ApplySceneCuts");
+        AutomationProperties.SetAutomationId(status, "SceneDetectionStatus");
+        AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
+        actionField = Field("A_ction", action);
 
-        var root = new StackPanel { Margin = new Thickness(16), Background = panelBrush };
+        inputs.Children.Add(Field("_Video event", events));
+        var sensitivityRow = new DockPanel();
+        var value = new TextBlock { Width = 42, Text = "65%", TextAlignment = TextAlignment.Right };
+        DockPanel.SetDock(value, Dock.Right);
+        sensitivityRow.Children.Add(value);
+        sensitivityRow.Children.Add(sensitivity);
+        inputs.Children.Add(Field("_Sensitivity", sensitivity, sensitivityRow));
+        inputs.Children.Add(Field("_Minimum scene length (ms)", minimumLength));
+        Form.Children.Add(inputs);
 
-        // 1. Target Clip Selection
-        root.Children.Add(new TextBlock { Text = "Video Event to Detect:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
-        PopulateVideoClips(initialClip?.Id);
-        root.Children.Add(targetClipComboBox);
+        var scanBar = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
+        DockPanel.SetDock(analyze, Dock.Right);
+        scanBar.Children.Add(analyze);
+        scanBar.Children.Add(status);
+        Form.Children.Add(scanBar);
+        Form.Children.Add(progress);
+        Form.Children.Add(review);
 
-        // 2. Operational Mode Selection (Vegas Pro SceneDetectionCmd.Mode)
-        root.Children.Add(new TextBlock { Text = "Action on Detection:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 10, 0, 4) });
-        modeComboBox.Items.Add("Split on Timeline (cut event into individual scenes)");
-        modeComboBox.Items.Add("Add Region Markers to Timeline (ruler regions for each scene)");
-        modeComboBox.Items.Add("Create Subclips in Media Pool");
-        modeComboBox.SelectedIndex = 0;
-        modeComboBox.SelectionChanged += (_, _) =>
+        action.SelectionChanged += (_, _) => grouped.Visibility = action.SelectedIndex == 0 ? Visibility.Visible : Visibility.Collapsed;
+        events.SelectionChanged += (_, _) => ResetResults();
+        minimumLength.TextChanged += (_, _) => ResetResults();
+        sensitivity.ValueChanged += (_, _) =>
         {
-            splitGroupedCheckBox.IsEnabled = modeComboBox.SelectedIndex == 0;
-            detectButton.Content = modeComboBox.SelectedIndex == 0 ? "Detect & Split Scenes" : "Detect Scenes";
+            value.Text = $"{sensitivity.Value:0}%";
+            ResetResults();
         };
-        root.Children.Add(modeComboBox);
-
-        // 3. Sensitivity Slider
-        var sensPanel = new DockPanel { Margin = new Thickness(0, 12, 0, 4) };
-        sensitivitySlider.ValueChanged += (_, e) =>
+        analyze.Click += async (_, _) =>
         {
-            var val = (int)e.NewValue;
-            var desc = val >= 75 ? "High (find subtle cuts)" : val <= 40 ? "Low (obvious cuts only)" : "Medium (recommended)";
-            sensitivityLabel.Text = $"Sensitivity: {desc} ({val}%)";
+            if (scan is { } current) current.Cancel();
+            else await AnalyzeAsync();
         };
-        sensPanel.Children.Add(sensitivityLabel);
-        DockPanel.SetDock(sensitivitySlider, Dock.Right);
-        sensPanel.Children.Add(sensitivitySlider);
-        root.Children.Add(sensPanel);
-
-        // 4. Min Scene Duration (debouncing)
-        var minLenPanel = new WrapPanel { Margin = new Thickness(0, 6, 0, 6), VerticalAlignment = VerticalAlignment.Center };
-        minLenPanel.Children.Add(new TextBlock { Text = "Minimum Scene Length (ms):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
-        minLenPanel.Children.Add(minLengthTextBox);
-        minLenPanel.Children.Add(new TextBlock { Text = " (Vegas Pro default: 500 ms)", VerticalAlignment = VerticalAlignment.Center, Foreground = System.Windows.Media.Brushes.Gray, Margin = new Thickness(6, 0, 0, 0) });
-        root.Children.Add(minLenPanel);
-
-        // 5. Checkboxes
-        root.Children.Add(hardCutsCheckBox);
-        root.Children.Add(splitGroupedCheckBox);
-
-        // 6. Progress and Status
-        root.Children.Add(progressBar);
-        root.Children.Add(statusText);
-
-        // 7. Buttons
-        var buttonPanel = new DockPanel { Margin = new Thickness(0, 14, 0, 0), LastChildFill = false };
-        detectButton.Click += DetectButtonClick;
-        buttonPanel.Children.Add(detectButton);
-
-        cancelButton.Margin = new Thickness(8, 0, 0, 0);
-        cancelButton.Click += (_, _) =>
+        Closed += (_, _) =>
         {
-            cts?.Cancel();
-            Close();
+            closed = true;
+            scan?.Cancel();
         };
-        buttonPanel.Children.Add(cancelButton);
-
-        root.Children.Add(buttonPanel);
-        Content = root;
+        AcceptButton.Content = "_Apply";
+        ResetResults();
     }
 
-    private void PopulateVideoClips(Guid? preferClipId = null)
+    private bool CanAnalyze() => events.SelectedItem is Candidate target && !target.Clip.IsReversed
+        && target.Clip.PlaybackRate == 1 && target.Clip.UnderSampleRate == 1
+        && target.Clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) != true
+        && target.Clip.SourceInFrame >= 0 && target.Clip.SourceInFrame + target.Clip.DurationFrames <= vm.Project.FrameRate.Frames(target.Media.DurationSeconds);
+
+    private void ResetResults()
     {
-        videoClips.Clear();
-        targetClipComboBox.Items.Clear();
-
-        foreach (var track in vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video))
-        {
-            foreach (var clip in track.Clips)
-            {
-                var media = vm.Project.Media.FirstOrDefault(m => m.Id == clip.MediaId);
-                if (media is not null && media.HasVideo && !media.Path.StartsWith("openrend://"))
-                {
-                    videoClips.Add((track, clip, media));
-                    var isSelected = preferClipId.HasValue ? clip.Id == preferClipId.Value : vm.Selection.Contains(clip.Id);
-                    var item = $"[{track.Name}] {clip.Name} ({clip.DurationFrames} frames)";
-                    targetClipComboBox.Items.Add(item);
-                    if (isSelected)
-                    {
-                        targetClipComboBox.SelectedIndex = targetClipComboBox.Items.Count - 1;
-                    }
-                }
-            }
-        }
-
-        if (targetClipComboBox.SelectedIndex < 0 && targetClipComboBox.Items.Count > 0)
-            targetClipComboBox.SelectedIndex = 0;
-
-        if (targetClipComboBox.Items.Count == 0)
-        {
-            targetClipComboBox.Items.Add("No video events available on timeline");
-            targetClipComboBox.SelectedIndex = 0;
-            detectButton.IsEnabled = false;
-        }
+        ClearValidation();
+        choices.Clear();
+        review.Children.Clear();
+        UpdateApplyState();
+        analyze.IsEnabled = CanAnalyze();
+        ShowStatus(analyze.IsEnabled ? "Analyze the event for hard cuts."
+            : events.SelectedItem is null ? "No video events are available."
+            : "Analyze requires a forward, unretimed event within its source range.");
     }
 
-    private async void DetectButtonClick(object sender, RoutedEventArgs e)
+    private async Task AnalyzeAsync()
     {
-        if (targetClipComboBox.SelectedIndex < 0 || targetClipComboBox.SelectedIndex >= videoClips.Count)
+        if (!CanAnalyze() || events.SelectedItem is not Candidate target) return;
+        if (!double.TryParse(minimumLength.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var duration)
+            || !double.IsFinite(duration) || duration is < 50 or > 60000)
+        {
+            Reject(minimumLength, "Enter a minimum scene length from 50 to 60,000 ms.");
             return;
+        }
 
-        var (targetTrack, targetClip, targetMedia) = videoClips[targetClipComboBox.SelectedIndex];
-        var sensitivityNorm = sensitivitySlider.Value / 100.0;
-        double.TryParse(minLengthTextBox.Text, out var minMs);
-        if (minMs < 50.0) minMs = 500.0;
-
-        var options = new SceneDetectionOptions
-        {
-            Sensitivity = Math.Clamp(sensitivityNorm, 0.0, 1.0),
-            MinSceneLengthMs = minMs,
-            DetectHardCuts = hardCutsCheckBox.IsChecked ?? true,
-            IncludeGroupedTracks = splitGroupedCheckBox.IsChecked ?? true
-        };
-
-        var mode = modeComboBox.SelectedIndex switch
-        {
-            1 => SceneDetectionMode.AddRegionMarkers,
-            2 => SceneDetectionMode.CreateSubclips,
-            _ => SceneDetectionMode.SplitOnTimeline
-        };
-
-        detectButton.IsEnabled = false;
-        progressBar.Visibility = Visibility.Visible;
-        progressBar.Value = 0;
-        statusText.Text = "Scanning frames for scene cut transitions…";
-
-        cts = new CancellationTokenSource();
-        var token = cts.Token;
-
+        ResetResults();
+        using var cancellation = new CancellationTokenSource();
+        scan = cancellation;
+        inputs.IsEnabled = false;
+        analyze.Content = "Cancel scan";
+        analyze.IsDefault = false;
+        progress.Value = 0;
+        progress.Visibility = Visibility.Visible;
+        ShowStatus("Analyzing video frames…");
         try
         {
-            var service = new SceneDetectionService(vm.Media);
-            var progress = new Progress<double>(pct =>
+            var updates = new Progress<double>(value =>
             {
-                Dispatcher.Invoke(() =>
-                {
-                    progressBar.Value = pct;
-                    statusText.Text = $"Scanning video frames ({pct:0}%)…";
-                });
+                if (!closed && scan == cancellation) progress.Value = value;
             });
-
-            var cuts = await service.DetectScenesAsync(
-                targetMedia.Path,
-                targetClip.SourceInFrame,
-                targetClip.DurationFrames,
-                vm.Project.FrameRate,
-                options,
-                targetClip.StartFrame,
-                progress,
-                token
-            );
-
-            if (token.IsCancellationRequested)
-            {
-                statusText.Text = "Scene detection cancelled.";
-                return;
-            }
-
-            if (cuts.Count == 0)
-            {
-                statusText.Text = "No scene cuts detected with current sensitivity.";
-                MessageBox.Show(this, "No scene transitions met the threshold criteria. Try increasing the sensitivity or reducing the minimum scene length.", "Scene Detection", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-
-            if (mode == SceneDetectionMode.CreateSubclips)
-            {
-                // Create named subclips in Project Media pool matching Vegas Pro doSubclipsFromMediaFX
-                var spans = SceneDetectionEngine.BuildSceneSpans(cuts, targetClip.DurationFrames, targetClip.StartFrame, targetMedia.Name);
-                var subclipCount = 0;
-                foreach (var span in spans)
-                {
-                    var subclipName = $"{targetMedia.Name}.{span.Index:D4}";
-                    var subclipMedia = new MediaAsset
-                    {
-                        Id = Guid.NewGuid(),
-                        Path = targetMedia.Path,
-                        DisplayName = subclipName,
-                        DurationSeconds = vm.Project.FrameRate.Seconds(span.DurationFrames),
-                        Width = targetMedia.Width,
-                        Height = targetMedia.Height,
-                        FrameRate = targetMedia.FrameRate,
-                        HasVideo = targetMedia.HasVideo,
-                        HasAudio = targetMedia.HasAudio
-                    };
-                    vm.Editor.AddMedia(subclipMedia);
-                    subclipCount++;
-                }
-
-                statusText.Text = $"Successfully created {subclipCount} subclips in Project Media pool!";
-                MessageBox.Show(this, $"Created {subclipCount} subclips in Project Media pool.", "Scene Detection", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-            else
-            {
-                // Execute atomic split or region generation in project editor
-                var result = vm.Editor.ApplySceneDetection(
-                    targetClip.Id,
-                    cuts,
-                    mode,
-                    options,
-                    targetClip.Name
-                );
-
-                var actionDesc = mode == SceneDetectionMode.SplitOnTimeline
-                    ? $"split into {result.SceneCount} scenes on timeline"
-                    : $"created {result.ResultRegions.Count} timeline scene regions";
-
-                statusText.Text = $"Successfully detected {result.CutCount} cuts and {actionDesc}!";
-                MessageBox.Show(this, $"Detected {result.CutCount} scene transitions and {actionDesc}.", "Scene Detection", MessageBoxButton.OK, MessageBoxImage.Information);
-            }
-
-            DialogResult = true;
-            Close();
+            var options = new SceneDetectionOptions { Sensitivity = sensitivity.Value / 100, MinSceneLengthMs = duration };
+            var detected = await new SceneDetectionService(vm.Media).DetectScenesAsync(
+                target.Media.Path, target.Clip.SourceInFrame, target.Clip.DurationFrames, vm.Project.FrameRate, options, target.Clip.StartFrame,
+                updates, cancellation.Token);
+            cancellation.Token.ThrowIfCancellationRequested();
+            if (!closed) ShowCuts(detected);
         }
         catch (OperationCanceledException)
         {
-            statusText.Text = "Scene detection cancelled.";
+            if (!closed) ShowStatus("Analysis cancelled.");
         }
-        catch (Exception ex)
+        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException)
         {
-            statusText.Text = $"Scene detection failed: {ex.Message}";
-            MessageBox.Show(this, $"Scene detection error: {ex.Message}", "Scene Detection", MessageBoxButton.OK, MessageBoxImage.Error);
+            if (!closed) ShowStatus("Analysis failed. " + error.Message);
         }
         finally
         {
-            detectButton.IsEnabled = true;
-            progressBar.Visibility = Visibility.Collapsed;
+            scan = null;
+            if (!closed)
+            {
+                inputs.IsEnabled = true;
+                analyze.Content = "Analyze";
+                progress.Visibility = Visibility.Collapsed;
+                UpdateApplyState();
+            }
         }
+    }
+
+    private void ShowCuts(IReadOnlyList<SceneCut> cuts)
+    {
+        if (cuts.Count == 0)
+        {
+            ShowStatus("No cuts found with these settings.");
+            return;
+        }
+
+        ShowStatus(cuts.Count == 1 ? "Review 1 detected cut." : $"Review {cuts.Count} detected cuts.");
+        var rows = new StackPanel();
+        var project = vm.Project;
+        foreach (var cut in cuts)
+        {
+            var position = TimecodeFormatter.Format(cut.AbsoluteFrame, project.FrameRate, project.RulerFormat,
+                project.AudioSampleRate, project.BeatsPerMinute, project.BeatsPerMeasure, project.RulerStartTimeFrames);
+            var include = new CheckBox { Content = $"Cut at {position}", IsChecked = true };
+            AutomationProperties.SetAutomationId(include, $"SceneCut_{cut.AbsoluteFrame}");
+            include.Checked += (_, _) => UpdateApplyState();
+            include.Unchecked += (_, _) => UpdateApplyState();
+            choices.Add(new(cut, include));
+            rows.Children.Add(include);
+        }
+
+        var scroll = new ScrollViewer { Content = rows, MaxHeight = 145, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        review.Children.Add(new TextBlock { Text = "Detected cuts", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 4) });
+        var list = new Border { Child = scroll, BorderThickness = new Thickness(1), Padding = new Thickness(4), Margin = new Thickness(0, 0, 0, 8) };
+        list.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        list.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        review.Children.Add(list);
+        review.Children.Add(actionField);
+        review.Children.Add(grouped);
+        UpdateApplyState();
+    }
+
+    private void UpdateApplyState()
+    {
+        var canApply = scan is null && choices.Any(choice => choice.Include.IsChecked == true);
+        AcceptButton.IsEnabled = AcceptButton.IsDefault = canApply;
+        analyze.IsDefault = scan is null && !canApply;
+    }
+
+    protected override bool TryAccept()
+    {
+        if (events.SelectedItem is not Candidate target || scan is not null) return false;
+        var cuts = choices.Where(choice => choice.Include.IsChecked == true).Select(choice => choice.Cut).ToArray();
+        if (cuts.Length == 0) return false;
+
+        var mode = action.SelectedIndex == 0 ? SceneDetectionMode.SplitOnTimeline : SceneDetectionMode.AddRegionMarkers;
+        try
+        {
+            var result = vm.Editor.ApplySceneDetection(target.Clip.Id, cuts, mode,
+                new() { IncludeGroupedTracks = grouped.IsChecked == true }, target.Clip.Name);
+            vm.Status = mode == SceneDetectionMode.SplitOnTimeline
+                ? $"Split the event into {result.SceneCount} scenes."
+                : $"Added {result.ResultRegions.Count} scene regions.";
+            return true;
+        }
+        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or OverflowException)
+        {
+            ShowStatus("Could not apply the cuts. " + error.Message);
+            return false;
+        }
+    }
+
+    private void ShowStatus(string message)
+    {
+        status.Text = message;
+        UIElementAutomationPeer.CreatePeerForElement(status)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 }

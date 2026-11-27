@@ -986,17 +986,26 @@ public sealed partial class TimelineEditor
 
     public IReadOnlyList<TimelineClip> SplitSelection(IEnumerable<Guid> ids, long frame, bool ignoreGroups = false)
     {
-        var selected = SelectedClips(ids, ignoreGroups);
+        var splits = PrepareSplits(SelectedClips(ids, ignoreGroups), frame);
+        Execute(_ => ApplySplits(splits));
+        return splits.Select(split => split.Right).ToArray();
+    }
+
+    private sealed record ClipSplit(TimelineTrack Track, TimelineClip Clip, TimelineClip Right,
+        long LeftDuration, long Envelope, List<ClipEnvelope>? LeftEnvelopes);
+
+    private static List<ClipSplit> PrepareSplits(List<(TimelineTrack Track, TimelineClip Clip)> selected, long frame)
+    {
         foreach (var item in selected) EnsureUnlocked(item.Track, item.Clip);
         var crossing = selected.Where(item => frame > item.Clip.StartFrame && frame < item.Clip.EndFrame).ToList();
         if (crossing.Count == 0) throw new ArgumentOutOfRangeException(nameof(frame), "Split must be inside a selected clip.");
         var rightGroups = new Dictionary<Guid, Guid>();
-        var splits = crossing.Select(item =>
+        return crossing.Select(item =>
         {
             var leftDuration = checked(frame - item.Clip.StartFrame);
             var envelope = item.Clip.FadeDurationFrames ?? item.Clip.DurationFrames;
             var right = item.Clip.DeepClone(); right.Id = Guid.NewGuid(); right.StartFrame = frame;
-                        // Velocity envelope and playback rate modulated source frame progression
+            // An enabled velocity envelope supplies the split source frame.
             var effPlaybackRate = double.IsFinite(item.Clip.PlaybackRate) && item.Clip.PlaybackRate != 0 ? item.Clip.PlaybackRate : 1.0;
             if (item.Clip.Envelopes?.FirstOrDefault(e => e.Type == EnvelopeType.Velocity && e.IsEnabled) is { } velEnv)
             {
@@ -1029,20 +1038,21 @@ public sealed partial class TimelineEditor
                 right.Envelopes = rightEnvelopes;
             }
 
-            return (item.Track, item.Clip, Right: right, LeftDuration: leftDuration, Envelope: envelope, LeftEnvelopes: leftEnvelopes);
+            return new ClipSplit(item.Track, item.Clip, right, leftDuration, envelope, leftEnvelopes);
         }).ToList();
-        Execute(_ =>
-        {
-            foreach (var split in splits)
-            {
-                split.Clip.DurationFrames = split.LeftDuration;
-                split.Clip.FadeDurationFrames = split.Envelope;
-                if (split.LeftEnvelopes != null) split.Clip.Envelopes = split.LeftEnvelopes;
-                split.Track.Clips.Add(split.Right);
-            }
-        });
-        return splits.Select(split => split.Right).ToArray();
     }
+
+    private static void ApplySplits(IEnumerable<ClipSplit> splits)
+    {
+        foreach (var split in splits)
+        {
+            split.Clip.DurationFrames = split.LeftDuration;
+            split.Clip.FadeDurationFrames = split.Envelope;
+            if (split.LeftEnvelopes != null) split.Clip.Envelopes = split.LeftEnvelopes;
+            split.Track.Clips.Add(split.Right);
+        }
+    }
+
 
     public void DeleteSelection(IEnumerable<Guid> ids, bool ripple = false, bool ignoreGroups = false, AutoRippleMode rippleMode = AutoRippleMode.AffectedTracks)
     {
