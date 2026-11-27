@@ -870,7 +870,8 @@
           </ScrollViewer>
         </TabItem>
       </TabControl>
-      <GridSplitter Grid.Row="2" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#141414" Cursor="SizeWE" DragCompleted="SourceSplitterCompleted"/>
+      <GridSplitter x:Name="ToolsPreviewSplitter" Grid.Row="2" Grid.Column="1" Width="5" HorizontalAlignment="Center" VerticalAlignment="Stretch"
+                    Background="#141414" Cursor="SizeWE" DragCompleted="SourceSplitterCompleted" AutomationProperties.Name="Resize Tools and Preview"/>
       <Grid Grid.Row="2" Grid.Column="2">
         <Grid.ColumnDefinitions>
           <ColumnDefinition x:Name="SourceWidth" Width="0"/>

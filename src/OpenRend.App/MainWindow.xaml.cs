@@ -1546,7 +1546,9 @@ public partial class MainWindow : Window
     private void UpdateInspector()
     {
         var clip = SelectedClip; Inspector.IsEnabled = clip is not null; ClipName.Text = clip?.Name ?? "Select a timeline clip";
-        DockColorGrading.BindToClip(clip);
+        var selectedVideo = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips).Where(eventClip => vm.Selection.Contains(eventClip.Id)).Take(2).ToArray();
+        DockColorGrading.BindToClip(selectedVideo.Length == 1 ? selectedVideo[0] : null);
         if (clip is null)
         {
             EditTextMediaButton.Visibility = Visibility.Collapsed;

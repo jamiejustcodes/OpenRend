@@ -97,104 +97,62 @@ public sealed class ColorGradingDockControl : UserControl
 
     public ColorGradingDockControl()
     {
-        var panelBrush = new SolidColorBrush(Color.FromRgb(24, 24, 24));
-        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
-        var textBrush = Brushes.White;
-
-        Background = panelBrush;
-
+        SetResourceReference(BackgroundProperty, "WindowBrush");
+        ClipToBounds = true;
         var root = new Grid();
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) }); // Header
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Body
+        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        root.RowDefinitions.Add(new RowDefinition());
 
-        // Header
-        var header = new DockPanel { Background = headerBrush, Height = 32 };
+        var header = new Border { BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(8, 5, 4, 1) };
+        header.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        header.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         AutomationProperties.SetAutomationId(header, "ColorGradingHeader");
 
-        var headerLeft = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) };
-        var fxBadge = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(50, 100, 160)),
-            CornerRadius = new CornerRadius(2),
-            Padding = new Thickness(4, 1, 4, 1),
-            Margin = new Thickness(0, 0, 6, 0)
-        };
-        fxBadge.Child = new TextBlock { Text = "fx", FontSize = 10, FontWeight = FontWeights.Bold, Foreground = Brushes.White };
-        headerLeft.Children.Add(fxBadge);
-
+        var headerContent = new StackPanel();
         targetLabel = new TextBlock
         {
-            Text = "Event FX:  (Not active)",
             FontWeight = FontWeights.SemiBold,
-            Foreground = textBrush,
-            VerticalAlignment = VerticalAlignment.Center
+            TextTrimming = TextTrimming.CharacterEllipsis,
+            Margin = new Thickness(0, 0, 0, 5)
         };
         AutomationProperties.SetAutomationId(targetLabel, "ColorGrading_TargetLabel");
-        headerLeft.Children.Add(targetLabel);
-        header.Children.Add(headerLeft);
+        headerContent.Children.Add(targetLabel);
 
-        var headerRight = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
-        DockPanel.SetDock(headerRight, Dock.Right);
-
-        bypassBtn = new ToggleButton
-        {
-            Content = "Bypass",
-            Padding = new Thickness(8, 2, 8, 2),
-            Margin = new Thickness(0, 0, 4, 0)
-        };
+        var tools = new WrapPanel();
+        bypassBtn = new ToggleButton { Content = "Bypass", Margin = new Thickness(0, 0, 4, 4) };
+        bypassBtn.SetResourceReference(StyleProperty, "TextToggleButton");
         AutomationProperties.SetAutomationId(bypassBtn, "m_BypassButton");
         bypassBtn.Click += OnBypassClick;
-        headerRight.Children.Add(bypassBtn);
+        tools.Children.Add(bypassBtn);
 
-        resetAllBtn = new Button
-        {
-            Content = "Reset All",
-            Padding = new Thickness(8, 2, 8, 2),
-            Margin = new Thickness(0, 0, 4, 0)
-        };
+        resetAllBtn = new Button { Content = "Reset all", Margin = new Thickness(0, 0, 4, 4) };
         AutomationProperties.SetAutomationId(resetAllBtn, "m_ResetAllButton");
         resetAllBtn.Click += OnResetAllClick;
-        headerRight.Children.Add(resetAllBtn);
+        tools.Children.Add(resetAllBtn);
 
-        presetCombo = new ComboBox
-        {
-            Width = 140,
-            Margin = new Thickness(0, 0, 6, 0)
-        };
-        presetCombo.Items.Add("(None)");
-        foreach (var name in BuiltinLutLibrary.LookLutNames) presetCombo.Items.Add(name);
-        presetCombo.SelectedIndex = 0;
-        AutomationProperties.SetAutomationId(presetCombo, "ColorGrading_PresetCombo");
-        presetCombo.SelectionChanged += OnPresetComboChanged;
-        headerRight.Children.Add(presetCombo);
+        presetCombo = MakeLutPicker(BuiltinLutLibrary.LookLutNames, "ColorGrading_PresetCombo", "Look LUT");
+        presetCombo.ToolTip = "Look LUT";
+        presetCombo.Width = 132;
+        presetCombo.Margin = new Thickness(0, 0, 4, 4);
+        presetCombo.SelectionChanged += (_, _) => SelectLut(1, presetCombo);
+        tools.Children.Add(presetCombo);
 
-        popoutBtn = new Button
-        {
-            Content = "Open Floating Panel…",
-            Padding = new Thickness(8, 2, 8, 2)
-        };
+        popoutBtn = new Button { Content = "Open panel…", Margin = new Thickness(0, 0, 4, 4) };
         AutomationProperties.SetAutomationId(popoutBtn, "ColorGrading_PopoutButton");
         popoutBtn.Click += (_, _) => popoutCallback?.Invoke();
-        headerRight.Children.Add(popoutBtn);
+        tools.Children.Add(popoutBtn);
 
-        header.Children.Add(headerRight);
-        Grid.SetRow(header, 0);
+        headerContent.Children.Add(tools);
+        header.Child = headerContent;
         root.Children.Add(header);
 
-        // --- 2. Main Body: Left Navigation + Right Pages ---
+        const double navWidth = 114;
         var body = new Grid();
-        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(140) });
-        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        // Left Navigation List
-        navList = new ListBox
-        {
-            Background = new SolidColorBrush(Color.FromRgb(36, 36, 36)),
-            BorderThickness = new Thickness(0, 0, 1, 0),
-            BorderBrush = borderBrush,
-            Padding = new Thickness(4)
-        };
+        body.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(navWidth) });
+        body.ColumnDefinitions.Add(new ColumnDefinition());
+        navList = new ListBox { BorderThickness = new Thickness(0, 0, 1, 0), Padding = new Thickness(3) };
+        navList.SetResourceReference(BackgroundProperty, "PanelBrush");
+        navList.SetResourceReference(BorderBrushProperty, "BorderBrush");
         AutomationProperties.SetAutomationId(navList, "ColorGradingNavigation");
 
         navList.Items.Add(MakeNavItem("LUTs", "LUTsItem"));
@@ -248,8 +206,26 @@ public sealed class ColorGradingDockControl : UserControl
         pageContainer.Children.Add(wbHslPage);
         pageContainer.Children.Add(curvesPage);
 
-        Grid.SetColumn(pageContainer, 1);
-        body.Children.Add(pageContainer);
+        var scroll = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = pageContainer
+        };
+        Grid.SetColumn(scroll, 1);
+        body.Children.Add(scroll);
+        var sections = new[] { lutsPage, wheelsPage, toneLevelsPage, wbHslPage };
+        var columnCount = 1;
+        foreach (var page in sections) ArrangeSections(page, columnCount);
+        body.SizeChanged += (_, args) =>
+        {
+            // Leave room for page margins and a vertical scrollbar before placing sections side by side.
+            var columns = args.NewSize.Width - navWidth >= 552 ? 2 : 1;
+            if (columns == columnCount) return;
+            columnCount = columns;
+            foreach (var page in sections) ArrangeSections(page, columnCount);
+        };
+        navList.SelectionChanged += (_, _) => scroll.ScrollToTop();
 
         Grid.SetRow(body, 1);
         root.Children.Add(body);
@@ -263,12 +239,11 @@ public sealed class ColorGradingDockControl : UserControl
     {
         var item = new ListBoxItem
         {
-            Content = "▶  " + label,
-            Padding = new Thickness(8, 6, 8, 6),
-            Foreground = Brushes.White,
-            Cursor = System.Windows.Input.Cursors.Hand
+            Content = new TextBlock { Text = label, TextWrapping = TextWrapping.Wrap },
+            Padding = new Thickness(5, 5, 5, 5)
         };
         AutomationProperties.SetAutomationId(item, autoId);
+        AutomationProperties.SetName(item, label);
         return item;
     }
 
@@ -283,9 +258,10 @@ public sealed class ColorGradingDockControl : UserControl
     {
         activeClip = clip is { IsLocked: false } && vm?.Project.Tracks.Any(track =>
             track.Kind == TrackKind.Video && !track.IsLocked && track.Clips.Contains(clip)) == true ? clip : null;
-        targetLabel.Text = activeClip is { } target ? $"Event FX:  {target.Name}" : "Event FX:  (Not active)";
+        targetLabel.Text = activeClip is { } target ? $"Event FX · {target.Name}" : "Select one unlocked video event";
+        targetLabel.ToolTip = activeClip?.Name;
         bypassBtn.IsEnabled = resetAllBtn.IsEnabled = ActiveEffect is not null;
-        presetCombo.IsEnabled = pageContainer.IsEnabled = activeClip is not null;
+        presetCombo.IsEnabled = popoutBtn.IsEnabled = pageContainer.IsEnabled = activeClip is not null;
         UpdateControlsFromEffect();
     }
 
@@ -298,6 +274,19 @@ public sealed class ColorGradingDockControl : UserControl
         curvesPage.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
     }
 
+    private static void ArrangeSections(Grid page, int columns)
+    {
+        page.ColumnDefinitions.Clear();
+        page.RowDefinitions.Clear();
+        for (var i = 0; i < columns; i++) page.ColumnDefinitions.Add(new ColumnDefinition());
+        for (var i = 0; i < page.Children.Count; i++)
+        {
+            if (i % columns == 0) page.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            Grid.SetColumn(page.Children[i], i % columns);
+            Grid.SetRow(page.Children[i], i / columns);
+        }
+    }
+
     // --- Page 0: LUTs ---
 
     private Grid CreateLutsPage(
@@ -307,157 +296,121 @@ public sealed class ColorGradingDockControl : UserControl
         out ComboBox lookInterp, out CheckBox lookBypass)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
-
-        // Camera LUT Slot 0
-        var camBorder = new Border
-        {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Margin = new Thickness(4),
-            Padding = new Thickness(10)
-        };
-        var camPanel = new StackPanel();
-        var camHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        camHeader.Children.Add(new TextBlock { Text = "Camera LUT (Input Slot)", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
-        var resetCamBtn = new Button { Content = "Reset", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
-        AutomationProperties.SetAutomationId(resetCamBtn, "cameraLut_ResetButton");
-        resetCamBtn.Click += (_, _) => ResetLutSlot(0);
-        DockPanel.SetDock(resetCamBtn, Dock.Right);
-        camHeader.Children.Add(resetCamBtn);
-        camPanel.Children.Add(camHeader);
-
-        camPath = new TextBlock { Text = "(No LUT loaded)", Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 6), TextTrimming = TextTrimming.CharacterEllipsis };
-        camPanel.Children.Add(camPath);
-
-        var camPresetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        camPresetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 65, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White });
-        var camPresetCtrl = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        camPresetCtrl.Items.Add("(None / Custom)");
-        foreach (var name in BuiltinLutLibrary.CameraLutNames) camPresetCtrl.Items.Add(name);
-        camPresetCtrl.SelectedIndex = 0;
-        camPreset = camPresetCtrl;
-        AutomationProperties.SetAutomationId(camPreset, "CameraLut_Preset");
-        camPresetCtrl.SelectionChanged += (_, _) =>
-        {
-            if (updating || camPresetCtrl.SelectedIndex <= 0) return;
-            var preset = BuiltinLutLibrary.CreatePreset(camPresetCtrl.SelectedItem.ToString()!);
-            if (preset is not null) SetLutSlot(0, preset);
-        };
-        camPresetRow.Children.Add(camPreset);
-        camPanel.Children.Add(camPresetRow);
-
-        var camBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        var camBrowse = new Button { Content = "Browse…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 0) };
-        AutomationProperties.SetAutomationId(camBrowse, "cameraLut_BrowseButton");
-        camBrowse.Click += (_, _) => BrowseLutSlot(0);
-        var camClear = new Button { Content = "Clear", Padding = new Thickness(8, 2, 8, 2) };
-        AutomationProperties.SetAutomationId(camClear, "cameraLut_Clear");
-        camClear.Click += (_, _) => SetLutSlot(0, null);
-        camBtns.Children.Add(camBrowse);
-        camBtns.Children.Add(camClear);
-        camPanel.Children.Add(camBtns);
-
-        camPanel.Children.Add(MakeSliderRow("Strength", "cameraLut_Strength", 0, 1, 1, 0.01, out camStrength, out camStrengthV, v => CommitSingleParam("LUTGain_0", v)));
-
-        var camInterpRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        camInterpRow.Children.Add(new TextBlock { Text = "Interpolation", Width = 90, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White });
-        var camInterpCtrl = new ComboBox { Items = { "Trilinear", "Tetrahedral" }, SelectedIndex = 0, Width = 110, HorizontalAlignment = HorizontalAlignment.Left };
-        camInterp = camInterpCtrl;
-        AutomationProperties.SetAutomationId(camInterp, "cameraLut_tetrahedral_ToggleButton");
-        camInterpCtrl.SelectionChanged += (_, _) => { if (!updating) CommitSingleParam("LUTInterpolation_0", camInterpCtrl.SelectedIndex); };
-        camInterpRow.Children.Add(camInterp);
-        camPanel.Children.Add(camInterpRow);
-
-        var camBypassCtrl = new CheckBox { Content = "Bypass Camera LUT", Margin = new Thickness(0, 4, 0, 0) };
-        camBypass = camBypassCtrl;
-        AutomationProperties.SetAutomationId(camBypass, "cameraLut_Bypass");
-        camBypassCtrl.Click += (_, _) => { if (!updating) CommitSingleParam("LUTEnable_0", camBypassCtrl.IsChecked == true ? 1 : 0); };
-        camPanel.Children.Add(camBypass);
-
-        camBorder.Child = camPanel;
-        Grid.SetColumn(camBorder, 0);
-        grid.Children.Add(camBorder);
-
-        // Look LUT Slot 1
-        var lookBorder = new Border
-        {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(4),
-            Margin = new Thickness(4),
-            Padding = new Thickness(10)
-        };
-        var lookPanel = new StackPanel();
-        var lookHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 8) };
-        lookHeader.Children.Add(new TextBlock { Text = "Look LUT (Output Slot)", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
-        var resetLookBtn = new Button { Content = "Reset", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Right };
-        AutomationProperties.SetAutomationId(resetLookBtn, "lookLut_ResetButton");
-        resetLookBtn.Click += (_, _) => ResetLutSlot(1);
-        DockPanel.SetDock(resetLookBtn, Dock.Right);
-        lookHeader.Children.Add(resetLookBtn);
-        lookPanel.Children.Add(lookHeader);
-
-        lookPath = new TextBlock { Text = "(No LUT loaded)", Foreground = Brushes.Gray, Margin = new Thickness(0, 0, 0, 6), TextTrimming = TextTrimming.CharacterEllipsis };
-        lookPanel.Children.Add(lookPath);
-
-        var lookPresetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        lookPresetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 65, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White });
-        var lookPresetCtrl = new ComboBox { HorizontalAlignment = HorizontalAlignment.Stretch };
-        lookPresetCtrl.Items.Add("(None / Custom)");
-        foreach (var name in BuiltinLutLibrary.LookLutNames) lookPresetCtrl.Items.Add(name);
-        lookPresetCtrl.SelectedIndex = 0;
-        lookPreset = lookPresetCtrl;
-        AutomationProperties.SetAutomationId(lookPreset, "LookLut_Preset");
-        lookPresetCtrl.SelectionChanged += (_, _) =>
-        {
-            if (updating || lookPresetCtrl.SelectedIndex <= 0) return;
-            var preset = BuiltinLutLibrary.CreatePreset(lookPresetCtrl.SelectedItem.ToString()!);
-            if (preset is not null) SetLutSlot(1, preset);
-        };
-        lookPresetRow.Children.Add(lookPreset);
-        lookPanel.Children.Add(lookPresetRow);
-
-        var lookBtns = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        var lookBrowse = new Button { Content = "Browse…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 0) };
-        AutomationProperties.SetAutomationId(lookBrowse, "lookLut_BrowseButton");
-        lookBrowse.Click += (_, _) => BrowseLutSlot(1);
-        var lookClear = new Button { Content = "Clear", Padding = new Thickness(8, 2, 8, 2) };
-        AutomationProperties.SetAutomationId(lookClear, "lookLut_Clear");
-        lookClear.Click += (_, _) => SetLutSlot(1, null);
-        lookBtns.Children.Add(lookBrowse);
-        lookBtns.Children.Add(lookClear);
-        lookPanel.Children.Add(lookBtns);
-
-        lookPanel.Children.Add(MakeSliderRow("Strength", "lookLut_Strength", 0, 1, 1, 0.01, out lookStrength, out lookStrengthV, v => CommitSingleParam("LUTGain_1", v)));
-
-        var lookInterpRow = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        lookInterpRow.Children.Add(new TextBlock { Text = "Interpolation", Width = 90, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White });
-        var lookInterpCtrl = new ComboBox { Items = { "Trilinear", "Tetrahedral" }, SelectedIndex = 0, Width = 110, HorizontalAlignment = HorizontalAlignment.Left };
-        lookInterp = lookInterpCtrl;
-        AutomationProperties.SetAutomationId(lookInterp, "lookLut_tetrahedral_ToggleButton");
-        lookInterpCtrl.SelectionChanged += (_, _) => { if (!updating) CommitSingleParam("LUTInterpolation_1", lookInterpCtrl.SelectedIndex); };
-        lookInterpRow.Children.Add(lookInterp);
-        lookPanel.Children.Add(lookInterpRow);
-
-        var lookBypassCtrl = new CheckBox { Content = "Bypass Look LUT", Margin = new Thickness(0, 4, 0, 0) };
-        lookBypass = lookBypassCtrl;
-        AutomationProperties.SetAutomationId(lookBypass, "lookLut_Bypass");
-        lookBypassCtrl.Click += (_, _) => { if (!updating) CommitSingleParam("LUTEnable_1", lookBypassCtrl.IsChecked == true ? 1 : 0); };
-        lookPanel.Children.Add(lookBypass);
-
-        lookBorder.Child = lookPanel;
-        Grid.SetColumn(lookBorder, 1);
-        grid.Children.Add(lookBorder);
-
+        grid.Children.Add(CreateLutSlot(0, "Camera LUT", BuiltinLutLibrary.CameraLutNames,
+            out camPath, out camPreset, out camStrength, out camStrengthV, out camInterp, out camBypass));
+        grid.Children.Add(CreateLutSlot(1, "Look LUT", BuiltinLutLibrary.LookLutNames,
+            out lookPath, out lookPreset, out lookStrength, out lookStrengthV, out lookInterp, out lookBypass));
         return grid;
+    }
+
+    private Border CreateLutSlot(int slot, string title, IReadOnlyList<string> names, out TextBlock path, out ComboBox picker,
+        out Slider strength, out TextBlock strengthValue, out ComboBox interpolation, out CheckBox bypass)
+    {
+        var id = slot == 0 ? "cameraLut" : "lookLut";
+        var panel = new StackPanel();
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var reset = new Button { Content = "Reset" };
+        DockPanel.SetDock(reset, Dock.Right);
+        AutomationProperties.SetAutomationId(reset, id + "_ResetButton");
+        AutomationProperties.SetName(reset, $"Reset {title}");
+        reset.Click += (_, _) => ResetLutSlot(slot);
+        header.Children.Add(reset);
+        header.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold });
+        panel.Children.Add(header);
+
+        path = new TextBlock { Margin = new Thickness(0, 0, 0, 6), TextTrimming = TextTrimming.CharacterEllipsis };
+        path.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        AutomationProperties.SetAutomationId(path, id + "_Path");
+        panel.Children.Add(path);
+
+        var preset = MakeLutPicker(names, slot == 0 ? "CameraLut_Preset" : "LookLut_Preset", $"{title} preset");
+        picker = preset;
+        preset.SelectionChanged += (_, _) => SelectLut(slot, preset);
+        panel.Children.Add(LabeledRow("Preset", preset));
+
+        var buttons = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
+        var browse = new Button { Content = "Browse…", Margin = new Thickness(0, 0, 4, 2) };
+        AutomationProperties.SetAutomationId(browse, id + "_BrowseButton");
+        AutomationProperties.SetName(browse, $"Browse for {title}");
+        browse.Click += (_, _) => BrowseLutSlot(slot);
+        var clear = new Button { Content = "Clear", Margin = new Thickness(0, 0, 0, 2) };
+        AutomationProperties.SetAutomationId(clear, id + "_Clear");
+        AutomationProperties.SetName(clear, $"Clear {title}");
+        clear.Click += (_, _) => SetLutSlot(slot, null);
+        buttons.Children.Add(browse);
+        buttons.Children.Add(clear);
+        panel.Children.Add(buttons);
+
+        panel.Children.Add(MakeSliderRow("Strength", id + "_Strength", 0, 1, 1, 0.01,
+            out strength, out strengthValue, value => CommitSingleParam($"LUTGain_{slot}", value)));
+
+        var method = new ComboBox { Items = { "Trilinear", "Tetrahedral" }, SelectedIndex = 0 };
+        interpolation = method;
+        AutomationProperties.SetAutomationId(method, id + "_tetrahedral_ToggleButton");
+        AutomationProperties.SetName(method, $"{title} interpolation");
+        method.SelectionChanged += (_, _) =>
+        {
+            if (method.SelectedIndex >= 0) CommitSingleParam($"LUTInterpolation_{slot}", method.SelectedIndex);
+        };
+        panel.Children.Add(LabeledRow("Interpolation", method));
+
+        var check = new CheckBox { Content = $"Bypass {title}" };
+        bypass = check;
+        AutomationProperties.SetAutomationId(check, id + "_Bypass");
+        check.Click += (_, _) => CommitSingleParam($"LUTEnable_{slot}", check.IsChecked == true ? 1 : 0);
+        panel.Children.Add(check);
+
+        var section = new Border { Child = panel, BorderThickness = new Thickness(1), Margin = new Thickness(3), Padding = new Thickness(8) };
+        section.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        section.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        return section;
+    }
+
+    private static DockPanel LabeledRow(string label, Control input)
+    {
+        var row = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var caption = new Label { Content = label, Target = input, Width = 85, Padding = new Thickness(0), VerticalAlignment = VerticalAlignment.Center };
+        AutomationProperties.SetLabeledBy(input, caption);
+        row.Children.Add(caption);
+        row.Children.Add(input);
+        return row;
+    }
+
+    private static ComboBox MakeLutPicker(IReadOnlyList<string> names, string id, string label)
+    {
+        var picker = new ComboBox();
+        picker.Items.Add("None");
+        foreach (var name in names) picker.Items.Add(name);
+        picker.SelectedIndex = 0;
+        AutomationProperties.SetAutomationId(picker, id);
+        AutomationProperties.SetName(picker, label);
+        return picker;
+    }
+
+    private void SelectLut(int slot, ComboBox picker)
+    {
+        if (updating || picker.SelectedItem is not string name) return;
+        SetLutSlot(slot, picker.SelectedIndex == 0 ? null : BuiltinLutLibrary.CreatePreset(name));
+    }
+
+    private static void SyncLutPicker(ComboBox picker, CubeLut? lut)
+    {
+        var imported = picker.Items[^1] as ComboBoxItem;
+        var matchingPreset = lut is null ? "None" : picker.Items.OfType<string>().Skip(1)
+            .FirstOrDefault(name => string.Equals(name, lut.Title, StringComparison.OrdinalIgnoreCase));
+        if (matchingPreset is not null)
+        {
+            if (imported is not null) picker.Items.Remove(imported);
+            picker.SelectedItem = matchingPreset;
+            return;
+        }
+
+        if (imported is null)
+        {
+            imported = new ComboBoxItem { Content = "Imported LUT", IsEnabled = false };
+            picker.Items.Add(imported);
+        }
+        picker.SelectedItem = imported;
     }
 
     // --- Page 1: Color Wheels ---
@@ -469,10 +422,6 @@ public sealed class ColorGradingDockControl : UserControl
         out ColorGradingWheelControl ow, out Slider oys, out TextBlock orBlock)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.ColumnDefinitions.Add(new ColumnDefinition());
-        grid.RowDefinitions.Add(new RowDefinition());
-        grid.RowDefinitions.Add(new RowDefinition());
 
         var liftCard = MakeWheelCard("Shadows (Lift)", "ColorWheel_Shadows",
             -1.0, 1.0, 0.0,
@@ -483,7 +432,7 @@ public sealed class ColorGradingDockControl : UserControl
             out lw, out lys, out lr,
             (r, g, b, y) => OnWheelGroupChanged("Lift", r, g, b, y),
             () => ResetWheelGroup("Lift"));
-        Grid.SetRow(liftCard, 0); Grid.SetColumn(liftCard, 0); grid.Children.Add(liftCard);
+        grid.Children.Add(liftCard);
 
         var gammaCard = MakeWheelCard("Midtones (Gamma)", "ColorWheel_Midtones",
             0.0, 5.0, 1.0,
@@ -494,7 +443,7 @@ public sealed class ColorGradingDockControl : UserControl
             out gw, out gys, out gr,
             (r, g, b, y) => OnWheelGroupChanged("Gamma", r, g, b, y),
             () => ResetWheelGroup("Gamma"));
-        Grid.SetRow(gammaCard, 0); Grid.SetColumn(gammaCard, 1); grid.Children.Add(gammaCard);
+        grid.Children.Add(gammaCard);
 
         var gainCard = MakeWheelCard("Highlights (Gain)", "ColorWheel_Highlights",
             0.0, 2.0, 1.0,
@@ -505,7 +454,7 @@ public sealed class ColorGradingDockControl : UserControl
             out hw, out hys, out hr,
             (r, g, b, y) => OnWheelGroupChanged("Gain", r, g, b, y),
             () => ResetWheelGroup("Gain"));
-        Grid.SetRow(gainCard, 1); Grid.SetColumn(gainCard, 0); grid.Children.Add(gainCard);
+        grid.Children.Add(gainCard);
 
         var offsetCard = MakeWheelCard("Offset", "ColorWheel_Log_Offset",
             -1.0, 1.0, 0.0,
@@ -516,7 +465,7 @@ public sealed class ColorGradingDockControl : UserControl
             out ow, out oys, out orBlock,
             (r, g, b, y) => OnWheelGroupChanged("Offset", r, g, b, y),
             () => ResetWheelGroup("Offset"));
-        Grid.SetRow(offsetCard, 1); Grid.SetColumn(offsetCard, 1); grid.Children.Add(offsetCard);
+        grid.Children.Add(offsetCard);
 
         return grid;
     }
@@ -550,17 +499,11 @@ public sealed class ColorGradingDockControl : UserControl
         out Slider sat, out TextBlock satV)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
 
         // Levels Card
         var levelsBorder = new Border
         {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Margin = new Thickness(3),
@@ -568,7 +511,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         var levelsPanel = new StackPanel();
         var levelsHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        levelsHeader.Children.Add(new TextBlock { Text = "Levels", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+        levelsHeader.Children.Add(new TextBlock { Text = "Levels", FontWeight = FontWeights.SemiBold });
         var resetLevelsBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetLevelsBtn, "levels_Reset_Button");
         resetLevelsBtn.Click += (_, _) => ResetParams(new() { ["InMinAdjust"] = 0, ["InMaxAdjust"] = 1, ["OutMinAdjust"] = 0, ["OutMaxAdjust"] = 1 });
@@ -581,14 +524,13 @@ public sealed class ColorGradingDockControl : UserControl
         levelsPanel.Children.Add(MakeSliderRow("Output Min", "outputMin", 0, 1, 0, 0.005, out outMin, out outMinV, v => CommitSingleParam("OutMinAdjust", v)));
         levelsPanel.Children.Add(MakeSliderRow("Output Max", "outputMax", 0, 1, 1, 0.005, out outMax, out outMaxV, v => CommitSingleParam("OutMaxAdjust", v)));
         levelsBorder.Child = levelsPanel;
-        Grid.SetColumn(levelsBorder, 0);
+        levelsBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        levelsBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         grid.Children.Add(levelsBorder);
 
         // Tone Card
         var toneBorder = new Border
         {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Margin = new Thickness(3),
@@ -596,7 +538,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         var tonePanel = new StackPanel();
         var toneHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        toneHeader.Children.Add(new TextBlock { Text = "Tone & Exposure", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+        toneHeader.Children.Add(new TextBlock { Text = "Tone & Exposure", FontWeight = FontWeights.SemiBold });
         var resetToneBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetToneBtn, "tone_Reset_Button");
         resetToneBtn.Click += (_, _) => ResetParams(new() { ["ExposureLnAdjust"] = 0, ["BrightnessAdjust"] = 0, ["ContrastAdjust"] = 0, ["ContrastCtrAdjust"] = 0.5, ["SaturationAdjust"] = 1 });
@@ -610,7 +552,8 @@ public sealed class ColorGradingDockControl : UserControl
         tonePanel.Children.Add(MakeSliderRow("Contrast Center", "contrastCenter", 0, 1, 0.5, 0.01, out conCtr, out conCtrV, v => CommitSingleParam("ContrastCtrAdjust", v)));
         tonePanel.Children.Add(MakeSliderRow("Saturation", "saturation", 0, 3, 1, 0.01, out sat, out satV, v => CommitSingleParam("SaturationAdjust", v)));
         toneBorder.Child = tonePanel;
-        Grid.SetColumn(toneBorder, 1);
+        toneBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        toneBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         grid.Children.Add(toneBorder);
 
         return grid;
@@ -624,17 +567,11 @@ public sealed class ColorGradingDockControl : UserControl
         out Slider val, out TextBlock valV)
     {
         var grid = new Grid();
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
-        var headerBrush = new SolidColorBrush(Color.FromRgb(36, 36, 36));
-        var borderBrush = new SolidColorBrush(Color.FromRgb(46, 46, 46));
 
         // White Balance Card
         var wbBorder = new Border
         {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Margin = new Thickness(3),
@@ -642,7 +579,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         var wbPanel = new StackPanel();
         var wbHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        wbHeader.Children.Add(new TextBlock { Text = "White Balance", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+        wbHeader.Children.Add(new TextBlock { Text = "White Balance", FontWeight = FontWeights.SemiBold });
         var resetWbBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetWbBtn, "whiteBalance_Reset_Button");
         resetWbBtn.Click += (_, _) => ResetParams(new() { ["TemperatureAdjust"] = 0, ["TintAdjust"] = 0 });
@@ -653,14 +590,13 @@ public sealed class ColorGradingDockControl : UserControl
         wbPanel.Children.Add(MakeSliderRow("Temperature", "temperature", -4000, 4000, 0, 10, out temp, out tempV, v => CommitSingleParam("TemperatureAdjust", v)));
         wbPanel.Children.Add(MakeSliderRow("Tint", "tint", -100, 100, 0, 1, out tint, out tintV, v => CommitSingleParam("TintAdjust", v)));
         wbBorder.Child = wbPanel;
-        Grid.SetColumn(wbBorder, 0);
+        wbBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        wbBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         grid.Children.Add(wbBorder);
 
         // HSL Card
         var hslBorder = new Border
         {
-            Background = headerBrush,
-            BorderBrush = borderBrush,
             BorderThickness = new Thickness(1),
             CornerRadius = new CornerRadius(3),
             Margin = new Thickness(3),
@@ -668,7 +604,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         var hslPanel = new StackPanel();
         var hslHeader = new DockPanel { Margin = new Thickness(0, 0, 0, 6) };
-        hslHeader.Children.Add(new TextBlock { Text = "HSL Adjust", FontWeight = FontWeights.SemiBold, Foreground = Brushes.White });
+        hslHeader.Children.Add(new TextBlock { Text = "HSL Adjust", FontWeight = FontWeights.SemiBold });
         var resetHslBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetHslBtn, "HSL_Reset_Button");
         resetHslBtn.Click += (_, _) => ResetParams(new() { ["HueAdjust"] = 0, ["SatAdjust"] = 1, ["ValAdjust"] = 1 });
@@ -680,7 +616,8 @@ public sealed class ColorGradingDockControl : UserControl
         hslPanel.Children.Add(MakeSliderRow("Saturation", "saturationHSL", 0, 3, 1, 0.01, out sat, out satV, v => CommitSingleParam("SatAdjust", v)));
         hslPanel.Children.Add(MakeSliderRow("Luminance", "luminance", 0, 2, 1, 0.01, out val, out valV, v => CommitSingleParam("ValAdjust", v)));
         hslBorder.Child = hslPanel;
-        Grid.SetColumn(hslBorder, 1);
+        hslBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        hslBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         grid.Children.Add(hslBorder);
 
         return grid;
@@ -696,20 +633,20 @@ public sealed class ColorGradingDockControl : UserControl
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
-        var modeBar = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
-        var btnTabColor = new Button { Content = "Color Curves (RGB)", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0), FontWeight = FontWeights.Bold };
-        var btnTabHsl = new Button { Content = "HSL Curves", Padding = new Thickness(8, 2, 8, 2) };
+        var modeBar = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
+        var btnTabColor = new Button { Content = "RGB curves", Margin = new Thickness(0, 0, 4, 4), FontWeight = FontWeights.Bold };
+        var btnTabHsl = new Button { Content = "HSL curves", Margin = new Thickness(0, 0, 4, 4) };
         modeBar.Children.Add(btnTabColor);
         modeBar.Children.Add(btnTabHsl);
         Grid.SetRow(modeBar, 0);
         grid.Children.Add(modeBar);
 
         var colorGrid = new Grid();
-        colorGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
+        colorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         colorGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var hslGrid = new Grid { Visibility = Visibility.Collapsed };
-        hslGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(32) });
+        hslGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         hslGrid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         btnTabColor.Click += (_, _) =>
@@ -728,30 +665,25 @@ public sealed class ColorGradingDockControl : UserControl
         };
 
         // --- Color Curves ---
-        var top = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var chPanel = new StackPanel { Orientation = Orientation.Horizontal };
+        var top = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
         var btnRgb = new Button { Content = "RGB", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0), FontWeight = FontWeights.Bold };
         var btnRed = new Button { Content = "Red", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnGreen = new Button { Content = "Green", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnBlue = new Button { Content = "Blue", Padding = new Thickness(8, 2, 8, 2) };
-        chPanel.Children.Add(btnRgb);
-        chPanel.Children.Add(btnRed);
-        chPanel.Children.Add(btnGreen);
-        chPanel.Children.Add(btnBlue);
-        top.Children.Add(chPanel);
+        top.Children.Add(btnRgb);
+        top.Children.Add(btnRed);
+        top.Children.Add(btnGreen);
+        top.Children.Add(btnBlue);
 
-        var rstPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var rstChBtn = new Button { Content = "Reset Channel", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) };
         var rstAllBtn = new Button { Content = "Reset All Curves", Padding = new Thickness(8, 2, 8, 2) };
-        rstPanel.Children.Add(rstChBtn);
-        rstPanel.Children.Add(rstAllBtn);
-        DockPanel.SetDock(rstPanel, Dock.Right);
-        top.Children.Add(rstPanel);
+        top.Children.Add(rstChBtn);
+        top.Children.Add(rstAllBtn);
 
         Grid.SetRow(top, 0);
         colorGrid.Children.Add(top);
 
-        ctrl = new ColorCurvesControl { Margin = new Thickness(0, 0, 0, 4) };
+        ctrl = new ColorCurvesControl { Margin = new Thickness(0, 0, 0, 4), MinHeight = 170 };
         AutomationProperties.SetAutomationId(ctrl, "CurvesItem_Control");
         var c = ctrl;
         void UpdateColorChannelStyles(CurveChannel ch)
@@ -775,32 +707,27 @@ public sealed class ColorGradingDockControl : UserControl
         colorGrid.Children.Add(ctrl);
 
         // --- HSL Curves ---
-        var hslTop = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var hslModePanel = new StackPanel { Orientation = Orientation.Horizontal };
+        var hslTop = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
         var btnHvh = new Button { Content = "Hue vs Hue", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnHvs = new Button { Content = "Hue vs Sat", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0), FontWeight = FontWeights.Bold };
         var btnHvl = new Button { Content = "Hue vs Lum", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnSvs = new Button { Content = "Sat vs Sat", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnLvs = new Button { Content = "Lum vs Sat", Padding = new Thickness(6, 2, 6, 2) };
-        hslModePanel.Children.Add(btnHvh);
-        hslModePanel.Children.Add(btnHvs);
-        hslModePanel.Children.Add(btnHvl);
-        hslModePanel.Children.Add(btnSvs);
-        hslModePanel.Children.Add(btnLvs);
-        hslTop.Children.Add(hslModePanel);
+        hslTop.Children.Add(btnHvh);
+        hslTop.Children.Add(btnHvs);
+        hslTop.Children.Add(btnHvl);
+        hslTop.Children.Add(btnSvs);
+        hslTop.Children.Add(btnLvs);
 
-        var hslRstPanel = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
         var rstHslModeBtn = new Button { Content = "Reset Mode", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
         var rstAllHslBtn = new Button { Content = "Reset All HSL", Padding = new Thickness(6, 2, 6, 2) };
-        hslRstPanel.Children.Add(rstHslModeBtn);
-        hslRstPanel.Children.Add(rstAllHslBtn);
-        DockPanel.SetDock(hslRstPanel, Dock.Right);
-        hslTop.Children.Add(hslRstPanel);
+        hslTop.Children.Add(rstHslModeBtn);
+        hslTop.Children.Add(rstAllHslBtn);
 
         Grid.SetRow(hslTop, 0);
         hslGrid.Children.Add(hslTop);
 
-        hslCtrl = new HSLCurvesControl { Margin = new Thickness(0, 0, 0, 4) };
+        hslCtrl = new HSLCurvesControl { Margin = new Thickness(0, 0, 0, 4), MinHeight = 170 };
         AutomationProperties.SetAutomationId(hslCtrl, "HSLCurvesItem_Control");
         var hc = hslCtrl;
         void UpdateHslModeStyles(HSLCurveMode m)
@@ -838,10 +765,12 @@ public sealed class ColorGradingDockControl : UserControl
         out Slider slider, out TextBlock valText, Action<double> onCommit)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 0, 0, 4) };
-        var labelBlock = new TextBlock { Text = label, Width = 85, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.White, FontSize = 11 };
+        var labelBlock = new TextBlock { Text = label, Width = 85, TextTrimming = TextTrimming.CharacterEllipsis };
         panel.Children.Add(labelBlock);
 
-        valText = new TextBlock { Text = def.ToString("F2", CultureInfo.InvariantCulture), Width = 40, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = Brushes.LightGray, FontSize = 10.5 };
+        var format = step >= 1 ? "F0" : step >= .1 ? "F1" : step >= .01 ? "F2" : "F3";
+        valText = new TextBlock { Text = def.ToString(format, CultureInfo.CurrentCulture), Width = 42, TextAlignment = TextAlignment.Right };
+        valText.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         DockPanel.SetDock(valText, Dock.Right);
         panel.Children.Add(valText);
 
@@ -856,11 +785,12 @@ public sealed class ColorGradingDockControl : UserControl
             Margin = new Thickness(6, 0, 6, 0)
         };
         AutomationProperties.SetAutomationId(slider, autoId);
+        AutomationProperties.SetName(slider, label);
         var s = slider;
         var vt = valText;
         slider.ValueChanged += (_, _) =>
         {
-            vt.Text = s.Value.ToString(Math.Abs(step) < 0.1 ? "F2" : "F0", CultureInfo.InvariantCulture);
+            vt.Text = s.Value.ToString(format, CultureInfo.CurrentCulture);
             onCommit(Math.Round(s.Value, 3));
         };
         panel.Children.Add(slider);
@@ -925,20 +855,7 @@ public sealed class ColorGradingDockControl : UserControl
             cameraLutInterpCombo.SelectedIndex = (int)fx.GetParameter("LUTInterpolation_0");
             cameraLutBypassCheck.IsChecked = fx.GetParameter("LUTEnable_0") == 1;
 
-            var camTitle = fx.Lut?.Title;
-            var camIdx = 0;
-            if (!string.IsNullOrEmpty(camTitle))
-            {
-                for (var i = 1; i < cameraLutPresetCombo.Items.Count; i++)
-                {
-                    if (string.Equals(cameraLutPresetCombo.Items[i]?.ToString(), camTitle, StringComparison.OrdinalIgnoreCase))
-                    {
-                        camIdx = i;
-                        break;
-                    }
-                }
-            }
-            cameraLutPresetCombo.SelectedIndex = camIdx;
+            SyncLutPicker(cameraLutPresetCombo, fx.Lut);
 
             // Look LUT
             lookLutPathText.Text = fx.LookLut is not null ? (fx.LookLut.Title ?? "Embedded 3D LUT") : "(No LUT loaded)";
@@ -946,20 +863,8 @@ public sealed class ColorGradingDockControl : UserControl
             lookLutInterpCombo.SelectedIndex = (int)fx.GetParameter("LUTInterpolation_1");
             lookLutBypassCheck.IsChecked = fx.GetParameter("LUTEnable_1") == 1;
 
-            var lookTitle = fx.LookLut?.Title;
-            var lookIdx = 0;
-            if (!string.IsNullOrEmpty(lookTitle))
-            {
-                for (var i = 1; i < lookLutPresetCombo.Items.Count; i++)
-                {
-                    if (string.Equals(lookLutPresetCombo.Items[i]?.ToString(), lookTitle, StringComparison.OrdinalIgnoreCase))
-                    {
-                        lookIdx = i;
-                        break;
-                    }
-                }
-            }
-            lookLutPresetCombo.SelectedIndex = lookIdx;
+            SyncLutPicker(lookLutPresetCombo, fx.LookLut);
+            SyncLutPicker(presetCombo, fx.LookLut);
         }
         finally
         {
@@ -1101,13 +1006,5 @@ public sealed class ColorGradingDockControl : UserControl
             grade.Parameters = new(NeutralGrade.Parameters, StringComparer.Ordinal);
             return true;
         });
-    }
-
-    private void OnPresetComboChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (updating || activeClip is null || vm is null || presetCombo.SelectedIndex <= 0) return;
-        var presetName = presetCombo.SelectedItem.ToString()!;
-        var lut = BuiltinLutLibrary.CreatePreset(presetName);
-        if (lut is not null) SetLutSlot(1, lut);
     }
 }

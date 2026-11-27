@@ -30,6 +30,8 @@ Media Generator uses the same search and category controls as Video FX. Procedur
 
 Transitions uses the same browser controls and a preset list. When a category or query hides the selection, the pane picks a visible transition and loads its presets. Use Apply, Enter or double-click to apply a preset to the selection. Drag a preset onto a video overlap or adjacent cut. Desktop workflows verify favorite persistence, combined category and text filtering, keyboard apply and drag placement.
 
+The docked Color Grading pane binds to one selected video event even when its linked audio is selected. The toolbar wraps, grading sections stack at compact widths, and wider docks place the sections side by side. Both Look LUT pickers read the same event and select, replace or clear its LUT. An imported LUT displays as imported with its file name in the slot. The desktop workflow resizes the real pane, saves a LUT and a 0.005 input-level adjustment, clears the LUT, and checks that Undo restores it.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.
