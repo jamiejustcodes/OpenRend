@@ -19,7 +19,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
 
     private readonly EditorViewModel vm;
     private readonly ComboBox events = new() { DisplayMemberPath = nameof(Candidate.Label) };
-    private readonly ComboBox action = new() { Items = { "Split selected event", "Add scene regions" }, SelectedIndex = 0 };
+    private readonly ComboBox action = new() { Items = { "Split selected event", "Add scene regions", "Create subclips in Project Media" }, SelectedIndex = 0 };
     private readonly Slider sensitivity = new() { Minimum = 10, Maximum = 95, Value = 65, TickFrequency = 5, IsSnapToTickEnabled = true };
     private readonly TextBox minimumLength = TimeField("500");
     private readonly CheckBox grouped = new() { Content = "Split linked and grouped events at each cut", IsChecked = true };
@@ -139,7 +139,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
             });
             var options = new SceneDetectionOptions { Sensitivity = sensitivity.Value / 100, MinSceneLengthMs = duration };
             var detected = await new SceneDetectionService(vm.Media).DetectScenesAsync(
-                target.Media.Path, target.Clip.SourceInFrame, target.Clip.DurationFrames, vm.Project.FrameRate, options, target.Clip.StartFrame,
+                target.Media, target.Clip.SourceInFrame, target.Clip.DurationFrames, vm.Project.FrameRate, options, target.Clip.StartFrame,
                 updates, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             if (!closed) ShowCuts(detected);
@@ -212,14 +212,17 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         var cuts = choices.Where(choice => choice.Include.IsChecked == true).Select(choice => choice.Cut).ToArray();
         if (cuts.Length == 0) return false;
 
-        var mode = action.SelectedIndex == 0 ? SceneDetectionMode.SplitOnTimeline : SceneDetectionMode.AddRegionMarkers;
+        var mode = (SceneDetectionMode)action.SelectedIndex;
         try
         {
             var result = vm.Editor.ApplySceneDetection(target.Clip.Id, cuts, mode,
                 new() { IncludeGroupedTracks = grouped.IsChecked == true }, target.Clip.Name);
-            vm.Status = mode == SceneDetectionMode.SplitOnTimeline
-                ? $"Split the event into {result.SceneCount} scenes."
-                : $"Added {result.ResultRegions.Count} scene regions.";
+            vm.Status = mode switch
+            {
+                SceneDetectionMode.SplitOnTimeline => $"Split the event into {result.SceneCount} scenes.",
+                SceneDetectionMode.AddRegionMarkers => $"Added {result.ResultRegions.Count} scene regions.",
+                _ => $"Created {result.ResultSubclips.Count} scene subclips in Project Media."
+            };
             return true;
         }
         catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or OverflowException)

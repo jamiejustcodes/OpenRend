@@ -37,7 +37,7 @@ public sealed class SceneDetectionMediaTests : IClassFixture<MediaFixture>
 
         // fixture.Source has 1s of Red (frames 0-29) followed by 1s of Blue (frames 30-59) at 30fps
         var cuts = await service.DetectScenesAsync(
-            fixture.Source,
+            await mediaService.ProbeAsync(fixture.Source),
             startFrame: 0,
             totalFrames: 60,
             frameRate: new Rational(30, 1),
@@ -86,7 +86,7 @@ public sealed class SceneDetectionMediaTests : IClassFixture<MediaFixture>
         await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
         {
             await service.DetectScenesAsync(
-                fixture.Source,
+                await mediaService.ProbeAsync(fixture.Source),
                 startFrame: 0,
                 totalFrames: 60,
                 frameRate: new Rational(30, 1),

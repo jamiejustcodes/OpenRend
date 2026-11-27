@@ -4,9 +4,7 @@ using System.IO;
 namespace OpenRend.Core;
 
 /// <summary>
-/// Specifies the target action when scene cuts are detected,
-/// matching 1:1 Vegas Pro SceneDetectionCmd.Mode enum:
-/// SplitOnTimeLine, ApplyAsMediaFXAndGenerateSubclips, OnlyAddRegionMarkers.
+/// Specifies the edit to apply to the reviewed scene cuts.
 /// </summary>
 public enum SceneDetectionMode
 {
@@ -21,7 +19,7 @@ public enum SceneDetectionMode
     AddRegionMarkers = 1,
 
     /// <summary>
-    /// Create named subclip references in the media pool (<MediaName>.<0001>, <MediaName>.<0002>).
+    /// Create a named source-range asset for each scene in Project Media.
     /// </summary>
     CreateSubclips = 2
 }

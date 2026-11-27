@@ -6,7 +6,10 @@ public sealed record SceneDetectionResult(
     int CutCount,
     int SceneCount,
     IReadOnlyList<TimelineClip> ResultClips,
-    IReadOnlyList<TimelineRegion> ResultRegions);
+    IReadOnlyList<TimelineRegion> ResultRegions)
+{
+    public IReadOnlyList<MediaAsset> ResultSubclips { get; init; } = [];
+}
 
 public sealed partial class TimelineEditor
 {
@@ -75,7 +78,14 @@ public sealed partial class TimelineEditor
                 });
                 return new(boundaries.Length, spans.Count, [clip], regions);
             case SceneDetectionMode.CreateSubclips:
-                throw new NotSupportedException("Scene subclips require source-range media assets.");
+                if (clip.IsReversed || clip.PlaybackRate != 1 || clip.UnderSampleRate != 1 ||
+                    clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) == true)
+                    throw new InvalidOperationException("Scene subclips require a forward, unretimed event.");
+                var source = Project.Media.Single(asset => asset.Id == clip.MediaId);
+                var subclips = spans.Select(span => MakeSubclip(source,
+                    new FrameRange(checked(clip.SourceInFrame + span.StartOffsetFrames), span.DurationFrames), span.Name)).ToArray();
+                Execute("Create scene subclips", project => project.Media.AddRange(subclips));
+                return new(boundaries.Length, spans.Count, [clip], []) { ResultSubclips = subclips };
             default:
                 throw new ArgumentOutOfRangeException(nameof(mode));
         }

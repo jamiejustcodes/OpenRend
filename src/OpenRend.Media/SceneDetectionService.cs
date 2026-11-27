@@ -27,7 +27,7 @@ public sealed class SceneDetectionService
     /// and reports detected scene cut points with progress feedback.
     /// </summary>
     public async Task<IReadOnlyList<SceneCut>> DetectScenesAsync(
-        string mediaPath,
+        MediaAsset asset,
         long startFrame,
         long totalFrames,
         Rational frameRate,
@@ -36,7 +36,7 @@ public sealed class SceneDetectionService
         IProgress<double>? progress = null,
         CancellationToken cancellationToken = default)
     {
-        ArgumentException.ThrowIfNullOrWhiteSpace(mediaPath);
+        ArgumentNullException.ThrowIfNull(asset);
         ArgumentNullException.ThrowIfNull(options);
 
         options.Validate();
@@ -66,7 +66,7 @@ public sealed class SceneDetectionService
                 byte[] currFrame;
                 try
                 {
-                    currFrame = mediaService.GetFrame(mediaPath, timeSec, ProxyWidth, ProxyHeight);
+                    currFrame = mediaService.GetFrame(asset, timeSec, ProxyWidth, ProxyHeight);
                 }
                 catch
                 {

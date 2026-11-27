@@ -81,6 +81,22 @@ public sealed partial class EditorWorkflowTests
             Assert.Empty(saved.Regions);
             dialog = OpenSceneDetection(window);
             AnalyzeSceneCuts(dialog);
+            action = Find(dialog, "SceneDetectionAction").AsComboBox();
+            action.Select(2);
+            action.Patterns.ExpandCollapse.Pattern.Collapse();
+            Find(dialog, "ApplySceneCuts").AsButton().Invoke();
+            WaitFor(() => window.ModalWindows.Length == 0, "Creating scene subclips did not close the dialog.");
+            saved = await SaveGrade(window, projectPath);
+            Assert.Single(saved.Tracks[0].Clips);
+            Assert.Equal(new[] { new MediaSourceRange(0, 1, 1), new(1, 1, 1), new(2, 1, 1) },
+                saved.Media.Where(media => media.SourceRange.HasValue).Select(media => media.SourceRange!.Value));
+            Assert.All(saved.Media, media => Assert.Equal(source, media.Path));
+            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
+            saved = await SaveGrade(window, projectPath);
+            Assert.Single(saved.Media);
+
+            dialog = OpenSceneDetection(window);
+            AnalyzeSceneCuts(dialog);
             Find(dialog, "ApplySceneCuts").AsButton().Invoke();
             WaitFor(() => window.ModalWindows.Length == 0, "Applying the scene splits did not close the dialog.");
             saved = await SaveGrade(window, projectPath);
