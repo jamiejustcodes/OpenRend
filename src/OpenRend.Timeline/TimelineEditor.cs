@@ -1600,10 +1600,14 @@ public sealed partial class TimelineEditor
         };
     }
 
-    public VideoEffect AddScopedVideoEffect(EffectScope scope, Guid targetId, VideoEffectKind kind)
+    public VideoEffect AddScopedVideoEffect(EffectScope scope, Guid targetId, VideoEffectKind kind) =>
+        AddScopedVideoEffect(scope, targetId, kind, null);
+
+    public VideoEffect AddScopedVideoEffect(EffectScope scope, Guid targetId, VideoEffectKind kind,
+        IReadOnlyDictionary<string, double>? parameters)
     {
         var effects = GetScopedVideoEffects(scope, targetId);
-        var effect = VideoEffect.Create(kind);
+        var effect = VideoEffect.Create(kind, parameters);
         Execute(_ => effects.Add(effect));
         return effect;
     }

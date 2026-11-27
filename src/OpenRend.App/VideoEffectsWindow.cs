@@ -60,9 +60,10 @@ public sealed partial class VideoEffectsWindow : Window
     {
     }
 
-    public VideoEffectsWindow(EditorViewModel viewModel, EffectScope effectScope, Guid selectedTargetId)
+    public VideoEffectsWindow(EditorViewModel viewModel, EffectScope effectScope, Guid selectedTargetId, Guid? selectedEffectId = null)
     {
         vm = viewModel; editor = vm.Editor; scope = effectScope; targetId = selectedTargetId;
+        selectedId = selectedEffectId;
         Style = (Style)FindResource(typeof(Window));
         Title = WindowTitle; Width = 840; Height = 600; MinWidth = 720; MinHeight = 520;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -268,7 +269,10 @@ public sealed partial class VideoEffectsWindow : Window
         };
     }
 
-    private sealed record ChainEntry(Guid Id, string Name);
+    private sealed record ChainEntry(Guid Id, string Name)
+    {
+        public override string ToString() => Name;
+    }
     private TimelineClip? EventClip => scope == EffectScope.Event ? editor.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.Id == targetId) : null;
     private TimelineTrack? TargetTrack => scope == EffectScope.Track ? editor.Project.Tracks.FirstOrDefault(t => t.Id == targetId) : null;
     private MediaAsset? TargetMedia => scope == EffectScope.Media ? editor.Project.Media.FirstOrDefault(m => m.Id == targetId) : null;

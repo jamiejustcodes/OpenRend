@@ -15,7 +15,8 @@ public partial class MainWindow
 
     private void SetVideoFxPresetContent(ListBoxItem item, VideoEffectKind kind, VideoFxPreset preset)
     {
-        var image = SetPresetPreviewContent(item, preset.Name, "VideoFxPresetThumbnail", "Apply to the selected video events");
+        var image = SetPresetPreviewContent(item, preset.Name, "VideoFxPresetThumbnail",
+            "Drag to an event, video track header or preview, or apply to the selected events");
         item.IsVisibleChanged += (_, _) =>
         {
             if (item.IsVisible) image.Source = VideoFxThumbnail(kind, preset);

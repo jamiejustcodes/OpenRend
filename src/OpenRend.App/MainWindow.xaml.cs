@@ -233,6 +233,7 @@ public partial class MainWindow : Window
                     ? "Default Dissolve applied to the dropped overlap."
                     : $"{gesture.Transition.Kind} ({gesture.Transition.Preset}) applied to the dropped overlap.");
         });
+        Timeline.VideoEffectDropped += ApplyVideoFxDrop;
         Timeline.SplitRequested += SplitAtCursor;
         Timeline.OverlapToCutRequested += (outgoing, incoming) => Guard(() =>
         {

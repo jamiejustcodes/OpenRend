@@ -99,6 +99,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<TrimmerRangeDrag, Guid?, long>? TrimmerRangeDropped;
     public event Action<MediaGeneratorPreset, Guid?, long>? GeneratedMediaDropped;
     public event Action<TransitionGesture>? TransitionDropped;
+    public event Action<EffectScope, Guid, VideoEffectDrag, bool>? VideoEffectDropped;
     public event Action<Guid, long>? ClipMoveHover;
     public event Action<Guid, Guid>? OverlapToCutRequested;
     public event Action? DeleteRequested;
@@ -308,6 +309,13 @@ public sealed partial class TimelineView : FrameworkElement
                 return;
             }
             var p = e.GetPosition(this);
+            if (e.Data.GetData(VideoEffectDataFormat) is VideoEffectDrag effect)
+            {
+                if (VideoEffectTargetAt(p) is { } target)
+                    VideoEffectDropped?.Invoke(target.Scope, target.Id, effect, (e.KeyStates & DragDropKeyStates.ShiftKey) != 0);
+                e.Handled = true;
+                return;
+            }
             var track = TrackAt(p.Y);
             var frame = Math.Max(0, FrameAt(p.X));
             if (e.Data.GetData(typeof(MediaGeneratorPreset)) is MediaGeneratorPreset generator)
@@ -348,6 +356,12 @@ public sealed partial class TimelineView : FrameworkElement
         }
 
         var p = e.GetPosition(this);
+        if (e.Data.GetData(VideoEffectDataFormat) is VideoEffectDrag)
+        {
+            e.Effects = VideoEffectTargetAt(p) is null ? DragDropEffects.None : DragDropEffects.Copy;
+            e.Handled = true;
+            return;
+        }
         if (p.X < HeaderWidth)
         {
             if (hoverFileDropActive) { hoverFileDropActive = false; InvalidateVisual(); }
