@@ -22,6 +22,8 @@ Alt-drag changes the source In point while keeping the event on its original pro
 
 Dragging the event's snap offset marker previews the new frame until release. Release updates the event and its active take in one undo step. Escape cancels the preview. The desktop workflow verifies both saved offsets after a drag, undo, redo and cancel.
 
+Move and standard trim snapping use a ten-DIP distance from the unrounded drag position to candidate frames. Event edges, the cursor, markers and both region endpoints are snap targets. Move uses the event's snap offset as an additional anchor. The frame calculation follows horizontal scrolling during the drag. F8 or N toggles snapping, and Shift reverses the current setting during a drag. The desktop workflow verifies both Shift overrides and lets a trim land one frame from a region endpoint when that frame is outside the snapping distance.
+
 ## Auto Ripple and ruler regions
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.

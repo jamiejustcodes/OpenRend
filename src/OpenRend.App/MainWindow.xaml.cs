@@ -3415,7 +3415,7 @@ public partial class MainWindow : Window
             Key.Delete => () => DeleteClick(this, e),
             Key.G when !ctrl && !shift && !alt => () => GroupCreateClick(this, e),
             Key.U when !ctrl && !shift && !alt => () => GroupRemoveClick(this, e),
-            Key.N => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); },
+            Key.N or Key.F8 when !ctrl && !alt && !shift => () => { SnapToggle.IsChecked = SnapToggle.IsChecked != true; SnapClick(this, e); },
             Key.Q when !ctrl && !alt && !shift => () => LoopPlaybackClick(this, e),
             Key.X when !ctrl && !alt && !shift => () => AutoCrossfadeClick(this, e),
             Key.Add or Key.OemPlus => () => ZoomInClick(this, e),

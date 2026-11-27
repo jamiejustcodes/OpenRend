@@ -204,7 +204,7 @@
       <MenuItem Header="_Options">
         <MenuItem x:Name="LoopPlaybackMenu" Header="_Loop Playback" InputGestureText="Q" IsCheckable="True" Click="LoopPlaybackClick"/>
         <MenuItem x:Name="AutoCrossfadeMenu" Header="Automatic _Crossfades" InputGestureText="X" IsCheckable="True" IsChecked="True" Click="AutoCrossfadeClick"/>
-        <MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="N" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/>
+        <MenuItem x:Name="SnappingMenu" Header="Enable snapping" InputGestureText="F8" IsCheckable="True" IsChecked="True" Click="SnapMenuClick"/>
         <MenuItem x:Name="RippleMenu" Header="Auto _Ripple" InputGestureText="Ctrl+L" IsCheckable="True" Click="RippleMenuClick"/>
         <MenuItem x:Name="AutoRippleModeMenu" Header="Auto Ripple _Mode">
           <MenuItem x:Name="RippleAffectedTracksMenu" Header="_Affected Tracks" InputGestureText="F" IsCheckable="True" IsChecked="True" Click="RippleAffectedTracksClick"/>
@@ -1004,7 +1004,8 @@
       <DockPanel>
         <StackPanel Orientation="Horizontal" DockPanel.Dock="Right" VerticalAlignment="Center">
           <Button Style="{StaticResource IconButton}" Content="−" Width="24" Height="24" Click="ZoomOutClick" ToolTip="Zoom out" Foreground="{StaticResource TextColor}"/>
-          <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in" Foreground="{StaticResource TextColor}"/>
+          <Button Style="{StaticResource IconButton}" Content="+" Width="24" Height="24" Click="ZoomInClick" ToolTip="Zoom in"
+                  AutomationProperties.AutomationId="ZoomInTimelineButton" AutomationProperties.Name="Zoom in timeline" Foreground="{StaticResource TextColor}"/>
           <Button Style="{StaticResource IconButton}" Content="↔" Width="24" Height="24" Click="FitClick" ToolTip="Fit timeline"
                   AutomationProperties.AutomationId="FitTimelineButton" AutomationProperties.Name="Fit timeline" Foreground="{StaticResource TextColor}"/>
         </StackPanel>
@@ -1028,7 +1029,7 @@
           <Button x:Name="InsertMarkerButton" Style="{StaticResource IconButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_marker}" AutomationProperties.Name="Insert marker" AutomationProperties.AutomationId="InsertMarkerButton" Click="InsertMarkerClick" ToolTip="Insert marker (M)"/>
           <Separator Width="1" Background="{StaticResource ColorM}" Margin="4,2"/>
           <ToggleButton x:Name="AutoCrossfadeToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" ContentTemplate="{StaticResource ic_autocrossfade}" AutomationProperties.Name="Automatic Crossfades" ToolTip="Automatic Crossfades (X)" Click="AutoCrossfadeClick" Margin="2,0"/>
-          <ToggleButton x:Name="SnapToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" ContentTemplate="{StaticResource ic_snapping}" AutomationProperties.Name="Enable Snapping" ToolTip="Enable Snapping (N)" Click="SnapClick" Margin="2,0"/>
+          <ToggleButton x:Name="SnapToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" IsChecked="True" ContentTemplate="{StaticResource ic_snapping}" AutomationProperties.Name="Enable Snapping" ToolTip="Enable snapping (F8 or N)" Click="SnapClick" Margin="2,0"/>
           <ToggleButton x:Name="IgnoreGroupsToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_ignore_grouping}" AutomationProperties.Name="Ignore Event Grouping" ToolTip="Ignore Event Grouping (Ctrl+Shift+U)" Click="IgnoreGroupsClick" Margin="2,0"/>
           <ToggleButton x:Name="RippleToggle" Style="{StaticResource IconToggleButton}" Width="26" Height="26" ContentTemplate="{StaticResource ic_ripple}" AutomationProperties.Name="Auto Ripple" ToolTip="Auto Ripple (Ctrl+L) - Affected Tracks" Click="RippleClick" Margin="2,0">
             <ToggleButton.ContextMenu>

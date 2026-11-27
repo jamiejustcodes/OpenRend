@@ -212,6 +212,7 @@ public sealed partial class TimelineView : FrameworkElement
     private TimelineTrack? dragTrack;
     private string mode = "";
     private Point origin;
+    private double dragOriginOffset;
     private long delta;
     private int destination;
     private bool destinationIsNewTrack;
@@ -1952,6 +1953,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
         if (dragTrack!.IsLocked || dragging.IsLocked) { dragging = null; return; }
         mode = hit!.Value.Mode;
+        dragOriginOffset = Offset;
         destination = Project.Tracks.IndexOf(dragTrack); delta = 0;
         destinationIsNewTrack = false;
         destinationNewTrackIndex = destination;
@@ -2010,13 +2012,18 @@ public sealed partial class TimelineView : FrameworkElement
         }
         else if (p.Y < RulerHeight + 20 && VerticalOffset > 0) VerticalOffset = Math.Max(0, VerticalOffset - 15);
 
-        delta = Project.FrameRate.Frames((p.X - origin.X) / PixelsPerSecond);
+        var pixels = p.X - origin.X;
+        if (mode is "Move" or "TrimLeft" or "TrimRight")
+            pixels += Offset - dragOriginOffset;
+        delta = Project.FrameRate.Frames(pixels / PixelsPerSecond);
+        snappedFrame = null;
         if (mode == "Move")
         {
             var minStart = movingClipIds is not null && movingClipIds.Count > 0
                 ? Project.Tracks.SelectMany(t => t.Clips).Where(c => movingClipIds.Contains(c.Id)).Min(c => c.StartFrame)
                 : dragging.StartFrame;
-            delta = Math.Max(-minStart, delta);
+            var maxDelta = long.MaxValue - dragging.EndFrame;
+            delta = Math.Clamp(delta, -minStart, maxDelta);
 
             var sourceTrackIdx = dragTrack is not null ? Project.Tracks.IndexOf(dragTrack) : (int?)null;
             var targetResult = EvaluateDragTarget(p.Y, dragTrack!.Kind, sourceTrackIdx);
@@ -2041,59 +2048,8 @@ public sealed partial class TimelineView : FrameworkElement
                 }
             }
 
-            snappedFrame = null;
-            if (Snapping)
-            {
-                var ignoreIds = movingClipIds ?? Selection;
-                var points = Project.Tracks.SelectMany(t => t.Clips)
-                    .Where(c => !ignoreIds.Contains(c.Id))
-                    .SelectMany(c => new[] { c.StartFrame, c.EndFrame })
-                    .Append(Position)
-                    .Append(0)
-                    .Concat(Project.Markers.Select(m => m.Frame));
-                var start = dragging.StartFrame + delta;
-                var end = start + dragging.DurationFrames;
-                var threshold = Math.Max(1, Project.FrameRate.Frames(10 / PixelsPerSecond));
-
-                long bestSnapDelta = 0;
-                long? bestSnapPoint = null;
-                var minDistance = long.MaxValue;
-
-                foreach (var pt in points)
-                {
-                    var distStart = pt - start;
-                    if (Math.Abs(distStart) <= threshold && Math.Abs(distStart) < minDistance)
-                    {
-                        minDistance = Math.Abs(distStart);
-                        bestSnapDelta = distStart;
-                        bestSnapPoint = pt;
-                    }
-                    var distEnd = pt - end;
-                    if (Math.Abs(distEnd) <= threshold && Math.Abs(distEnd) < minDistance)
-                    {
-                        minDistance = Math.Abs(distEnd);
-                        bestSnapDelta = distEnd;
-                        bestSnapPoint = pt;
-                    }
-                    if (dragging.SnapOffsetFrames > 0)
-                    {
-                        var snapAnchor = start + dragging.SnapOffsetFrames;
-                        var distSnap = pt - snapAnchor;
-                        if (Math.Abs(distSnap) <= threshold && Math.Abs(distSnap) < minDistance)
-                        {
-                            minDistance = Math.Abs(distSnap);
-                            bestSnapDelta = distSnap;
-                            bestSnapPoint = pt;
-                        }
-                    }
-                }
-
-                if (bestSnapPoint.HasValue)
-                {
-                    delta = Math.Max(-minStart, delta + bestSnapDelta);
-                    snappedFrame = bestSnapPoint.Value;
-                }
-            }
+            SnapEventDrag(dragging, pixels, -minStart, maxDelta,
+                [dragging.StartFrame, dragging.EndFrame, dragging.StartFrame + dragging.SnapOffsetFrames]);
         }
         else if (mode == "SnapOffset")
         {
@@ -2130,16 +2086,24 @@ public sealed partial class TimelineView : FrameworkElement
                 delta = Math.Clamp(delta, -dragging.StartFrame, maxDelta);
             }
         }
-        else if (mode == "TrimLeft") delta = Math.Clamp(delta,
-            dragging.VideoSourceMode == VideoSourceMode.Bounded ? Math.Max(-dragging.SourceInFrame, -dragging.StartFrame) : -dragging.StartFrame,
-            dragging.DurationFrames - 1);
+        else if (mode == "TrimLeft")
+        {
+            var minimum = dragging.VideoSourceMode == VideoSourceMode.Bounded
+                ? Math.Max(-dragging.SourceInFrame, -dragging.StartFrame) : -dragging.StartFrame;
+            var maximum = dragging.DurationFrames - 1;
+            delta = Math.Clamp(delta, minimum, maximum);
+            SnapEventDrag(dragging, pixels, minimum, maximum, [dragging.StartFrame]);
+        }
         else
         {
             var media = Project.Media.First(m => m.Id == dragging.MediaId);
             var maximum = dragging.VideoSourceMode == VideoSourceMode.Bounded
                 ? Math.Max(0, Project.FrameRate.Frames(media.DurationSeconds) - dragging.SourceInFrame - dragging.DurationFrames)
                 : long.MaxValue - dragging.StartFrame - dragging.DurationFrames;
-            delta = Math.Clamp(delta, 1 - dragging.DurationFrames, maximum);
+            var minimum = 1 - dragging.DurationFrames;
+            delta = Math.Clamp(delta, minimum, maximum);
+            if (mode == "TrimRight")
+                SnapEventDrag(dragging, pixels, minimum, maximum, [dragging.EndFrame]);
         }
         if (mode == "Move" && isDragging && dragging is not null)
         {
@@ -2152,6 +2116,49 @@ public sealed partial class TimelineView : FrameworkElement
         }
         InvalidateVisual();
     }
+
+    private void SnapEventDrag(TimelineClip clip, double pixels, long minimum, long maximum, ReadOnlySpan<long> anchors)
+    {
+        var temporarilyInverted = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        if (Snapping == temporarilyInverted) return;
+
+        const double tolerance = 10;
+        var nearest = double.PositiveInfinity;
+        foreach (var target in EventSnapTargets(clip))
+        {
+            foreach (var anchor in anchors)
+            {
+                var candidate = target - anchor;
+                if (candidate < minimum || candidate > maximum) continue;
+                // Measure against the pointer before rounding to the project frame grid.
+                var distance = Math.Abs(Project.FrameRate.Seconds(candidate) * PixelsPerSecond - pixels);
+                if (distance > tolerance || distance >= nearest) continue;
+                nearest = distance;
+                delta = candidate;
+                snappedFrame = target;
+            }
+        }
+    }
+
+    private IEnumerable<long> EventSnapTargets(TimelineClip draggingClip)
+    {
+        foreach (var track in Project.Tracks)
+            foreach (var clip in track.Clips)
+            {
+                if (clip.Id == draggingClip.Id || (movingClipIds ?? Selection).Contains(clip.Id)) continue;
+                yield return clip.StartFrame;
+                yield return clip.EndFrame;
+            }
+        yield return Position;
+        yield return 0;
+        foreach (var marker in Project.Markers) yield return marker.Frame;
+        foreach (var region in Project.Regions)
+        {
+            yield return region.StartFrame;
+            yield return region.EndFrame;
+        }
+    }
+
     protected override void OnMouseLeftButtonUp(MouseButtonEventArgs e)
     {
         var p = e.GetPosition(this);
