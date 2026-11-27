@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Diagnostics;
 using FlaUI.Core.AutomationElements;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
@@ -39,19 +40,7 @@ public sealed partial class EditorWorkflowTests
 
             using var running = Launch(executable, path, temporary);
             var window = running.Window;
-            FitTimeline(window);
-            AutomationElement? clipElement = null;
-            WaitFor(() => (clipElement = window.FindFirstDescendant(c => c.ByAutomationId($"Clip_{clip.Id:N}")))?.BoundingRectangle.Width > 100,
-                "Fit Timeline did not expand the timeline event.");
-            var clipBounds = clipElement!.BoundingRectangle;
-            var menuPoint = new Point(clipBounds.Left + clipBounds.Width / 2, clipBounds.Top + clipBounds.Height / 2);
-            Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(menuPoint).Properties.ProcessId.Value);
-            Mouse.Click(menuPoint, MouseButton.Right);
-            AutomationElement? command = null;
-            WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(c =>
-                c.ByAutomationId("OpenEventInTrimmer").And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
-                "The timeline did not expose Open in Trimmer.");
-            Assert.True(command!.IsEnabled);
+            var command = OpenInTrimmerCommand(window, clip.Id);
             var titleBefore = window.Title;
             var undoBefore = Find(window, "UndoButton").IsEnabled;
             command.AsMenuItem().Invoke();
@@ -148,5 +137,68 @@ public sealed partial class EditorWorkflowTests
             }
         }
         finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public async Task TrimmerStopsAfterAOneSecondSelectionAtSixtyFramesPerSecond()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        try
+        {
+            var path = Path.Combine(temporary, "source-clock.openrend");
+            var media = new MediaAsset
+            {
+                Path = Path.Combine(root, "tests", "native", "fixture.mp4"),
+                Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true
+            };
+            var clip = new TimelineClip { MediaId = media.Id, SourceInFrame = 30, DurationFrames = 60 };
+            await ProjectStore.SaveAsync(new ProjectDocument
+            {
+                Name = "UI integration", Width = 320, Height = 180, FrameRate = new(60, 1),
+                Media = [media], Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }]
+            }, path);
+
+            using var running = Launch(executable, path, temporary);
+            var window = running.Window;
+            OpenInTrimmerCommand(window, clip.Id).AsMenuItem().Invoke();
+            var play = Find(window, "TrimmerPlayButton");
+            play.Focus();
+            Keyboard.Type(VirtualKeyShort.KEY_Q);
+            WaitFor(() => Find(window, "TrimmerLoopButton").Patterns.Toggle.Pattern.ToggleState.Value == ToggleState.Off,
+                "Trimmer loop playback did not turn off.");
+
+            var elapsed = Stopwatch.StartNew();
+            play.AsButton().Invoke();
+            WaitFor(() => play.Name == "Pause source", "The Trimmer did not start playing.");
+            WaitFor(() => play.Name == "Play source", "The Trimmer did not stop at the selected Out point.");
+            Assert.InRange(elapsed.Elapsed.TotalSeconds, .65, 1.65);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByName("Cursor: 00:00:01:30").And(c.ByControlType(ControlType.Text))) is not null,
+                "The Trimmer cursor did not reach the selected Out frame.");
+            running.CloseGracefully();
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    private static AutomationElement OpenInTrimmerCommand(Window window, Guid clipId)
+    {
+        FitTimeline(window);
+        AutomationElement? clip = null;
+        WaitFor(() => (clip = window.FindFirstDescendant(c => c.ByAutomationId($"Clip_{clipId:N}")))?.BoundingRectangle.Width > 100,
+            "Fit Timeline did not expand the timeline event.");
+        var bounds = clip!.BoundingRectangle;
+        var point = new Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2);
+        Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(point).Properties.ProcessId.Value);
+        Mouse.Click(point, MouseButton.Right);
+        AutomationElement? command = null;
+        WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(c =>
+            c.ByAutomationId("OpenEventInTrimmer").And(c.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
+            "The timeline did not expose Open in Trimmer.");
+        Assert.True(command!.IsEnabled);
+        return command;
     }
 }

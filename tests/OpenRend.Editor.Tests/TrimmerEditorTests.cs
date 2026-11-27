@@ -14,6 +14,29 @@ namespace OpenRend.Editor.Tests;
 
 public sealed class TrimmerEditorTests
 {
+    [Theory]
+    [InlineData(60, 1, 1000, 70)]
+    [InlineData(24_000, 1001, 1000, 33)]
+    [InlineData(30_000, 1001, 1001, 40)]
+    public void TrimmerPlaybackCountsElapsedProjectFrames(int numerator, int denominator, int milliseconds, long expected)
+    {
+        var result = TrimmerControl.PlaybackFrameAt(new FrameRange(0, 180), 10, new Rational(numerator, denominator),
+            1, TimeSpan.FromMilliseconds(milliseconds), loop: false);
+        Assert.Equal((expected, false), result);
+    }
+
+    [Fact]
+    public void TrimmerPlaybackKeepsTheLoopPhaseAfterDelayedTicksInBothDirections()
+    {
+        var range = new FrameRange(10, 10);
+        var rate = new Rational(24_000, 1001);
+        var elapsed = TimeSpan.FromSeconds(1);
+        Assert.Equal((15L, false), TrimmerControl.PlaybackFrameAt(range, 12, rate, 1, elapsed, loop: true));
+        Assert.Equal((11L, false), TrimmerControl.PlaybackFrameAt(range, 18, rate, -2, elapsed, loop: true));
+        Assert.Equal((20L, true), TrimmerControl.PlaybackFrameAt(range, 12, rate, 1, elapsed, loop: false));
+        Assert.Equal((10L, true), TrimmerControl.PlaybackFrameAt(range, 18, rate, -2, elapsed, loop: false));
+    }
+
     private static void RunSta(Action action)
     {
         Exception? error = null;

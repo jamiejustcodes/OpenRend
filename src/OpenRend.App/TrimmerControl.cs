@@ -1,4 +1,5 @@
 using System;
+using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -33,6 +34,8 @@ public sealed class TrimmerControl : UserControl
     private int shuttleSpeed = 0; // -8, -4, -2, -1, 0, 1, 2, 4, 8
     private bool isLooping = true;
     private readonly DispatcherTimer playbackTimer;
+    private readonly Stopwatch playbackClock = new();
+    private long playbackAnchor;
     private float[]? audioWaveform;
     private long mediaLoadId;
     private long previewRequestId;
@@ -96,7 +99,7 @@ public sealed class TrimmerControl : UserControl
 
         playbackTimer = new DispatcherTimer(DispatcherPriority.Render)
         {
-            Interval = TimeSpan.FromMilliseconds(33.33)
+            Interval = TimeSpan.FromMilliseconds(16)
         };
         playbackTimer.Tick += OnPlaybackTick;
 
@@ -256,6 +259,8 @@ public sealed class TrimmerControl : UserControl
         shuttleRevBtn = CreateToolbarBtn("◄◄", "Shuttle Reverse (J)", (_, _) => ShuttleReverse());
         prevFrameBtn = CreateToolbarBtn("◄", "Previous Frame (Left / Alt+Left: 5 frames)", (_, _) => StepFrame(-1));
         playPauseBtn = CreateToolbarBtn("▶", "Play / Pause (Space / K)", (_, _) => TogglePlayPause());
+        AutomationProperties.SetAutomationId(playPauseBtn, "TrimmerPlayButton");
+        AutomationProperties.SetName(playPauseBtn, "Play source");
         nextFrameBtn = CreateToolbarBtn("►", "Next Frame (Right / Alt+Right: 5 frames)", (_, _) => StepFrame(1));
         shuttleFwdBtn = CreateToolbarBtn("►►", "Shuttle Forward (L)", (_, _) => ShuttleForward());
         jumpEndBtn = CreateToolbarBtn("►|", "Go to End (End)", (_, _) => SeekTo(totalFrames));
@@ -272,7 +277,9 @@ public sealed class TrimmerControl : UserControl
             BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
             ToolTip = "Loop Playback (Q)"
         };
-        loopToggle.Click += (_, _) => isLooping = loopToggle.IsChecked == true;
+        loopToggle.Click += (_, _) => SetLoopPlayback(loopToggle.IsChecked == true);
+        AutomationProperties.SetAutomationId(loopToggle, "TrimmerLoopButton");
+        AutomationProperties.SetName(loopToggle, "Loop source playback");
 
         shuttleStatus = new TextBlock
         {
@@ -320,6 +327,7 @@ public sealed class TrimmerControl : UserControl
         var frameCount = Math.Max(1, rate.Frames(media.DurationSeconds));
         var range = sourceRange ?? new FrameRange(0, frameCount);
         range.Validate(frameCount);
+        StopPlayback();
         activeMedia = media;
         if (!SupportsStream(streamMode)) streamMode = TrimmerPlacementStream.VideoAndAudio;
         UpdateStreamButtons();
@@ -379,6 +387,7 @@ public sealed class TrimmerControl : UserControl
     {
         if (activeMedia is null) return;
         currentFrame = Math.Clamp(frame, 0, totalFrames);
+        RestartPlaybackClock();
         UpdateReadouts();
         RequestCurrentFrameAsync();
         ruler.InvalidateVisual();
@@ -388,6 +397,7 @@ public sealed class TrimmerControl : UserControl
     {
         if (activeMedia is null) return;
         inFrame = Math.Clamp(currentFrame, 0, outFrame);
+        RestartPlaybackClock();
         UpdateReadouts();
         ruler.InvalidateVisual();
     }
@@ -396,6 +406,7 @@ public sealed class TrimmerControl : UserControl
     {
         if (activeMedia is null) return;
         outFrame = Math.Clamp(currentFrame, inFrame, totalFrames);
+        RestartPlaybackClock();
         UpdateReadouts();
         ruler.InvalidateVisual();
     }
@@ -405,6 +416,7 @@ public sealed class TrimmerControl : UserControl
         if (activeMedia is null) return;
         inFrame = 0;
         outFrame = totalFrames;
+        RestartPlaybackClock();
         UpdateReadouts();
         ruler.InvalidateVisual();
     }
@@ -423,13 +435,19 @@ public sealed class TrimmerControl : UserControl
     public void StartPlayback(int speed = 1)
     {
         if (activeMedia is null) return;
+        var range = PlacementRange;
+        if (currentFrame < range.StartFrame || currentFrame >= range.EndFrame || speed < 0 && currentFrame == range.StartFrame)
+            currentFrame = speed < 0 ? range.EndFrame - 1 : range.StartFrame;
         isPlaying = true;
-        shuttleSpeed = speed;
-        if (speed > 0 && (currentFrame >= outFrame || currentFrame < inFrame)) currentFrame = inFrame;
-        else if (speed < 0 && (currentFrame <= inFrame || currentFrame > outFrame)) currentFrame = outFrame;
+        shuttleSpeed = speed == 0 ? 1 : speed;
+        RestartPlaybackClock();
         playbackTimer.Start();
         playPauseBtn.Content = "⏸";
+        AutomationProperties.SetName(playPauseBtn, "Pause source");
         UpdateShuttleLabel();
+        UpdateReadouts();
+        RequestCurrentFrameAsync();
+        ruler.InvalidateVisual();
     }
 
     public void StopPlayback()
@@ -437,7 +455,9 @@ public sealed class TrimmerControl : UserControl
         isPlaying = false;
         shuttleSpeed = 0;
         playbackTimer.Stop();
+        playbackClock.Stop();
         playPauseBtn.Content = "▶";
+        AutomationProperties.SetName(playPauseBtn, "Play source");
         UpdateShuttleLabel();
     }
 
@@ -621,41 +641,45 @@ public sealed class TrimmerControl : UserControl
     private void OnPlaybackTick(object? sender, EventArgs e)
     {
         if (!isPlaying || activeMedia is null) return;
-
-        var step = shuttleSpeed != 0 ? shuttleSpeed : 1;
-        currentFrame += step;
-
-        if (step > 0 && currentFrame >= outFrame)
-        {
-            if (isLooping)
-            {
-                currentFrame = inFrame;
-            }
-            else
-            {
-                currentFrame = outFrame;
-                StopPlayback();
-                return;
-            }
-        }
-        else if (step < 0 && currentFrame <= inFrame)
-        {
-            if (isLooping)
-            {
-                currentFrame = outFrame;
-            }
-            else
-            {
-                currentFrame = inFrame;
-                StopPlayback();
-                return;
-            }
-        }
-
-        currentFrame = Math.Clamp(currentFrame, 0, totalFrames);
+        var rate = vm?.Project.FrameRate ?? new Rational(30, 1);
+        var (frame, finished) = PlaybackFrameAt(PlacementRange, playbackAnchor, rate, shuttleSpeed, playbackClock.Elapsed, isLooping);
+        if (frame == currentFrame && !finished) return;
+        currentFrame = frame;
+        if (finished) StopPlayback();
         UpdateReadouts();
-        RequestCurrentFrameAsync();
+        if (!finished) RequestCurrentFrameAsync();
         ruler.InvalidateVisual();
+    }
+
+    private void RestartPlaybackClock()
+    {
+        if (!isPlaying) return;
+        playbackAnchor = currentFrame;
+        playbackClock.Restart();
+    }
+
+    private void SetLoopPlayback(bool enabled)
+    {
+        isLooping = enabled;
+        loopToggle.IsChecked = enabled;
+        RestartPlaybackClock();
+    }
+
+    internal static (long Frame, bool Finished) PlaybackFrameAt(FrameRange range, long anchor, Rational rate,
+        int speed, TimeSpan elapsed, bool loop)
+    {
+        var frames = (Int128)elapsed.Ticks * rate.Numerator * speed / ((long)TimeSpan.TicksPerSecond * rate.Denominator);
+        var position = anchor + frames;
+        if (loop)
+        {
+            // Keep the phase when a delayed dispatcher tick spans one or more loops.
+            var wrapped = (position - range.StartFrame) % range.FrameCount;
+            if (wrapped < 0) wrapped += range.FrameCount;
+            return (range.StartFrame + (long)wrapped, false);
+        }
+        if (position >= range.EndFrame) return (range.EndFrame, true);
+        if (position < range.StartFrame) return (range.StartFrame, true);
+        return ((long)position, false);
     }
 
     private async void RequestCurrentFrameAsync()
@@ -716,7 +740,7 @@ public sealed class TrimmerControl : UserControl
         else if (e.Key == Key.J) { ShuttleReverse(); e.Handled = true; }
         else if (e.Key == Key.K) { StopPlayback(); e.Handled = true; }
         else if (e.Key == Key.L) { ShuttleForward(); e.Handled = true; }
-        else if (e.Key == Key.Q) { isLooping = !isLooping; loopToggle.IsChecked = isLooping; e.Handled = true; }
+        else if (e.Key == Key.Q) { SetLoopPlayback(!isLooping); e.Handled = true; }
         else if (e.Key == Key.Left) { StepFrame(alt ? -5 : -1); e.Handled = true; }
         else if (e.Key == Key.Right) { StepFrame(alt ? 5 : 1); e.Handled = true; }
     }
