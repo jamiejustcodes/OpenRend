@@ -399,8 +399,79 @@
         </Style.Triggers>
       </Style>
 
-      <Style TargetType="TabControl"><Setter Property="Background" Value="{StaticResource PanelBrush}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabControl"><Grid Background="{TemplateBinding Background}"><Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="28"/></Grid.RowDefinitions><ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent" KeyboardNavigation.TabNavigation="Local"/><TabPanel Grid.Row="1" IsItemsHost="True" Background="{StaticResource HeaderBrush}" KeyboardNavigation.TabIndex="1" ClipToBounds="True"/></Grid></ControlTemplate></Setter.Value></Setter></Style>
-      <Style x:Key="NativeTabItem" TargetType="TabItem"><Setter Property="Foreground" Value="{StaticResource MutedBrush}"/><Setter Property="Background" Value="{StaticResource HeaderBrush}"/><Setter Property="FontSize" Value="11"/><Setter Property="Height" Value="28"/><Setter Property="Padding" Value="9,0"/><Setter Property="FocusVisualStyle" Value="{x:Null}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TabItem"><Grid><Border x:Name="Surface" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="Header" RecognizesAccessKey="True" HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><Border x:Name="SelectionLine" VerticalAlignment="Top" Height="1" Background="Transparent"/></Grid><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource ColorM}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource ColorD}"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter TargetName="SelectionLine" Property="Background" Value="{StaticResource ActiveColor}"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="SelectionLine" Property="Background" Value="{StaticResource FocusBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+      <Style TargetType="TabControl">
+        <Setter Property="Background" Value="{StaticResource PanelBrush}"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="0"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="TabControl">
+              <DockPanel Background="{TemplateBinding Background}">
+                <TabPanel DockPanel.Dock="{TemplateBinding TabStripPlacement}" IsItemsHost="True"
+                          Background="{StaticResource HeaderBrush}" ClipToBounds="True"
+                          MinHeight="28" KeyboardNavigation.TabIndex="0"/>
+                <Border BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"
+                        Padding="{TemplateBinding Padding}" KeyboardNavigation.TabIndex="1">
+                  <ContentPresenter x:Name="PART_SelectedContentHost" ContentSource="SelectedContent"
+                                    KeyboardNavigation.TabNavigation="Local"/>
+                </Border>
+              </DockPanel>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
+      <Style x:Key="NativeTabItem" TargetType="TabItem">
+        <Setter Property="Foreground" Value="{StaticResource MutedBrush}"/>
+        <Setter Property="Background" Value="{StaticResource HeaderBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="Height" Value="28"/>
+        <Setter Property="Padding" Value="9,0"/>
+        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="TabItem">
+              <Grid>
+                <Border x:Name="Surface" Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
+                  <ContentPresenter ContentSource="Header" RecognizesAccessKey="True"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                </Border>
+                <Border x:Name="SelectionLine" VerticalAlignment="Bottom" Height="1" Background="Transparent"/>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <DataTrigger Binding="{Binding TabStripPlacement, RelativeSource={RelativeSource AncestorType=TabControl}}" Value="Bottom">
+                  <Setter TargetName="SelectionLine" Property="VerticalAlignment" Value="Top"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TabStripPlacement, RelativeSource={RelativeSource AncestorType=TabControl}}" Value="Left">
+                  <Setter TargetName="SelectionLine" Property="VerticalAlignment" Value="Stretch"/>
+                  <Setter TargetName="SelectionLine" Property="HorizontalAlignment" Value="Right"/>
+                  <Setter TargetName="SelectionLine" Property="Height" Value="Auto"/>
+                  <Setter TargetName="SelectionLine" Property="Width" Value="1"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding TabStripPlacement, RelativeSource={RelativeSource AncestorType=TabControl}}" Value="Right">
+                  <Setter TargetName="SelectionLine" Property="VerticalAlignment" Value="Stretch"/>
+                  <Setter TargetName="SelectionLine" Property="HorizontalAlignment" Value="Left"/>
+                  <Setter TargetName="SelectionLine" Property="Height" Value="Auto"/>
+                  <Setter TargetName="SelectionLine" Property="Width" Value="1"/>
+                </DataTrigger>
+                <Trigger Property="IsMouseOver" Value="True">
+                  <Setter TargetName="Surface" Property="Background" Value="{StaticResource ColorM}"/>
+                </Trigger>
+                <Trigger Property="IsSelected" Value="True">
+                  <Setter TargetName="Surface" Property="Background" Value="{StaticResource ColorD}"/>
+                  <Setter Property="Foreground" Value="{StaticResource TextColor}"/>
+                  <Setter TargetName="SelectionLine" Property="Background" Value="{StaticResource ActiveColor}"/>
+                </Trigger>
+                <Trigger Property="IsKeyboardFocused" Value="True">
+                  <Setter TargetName="SelectionLine" Property="Background" Value="{StaticResource FocusBrush}"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+      </Style>
       <Style TargetType="TabItem" BasedOn="{StaticResource NativeTabItem}"/>
 
       <Style TargetType="TextBox"><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="Background" Value="{StaticResource ColorBG}"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="4,3"/><Setter Property="Margin" Value="2"/><Setter Property="FontSize" Value="11"/><Setter Property="MinHeight" Value="23"/><Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="CaretBrush" Value="{StaticResource TextColor}"/><Setter Property="SelectionBrush" Value="{StaticResource SelectionBrush}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource FocusBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>

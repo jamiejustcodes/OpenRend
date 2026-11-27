@@ -18,6 +18,8 @@ OpenRend declares per-monitor v2 DPI awareness. After WPF processes a DPI change
 
 Standard tool and dialog title bars use the same OpenRend colors as the workspace. A shared window hook applies the caption and text colors and leaves the familiar Windows caption buttons in place. Windows contrast themes use system caption colors. Live Windows 11 captures verified the shared caption color in Marker, Region, Pan/Crop and Render As.
 
+The shared tab template follows the control's configured placement. Settings tabs appear above the form, and workspace tabs stay below each pane. The selected and focused tab indicator sits next to the page it controls. The desktop workflow measures the tabs and fields in Project Properties and the Project Media tab and list in the workspace.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.
