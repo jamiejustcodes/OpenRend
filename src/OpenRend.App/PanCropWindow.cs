@@ -70,7 +70,12 @@ public sealed class PanCropWindow : Window
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "OpenRend"),
         "pancrop.json");
     private PanCropPreferences panCropPrefs = new();
-    private readonly List<string> presetNames = [];
+    private static readonly string[] BuiltInPresetNames =
+    [
+        "Full frame", "Half size", "Square center", "16:9 Widescreen TV (1.778)",
+        "4:3 Standard TV (1.333)", "9:16 Vertical Video (0.5625)", "2.39:1 CinemaScope (2.390)",
+        "Match Output Aspect", "Match Source Aspect"
+    ];
     private long localFrame;
     private bool refreshing;
     private bool closed;
@@ -118,47 +123,23 @@ public sealed class PanCropWindow : Window
         Grid.SetRow(presetRow, 2); root.Children.Add(presetRow);
         presetRow.Children.Add(new TextBlock { Text = "Preset:", Width = 72, VerticalAlignment = VerticalAlignment.Center });
 
-        var deletePresetBtn = Button("✕", "Delete preset", DeleteCurrentPreset);
+        var deletePresetBtn = PresetButton("Icon.Delete", "Delete preset", DeleteCurrentPreset);
         AutomationProperties.SetAutomationId(deletePresetBtn, "DeleteCropPreset");
         DockPanel.SetDock(deletePresetBtn, Dock.Right);
         presetRow.Children.Add(deletePresetBtn);
 
-        var savePresetBtn = Button("💾", "Save preset", SaveCurrentPreset);
+        var savePresetBtn = PresetButton("Icon.Save", "Save preset", SaveCurrentPreset);
         AutomationProperties.SetAutomationId(savePresetBtn, "SaveCropPreset");
         DockPanel.SetDock(savePresetBtn, Dock.Right);
         presetRow.Children.Add(savePresetBtn);
 
-        presets = new ComboBox { IsEditable = true };
+        presets = new ComboBox { IsEditable = true, IsTextSearchEnabled = false };
         AutomationProperties.SetName(presets, "Crop preset");
         AutomationProperties.SetAutomationId(presets, "CropPresetCombo");
         PopulatePresets();
         presets.SelectionChanged += (_, _) =>
         {
-            if (refreshing || presets.SelectedIndex < 0) return;
-            var selectedName = presets.SelectedItem as string ?? presets.Text;
-            var identity = CropState.Identity(Source.Width, Source.Height);
-
-            CropState CalculateAspectCrop(double targetAspect)
-            {
-                var sourceAspect = (double)Source.Width / Source.Height;
-                var w = sourceAspect > targetAspect ? Source.Height * targetAspect : Source.Width;
-                var h = sourceAspect > targetAspect ? Source.Height : Source.Width / targetAspect;
-                return identity with { Width = w, Height = h, CenterX = Source.Width / 2.0, CenterY = Source.Height / 2.0 };
-            }
-
-            var preset = selectedName switch
-            {
-                "Full frame" => identity,
-                "Half size" => identity with { Width = identity.Width / 2, Height = identity.Height / 2 },
-                "Square center" => identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) },
-                "16:9 Widescreen TV (1.778)" => CalculateAspectCrop(16.0 / 9.0),
-                "4:3 Standard TV (1.333)" => CalculateAspectCrop(4.0 / 3.0),
-                "9:16 Vertical Video (0.5625)" => CalculateAspectCrop(9.0 / 16.0),
-                "2.39:1 CinemaScope (2.390)" => CalculateAspectCrop(2.39),
-                "Match Output Aspect" => CalculateAspectCrop((double)vm.Project.Width / vm.Project.Height),
-                "Match Source Aspect" => identity,
-                _ => panCropPrefs.CustomPresets.FirstOrDefault(p => string.Equals(p.Name, selectedName, StringComparison.OrdinalIgnoreCase))?.ToState() ?? identity
-            };
+            if (refreshing || presets.SelectedItem is not string name || PresetState(name) is not { } preset) return;
             Edit(() => editor.SetCropKeyframe(clipId, localFrame, preset, CurrentInterpolation, CurrentSmoothness));
         };
         presetRow.Children.Add(presets);
@@ -700,26 +681,47 @@ public sealed class PanCropWindow : Window
     private void PopulatePresets(string? selectName = null)
     {
         panCropPrefs = PanCropPreferencesStore.Load(PanCropPreferencesPath);
-        presetNames.Clear();
-        presetNames.AddRange([
-            "Full frame",
-            "Half size",
-            "Square center",
-            "16:9 Widescreen TV (1.778)",
-            "4:3 Standard TV (1.333)",
-            "9:16 Vertical Video (0.5625)",
-            "2.39:1 CinemaScope (2.390)",
-            "Match Output Aspect",
-            "Match Source Aspect"
-        ]);
-        foreach (var custom in panCropPrefs.CustomPresets)
+        var wasRefreshing = refreshing;
+        refreshing = true;
+        try
         {
-            presetNames.Add(custom.Name);
+            presets.ItemsSource = BuiltInPresetNames.Concat(panCropPrefs.CustomPresets.Select(preset => preset.Name)).ToArray();
+            presets.SelectedItem = selectName;
         }
-        presets.ItemsSource = null;
-        presets.ItemsSource = presetNames.ToArray();
+        finally { refreshing = wasRefreshing; }
+    }
 
-        if (selectName != null) presets.SelectedItem = selectName;
+    private CropState? PresetState(string name)
+    {
+        var source = Source;
+        var identity = CropState.Identity(source.Width, source.Height);
+        CropState FitAspect(double targetAspect)
+        {
+            var sourceAspect = (double)source.Width / source.Height;
+            return sourceAspect > targetAspect
+                ? identity with { Width = source.Height * targetAspect }
+                : identity with { Height = source.Width / targetAspect };
+        }
+
+        return name switch
+        {
+            "Full frame" or "Match Source Aspect" => identity,
+            "Half size" => identity with { Width = identity.Width / 2, Height = identity.Height / 2 },
+            "Square center" => FitAspect(1),
+            "16:9 Widescreen TV (1.778)" => FitAspect(16.0 / 9.0),
+            "4:3 Standard TV (1.333)" => FitAspect(4.0 / 3.0),
+            "9:16 Vertical Video (0.5625)" => FitAspect(9.0 / 16.0),
+            "2.39:1 CinemaScope (2.390)" => FitAspect(2.39),
+            "Match Output Aspect" => FitAspect((double)vm.Project.Width / vm.Project.Height),
+            _ => panCropPrefs.CustomPresets.FirstOrDefault(preset => preset.Name == name)?.ToState()
+        };
+    }
+
+    private void UpdateSelectedPreset()
+    {
+        if (presets.SelectedItem is string selected && PresetState(selected) == state) return;
+        presets.SelectedItem = BuiltInPresetNames.FirstOrDefault(name => PresetState(name) == state)
+            ?? panCropPrefs.CustomPresets.FirstOrDefault(preset => preset.ToState() == state)?.Name;
     }
 
     private void SaveCurrentPreset()
@@ -730,14 +732,18 @@ public sealed class PanCropWindow : Window
             status.Text = "Please enter a preset name to save.";
             return;
         }
+        if (BuiltInPresetNames.Contains(name, StringComparer.OrdinalIgnoreCase))
+        {
+            status.Text = "Enter a different name for your preset.";
+            return;
+        }
         var preset = PanCropPreset.FromState(name, state);
         var list = new List<PanCropPreset>(panCropPrefs.CustomPresets);
         var existingIndex = list.FindIndex(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existingIndex >= 0) list[existingIndex] = preset;
         else list.Add(preset);
 
-        panCropPrefs = panCropPrefs with { CustomPresets = list };
-        PanCropPreferencesStore.Save(panCropPrefs, PanCropPreferencesPath);
+        PanCropPreferencesStore.Save(panCropPrefs with { CustomPresets = list }, PanCropPreferencesPath);
         PopulatePresets(name);
         status.Text = $"Preset '{name}' saved.";
     }
@@ -750,15 +756,26 @@ public sealed class PanCropWindow : Window
         var removed = list.RemoveAll(p => string.Equals(p.Name, selected, StringComparison.OrdinalIgnoreCase));
         if (removed > 0)
         {
-            panCropPrefs = panCropPrefs with { CustomPresets = list };
-            PanCropPreferencesStore.Save(panCropPrefs, PanCropPreferencesPath);
-            PopulatePresets("Full frame");
+            PanCropPreferencesStore.Save(panCropPrefs with { CustomPresets = list }, PanCropPreferencesPath);
+            PopulatePresets();
             status.Text = $"Preset '{selected}' deleted.";
         }
         else
         {
-            status.Text = "Built-in presets cannot be deleted.";
+            status.Text = BuiltInPresetNames.Contains(selected, StringComparer.OrdinalIgnoreCase)
+                ? "Built-in presets cannot be deleted."
+                : "Choose a saved preset to delete.";
         }
+    }
+
+    private Button PresetButton(string icon, string label, Action action)
+    {
+        var button = Button(string.Empty, label, action);
+        button.SetResourceReference(StyleProperty, "ToolbarButton");
+        var image = new Image { Width = 14, Height = 14 };
+        image.SetResourceReference(Image.SourceProperty, icon);
+        button.Content = image;
+        return button;
     }
 
     private static Button Button(string text, string label, Action action)
@@ -788,14 +805,7 @@ public sealed class PanCropWindow : Window
         {
             RefreshFields();
             frameField.Text = localFrame.ToString(CultureInfo.InvariantCulture);
-            var identity = CropState.Identity(Source.Width, Source.Height);
-            if (presets.SelectedIndex < 0)
-            {
-                var customMatch = panCropPrefs.CustomPresets.FindIndex(p => p.ToState() == state);
-                if (customMatch >= 0) presets.SelectedIndex = 9 + customMatch;
-            }
-            presets.SelectedIndex = state == identity ? 0 : state == (identity with { Width = identity.Width / 2, Height = identity.Height / 2 }) ? 1
-                : state == (identity with { Width = Math.Min(identity.Width, identity.Height), Height = Math.Min(identity.Width, identity.Height) }) ? 2 : -1;
+            UpdateSelectedPreset();
 
             var current = checked(localFrame + EventClip.CropOffsetFrames);
 

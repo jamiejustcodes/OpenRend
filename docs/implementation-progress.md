@@ -30,6 +30,8 @@ The editor menus use WPF access keys. Main timeline commands yield while a menu 
 
 Marker and region editors use the same form layout and color picker as each other. The marker displays its position in the active ruler format. The region form shows its frame count as the bounds change and gives inline feedback for an invalid range. A marker's label and color save in one undo step. The desktop workflow edits both forms, verifies the saved details and checks region selection and ripple after reopening.
 
+Pan/Crop uses the shared editable dropdown for position presets. Type a name and use Save preset to store the current crop. Choosing a preset applies it at the current frame, and deleting a preset removes it from the list while preserving the event crop. The desktop workflow types a name, restarts the application, reapplies the saved crop and verifies that deletion preserves the edited width in the project.
+
 ## Auto Ripple and ruler regions
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.

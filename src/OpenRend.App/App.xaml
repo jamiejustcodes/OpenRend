@@ -405,7 +405,72 @@
 
       <Style TargetType="TextBox"><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="Background" Value="{StaticResource ColorBG}"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="4,3"/><Setter Property="Margin" Value="2"/><Setter Property="FontSize" Value="11"/><Setter Property="MinHeight" Value="23"/><Setter Property="VerticalContentAlignment" Value="Center"/><Setter Property="CaretBrush" Value="{StaticResource TextColor}"/><Setter Property="SelectionBrush" Value="{StaticResource SelectionBrush}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TextBox"><Border x:Name="Surface" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}"><ScrollViewer x:Name="PART_ContentHost" Margin="{TemplateBinding Padding}"/></Border><ControlTemplate.Triggers><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource FocusBrush}"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
 
-      <Style TargetType="ComboBox"><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="Background" Value="{StaticResource ColorD}"/><Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/><Setter Property="FontSize" Value="11"/><Setter Property="MinHeight" Value="23"/><Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBox"><Grid><ToggleButton x:Name="Toggle" Focusable="False" IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border x:Name="Surface" Background="{StaticResource ColorD}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1"/><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource HoverColor}"/></Trigger><Trigger Property="IsChecked" Value="True"><Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource FocusBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><ContentPresenter Content="{TemplateBinding SelectionBoxItem}" ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}" Margin="5,2,22,2" VerticalAlignment="Center" IsHitTestVisible="False"/><Path Data="M 0,0 L 4,4 8,0" Stroke="{StaticResource TextColorGrey}" StrokeThickness="1" HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,7,0" IsHitTestVisible="False"/><Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True" Focusable="False"><Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource BorderBrush}" BorderThickness="1" MinWidth="{TemplateBinding ActualWidth}"><ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}" CanContentScroll="True"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/></ScrollViewer></Border></Popup></Grid><ControlTemplate.Triggers><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
+      <Style TargetType="ComboBox">
+        <Setter Property="Foreground" Value="{StaticResource TextColor}"/>
+        <Setter Property="Background" Value="{StaticResource ColorD}"/>
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="MinHeight" Value="23"/>
+        <Setter Property="FocusVisualStyle" Value="{StaticResource KeyboardFocus}"/>
+        <Setter Property="Template">
+          <Setter.Value>
+            <ControlTemplate TargetType="ComboBox">
+              <Grid>
+                <ToggleButton Focusable="False"
+                              Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}"
+                              IsChecked="{Binding IsDropDownOpen, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}">
+                  <ToggleButton.Template>
+                    <ControlTemplate TargetType="ToggleButton">
+                      <Border x:Name="Surface" Background="{TemplateBinding Background}"
+                              BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="1"/>
+                      <ControlTemplate.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                          <Setter TargetName="Surface" Property="Background" Value="{StaticResource HoverColor}"/>
+                        </Trigger>
+                        <Trigger Property="IsChecked" Value="True">
+                          <Setter TargetName="Surface" Property="BorderBrush" Value="{StaticResource FocusBrush}"/>
+                        </Trigger>
+                      </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                  </ToggleButton.Template>
+                </ToggleButton>
+                <ContentPresenter x:Name="Selection" Content="{TemplateBinding SelectionBoxItem}"
+                                  ContentTemplate="{TemplateBinding SelectionBoxItemTemplate}"
+                                  Margin="5,2,22,2" VerticalAlignment="Center" IsHitTestVisible="False"/>
+                <TextBox x:Name="PART_EditableTextBox" Visibility="Collapsed"
+                         IsReadOnly="{TemplateBinding IsReadOnly}" Margin="1,1,22,1"
+                         MinHeight="0" BorderThickness="0" Padding="4,1"
+                         VerticalContentAlignment="Center"/>
+                <Path Data="M 0,0 L 4,4 8,0" Stroke="{StaticResource TextColorGrey}" StrokeThickness="1"
+                      HorizontalAlignment="Right" VerticalAlignment="Center" Margin="0,0,7,0" IsHitTestVisible="False"/>
+                <Popup x:Name="PART_Popup" IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom"
+                       AllowsTransparency="True" Focusable="False">
+                  <Border Background="{StaticResource ColorBG}" BorderBrush="{StaticResource BorderBrush}"
+                          BorderThickness="1" MinWidth="{TemplateBinding ActualWidth}">
+                    <ScrollViewer MaxHeight="{TemplateBinding MaxDropDownHeight}" CanContentScroll="True">
+                      <ItemsPresenter KeyboardNavigation.DirectionalNavigation="Contained"/>
+                    </ScrollViewer>
+                  </Border>
+                </Popup>
+              </Grid>
+              <ControlTemplate.Triggers>
+                <Trigger Property="IsEditable" Value="True">
+                  <Setter TargetName="Selection" Property="Visibility" Value="Collapsed"/>
+                  <Setter TargetName="PART_EditableTextBox" Property="Visibility" Value="Visible"/>
+                </Trigger>
+                <Trigger Property="IsEnabled" Value="False">
+                  <Setter Property="Opacity" Value="0.4"/>
+                </Trigger>
+              </ControlTemplate.Triggers>
+            </ControlTemplate>
+          </Setter.Value>
+        </Setter>
+        <Style.Triggers>
+          <Trigger Property="IsEditable" Value="True">
+            <Setter Property="IsTabStop" Value="False"/>
+          </Trigger>
+        </Style.Triggers>
+      </Style>
       <Style TargetType="ComboBoxItem"><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="FontSize" Value="11"/><Setter Property="Padding" Value="6,4"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ComboBoxItem"><Border x:Name="Surface" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border><ControlTemplate.Triggers><Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource HoverColor}"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="Surface" Property="Background" Value="{StaticResource SelectionBrush}"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
       <Style TargetType="ListBox"><Setter Property="Background" Value="{StaticResource PanelBrush}"/><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="BorderThickness" Value="0"/><Setter Property="Padding" Value="0"/><Setter Property="FontSize" Value="11"/><Setter Property="ScrollViewer.HorizontalScrollBarVisibility" Value="Disabled"/><Setter Property="ScrollViewer.CanContentScroll" Value="True"/><Setter Property="VirtualizingPanel.IsVirtualizing" Value="True"/><Setter Property="VirtualizingPanel.VirtualizationMode" Value="Recycling"/></Style>
       <Style TargetType="TreeViewItem"><Setter Property="Foreground" Value="{StaticResource TextColor}"/><Setter Property="Padding" Value="3,0"/><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="TreeViewItem"><StackPanel><Grid><Grid.ColumnDefinitions><ColumnDefinition Width="16"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions><ToggleButton x:Name="Expand" IsChecked="{Binding IsExpanded, RelativeSource={RelativeSource TemplatedParent}, Mode=TwoWay}" Focusable="False" Width="16" Height="16"><ToggleButton.Template><ControlTemplate TargetType="ToggleButton"><Border Background="Transparent"><Path x:Name="Arrow" Data="M 5,4 L 9,8 5,12" Stroke="{StaticResource TextColorGrey}" StrokeThickness="1" RenderTransformOrigin="0.5,0.5"/></Border><ControlTemplate.Triggers><Trigger Property="IsChecked" Value="True"><Setter TargetName="Arrow" Property="RenderTransform"><Setter.Value><RotateTransform Angle="90"/></Setter.Value></Setter></Trigger></ControlTemplate.Triggers></ControlTemplate></ToggleButton.Template></ToggleButton><Border x:Name="HeaderSurface" Grid.Column="1" Background="Transparent" Padding="{TemplateBinding Padding}"><ContentPresenter ContentSource="Header" VerticalAlignment="Center"/></Border></Grid><ItemsPresenter x:Name="Children" Margin="14,0,0,0" Visibility="Collapsed"/></StackPanel><ControlTemplate.Triggers><Trigger Property="IsExpanded" Value="True"><Setter TargetName="Children" Property="Visibility" Value="Visible"/></Trigger><Trigger Property="HasItems" Value="False"><Setter TargetName="Expand" Property="Visibility" Value="Hidden"/></Trigger><Trigger Property="IsSelected" Value="True"><Setter TargetName="HeaderSurface" Property="Background" Value="{StaticResource HoverColor}"/></Trigger><Trigger Property="IsKeyboardFocusWithin" Value="True"><Setter TargetName="HeaderSurface" Property="BorderBrush" Value="{StaticResource FocusBrush}"/><Setter TargetName="HeaderSurface" Property="BorderThickness" Value="1"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style>
