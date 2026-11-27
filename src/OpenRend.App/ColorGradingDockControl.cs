@@ -129,7 +129,6 @@ public sealed partial class ColorGradingDockControl : UserControl
     private readonly ColorCurvesControl curvesControl;
     private readonly TextBlock curveReadout;
     private readonly HSLCurvesControl hslCurvesControl;
-    private readonly TextBlock hslCurveReadout;
 
     // LUT Slots
     private readonly TextBlock cameraLutPathText;
@@ -278,7 +277,7 @@ public sealed partial class ColorGradingDockControl : UserControl
             out valHslSlider, out valHslVal);
 
         // Page 4: Curves
-        curvesPage = CreateCurvesPage(out curvesControl, out curveReadout, out hslCurvesControl, out hslCurveReadout);
+        curvesPage = CreateCurvesPage(out curvesControl, out curveReadout, out hslCurvesControl);
         rangePage = CreateRangePage(out var rangeWheelsGrid);
 
         pageContainer.Children.Add(lutsPage);
@@ -873,7 +872,7 @@ public sealed partial class ColorGradingDockControl : UserControl
 
     private Grid CreateCurvesPage(
         out ColorCurvesControl ctrl, out TextBlock readout,
-        out HSLCurvesControl hslCtrl, out TextBlock hslReadout)
+        out HSLCurvesControl hslCtrl)
     {
         var grid = new Grid();
         grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
@@ -1043,13 +1042,10 @@ public sealed partial class ColorGradingDockControl : UserControl
         hslCtrl.CurvesChanged += CommitHslCurves;
         hslCtrl.CurvePreviewChanged += PreviewCurves;
 
-        var hslStatus = new TextBlock { Text = "Hue vs saturation", Margin = new Thickness(0, 0, 0, 4) };
-        hslStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
-        hslReadout = hslStatus;
-        hc.PointSelected += text => hslStatus.Text = text;
+        var pointFields = CreateHslPointFields(hc);
         hslGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-        Grid.SetRow(hslStatus, 2);
-        hslGrid.Children.Add(hslStatus);
+        Grid.SetRow(pointFields, 2);
+        hslGrid.Children.Add(pointFields);
 
         Grid.SetRow(hslCtrl, 1);
         hslGrid.Children.Add(hslCtrl);

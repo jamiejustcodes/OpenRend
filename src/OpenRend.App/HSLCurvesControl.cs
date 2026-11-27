@@ -1,6 +1,5 @@
 using System;
 using System.Collections.Generic;
-using System.Globalization;
 using System.Windows;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -24,7 +23,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
 
     public event Action? CurvesChanged;
     internal event Action? CurvePreviewChanged;
-    public event Action<string>? PointSelected;
+    internal event Action? PointChanged;
 
     public HSLCurveMode ActiveMode
     {
@@ -66,7 +65,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
         _ => curves.HueVsSat
     };
 
-    private bool IsHueMode => activeMode is HSLCurveMode.HueVsHue or HSLCurveMode.HueVsSat or HSLCurveMode.HueVsLum;
+    internal bool IsHueMode => activeMode is HSLCurveMode.HueVsHue or HSLCurveMode.HueVsSat or HSLCurveMode.HueVsLum;
     private bool IsSaturationMode => activeMode is HSLCurveMode.SatVsSat or HSLCurveMode.SatVsLum;
     private bool UsesFreePoints => activeMode == HSLCurveMode.SatVsLum;
 
@@ -78,6 +77,47 @@ public sealed class HSLCurvesControl : CurveGraphControl
     }
     protected override bool WrapTangents => IsHueMode;
     protected override bool ClampStoredTangents => true;
+
+    internal Point? SelectedPoint => selectedPointIndex >= 0 && selectedPointIndex < PointCount
+        ? CurvePointAt(selectedPointIndex) : null;
+
+    internal bool CanMoveSelectedInput => SelectedPoint is not null &&
+        (IsHueMode || UsesFreePoints || (selectedPointIndex > 0 && selectedPointIndex < PointCount - 1));
+
+    internal bool SetSelectedCoordinate(bool input, double value)
+    {
+        if (SelectedPoint is not { } selected || IsDragging || !double.IsFinite(value) || value is < 0 or > 1)
+            return false;
+        var points = ActiveCurve.Points;
+        var current = points[selectedPointIndex];
+        if (input)
+        {
+            if (!CanMoveSelectedInput) return false;
+            if (selected.X == value) return true;
+            if (IsHueMode)
+            {
+                if (value == 1) value = 0;
+                if (points.Any(point => point != current &&
+                    (Math.Abs(point.X - value) < 1e-7 || Math.Abs(point.X - value) > 1 - 1e-7))) return false;
+            }
+            else if ((selectedPointIndex > 0 && value <= points[selectedPointIndex - 1].X) ||
+                (selectedPointIndex + 1 < points.Count && value >= points[selectedPointIndex + 1].X)) return false;
+
+            current.X = value;
+            ActiveCurve.SortPoints();
+            selectedPointIndex = points.IndexOf(current);
+        }
+        else
+        {
+            if (selected.Y == value) return true;
+            current.Y = value;
+        }
+        RevealPoint(current.X, current.Y);
+        InvalidateVisual();
+        UpdateReadout();
+        CurvesChanged?.Invoke();
+        return true;
+    }
 
     protected override Point CurvePointAt(int index)
     {
@@ -300,8 +340,11 @@ public sealed class HSLCurvesControl : CurveGraphControl
             selectedPointIndex = hitIdx;
             if (hitIdx < 0)
             {
-                // Click on curve adds new point
-                var newPt = new HSLCurvePoint(norm.X, norm.Y);
+                // A click on the line should use its value despite screen-pixel rounding.
+                var curveY = ActiveCurve.Evaluate(norm.X, IsHueMode);
+                var y = UsesFreePoints && Math.Abs(NormalizedToScreen(norm.X, curveY).Y - pos.Y) <= HitRadius
+                    ? curveY : norm.Y;
+                var newPt = new HSLCurvePoint(norm.X, y);
                 pts.Add(newPt);
                 pts.Sort((a, b) => a.X.CompareTo(b.X));
                 selectedPointIndex = pts.IndexOf(newPt);
@@ -424,42 +467,6 @@ public sealed class HSLCurvesControl : CurveGraphControl
         UpdateReadout();
     }
 
-    private void UpdateReadout()
-    {
-        var pts = ActiveCurve.Points;
-        if (selectedPointIndex >= 0 && selectedPointIndex < pts.Count)
-        {
-            var p = pts[selectedPointIndex];
-            var deltaPercent = (p.Y - 0.5) * 200.0;
-            var sign = deltaPercent >= 0 ? "+" : "";
-            if (IsHueMode)
-            {
-                var deg = (int)Math.Round(p.X * 360.0);
-                PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "Hue: {0}°   Shift: {1}{2:F1}%", deg, sign, deltaPercent));
-            }
-            else if (activeMode == HSLCurveMode.SatVsLum)
-            {
-                PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "Saturation {0:F1}%   Luminance {1}{2:F1}%", p.X * 100.0, sign, deltaPercent));
-            }
-            else
-            {
-                PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "In: {0:F1}%   Mod: {1}{2:F1}%", p.X * 100.0, sign, deltaPercent));
-            }
-        }
-        else
-        {
-            var modeName = activeMode switch
-            {
-                HSLCurveMode.HueVsHue => "Hue vs Hue",
-                HSLCurveMode.HueVsSat => "Hue vs Saturation",
-                HSLCurveMode.HueVsLum => "Hue vs Luminance",
-                HSLCurveMode.SatVsSat => "Saturation vs Saturation",
-                HSLCurveMode.SatVsLum => "Saturation vs Luminance",
-                HSLCurveMode.LumVsSat => "Luminance vs Saturation",
-                _ => "HSL Curve"
-            };
-            PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "Mode: {0} ({1} pts)", modeName, pts.Count));
-        }
-    }
+    private void UpdateReadout() => PointChanged?.Invoke();
 }
 

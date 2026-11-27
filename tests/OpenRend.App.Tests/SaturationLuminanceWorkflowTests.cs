@@ -85,6 +85,25 @@ public sealed partial class EditorWorkflowTests
             Chord(main, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
             WaitFor(() => Swatches() == (128, 0), "One Undo did not restore the selectively graded image.");
             Assert.True(anchors.ContentEquals(await SavedCurves()));
+
+            Mouse.Click(AtGraph(.97, .5));
+            EditText(main, "ColorGrading_HslPointInput", "50");
+            WaitFor(() => !Find(main, "ColorGrading_HslPointError").IsOffscreen, "Crossing a neighboring point was accepted.");
+            Assert.DoesNotContain('*', main.Title);
+            Keyboard.Type(VirtualKeyShort.ESCAPE);
+            EditText(main, "ColorGrading_HslPointInput", "90");
+            EditText(main, "ColorGrading_HslPointAdjustment", "22");
+            WaitFor(() => Swatches() is (128, >= 50), "The typed curve adjustment did not reach the native preview.");
+            var exact = (await SavedCurves()).SatVsLum.Points[1];
+            Assert.Equal(.9, exact.X);
+            Assert.Equal(.72, exact.Y, precision: 8);
+            using (var capture = Capture.Element(main))
+                capture.ToFile(Path.Combine(captures, "grading-hsl-point-fields.png"));
+            Chord(main, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
+            WaitFor(() => Swatches() == (128, 0), "One Undo did not restore the previous numeric adjustment.");
+            var restored = (await SavedCurves()).SatVsLum.Points[1];
+            Assert.Equal(.9, restored.X);
+            Assert.Equal(.5, restored.Y, precision: 2);
             running.CloseGracefully();
 
             async Task<HSLCurvesData> SavedCurves() =>

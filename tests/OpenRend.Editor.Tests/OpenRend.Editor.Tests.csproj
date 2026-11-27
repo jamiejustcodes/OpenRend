@@ -25,6 +25,7 @@
     <Compile Include="../../src/OpenRend.App/WorkspaceLayout.cs" Link="WorkspaceLayout.cs" />
     <Compile Include="../../src/OpenRend.App/WorkspaceLayoutManager.cs" Link="WorkspaceLayoutManager.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingDockControl.cs" Link="ColorGradingDockControl.cs" />
+    <Compile Include="../../src/OpenRend.App/ColorGradingDockControl.HslPoints.cs" Link="ColorGradingDockControl.HslPoints.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingDockControl.TonalRanges.cs" Link="ColorGradingDockControl.TonalRanges.cs" />
     <Compile Include="../../src/OpenRend.App/WhiteBalanceSampleDialog.cs" Link="WhiteBalanceSampleDialog.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingWheelControl.cs" Link="ColorGradingWheelControl.cs" />
