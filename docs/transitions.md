@@ -88,8 +88,10 @@ Dragging a parameter slider previews the setting and commits it in one edit on r
 
 Squeeze rescales both pictures into regions that change size over the overlap. Choose an edge or center origin. Clear **Squeeze previous image** to keep the outgoing picture at its original scale. The border controls set the width, feather, and color at the moving seam.
 
+Swap moves the outgoing picture in the chosen direction and brings the incoming picture to the foreground. Both pictures use the border settings, and the area between them reveals lower tracks.
+
 ## Current limits
 
-Swap, Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
+Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
 
 Legacy bounded events require source handles. Video Loop or Hold and audio Loop or silence padding permit extensions. The Editing preference sets the Loop default for new finite events. Same-start overlaps at project zero and exact-gap displacement remain limited. OpenRend initializes the cut overlap to 0.25 seconds, centered. Source-duration probing and arbitrary VFR behavior remain limited.

@@ -41,13 +41,15 @@ public sealed partial class TimelineRenderService
         var p = (float)Math.Clamp(dissolve.Progress, 0.0, 1.0);
         var parameters = TransitionCatalog.ResolveParameters(transition);
         SqueezeSettings? squeeze = transition.Kind == VideoTransitionKind.Squeeze ? ReadSqueezeSettings(parameters) : null;
+        SwapFrame? swap = transition.Kind == VideoTransitionKind.Swap ? BuildSwapFrame(first, second, p, parameters, firstOpacity, secondOpacity) : null;
 
         for (var y = 0; y < height; y++)
         for (var x = 0; x < width; x++)
         {
-            var sample = squeeze is { } settings
-                ? EvaluateSqueezePixel(first, second, x, y, width, height, p, settings, firstOpacity, secondOpacity)
-                : EvaluateTransitionPixel(first, second, x, y, width, height, p, transition.Kind, parameters, firstOpacity, secondOpacity, firstWeight, secondWeight);
+            Vector4 sample;
+            if (squeeze is { } settings) sample = EvaluateSqueezePixel(first, second, x, y, width, height, p, settings, firstOpacity, secondOpacity);
+            else if (swap is { } frameState) sample = EvaluateSwapPixel(x, y, width, height, frameState);
+            else sample = EvaluateTransitionPixel(first, second, x, y, width, height, p, transition.Kind, parameters, firstOpacity, secondOpacity, firstWeight, secondWeight);
             if (sample.W <= 0) continue;
             var offset = (y * width + x) * 4;
             output[offset] = Quantize(sample.X / sample.W);
@@ -396,7 +398,6 @@ public sealed partial class TimelineRenderService
                     : SampleDissolveLayer(first, x, y, width, height) * firstOpacity;
             }
 
-            case VideoTransitionKind.Swap:
             case VideoTransitionKind.CrossEffect:
             case VideoTransitionKind.PageLoop:
             case VideoTransitionKind.PagePeel:

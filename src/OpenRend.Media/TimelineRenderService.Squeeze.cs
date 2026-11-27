@@ -4,25 +4,13 @@ namespace OpenRend.Media;
 
 public sealed partial class TimelineRenderService
 {
-    private readonly record struct SqueezeSettings(bool Vertical, bool ReverseAxis, bool Centered, bool SqueezePrevious,
-        float BorderSize, float BorderFeather, Vector4 BorderColor);
+    private readonly record struct SqueezeSettings(bool Vertical, bool ReverseAxis, bool Centered, bool SqueezePrevious, TransitionBorder Border);
 
     private static SqueezeSettings ReadSqueezeSettings(IReadOnlyDictionary<string, string> parameters)
     {
-        var direction = (int)ReadFinite("Direction", 2);
-        var border = GetParamColor(parameters, "BorderColor", new Vector4(0, 0, 0, 1));
-        if (!float.IsFinite(border.X) || !float.IsFinite(border.Y) || !float.IsFinite(border.Z) ||
-            !float.IsFinite(border.W) || border.W is < 0 or > 1)
-            border = new Vector4(0, 0, 0, 1);
+        var direction = (int)GetFiniteTransitionNumber(parameters, "Direction", 2);
         return new SqueezeSettings(direction is 0 or 1 or 5, direction is 0 or 2, direction is 4 or 5,
-            GetParamBool(parameters, "SqueezePreviousImage", true), Math.Clamp(ReadFinite("BorderSize", 0), 0, 1),
-            Math.Clamp(ReadFinite("BorderFeather", 0), 0, 1), border);
-
-        float ReadFinite(string key, float fallback)
-        {
-            var value = GetParamFloat(parameters, key, fallback);
-            return float.IsFinite(value) ? value : fallback;
-        }
+            GetParamBool(parameters, "SqueezePreviousImage", true), ReadTransitionBorder(parameters));
     }
 
     private static Vector4 EvaluateSqueezePixel(DissolveSource? first, DissolveSource? second, int x, int y, int width, int height,
@@ -56,14 +44,7 @@ public sealed partial class TimelineRenderService
         var sample = settings.Vertical
             ? SampleSqueezeAxis(source, x, mapped, width, height, vertical: true)
             : SampleSqueezeAxis(source, y, mapped, width, height, vertical: false);
-        sample *= opacity;
-        if (settings.BorderSize == 0) return sample;
-        var distance = MathF.Abs(edge);
-        var half = settings.BorderSize / 2;
-        var feather = settings.BorderFeather * half;
-        var coverage = feather > 0 ? Math.Clamp((half - distance) / feather, 0, 1) : distance < half ? 1 : 0;
-        var border = settings.BorderColor * (coverage * opacity);
-        return border + sample * (1 - Math.Clamp(border.W, 0, 1));
+        return BlendTransitionBorder(sample * opacity, settings.Border, MathF.Abs(edge), opacity);
     }
 
     private static Vector4 SampleSqueezeAxis(DissolveSource? source, int other, float axis, int width, int height, bool vertical)

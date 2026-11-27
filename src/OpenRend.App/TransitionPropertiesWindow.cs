@@ -281,6 +281,15 @@ public sealed class TransitionPropertiesWindow : Window
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), value => SetParam("BorderColor", value));
                 break;
             }
+            case VideoTransitionKind.Swap:
+            {
+                AddChoice("Direction", ["Up", "Down", "Left", "Right"], (int)GetFloat(paramsDict, "Direction", 2),
+                    index => SetParam("Direction", index.ToString(CultureInfo.InvariantCulture)), "TransitionParameter_Direction");
+                AddSlider("Border Size", "BorderSize", 0, .2, GetFloat(paramsDict, "BorderSize", 0), 3);
+                AddSlider("Border Feather", "BorderFeather", 0, 1, GetFloat(paramsDict, "BorderFeather", 0), 2);
+                AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), value => SetParam("BorderColor", value));
+                break;
+            }
             case VideoTransitionKind.Dissolve:
             {
                 var types = new[] { "Crossfade", "Additive", "Subtractive", "Color Bleed", "Color Morph", "Threshold Dissolve", "Threshold Appear", "Fade Through Grayscale", "Fade Through Color", "RGB Crossfade" };
