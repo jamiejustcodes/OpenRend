@@ -149,10 +149,13 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [x] Reproduce the transition browser's categories, preset selection and placement interactions.
 - [x] Support overlap transitions for one event, two events, selected events and adjacent events, including ripple behavior.
 - [x] Persist transition settings in project frames and preserve them through move, trim, split, clipboard, save/reopen and undo/redo.
-- [x] Evaluate each supported transition identically in preview and export.
+- [x] Share transition evaluation across preview and export.
+- [ ] Implement distinct rendering for the six catalog entries that currently render as dissolves.
 - [x] Verify the desktop workflow and encoded output.
 
-Status: complete. All 18 Vegas Pro OFX video transition plug-ins (Dissolve, Flash, Linear Wipe, Clock Wipe, Venetian Blinds, Star Wipe, Barn Door, Iris, Split, Push, Slide, Zoom, Swap, Squeeze, Cross Effect, Page Loop, Page Peel, Page Roll) across 5 categories (Fades, Wipes, Reveals, Transforms, 3D & Peels) are modeled in `TransitionCatalog.cs`. Transitions store plug-in kind, preset name, and parameter dictionaries on the incoming event fade. Single-click selects preset; add, double-click, and drag-and-drop to cuts or overlaps apply the transition. Transition Properties window provides interactive preset switching and parameter sliders (angle, feather, direction, orientation, borders, push-off) with atomic undo/redo. Transitions evaluate identically across preview and export in `TimelineRenderService.Dissolve.cs`.
+The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer. Swap, Squeeze, Cross Effect, Page Loop, Page Peel, and Page Roll currently use its dissolve fallback.
+
+Transition parameter slider drags send the draft setting through the preview renderer. Release saves one undoable edit. Escape restores the original value and pixels. Keyboard increments keep focus on the slider. The desktop workflow verifies all three gestures and the saved angle of a Linear Wipe.
 
 Verified parts:
 

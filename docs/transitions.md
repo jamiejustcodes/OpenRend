@@ -58,11 +58,11 @@ Timeline video events provide context menu controls:
   - Each button displays a vector preview with falling blue outgoing and rising cyan incoming curves, and the active curve pair is highlighted with a gold outline.
   - Selecting any grid cell clears the transition plug-in and sets the reciprocal crossfade curve pair.
 
-Projects save as version 8 and read versions 1–8; older projects retain linear fades. Audio keeps its existing linear fades.
+Projects save as version 10 and read versions 1–10. Older projects without saved curve settings use linear fades. Audio fades use linear interpolation.
 
-## Vegas Pro Transition Catalog and Spatial Reveals
+## Transition catalog and spatial reveals
 
-Open the Transitions tab to view all 18 Vegas Pro OFX video transition plug-ins organized into categories:
+Open the Transitions tab to browse 18 transition entries by category:
 - **All Plug-ins**: Complete collection of all 18 plug-ins.
 - **Favorites**: User-selected favorite plug-ins (toggled with the ★ star icon, persisted in `transitions.json`).
 - **Fades**: `Dissolve` (23 presets including Crossfade, Additive, Fade Through Color, Color Bleed), `Flash` (Hard/Soft Flash).
@@ -85,8 +85,10 @@ Clicking the transition strip on an overlap, or choosing **Transition Properties
 - **Remove Selected Plug-In**: Reverts the transition to a canonical crossfade while preserving overlap timing and fades.
 - **Undo / Redo**: Immediate history navigation with real-time preview updates.
 
+Dragging a parameter slider previews the setting and commits it in one edit on release. Escape restores the previous setting and preview. The arrow keys adjust the focused slider by one displayed unit.
+
 ## Current limits
 
-All 18 Vegas Pro transition plug-in types, categories, and presets are modeled and evaluated with spatial masks, feathering, and border compositing. Highly complex non-linear 3D mesh deformation shaders (such as realistic 3D page curl specular physics) use smooth 2D gradient curl approximations in software rendering.
+Swap, Squeeze, Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
 
-Legacy bounded events reject missing source handles. Explicit video Loop/Hold modes permit source extensions; audio looping and default-loop preferences are not implemented. Same-start overlaps at project zero, event-level locks and exact-gap displacement remain limited. Initial Editing preferences use 0.25 seconds centered; factory-default matching has not been established. Source-duration probing and arbitrary VFR/source-rate equivalence remain limited. Exact reference-editor pixel math, color management and professional-scale throughput remain unverified.
+Legacy bounded events require source handles. Video Loop or Hold and audio Loop or silence padding permit extensions. The Editing preference sets the Loop default for new finite events. Same-start overlaps at project zero and exact-gap displacement remain limited. OpenRend initializes the cut overlap to 0.25 seconds, centered. Source-duration probing and arbitrary VFR behavior remain limited.

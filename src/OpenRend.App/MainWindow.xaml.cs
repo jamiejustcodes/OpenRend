@@ -1178,15 +1178,22 @@ public partial class MainWindow : Window
             {
                 previewRequested = false;
                 var draft = ReferenceEquals(gradingPreviewProject, vm.Project) ? gradingPreview : null;
-                if (cachedPreviewProject is null || cachedPreviewRevision != revision || !ReferenceEquals(cachedGradingPreview, draft))
+                var transition = ReferenceEquals(transitionParameterPreview?.Project, vm.Project) ? transitionParameterPreview : null;
+                if (cachedPreviewProject is null || cachedPreviewRevision != revision || !ReferenceEquals(cachedGradingPreview, draft) ||
+                    !ReferenceEquals(cachedTransitionParameterPreview, transition))
                 {
                     cachedPreviewProject = vm.Project.DeepClone();
                     draft?.Apply(cachedPreviewProject);
+                    if (transition is not null && cachedPreviewProject.Tracks.SelectMany(track => track.Clips)
+                        .FirstOrDefault(clip => clip.Id == transition.ClipId) is { } edited)
+                        edited.FadeInTransition = transition.Effect;
                     cachedGradingPreview = draft;
+                    cachedTransitionParameterPreview = transition;
                     cachedPreviewRevision = revision;
                 }
                 var project = cachedPreviewProject;
                 var gesture = gradingPreviewGesture;
+                var parameterGesture = transitionParameterGesture;
                 var frame = vm.Position;
                 var activeClip = SelectedClip;
                 if (activeClip != null && frame >= activeClip.StartFrame && frame < activeClip.EndFrame)
@@ -1238,7 +1245,7 @@ public partial class MainWindow : Window
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
                 // Present completed frames while the same drag is moving. Dropping or cancelling invalidates them.
-                if (IsLoaded && explorerPreviewName is null && gesture == gradingPreviewGesture &&
+                if (IsLoaded && explorerPreviewName is null && gesture == gradingPreviewGesture && parameterGesture == transitionParameterGesture &&
                     request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
                     Preview.Present(pixels, width, height);
@@ -3236,12 +3243,15 @@ public partial class MainWindow : Window
     {
         if (showProgress && !vm.Editor.CanEditTransitionProgress(id)) return;
         Pause();
-        new TransitionPropertiesWindow(vm, id, showProgress, frame =>
+        var project = vm.Project;
+        var window = new TransitionPropertiesWindow(vm, id, showProgress, frame =>
         {
             vm.Position = frame;
             UpdatePosition();
             RequestPreview();
-        }) { Owner = this }.ShowDialog();
+        }, effect => SetTransitionParameterPreview(project, id, effect)) { Owner = this };
+        try { window.ShowDialog(); }
+        finally { SetTransitionParameterPreview(project, id, null); }
     });
 
     private Guid? TransitionProgressTarget()

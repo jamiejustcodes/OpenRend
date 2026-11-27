@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
 
@@ -11,6 +13,7 @@ public sealed class TransitionPropertiesWindow : Window
 {
     private readonly EditorViewModel vm;
     private readonly Guid clipId;
+    private readonly Action<VideoTransition?>? previewParameter;
     private readonly TextBlock heading = new(), timing = new();
     private readonly ComboBox presetCombo = new();
     private readonly StackPanel paramPanel = new();
@@ -19,10 +22,16 @@ public sealed class TransitionPropertiesWindow : Window
     private readonly Button remove, undo, redo, switchPanel;
     private bool updatingControls;
     private bool showingProgress;
+    private bool committingSlider;
+    private ParameterDrag? parameterDrag;
 
-    public TransitionPropertiesWindow(EditorViewModel viewModel, Guid eventId, bool showProgress = false, Action<long>? seek = null)
+    private sealed record ParameterDrag(Slider Slider, Thumb Thumb, double StartValue);
+
+    public TransitionPropertiesWindow(EditorViewModel viewModel, Guid eventId, bool showProgress = false, Action<long>? seek = null,
+        Action<VideoTransition?>? previewParameter = null)
     {
         vm = viewModel; clipId = eventId;
+        this.previewParameter = previewParameter;
         showingProgress = showProgress;
         progress = new(curve => vm.Editor.SetTransitionProgress(clipId, curve), offset =>
         {
@@ -77,7 +86,17 @@ public sealed class TransitionPropertiesWindow : Window
         Content = root;
 
         vm.Editor.Changed += EditorChanged;
-        Closed += (_, _) => vm.Editor.Changed -= EditorChanged;
+        Closed += (_, _) =>
+        {
+            CancelParameterDrag();
+            vm.Editor.Changed -= EditorChanged;
+        };
+        PreviewKeyDown += (_, args) =>
+        {
+            if (args.Key != Key.Escape || parameterDrag is null) return;
+            args.Handled = true;
+            CancelParameterDrag();
+        };
         Refresh();
     }
 
@@ -93,10 +112,15 @@ public sealed class TransitionPropertiesWindow : Window
         return button;
     }
 
-    private void EditorChanged(object? sender, EventArgs e) => Refresh();
+    private void EditorChanged(object? sender, EventArgs e)
+    {
+        if (committingSlider) UpdateHistoryButtons();
+        else Refresh();
+    }
 
     private void Refresh()
     {
+        CancelParameterDrag();
         var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
             .FirstOrDefault(item => item.Clip.Id == clipId);
         var clip = item.Clip;
@@ -108,7 +132,7 @@ public sealed class TransitionPropertiesWindow : Window
         timing.Text = clip is null ? "Event is no longer in the project." : $"Fade in: {clip.FadeInFrames} frames";
         var editable = clip is { IsLocked: false, FadeInTransition: not null } && !item.Track.IsLocked;
         remove.IsEnabled = paramPanel.IsEnabled = presetCombo.IsEnabled = editable;
-        undo.IsEnabled = vm.Editor.CanUndo; redo.IsEnabled = vm.Editor.CanRedo;
+        UpdateHistoryButtons();
         progress.Bind(clip?.FadeInFrames ?? 1, clip?.FadeInProgress, canEditProgress);
         showingProgress = canEditProgress && (showingProgress || clip?.FadeInTransition is null);
         ShowPanel();
@@ -134,6 +158,12 @@ public sealed class TransitionPropertiesWindow : Window
         {
             updatingControls = false;
         }
+    }
+
+    private void UpdateHistoryButtons()
+    {
+        undo.IsEnabled = vm.Editor.CanUndo;
+        redo.IsEnabled = vm.Editor.CanRedo;
     }
 
     private void ShowPanel()
@@ -168,16 +198,16 @@ public sealed class TransitionPropertiesWindow : Window
         {
             case VideoTransitionKind.LinearWipe:
             {
-                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), val => SetParam("Angle", val.ToString("F1", CultureInfo.InvariantCulture)));
-                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), val => SetParam("Feather", val.ToString("F2", CultureInfo.InvariantCulture)));
+                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), 1);
+                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), 2);
                 break;
             }
             case VideoTransitionKind.BarnDoor:
             {
                 AddChoice("Orientation", ["Horizontal", "Vertical"], (int)GetFloat(paramsDict, "Orientation", 1), idx => SetParam("Orientation", idx.ToString()));
                 AddChoice("Direction", ["In", "Out"], (int)GetFloat(paramsDict, "Direction", 1), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), val => SetParam("BorderSize", val.ToString("F3", CultureInfo.InvariantCulture)));
-                AddSlider("Border Feather", "BorderFeather", 0, 1, GetFloat(paramsDict, "BorderFeather", 0), val => SetParam("BorderFeather", val.ToString("F2", CultureInfo.InvariantCulture)));
+                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), 3);
+                AddSlider("Border Feather", "BorderFeather", 0, 1, GetFloat(paramsDict, "BorderFeather", 0), 2);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), col => SetParam("BorderColor", col));
                 break;
             }
@@ -185,22 +215,22 @@ public sealed class TransitionPropertiesWindow : Window
             {
                 AddChoice("Direction", ["Up", "Down", "Left", "Right"], (int)GetFloat(paramsDict, "Direction", 2), idx => SetParam("Direction", idx.ToString()));
                 AddToggle("Push off previous image", GetBool(paramsDict, "PushOffPreviousImage", true), b => SetParam("PushOffPreviousImage", b.ToString().ToLowerInvariant()));
-                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), val => SetParam("BorderSize", val.ToString("F3", CultureInfo.InvariantCulture)));
+                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), 3);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), col => SetParam("BorderColor", col));
                 break;
             }
             case VideoTransitionKind.Slide:
             {
-                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), val => SetParam("Angle", val.ToString("F1", CultureInfo.InvariantCulture)));
+                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), 1);
                 AddChoice("Direction", ["In", "Out"], (int)GetFloat(paramsDict, "Direction", 0), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), val => SetParam("BorderSize", val.ToString("F3", CultureInfo.InvariantCulture)));
+                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), 3);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), col => SetParam("BorderColor", col));
                 break;
             }
             case VideoTransitionKind.Zoom:
             {
                 AddChoice("Direction", ["In", "Out"], (int)GetFloat(paramsDict, "Direction", 0), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), val => SetParam("BorderSize", val.ToString("F3", CultureInfo.InvariantCulture)));
+                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), 3);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), col => SetParam("BorderColor", col));
                 break;
             }
@@ -213,8 +243,8 @@ public sealed class TransitionPropertiesWindow : Window
             {
                 AddChoice("Shape", ["Circle", "Square", "Diamond", "Rectangle", "Triangle"], (int)GetFloat(paramsDict, "Shape", 0), idx => SetParam("Shape", idx.ToString()));
                 AddChoice("Direction", ["In", "Out"], (int)GetFloat(paramsDict, "Direction", 1), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), val => SetParam("Feather", val.ToString("F2", CultureInfo.InvariantCulture)));
-                AddSlider("Border", "Border", 0, 0.2, GetFloat(paramsDict, "Border", 0), val => SetParam("Border", val.ToString("F3", CultureInfo.InvariantCulture)));
+                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), 2);
+                AddSlider("Border", "Border", 0, 0.2, GetFloat(paramsDict, "Border", 0), 3);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("Color", "0 0 0"), col => SetParam("Color", col));
                 break;
             }
@@ -222,21 +252,21 @@ public sealed class TransitionPropertiesWindow : Window
             {
                 AddChoice("Split Mode", ["Push", "Wipe", "Squeeze"], (int)GetFloat(paramsDict, "SplitMode", 0), idx => SetParam("SplitMode", idx.ToString()));
                 AddChoice("Direction", ["In", "Out"], (int)GetFloat(paramsDict, "Direction", 1), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), val => SetParam("BorderSize", val.ToString("F3", CultureInfo.InvariantCulture)));
+                AddSlider("Border Size", "BorderSize", 0, 0.2, GetFloat(paramsDict, "BorderSize", 0), 3);
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), col => SetParam("BorderColor", col));
                 break;
             }
             case VideoTransitionKind.ClockWipe:
             {
                 AddChoice("Direction", ["Clockwise", "Counter Clockwise"], (int)GetFloat(paramsDict, "Direction", 0), idx => SetParam("Direction", idx.ToString()));
-                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), val => SetParam("Feather", val.ToString("F2", CultureInfo.InvariantCulture)));
+                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), 2);
                 break;
             }
             case VideoTransitionKind.VenetianBlinds:
             {
-                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), val => SetParam("Angle", val.ToString("F1", CultureInfo.InvariantCulture)));
-                AddSlider("Number of Blinds", "NumberOfBlinds", 1, 30, GetFloat(paramsDict, "NumberOfBlinds", 5), val => SetParam("NumberOfBlinds", ((int)val).ToString()));
-                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), val => SetParam("Feather", val.ToString("F2", CultureInfo.InvariantCulture)));
+                AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), 1);
+                AddSlider("Number of Blinds", "NumberOfBlinds", 1, 30, GetFloat(paramsDict, "NumberOfBlinds", 5), 0);
+                AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), 2);
                 break;
             }
             case VideoTransitionKind.Dissolve:
@@ -254,38 +284,81 @@ public sealed class TransitionPropertiesWindow : Window
 
     private void SetParam(string key, string value)
     {
-        var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
-            .FirstOrDefault(item => item.Clip.Id == clipId);
-        if (item.Clip?.FadeInTransition is not { } current) return;
-        var parameters = current.Parameters != null
-            ? new Dictionary<string, string>(current.Parameters, StringComparer.OrdinalIgnoreCase)
-            : new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
-        parameters[key] = value;
-        var updated = new VideoTransition
-        {
-            Kind = current.Kind,
-            Preset = current.Preset,
-            Parameters = parameters
-        };
+        if (ParameterValue(key, value) is not { } updated) return;
         vm.Editor.SetVideoTransition(clipId, updated);
     }
 
-    private void AddSlider(string label, string paramKey, double min, double max, double current, Action<double> onChange)
+    private VideoTransition? ParameterValue(string key, string value)
     {
+        var current = vm.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(clip => clip.Id == clipId)?.FadeInTransition;
+        if (current is null) return null;
+        var parameters = current.Parameters is null ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            : new Dictionary<string, string>(current.Parameters, StringComparer.OrdinalIgnoreCase);
+        if (parameters.TryGetValue(key, out var old) && old == value) return null;
+        parameters[key] = value;
+        return new VideoTransition { Kind = current.Kind, Preset = current.Preset, Parameters = parameters };
+    }
+
+    private void AddSlider(string label, string paramKey, double min, double max, double current, int decimals)
+    {
+        var format = $"F{decimals}";
+        string Format(double value) => value.ToString(format, CultureInfo.InvariantCulture);
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var text = new TextBlock { Text = label, Width = 110, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
-        var valText = new TextBlock { Text = current.ToString("F2", CultureInfo.InvariantCulture), Width = 45, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
-        var slider = new Slider { Minimum = min, Maximum = max, Value = current, Margin = new Thickness(6, 0, 6, 0) };
+        var valText = new TextBlock { Width = 54, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
+        var slider = new Slider { Minimum = min, Maximum = max, Value = current, Margin = new Thickness(6, 0, 6, 0),
+            SmallChange = Math.Pow(10, -decimals), LargeChange = Math.Max(Math.Pow(10, -decimals), (max - min) / 10),
+            TickFrequency = 1, IsSnapToTickEnabled = decimals == 0 };
+        valText.Text = Format(slider.Value);
+        AutomationProperties.SetName(slider, label);
+        AutomationProperties.SetAutomationId(slider, "TransitionParameter_" + paramKey);
         slider.ValueChanged += (_, e) =>
         {
-            valText.Text = e.NewValue.ToString("F2", CultureInfo.InvariantCulture);
-            if (!updatingControls) onChange(e.NewValue);
+            valText.Text = Format(e.NewValue);
+            if (updatingControls) return;
+            if (parameterDrag?.Slider == slider)
+                previewParameter?.Invoke(ParameterValue(paramKey, valText.Text));
+            else CommitSlider(valText.Text);
         };
+        slider.AddHandler(Thumb.DragStartedEvent, new DragStartedEventHandler((_, args) =>
+        {
+            if (args.OriginalSource is not Thumb thumb) return;
+            slider.Focus();
+            parameterDrag = new ParameterDrag(slider, thumb, slider.Value);
+        }), true);
+        slider.AddHandler(Thumb.DragCompletedEvent, new DragCompletedEventHandler((_, args) =>
+        {
+            if (parameterDrag is not { } drag || drag.Slider != slider) return;
+            if (args.Canceled) { CancelParameterDrag(); return; }
+            parameterDrag = null;
+            previewParameter?.Invoke(null);
+            if (Format(drag.StartValue) != Format(slider.Value)) CommitSlider(Format(slider.Value));
+        }), true);
         panel.Children.Add(text);
         DockPanel.SetDock(valText, Dock.Right);
         panel.Children.Add(valText);
         panel.Children.Add(slider);
         paramPanel.Children.Add(panel);
+
+        void CommitSlider(string value)
+        {
+            // Keep the focused slider in place for keyboard repeats within the same parameter.
+            committingSlider = true;
+            try { SetParam(paramKey, value); }
+            finally { committingSlider = false; }
+        }
+    }
+
+    private void CancelParameterDrag()
+    {
+        if (parameterDrag is not { } drag) return;
+        parameterDrag = null;
+        drag.Thumb.CancelDrag();
+        previewParameter?.Invoke(null);
+        var wasUpdating = updatingControls;
+        updatingControls = true;
+        try { drag.Slider.Value = drag.StartValue; }
+        finally { updatingControls = wasUpdating; }
     }
 
     private void AddChoice(string label, string[] options, int selectedIndex, Action<int> onSelect)

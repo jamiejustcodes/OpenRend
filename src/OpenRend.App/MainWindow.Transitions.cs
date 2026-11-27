@@ -17,6 +17,18 @@ public partial class MainWindow
     private bool transitionBrowserLoaded;
     private TransitionBrowserPreferences transitionPreferences = new();
     private EditingPreferences placementPreferences = new();
+    private sealed record TransitionParameterPreview(ProjectDocument Project, Guid ClipId, VideoTransition Effect);
+    private TransitionParameterPreview? transitionParameterPreview, cachedTransitionParameterPreview;
+    private long transitionParameterGesture;
+
+    private void SetTransitionParameterPreview(ProjectDocument project, Guid clipId, VideoTransition? effect)
+    {
+        if (effect is null && transitionParameterPreview is null) return;
+        if (effect is null || transitionParameterPreview is null || !ReferenceEquals(transitionParameterPreview.Project, project))
+            transitionParameterGesture++;
+        transitionParameterPreview = effect is null ? null : new TransitionParameterPreview(project, clipId, effect);
+        RequestPreview();
+    }
 
     private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
     private string GeneralPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "general.json");
