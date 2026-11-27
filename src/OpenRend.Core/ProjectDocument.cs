@@ -475,8 +475,11 @@ public sealed class ProjectDocument
                 if (!Enum.IsDefined(clip.VideoSourceMode) || clip.VideoSourceMode != VideoSourceMode.Bounded &&
                     (track.Kind != TrackKind.Video || source.DurationSeconds < 1e-28 || source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
                     throw new InvalidDataException("Source playback modes require a finite video source.");
+                if (!Enum.IsDefined(clip.AudioSourceMode) || clip.AudioSourceMode != AudioSourceMode.Bounded &&
+                    (track.Kind != TrackKind.Audio || !source.HasFiniteAudioSource))
+                    throw new InvalidDataException("Audio source playback modes require a finite audio source.");
                 var available = FrameRate.Frames(source.DurationSeconds);
-                if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
+                if (!clip.CanExtendSource && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new InvalidDataException("A clip extends beyond its source media.");
                 if (!double.IsFinite(clip.Gain) || clip.Gain < 0 || !double.IsFinite(clip.Opacity) || clip.Opacity is < 0 or > 1 || !double.IsFinite(clip.Pan) || clip.Pan is < -1 or > 1) throw new InvalidDataException("Clip levels are invalid.");
                 if (clip.SnapOffsetFrames < 0 || (clip.DurationFrames > 0 && clip.SnapOffsetFrames >= clip.DurationFrames)) throw new InvalidDataException("Clip snap offset must be within clip duration.");
                 if (!double.IsFinite(clip.PlaybackRate) || Math.Abs(clip.PlaybackRate) < 0.05 || Math.Abs(clip.PlaybackRate) > 10.0) throw new InvalidDataException("Clip playback rate must be between 0.05 and 10.0.");
@@ -617,6 +620,8 @@ public sealed class MediaAsset
     public double FrameRate { get; set; }
     public bool HasVideo { get; set; }
     public bool HasAudio { get; set; }
+    [JsonIgnore] public bool HasFiniteAudioSource => HasAudio && double.IsFinite(DurationSeconds) && DurationSeconds > 0 &&
+        !Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public int AudioChannels { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
@@ -833,6 +838,8 @@ public sealed class TimelineClip
     public long SourceInFrame { get; set; }
     public long DurationFrames { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoSourceMode VideoSourceMode { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public AudioSourceMode AudioSourceMode { get; set; }
+    [JsonIgnore] public bool CanExtendSource => VideoSourceMode != VideoSourceMode.Bounded || AudioSourceMode != AudioSourceMode.Bounded;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public bool IsReversed { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double PlaybackRate { get; set; } = 1.0;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public double UnderSampleRate { get; set; } = 1.0;

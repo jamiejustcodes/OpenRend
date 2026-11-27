@@ -447,6 +447,13 @@ public sealed partial class TimelineView
         };
         loop.Click += (_, _) =>
         {
+            if (!IsEnabled || !loop.IsEnabled) return;
+            if (TargetEvent() is { } audio && Project.Tracks.Any(track =>
+                track.Kind == TrackKind.Audio && !track.IsLocked && track.Clips.Contains(audio)))
+            {
+                AudioSourceModeRequested?.Invoke(audio.Id, loop.IsChecked ? AudioSourceMode.Loop : AudioSourceMode.PadSilence);
+                return;
+            }
             var events = Project.Tracks.Where(track => track.Kind == TrackKind.Video && !track.IsLocked)
                 .SelectMany(track => track.Clips.Where(clip => Selection.Contains(clip.Id) && (clipId is null || clip.Id == clipId))).ToArray();
             if (IsEnabled && events.Length == 1)
@@ -672,12 +679,17 @@ public sealed partial class TimelineView
                 resizeAdj.Visibility = isAdj ? Visibility.Visible : Visibility.Collapsed;
                 resizeAdj.IsEnabled = isAdj && !isLocked && (singleTarget.Track == null || !singleTarget.Track.IsLocked);
             }
-            var source = video.Length == 1 ? Project.Media.SingleOrDefault(media => media.Id == video[0].Clip.MediaId) : null;
-            switches.Visibility = source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)
+            var switchEvent = video.Length == 1 ? video[0] : singleTarget;
+            var source = switchEvent.Clip is { } sourceEvent ? Project.Media.SingleOrDefault(media => media.Id == sourceEvent.MediaId) : null;
+            var audio = switchEvent.Track?.Kind == TrackKind.Audio;
+            var supportsLoop = audio ? source?.HasFiniteAudioSource == true :
+                source is { HasVideo: true, DurationSeconds: > 0 } && !source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase);
+            switches.Visibility = supportsLoop
                 ? Visibility.Visible : Visibility.Collapsed;
-            switches.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked;
-            loop.IsEnabled = switches.IsEnabled && !isLocked;
-            loop.IsChecked = video.Length == 1 && video[0].Clip.VideoSourceMode == VideoSourceMode.Loop;
+            switches.IsEnabled = IsEnabled && supportsLoop && switchEvent.Track?.IsLocked == false;
+            loop.IsEnabled = switches.IsEnabled && switchEvent.Clip?.IsLocked == false;
+            loop.IsChecked = audio ? switchEvent.Clip?.AudioSourceMode == AudioSourceMode.Loop :
+                switchEvent.Clip?.VideoSourceMode == VideoSourceMode.Loop;
             muteItem.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked && !isLocked;
             muteItem.IsChecked = singleTarget.Clip?.IsMuted ?? false;
             lockItem.IsEnabled = IsEnabled && singleTarget.Clip != null && !singleTarget.Track!.IsLocked;

@@ -111,6 +111,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? ColorGradingRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
+    public event Action<Guid, AudioSourceMode>? AudioSourceModeRequested;
     public event Action<Guid, VideoFadeCurve, VideoFadeCurve?, bool>? VideoFadeCurveRequested;
     public event Action<Guid, string>? VideoEventActionRequested;
     public event Action<Guid, bool>? ClipLockRequested;
@@ -1315,6 +1316,7 @@ public sealed partial class TimelineView : FrameworkElement
                         for (var px = startPx; px < endPx; px += 2)
                         {
                             var t = Project.FrameRate.Seconds(clip.SourceInFrame) + px / PixelsPerSecond;
+                            if (clip.AudioSourceMode == AudioSourceMode.Loop) t %= media.DurationSeconds;
                             var index = (int)(t / media.DurationSeconds * peaks.Length);
                             var amplitude = index >= 0 && index < peaks.Length ? Math.Min(1, peaks[index] * clip.Gain) * (rowHeight - 21) / 2 : 0;
                             dc.DrawLine(wp, new Point(rect.X + px, mid - amplitude), new Point(rect.X + px, mid + amplitude));
@@ -2135,7 +2137,7 @@ public sealed partial class TimelineView : FrameworkElement
         else
         {
             var media = Project.Media.First(m => m.Id == dragging.MediaId);
-            var maximum = dragging.VideoSourceMode == VideoSourceMode.Bounded
+            var maximum = !dragging.CanExtendSource
                 ? Math.Max(0, Project.FrameRate.Frames(media.DurationSeconds) - dragging.SourceInFrame - dragging.DurationFrames)
                 : long.MaxValue - dragging.StartFrame - dragging.DurationFrames;
             var minimum = 1 - dragging.DurationFrames;

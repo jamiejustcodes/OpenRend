@@ -44,7 +44,8 @@ public sealed partial class TimelineEditor
             {
                 var range = new TimelineClip
                 {
-                    StartFrame = start, SourceInFrame = sourceIn, DurationFrames = duration, VideoSourceMode = member.VideoSourceMode
+                    StartFrame = start, SourceInFrame = sourceIn, DurationFrames = duration,
+                    VideoSourceMode = member.VideoSourceMode, AudioSourceMode = member.AudioSourceMode
                 };
                 EnsureTimelineBounds(range);
                 EnsureSourceBounds(range, Project.Media.Single(asset => asset.Id == member.MediaId));

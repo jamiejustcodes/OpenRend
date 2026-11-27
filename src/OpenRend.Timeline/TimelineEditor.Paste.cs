@@ -116,6 +116,7 @@ public sealed partial class TimelineEditor
                     {
                         clip.IsMuted = sourceClip.IsMuted;
                         clip.PlaybackRate = sourceClip.PlaybackRate;
+                        clip.AudioSourceMode = sourceClip.AudioSourceMode;
                     }
 
                     if (options.AudioFades)

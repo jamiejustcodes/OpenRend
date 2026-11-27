@@ -552,7 +552,10 @@ public sealed partial class TimelineRenderService : IDisposable
                     var rentedDecoded = ExactBufferPool.RentFloats(decodedSamples);
                     try
                     {
-                        media.GetAudio(asset, Math.Max(0, sourceStart), sampleCount, rentedDecoded);
+                        if (clip.AudioSourceMode == AudioSourceMode.Bounded)
+                            media.GetAudio(asset, Math.Max(0, sourceStart), sampleCount, rentedDecoded);
+                        else
+                            media.GetExtendedAudio(asset, Math.Max(0, sourceStart), sampleCount, clip.AudioSourceMode, rentedDecoded);
                         if (clip.IsReversed) MediaService.ReverseStereo(rentedDecoded, sampleCount);
                         if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
                         {

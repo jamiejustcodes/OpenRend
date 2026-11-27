@@ -375,13 +375,18 @@ public sealed class EditorViewModel : ObservableObject
             if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
                 throw new InvalidOperationException("This media has no stream for the selected track.");
             var clip = new TimelineClip { MediaId = mediaId, Name = asset.Name, StartFrame = start, DurationFrames = duration };
+            if (primaryKind == TrackKind.Audio && asset.HasFiniteAudioSource) clip.AudioSourceMode = AudioSourceMode.PadSilence;
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
             if (primaryKind == TrackKind.Video && asset.HasAudio)
             {
                 clip.GroupId = Guid.NewGuid();
                 var audio = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
                 if (audio is null) { audio = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audio); }
-                var sound = clip.DeepClone(); sound.Id = Guid.NewGuid(); audio.Clips.Add(sound); Selection.Add(sound.Id);
+                var sound = clip.DeepClone();
+                sound.Id = Guid.NewGuid();
+                if (asset.HasFiniteAudioSource) sound.AudioSourceMode = AudioSourceMode.PadSilence;
+                audio.Clips.Add(sound);
+                Selection.Add(sound.Id);
             }
         });
         if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
@@ -451,6 +456,7 @@ public sealed class EditorViewModel : ObservableObject
                 DurationFrames = Math.Max(1, duration),
                 PlaybackRate = rate
             };
+            if (primaryKind == TrackKind.Audio && asset.HasFiniteAudioSource) clip.AudioSourceMode = AudioSourceMode.PadSilence;
             target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
             if (audioTrack is not null)
             {
@@ -460,6 +466,7 @@ public sealed class EditorViewModel : ObservableObject
                 sound.Id = Guid.NewGuid();
                 sound.GroupId = group;
                 sound.PlaybackRate = rate;
+                if (asset.HasFiniteAudioSource) sound.AudioSourceMode = AudioSourceMode.PadSilence;
                 audioTrack.Clips.Add(sound);
                 Selection.Add(sound.Id);
             }

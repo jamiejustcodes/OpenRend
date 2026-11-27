@@ -336,6 +336,12 @@ public partial class MainWindow : Window
             vm.Editor.SetVideoSourceMode(id, mode);
             vm.Status = mode == VideoSourceMode.Loop ? "Video event looping enabled." : "Video event holds its last frame beyond the source.";
         });
+        Timeline.AudioSourceModeRequested += (id, mode) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.SetAudioSourceMode(id, mode);
+            vm.Status = mode == AudioSourceMode.Loop ? "Audio event looping enabled." : "Audio event plays silence beyond the source.";
+        });
         Timeline.VideoFadeCurveRequested += (id, curve, reciprocal, fadeOut) => Guard(() =>
         {
             Pause();

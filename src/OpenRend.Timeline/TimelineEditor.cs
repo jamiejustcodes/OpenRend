@@ -261,6 +261,19 @@ public sealed partial class TimelineEditor
         Execute(_ => { clip.VideoSourceMode = mode; clip.SourceInFrame = changed.SourceInFrame; });
     }
 
+    public void SetAudioSourceMode(Guid clipId, AudioSourceMode mode)
+    {
+        if (!Enum.IsDefined(mode)) throw new ArgumentOutOfRangeException(nameof(mode));
+        var (track, clip) = FindClip(clipId);
+        EnsureUnlocked(track, clip);
+        if (track.Kind != TrackKind.Audio) throw new InvalidOperationException("Audio source playback modes are only available for audio events.");
+        if (clip.AudioSourceMode == mode) return;
+        var changed = clip.DeepClone();
+        changed.AudioSourceMode = mode;
+        EnsureSourceBounds(changed, Project.Media.Single(media => media.Id == clip.MediaId));
+        Execute(_ => clip.AudioSourceMode = mode);
+    }
+
     public int ApplyDissolveToSelection(IEnumerable<Guid> selectedClipIds, VideoTransition? transition = null)
     {
         var ids = ExpandSelection(selectedClipIds, ignoreGroups: true);
@@ -1803,8 +1816,10 @@ public sealed partial class TimelineEditor
         if (clip.VideoSourceMode != VideoSourceMode.Bounded &&
             (!media.HasVideo || media.DurationSeconds < 1e-28 || media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase)))
             throw new InvalidOperationException("Source playback modes require a finite video source.");
+        if (clip.AudioSourceMode != AudioSourceMode.Bounded && !media.HasFiniteAudioSource)
+            throw new InvalidOperationException("Audio source playback modes require a finite audio source.");
         var available = Project.FrameRate.Frames(media.DurationSeconds);
-        if (clip.VideoSourceMode == VideoSourceMode.Bounded && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new ArgumentOutOfRangeException(nameof(clip), "Clip extends beyond the source media.");
+        if (!clip.CanExtendSource && available > 0 && clip.SourceInFrame + clip.DurationFrames > available) throw new ArgumentOutOfRangeException(nameof(clip), "Clip extends beyond the source media.");
     }
     private void Restore(ProjectDocument snapshot)
     {

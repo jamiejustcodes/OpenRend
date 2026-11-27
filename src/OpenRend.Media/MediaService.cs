@@ -163,6 +163,48 @@ public sealed class MediaService : IDisposable
         Array.Clear(destination, count * Channels, (frames - count) * Channels);
     }
 
+    internal void GetExtendedAudio(MediaAsset asset, double seconds, int frames, AudioSourceMode mode, float[] destination)
+    {
+        ValidateAudioDestination(seconds, frames, destination);
+        if (frames == 0) return;
+
+        // Each request uses the same sample period, even when the source ends between project frames.
+        double period = asset.SourceRange is { } range ? AudioFramesInRange(range.TickCount, range.TicksPerSecond)
+            : Math.Round(asset.DurationSeconds * SampleRate, MidpointRounding.AwayFromZero);
+        var sourceSample = Math.Round(seconds * SampleRate, MidpointRounding.AwayFromZero);
+        if (period < 1 || (mode == AudioSourceMode.PadSilence && sourceSample >= period))
+        {
+            Array.Clear(destination, 0, frames * Channels);
+            return;
+        }
+
+        if (mode == AudioSourceMode.Loop) sourceSample %= period;
+        var first = (int)Math.Min(frames, period - sourceSample);
+        GetAudio(asset, sourceSample / SampleRate, first, destination);
+        if (first == frames) return;
+        if (mode == AudioSourceMode.PadSilence)
+        {
+            Array.Clear(destination, first * Channels, (frames - first) * Channels);
+            return;
+        }
+
+        // Decode the beginning once and reuse that cycle when a buffer spans several wraps.
+        var cycleFrames = (int)Math.Min(frames - first, period);
+        var cycle = ExactBufferPool.RentFloats(cycleFrames * Channels);
+        try
+        {
+            GetAudio(asset, 0, cycleFrames, cycle);
+            var written = first;
+            while (written < frames)
+            {
+                var count = Math.Min(cycleFrames, frames - written);
+                Array.Copy(cycle, 0, destination, written * Channels, count * Channels);
+                written += count;
+            }
+        }
+        finally { ExactBufferPool.ReturnFloats(cycle); }
+    }
+
     private int DecodeForwardSubclipAudio(string path, MediaSourceRange range, double seconds, int frames, float[] destination)
     {
         var available = Math.Max(0, range.DurationSeconds - seconds);
