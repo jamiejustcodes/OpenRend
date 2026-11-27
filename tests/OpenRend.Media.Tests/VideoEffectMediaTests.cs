@@ -167,4 +167,31 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
         for (var channel = 0; channel < 3; channel++) Assert.InRange((int)encoded[channel], 137, 143);
         Assert.Equal(new byte[] { 64, 64, 64, 255 }, MediaGeneratorSynthesizer.Render(source, 64, 48)[..4]);
     }
+
+    [Fact]
+    public async Task HueTangentAloneChangesBothPreviewAndEncodedPixels()
+    {
+        using var media = new MediaService();
+        var source = new MediaAsset { Path = "openrend://color?hex=#CD7437", HasVideo = true, DurationSeconds = 1 };
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.HSLCurves = new();
+        grade.HSLCurves.HueVsLum.Points[0].OutTangent = new(.06, -.35);
+        var project = new ProjectDocument
+        {
+            Width = 64, Height = 48, Media = [source], VideoOutputEffects = [grade],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = source.Id, DurationFrames = 3 }] }]
+        };
+        using var renderer = new TimelineRenderService(media);
+        var preview = renderer.RenderFrame(project, 0, 64, 48);
+        var baseline = MediaGeneratorSynthesizer.Render(source, 64, 48);
+        Assert.Equal(205, baseline[2]);
+        Assert.True(baseline[2] - preview[2] > 8,
+            $"Expected a darker red channel after the tangent adjustment, got {baseline[2]} → {preview[2]}.");
+
+        var output = Path.Combine(fixture.Directory, "hue-curve-tangent.mp4");
+        await new ExportService(renderer).ExportAsync(project, output);
+        var encoded = media.GetFrame(output, 0, 64, 48);
+        for (var channel = 0; channel < 3; channel++)
+            Assert.InRange(Math.Abs(encoded[channel] - preview[channel]), 0, 5);
+    }
 }

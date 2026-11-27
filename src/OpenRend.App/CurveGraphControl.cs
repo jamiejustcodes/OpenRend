@@ -5,7 +5,7 @@ using System.Windows.Media;
 
 namespace OpenRend.App;
 
-public abstract class CurveGraphControl : FrameworkElement
+public abstract partial class CurveGraphControl : FrameworkElement
 {
     private const double Padding = 14;
     private const double MaximumZoom = 16;
@@ -107,6 +107,7 @@ public abstract class CurveGraphControl : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        if (TryEditTangentWithKey(e)) return;
         if (Keyboard.Modifiers != ModifierKeys.None || !IsNavigationKey(e.Key)) return;
         e.Handled = true;
         if (IsDragging) return;

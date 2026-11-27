@@ -3,6 +3,8 @@ using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
+public readonly record struct CurveTangent(double X, double Y);
+
 public sealed class CurvePoint
 {
     public double X { get; set; }
@@ -11,6 +13,8 @@ public sealed class CurvePoint
     public double InHandleY { get; set; } = 0.0;
     public double OutHandleX { get; set; } = 0.125;
     public double OutHandleY { get; set; } = 0.0;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool TangentsUnlinked { get; set; }
     [JsonIgnore] public bool IsSelected { get; set; }
 
     public CurvePoint() { }
@@ -107,24 +111,30 @@ public sealed class ColorCurve
         var dx = p1.X - p0.X;
         if (dx <= 1e-7) return p0.Y;
 
-        var c0x = p0.X + p0.OutHandleX;
-        var c0y = p0.Y + p0.OutHandleY;
-        var c1x = p1.X + p1.InHandleX;
-        var c1y = p1.Y + p1.InHandleY;
+        return EvaluateBezierSegment(x, p0.X, p0.Y, p1.X, p1.Y,
+            new(p0.OutHandleX, p0.OutHandleY), new(p1.InHandleX, p1.InHandleY));
+    }
 
+    internal static double EvaluateBezierSegment(double x, double startX, double startY, double endX, double endY,
+        CurveTangent outgoing, CurveTangent incoming)
+    {
+        var c0x = startX + outgoing.X;
+        var c0y = startY + outgoing.Y;
+        var c1x = endX + incoming.X;
+        var c1y = endY + incoming.Y;
         // Binary search for t in [0, 1] matching X(t) = x
         var low = 0.0;
         var high = 1.0;
         for (var step = 0; step < 16; step++)
         {
             var mid = (low + high) * 0.5;
-            var midX = CubicBezier(mid, p0.X, c0x, c1x, p1.X);
+            var midX = CubicBezier(mid, startX, c0x, c1x, endX);
             if (midX < x) low = mid;
             else high = mid;
         }
 
         var t = (low + high) * 0.5;
-        var y = CubicBezier(t, p0.Y, c0y, c1y, p1.Y);
+        var y = CubicBezier(t, startY, c0y, c1y, endY);
         return Math.Clamp(y, 0.0, 1.0);
     }
 
@@ -222,8 +232,8 @@ public sealed class ColorCurvesData
 
     private static bool SameCurve(ColorCurve left, ColorCurve right) => left.Points.Count == right.Points.Count &&
         left.Points.Zip(right.Points).All(pair =>
-            (pair.First.X, pair.First.Y, pair.First.InHandleX, pair.First.InHandleY, pair.First.OutHandleX, pair.First.OutHandleY) ==
-            (pair.Second.X, pair.Second.Y, pair.Second.InHandleX, pair.Second.InHandleY, pair.Second.OutHandleX, pair.Second.OutHandleY));
+            (pair.First.X, pair.First.Y, pair.First.InHandleX, pair.First.InHandleY, pair.First.OutHandleX, pair.First.OutHandleY, pair.First.TangentsUnlinked) ==
+            (pair.Second.X, pair.Second.Y, pair.Second.InHandleX, pair.Second.InHandleY, pair.Second.OutHandleX, pair.Second.OutHandleY, pair.Second.TangentsUnlinked));
 
     public void Validate()
     {

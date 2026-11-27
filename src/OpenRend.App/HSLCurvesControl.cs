@@ -67,6 +67,37 @@ public sealed class HSLCurvesControl : CurveGraphControl
 
     private bool IsHueMode => activeMode is HSLCurveMode.HueVsHue or HSLCurveMode.HueVsSat or HSLCurveMode.HueVsLum;
 
+    protected override int PointCount => ActiveCurve.Points.Count;
+    protected override int SelectedPointIndex
+    {
+        get => selectedPointIndex;
+        set { selectedPointIndex = value; InvalidateVisual(); UpdateReadout(); }
+    }
+    protected override bool WrapTangents => IsHueMode;
+    protected override bool ClampStoredTangents => true;
+
+    protected override Point CurvePointAt(int index)
+    {
+        var point = ActiveCurve.Points[index];
+        return new(point.X, point.Y);
+    }
+
+    protected override CurveTangent? StoredTangent(int index, bool incoming)
+    {
+        var point = ActiveCurve.Points[index];
+        return incoming ? point.InTangent : point.OutTangent;
+    }
+
+    protected override void SetTangent(int index, bool incoming, CurveTangent value)
+    {
+        var point = ActiveCurve.Points[index];
+        if (incoming) point.InTangent = value;
+        else point.OutTangent = value;
+    }
+
+    protected override bool TangentsUnlinked(int index) => ActiveCurve.Points[index].TangentsUnlinked;
+    protected override void SetTangentsUnlinked(int index, bool unlinked) => ActiveCurve.Points[index].TangentsUnlinked = unlinked;
+
     public void ResetActive()
     {
         CancelDrag();
@@ -168,6 +199,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
         }
         geometry.Freeze();
         dc.DrawGeometry(null, curvePen, geometry);
+        DrawTangents(dc);
 
         // Draw control points
         for (var i = 0; i < curve.Points.Count; i++)
@@ -223,6 +255,8 @@ public sealed class HSLCurvesControl : CurveGraphControl
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
+        if (IsKeyboardTangentEdit) CommitCurveGesture();
+        if (TryBeginTangentDrag(e)) return;
         var pos = e.GetPosition(this);
         var norm = ScreenToNormalized(pos);
         var pts = ActiveCurve.Points;
@@ -239,6 +273,12 @@ public sealed class HSLCurvesControl : CurveGraphControl
             }
         }
 
+        if (e.ChangedButton == MouseButton.Right)
+        {
+            OpenTangentMenu(hitIdx);
+            e.Handled = true;
+            return;
+        }
         if (e.ChangedButton == MouseButton.Left && (hitIdx >= 0 || GraphRect.Contains(pos)))
         {
             e.Handled = true;
@@ -254,7 +294,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
             }
 
             if (!CaptureMouse()) return;
-            beforeDrag = curves.DeepClone();
+            SnapshotCurveGesture();
             selectedPointIndex = hitIdx;
             if (hitIdx < 0)
             {
@@ -272,6 +312,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
 
     protected override void OnMouseMove(MouseEventArgs e)
     {
+        if (TryMoveTangent(e) || IsKeyboardTangentEdit) return;
         if (IsDragging && selectedPointIndex >= 0 && selectedPointIndex < ActiveCurve.Points.Count)
         {
             var pos = e.GetPosition(this);
@@ -297,19 +338,30 @@ public sealed class HSLCurvesControl : CurveGraphControl
             }
 
             if (previous != (pt.X, pt.Y))
-            {
-                InvalidateVisual();
-                UpdateReadout();
-                CurvePreviewChanged?.Invoke();
-            }
+                PreviewCurveGesture();
         }
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
-        if (e.ChangedButton != MouseButton.Left || !IsDragging) return;
+        if (e.ChangedButton != MouseButton.Left || !IsDragging || IsKeyboardTangentEdit) return;
         e.Handled = true;
+        CommitCurveGesture();
+    }
+
+    protected override void SnapshotCurveGesture() => beforeDrag = curves.DeepClone();
+
+    protected override void PreviewCurveGesture()
+    {
+        InvalidateVisual();
+        UpdateReadout();
+        CurvePreviewChanged?.Invoke();
+    }
+
+    protected override void CommitCurveGesture()
+    {
         beforeDrag = null;
+        ResetTangentGesture();
         if (IsMouseCaptured) ReleaseMouseCapture();
         CurvesChanged?.Invoke();
         CurvePreviewChanged?.Invoke();
@@ -326,7 +378,8 @@ public sealed class HSLCurvesControl : CurveGraphControl
         if (beforeDrag is not { } previous) return;
         beforeDrag = null;
         curves = previous;
-        selectedPointIndex = -1;
+        if (!IsTangentGesture) selectedPointIndex = -1;
+        ResetTangentGesture();
         if (IsMouseCaptured) ReleaseMouseCapture();
         InvalidateVisual();
         UpdateReadout();

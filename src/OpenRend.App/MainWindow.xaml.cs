@@ -3365,6 +3365,7 @@ public partial class MainWindow : Window
             key is Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown) return;
         if (Keyboard.FocusedElement is CurveGraphControl graph &&
             (key == Key.Delete || key == Key.Escape && graph.IsDragging ||
+             CurveGraphControl.IsTangentKey(key, Keyboard.Modifiers) ||
              Keyboard.Modifiers == ModifierKeys.None && CurveGraphControl.IsNavigationKey(key))) return;
         if (key == Key.Enter && !ctrl && !alt && !shift &&
             (VideoFxPresets.IsKeyboardFocusWithin || MediaGenPresets.IsKeyboardFocusWithin || TransitionPresets.IsKeyboardFocusWithin)) return;
