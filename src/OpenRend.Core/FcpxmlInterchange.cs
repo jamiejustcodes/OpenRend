@@ -43,15 +43,16 @@ public static class FcpxmlInterchange
             new XAttribute("height", project.Height)
         ));
 
-        var assetIdMap = new Dictionary<Guid, string>();
+        var assetIdMap = new Dictionary<Guid, (string Reference, MediaAsset Media)>();
+        var fileDurations = InterchangeSourceTiming.FileDurations(project);
         int assetIndex = 2;
 
         foreach (var media in project.Media)
         {
             var assetId = $"r{assetIndex++}";
-            assetIdMap[media.Id] = assetId;
+            assetIdMap[media.Id] = (assetId, media);
 
-            var assetDurationStr = FormatTimeRational(project.FrameRate.Frames(media.DurationSeconds), project.FrameRate);
+            var assetDurationStr = FormatTimeRational(fileDurations[media.Path], project.FrameRate);
             var assetElem = new XElement("asset",
                 new XAttribute("id", assetId),
                 new XAttribute("name", Path.GetFileName(media.Path)),
@@ -513,17 +514,18 @@ public static class FcpxmlInterchange
         };
     }
 
-    private static XElement CreateAssetClipElement(TimelineClip clip, ProjectDocument project, Dictionary<Guid, string> assetIdMap, int lane)
+    private static XElement CreateAssetClipElement(TimelineClip clip, ProjectDocument project,
+        Dictionary<Guid, (string Reference, MediaAsset Media)> assetIdMap, int lane)
     {
-        assetIdMap.TryGetValue(clip.MediaId, out var assetRef);
-        assetRef ??= "r1";
+        assetIdMap.TryGetValue(clip.MediaId, out var asset);
+        var source = InterchangeSourceTiming.FileRange(clip, asset.Media, project.FrameRate);
 
         var clipElem = new XElement("asset-clip",
-            new XAttribute("ref", assetRef),
+            new XAttribute("ref", asset.Reference ?? "r1"),
             new XAttribute("name", clip.Name ?? "Clip"),
             new XAttribute("offset", FormatTimeRational(clip.StartFrame, project.FrameRate)),
             new XAttribute("duration", FormatTimeRational(clip.DurationFrames, project.FrameRate)),
-            new XAttribute("start", FormatTimeRational(clip.SourceInFrame, project.FrameRate))
+            new XAttribute("start", FormatTimeRational(source.StartFrame, project.FrameRate))
         );
 
         if (lane != 0)

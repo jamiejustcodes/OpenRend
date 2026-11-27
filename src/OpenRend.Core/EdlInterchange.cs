@@ -116,8 +116,9 @@ public static class EdlInterchange
                 var clipName = clip.Name ?? media?.Name ?? Path.GetFileName(media?.Path) ?? "Clip";
                 var reelId = GenerateReelId(clipName, eventCounter);
 
-                var srcIn = FormatTimecode(clip.SourceInFrame, project.FrameRate, isDropFrame);
-                var srcOut = FormatTimecode(clip.SourceInFrame + clip.DurationFrames, project.FrameRate, isDropFrame);
+                var source = InterchangeSourceTiming.FileRange(clip, media, project.FrameRate);
+                var srcIn = FormatTimecode(source.StartFrame, project.FrameRate, isDropFrame);
+                var srcOut = FormatTimecode(source.EndFrame, project.FrameRate, isDropFrame);
                 var dstIn = FormatTimecode(clip.StartFrame, project.FrameRate, isDropFrame);
                 var dstOut = FormatTimecode(clip.EndFrame, project.FrameRate, isDropFrame);
 
@@ -166,8 +167,9 @@ public static class EdlInterchange
                 var clipName = clip.Name ?? media?.Name ?? Path.GetFileName(media?.Path) ?? "AudioClip";
                 var reelId = GenerateReelId(clipName, eventCounter);
 
-                var srcIn = FormatTimecode(clip.SourceInFrame, project.FrameRate, isDropFrame);
-                var srcOut = FormatTimecode(clip.SourceInFrame + clip.DurationFrames, project.FrameRate, isDropFrame);
+                var source = InterchangeSourceTiming.FileRange(clip, media, project.FrameRate);
+                var srcIn = FormatTimecode(source.StartFrame, project.FrameRate, isDropFrame);
+                var srcOut = FormatTimecode(source.EndFrame, project.FrameRate, isDropFrame);
                 var dstIn = FormatTimecode(clip.StartFrame, project.FrameRate, isDropFrame);
                 var dstOut = FormatTimecode(clip.EndFrame, project.FrameRate, isDropFrame);
 
@@ -360,11 +362,13 @@ public static class EdlInterchange
             var key = !string.IsNullOrWhiteSpace(ev.SourceFilePath) ? ev.SourceFilePath
                 : !string.IsNullOrWhiteSpace(ev.ClipName) ? ev.ClipName
                 : ev.ReelId;
+            var maxFrame = Math.Max(ev.SourceOutFrame, checked(ev.SourceInFrame + (ev.TimelineOutFrame - ev.TimelineInFrame)));
 
             if (mediaByPath.TryGetValue(key, out var existing))
             {
                 if (isVideo && !existing.HasVideo) existing.HasVideo = true;
                 if (!isVideo && !existing.HasAudio) existing.HasAudio = true;
+                existing.DurationSeconds = Math.Max(existing.DurationSeconds, rate.Seconds(maxFrame));
                 return existing;
             }
 
@@ -372,8 +376,7 @@ public static class EdlInterchange
                 ? ev.SourceFilePath
                 : $"openrend://edl/{Uri.EscapeDataString(key)}";
 
-            long maxFrame = Math.Max(ev.SourceOutFrame, ev.SourceInFrame + (ev.TimelineOutFrame - ev.TimelineInFrame));
-            double durationSec = Math.Max(10.0, rate.Seconds(maxFrame + 300));
+            double durationSec = Math.Max(10.0, rate.Seconds(checked(maxFrame + 300)));
 
             var asset = new MediaAsset
             {

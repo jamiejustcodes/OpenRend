@@ -26,6 +26,7 @@ public static class Fcp7XmlInterchange
 
         var (timebase, ntsc) = GetRateParameters(project.FrameRate);
         var totalDuration = project.DurationFrames;
+        var fileDurations = InterchangeSourceTiming.FileDurations(project);
 
         var xmeml = new XElement("xmeml",
             new XAttribute("version", "4"),
@@ -44,8 +45,8 @@ public static class Fcp7XmlInterchange
                             new XElement("displayformat", ntsc ? "DF" : "NDF")
                         ),
                         new XElement("media",
-                            CreateVideoMediaElement(project, timebase, ntsc),
-                            CreateAudioMediaElement(project, timebase, ntsc)
+                            CreateVideoMediaElement(project, fileDurations, timebase, ntsc),
+                            CreateAudioMediaElement(project, fileDurations, timebase, ntsc)
                         )
                     )
                 )
@@ -215,17 +216,10 @@ public static class Fcp7XmlInterchange
 
     private static (int Timebase, bool Ntsc) GetRateParameters(Rational rate)
     {
-        double fps = rate.Value;
-        if (Math.Abs(fps - 29.97) < 0.05) return (30, true);
-        if (Math.Abs(fps - 59.94) < 0.05) return (60, true);
-        if (Math.Abs(fps - 23.976) < 0.05) return (24, true);
-        if (Math.Abs(fps - 24.0) < 0.05) return (24, false);
-        if (Math.Abs(fps - 25.0) < 0.05) return (25, false);
-        if (Math.Abs(fps - 30.0) < 0.05) return (30, false);
-        if (Math.Abs(fps - 50.0) < 0.05) return (50, false);
-        if (Math.Abs(fps - 60.0) < 0.05) return (60, false);
-
-        int tb = (int)Math.Round(fps);
+        if (rate == new Rational(30000, 1001)) return (30, true);
+        if (rate == new Rational(60000, 1001)) return (60, true);
+        if (rate == new Rational(24000, 1001)) return (24, true);
+        int tb = (int)Math.Round(rate.Value);
         return (tb > 0 ? tb : 30, false);
     }
 
@@ -252,7 +246,7 @@ public static class Fcp7XmlInterchange
         return new Rational(timebase, 1);
     }
 
-    private static XElement CreateVideoMediaElement(ProjectDocument project, int timebase, bool ntsc)
+    private static XElement CreateVideoMediaElement(ProjectDocument project, Dictionary<string, long> fileDurations, int timebase, bool ntsc)
     {
         var videoElem = new XElement("video",
             new XElement("format",
@@ -276,7 +270,7 @@ public static class Fcp7XmlInterchange
             foreach (var clip in track.Clips.OrderBy(c => c.StartFrame))
             {
                 mediaById.TryGetValue(clip.MediaId, out var asset);
-                var clipItem = CreateClipItemElement(clip, asset, "clipitem-" + clipItemIdx++, TrackKind.Video, timebase, ntsc, project.Width, project.Height);
+                var clipItem = CreateClipItemElement(clip, asset, "clipitem-" + clipItemIdx++, TrackKind.Video, project, fileDurations, timebase, ntsc);
                 trackElem.Add(clipItem);
             }
             videoElem.Add(trackElem);
@@ -285,7 +279,7 @@ public static class Fcp7XmlInterchange
         return videoElem;
     }
 
-    private static XElement CreateAudioMediaElement(ProjectDocument project, int timebase, bool ntsc)
+    private static XElement CreateAudioMediaElement(ProjectDocument project, Dictionary<string, long> fileDurations, int timebase, bool ntsc)
     {
         var audioElem = new XElement("audio",
             new XElement("format",
@@ -305,7 +299,7 @@ public static class Fcp7XmlInterchange
             foreach (var clip in track.Clips.OrderBy(c => c.StartFrame))
             {
                 mediaById.TryGetValue(clip.MediaId, out var asset);
-                var clipItem = CreateClipItemElement(clip, asset, "clipitem-a" + clipItemIdx++, TrackKind.Audio, timebase, ntsc, 0, 0);
+                var clipItem = CreateClipItemElement(clip, asset, "clipitem-a" + clipItemIdx++, TrackKind.Audio, project, fileDurations, timebase, ntsc);
                 trackElem.Add(clipItem);
             }
             audioElem.Add(trackElem);
@@ -314,11 +308,13 @@ public static class Fcp7XmlInterchange
         return audioElem;
     }
 
-    private static XElement CreateClipItemElement(TimelineClip clip, MediaAsset? asset, string id, TrackKind kind, int timebase, bool ntsc, int width, int height)
+    private static XElement CreateClipItemElement(TimelineClip clip, MediaAsset? asset, string id, TrackKind kind,
+        ProjectDocument project, Dictionary<string, long> fileDurations, int timebase, bool ntsc)
     {
         var clipName = clip.Name ?? (asset is not null ? Path.GetFileName(asset.Path) : "Clip");
         var filePath = asset?.Path ?? string.Empty;
         var pathUrl = FormatPathUrl(filePath);
+        var source = InterchangeSourceTiming.FileRange(clip, asset, project.FrameRate);
 
         var item = new XElement("clipitem",
             new XAttribute("id", id),
@@ -327,8 +323,8 @@ public static class Fcp7XmlInterchange
             CreateRateElement(timebase, ntsc),
             new XElement("start", clip.StartFrame),
             new XElement("end", clip.EndFrame),
-            new XElement("in", clip.SourceInFrame),
-            new XElement("out", clip.SourceInFrame + clip.DurationFrames)
+            new XElement("in", source.StartFrame),
+            new XElement("out", source.EndFrame)
         );
 
         if (!string.IsNullOrEmpty(filePath))
@@ -338,7 +334,7 @@ public static class Fcp7XmlInterchange
                 new XElement("name", Path.GetFileName(filePath)),
                 new XElement("pathurl", pathUrl),
                 CreateRateElement(timebase, ntsc),
-                new XElement("duration", clip.DurationFrames)
+                new XElement("duration", fileDurations[filePath])
             );
 
             if (kind == TrackKind.Video)
@@ -346,8 +342,8 @@ public static class Fcp7XmlInterchange
                 fileElem.Add(new XElement("media",
                     new XElement("video",
                         new XElement("samplecharacteristics",
-                            new XElement("width", asset?.Width > 0 ? asset.Width : width),
-                            new XElement("height", asset?.Height > 0 ? asset.Height : height)
+                            new XElement("width", asset?.Width > 0 ? asset.Width : project.Width),
+                            new XElement("height", asset?.Height > 0 ? asset.Height : project.Height)
                         )
                     )
                 ));
@@ -421,6 +417,11 @@ public static class Fcp7XmlInterchange
             resolvedPath = $"openrend://generator/{kind.ToString().ToLowerInvariant()}";
         }
 
+        var sourceEnd = checked(sourceIn + duration);
+        var fileRate = fileElem?.Element("rate") is { } rateElement ? ParseRateElement(rateElement) : frameRate;
+        var fileDuration = long.TryParse(fileElem?.Element("duration")?.Value, out var declared) && declared > 0
+            ? Math.Max(frameRate.Seconds(sourceEnd), fileRate.Seconds(declared))
+            : frameRate.Seconds(checked(sourceEnd + 100));
         if (!assetMap.TryGetValue(resolvedPath, out var asset))
         {
             int w = defWidth;
@@ -434,7 +435,7 @@ public static class Fcp7XmlInterchange
             {
                 Id = Guid.NewGuid(),
                 Path = resolvedPath,
-                DurationSeconds = frameRate.Seconds(duration + sourceIn + 100),
+                DurationSeconds = fileDuration,
                 Width = w,
                 Height = h,
                 FrameRate = frameRate.Value,
@@ -443,6 +444,12 @@ public static class Fcp7XmlInterchange
             };
             assetMap[resolvedPath] = asset;
             assetList.Add(asset);
+        }
+        else
+        {
+            asset.DurationSeconds = Math.Max(asset.DurationSeconds, fileDuration);
+            asset.HasVideo |= kind == TrackKind.Video;
+            asset.HasAudio |= kind == TrackKind.Audio;
         }
 
         double opacity = 1.0;

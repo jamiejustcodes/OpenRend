@@ -165,6 +165,8 @@ Template customization replicates the authentic Vegas Pro 1:1 "Custom Settings" 
 
 ## 7. Final Cut Pro 7 XML and CMX 3600 EDL interchange — high
 
+Forward subclips export through CMX 3600 EDL, Final Cut Pro 7 XML and FCPXML as edits against the original media path. Their source offsets convert to the sequence frame grid. XML file durations cover the known source extent, including projects with only subclips in Project Media. Tests reopen all three formats, check picture and sound edit positions, and render the same decoded video and PCM samples. Final Cut Pro 7 XML preserves the distinction between integer and NTSC-fractional sequence rates.
+
 - [x] Parse and write sequence metadata, tracks, clip items and transitions for the supported format.
 - [x] Preserve edit decisions, source in/out and project positions across import and export.
 - [x] Validate imported XML against project invariants and handle unsupported tags cleanly.

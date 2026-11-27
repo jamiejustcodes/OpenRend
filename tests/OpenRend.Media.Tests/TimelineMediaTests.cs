@@ -475,6 +475,18 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
         Pixel(renderer.RenderFrame(preview, 0, 160, 90), red: 0, blue: 255);
         Assert.Equal(media.GetAudio(source.Path, 1.25, 2400), renderer.RenderAudio(preview, .25, 2400));
 
+        foreach (var reopened in new[]
+        {
+            EdlInterchange.ImportFromEdl(EdlInterchange.ExportToEdl(preview), preview.FrameRate),
+            Fcp7XmlInterchange.ImportFromXml(Fcp7XmlInterchange.ExportToXml(preview)),
+            FcpxmlInterchange.ImportFromXml(FcpxmlInterchange.ExportToXml(preview))
+        })
+        {
+            Assert.Equal(preview.FrameRate, reopened.FrameRate);
+            Pixel(renderer.RenderFrame(reopened, 0, 160, 90), red: 0, blue: 255);
+            Assert.Equal(renderer.RenderAudio(preview, .25, 2400), renderer.RenderAudio(reopened, .25, 2400));
+        }
+
         var destination = Path.Combine(fixture.Directory, "subclip.mp4");
         await new ExportService(renderer).ExportAsync(preview, destination);
         Pixel(media.GetFrame(destination, 0, 160, 90), red: 0, blue: 255, tolerance: 12);
