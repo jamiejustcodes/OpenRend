@@ -84,6 +84,17 @@ public sealed partial class ColorGradingDockControl : UserControl
     private readonly Grid wbHslPage;
     private readonly Grid curvesPage;
     private readonly Grid lutsPage;
+    private readonly CheckBox pinCurves = new()
+    {
+        Content = "Pin curves", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 4)
+    };
+    private readonly ScrollViewer toolsScroll;
+    private readonly ScrollViewer curvesScroll;
+    private readonly GridSplitter curvesSplitter;
+    private readonly RowDefinition toolsRow = new();
+    private readonly RowDefinition curvesRow = new();
+    private GridLength pinnedToolsHeight = new(2, GridUnitType.Star);
+    private GridLength pinnedCurvesHeight = new(3, GridUnitType.Star);
 
     // Color Wheels
     private readonly ColorGradingWheelControl liftWheel;
@@ -274,17 +285,47 @@ public sealed partial class ColorGradingDockControl : UserControl
         pageContainer.Children.Add(wheelsPage);
         pageContainer.Children.Add(toneLevelsPage);
         pageContainer.Children.Add(wbHslPage);
-        pageContainer.Children.Add(curvesPage);
         pageContainer.Children.Add(rangePage);
 
-        var scroll = new ScrollViewer
+        toolsScroll = new ScrollViewer
         {
             HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
             VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             Content = pageContainer
         };
-        Grid.SetColumn(scroll, 1);
-        body.Children.Add(scroll);
+        curvesPage.Margin = pageContainer.Margin;
+        curvesScroll = new ScrollViewer
+        {
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            Content = curvesPage
+        };
+        curvesSplitter = new GridSplitter
+        {
+            Height = 5, HorizontalAlignment = HorizontalAlignment.Stretch,
+            ResizeDirection = GridResizeDirection.Rows, ResizeBehavior = GridResizeBehavior.PreviousAndNext,
+            ToolTip = "Resize pinned curves"
+        };
+        AutomationProperties.SetAutomationId(curvesSplitter, "ColorGrading_CurvesSplitter");
+        AutomationProperties.SetName(curvesSplitter, "Resize pinned curves");
+        curvesSplitter.DragCompleted += (_, _) =>
+        {
+            pinnedToolsHeight = toolsRow.Height;
+            pinnedCurvesHeight = curvesRow.Height;
+        };
+        var pages = new Grid();
+        pages.RowDefinitions.Add(toolsRow);
+        pages.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        pages.RowDefinitions.Add(curvesRow);
+        Grid.SetRow(curvesSplitter, 1);
+        Grid.SetRow(curvesScroll, 2);
+        pages.Children.Add(toolsScroll);
+        pages.Children.Add(curvesSplitter);
+        pages.Children.Add(curvesScroll);
+        Grid.SetColumn(pages, 1);
+        body.Children.Add(pages);
+        pinCurves.Checked += (_, _) => UpdateCurveLayout(navList.SelectedIndex);
+        pinCurves.Unchecked += (_, _) => UpdateCurveLayout(navList.SelectedIndex);
         var sections = new[] { lutsPage, wheelsPage, toneLevelsPage, wbHslPage, rangeWheelsGrid };
         var columnCount = 1;
         foreach (var page in sections) ArrangeSections(page, columnCount);
@@ -296,7 +337,7 @@ public sealed partial class ColorGradingDockControl : UserControl
             columnCount = columns;
             foreach (var page in sections) ArrangeSections(page, columnCount);
         };
-        navList.SelectionChanged += (_, _) => scroll.ScrollToTop();
+        navList.SelectionChanged += (_, _) => toolsScroll.ScrollToTop();
 
         Grid.SetRow(body, 1);
         root.Children.Add(body);
@@ -318,7 +359,11 @@ public sealed partial class ColorGradingDockControl : UserControl
         };
         IsVisibleChanged += (_, _) =>
         {
-            if (!IsVisible) CancelThresholdDrag();
+            if (!IsVisible)
+            {
+                CancelCurveDrags();
+                CancelThresholdDrag();
+            }
             ScopeLimitsChanged?.Invoke();
         };
 
@@ -406,6 +451,7 @@ public sealed partial class ColorGradingDockControl : UserControl
         bypassBtn.IsEnabled = resetAllBtn.IsEnabled = ActiveEffect is not null;
         UpdateLutExportAvailability();
         presetCombo.IsEnabled = popoutBtn.IsEnabled = pageContainer.IsEnabled = targetEffects is not null;
+        curvesPage.IsEnabled = targetEffects is not null;
         undoBtn.IsEnabled = vm?.Editor.CanUndo == true;
         redoBtn.IsEnabled = vm?.Editor.CanRedo == true;
         UpdateControlsFromEffect(targetChanged);
@@ -444,15 +490,28 @@ public sealed partial class ColorGradingDockControl : UserControl
 
     private void SelectPage(int index)
     {
-        if (index != 4) CancelCurveDrags();
+        CancelCurveDrags();
         if (index != 5) CancelThresholdDrag();
         lutsPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         wheelsPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         toneLevelsPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         wbHslPage.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
-        curvesPage.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
         rangePage.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
+        UpdateCurveLayout(index);
         ScopeLimitsChanged?.Invoke();
+    }
+
+    private void UpdateCurveLayout(int index)
+    {
+        var curvesOnly = index == 4;
+        var split = !curvesOnly && pinCurves.IsChecked == true;
+        toolsScroll.Visibility = curvesOnly ? Visibility.Collapsed : Visibility.Visible;
+        curvesScroll.Visibility = curvesOnly || split ? Visibility.Visible : Visibility.Collapsed;
+        curvesSplitter.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+        toolsRow.MinHeight = split ? 68 : 0;
+        curvesRow.MinHeight = split ? 96 : 0;
+        toolsRow.Height = curvesOnly ? new GridLength(0) : split ? pinnedToolsHeight : new GridLength(1, GridUnitType.Star);
+        curvesRow.Height = curvesOnly ? new GridLength(1, GridUnitType.Star) : split ? pinnedCurvesHeight : new GridLength(0);
     }
 
     private static void ArrangeSections(Grid page, int columns)
@@ -821,10 +880,14 @@ public sealed partial class ColorGradingDockControl : UserControl
         grid.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
 
         var modeBar = new WrapPanel { Margin = new Thickness(0, 0, 0, 6) };
-        var btnTabColor = new Button { Content = "RGB curves", Margin = new Thickness(0, 0, 4, 4), FontWeight = FontWeights.Bold };
-        var btnTabHsl = new Button { Content = "HSL curves", Margin = new Thickness(0, 0, 4, 4) };
+        var btnTabColor = new Button { Content = "RGB", Margin = new Thickness(0, 0, 4, 4), FontWeight = FontWeights.Bold };
+        var btnTabHsl = new Button { Content = "HSL", Margin = new Thickness(0, 0, 4, 4) };
+        AutomationProperties.SetName(btnTabColor, "RGB curves");
+        AutomationProperties.SetName(btnTabHsl, "HSL curves");
         modeBar.Children.Add(btnTabColor);
         modeBar.Children.Add(btnTabHsl);
+        AutomationProperties.SetAutomationId(pinCurves, "ColorGrading_PinCurves");
+        modeBar.Children.Add(pinCurves);
         Grid.SetRow(modeBar, 0);
         grid.Children.Add(modeBar);
 
@@ -898,6 +961,7 @@ public sealed partial class ColorGradingDockControl : UserControl
         var rgbStatus = new TextBlock { Text = "Master curve", Margin = new Thickness(0, 0, 0, 4) };
         rgbStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
         readout = rgbStatus;
+        AutomationProperties.SetAutomationId(rgbStatus, "ColorGrading_RgbPoint");
         c.PointSelected += text => rgbStatus.Text = text;
         colorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
         Grid.SetRow(rgbStatus, 2);
@@ -931,6 +995,32 @@ public sealed partial class ColorGradingDockControl : UserControl
         AutomationProperties.SetAutomationId(hslCtrl, "HSLCurvesItem_Control");
         AutomationProperties.SetName(hslCtrl, "HSL curve graph");
         var hc = hslCtrl;
+        var zoomReadout = new TextBlock
+        {
+            MinWidth = 34, VerticalAlignment = VerticalAlignment.Center, TextAlignment = TextAlignment.Center,
+            Margin = new Thickness(0, 0, 4, 4)
+        };
+        zoomReadout.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        AutomationProperties.SetAutomationId(zoomReadout, "ColorGrading_CurveZoom");
+        CurveGraphControl ActiveGraph() => colorGrid.Visibility == Visibility.Visible ? c : hc;
+        void UpdateZoom() => zoomReadout.Text = $"{ActiveGraph().Zoom * 100:0}%";
+        void AddViewButton(string text, string label, string id, Action<CurveGraphControl> action)
+        {
+            var button = new Button { Content = text, ToolTip = label, Margin = new Thickness(0, 0, 4, 4) };
+            AutomationProperties.SetName(button, label);
+            AutomationProperties.SetAutomationId(button, id);
+            button.Click += (_, _) => action(ActiveGraph());
+            modeBar.Children.Add(button);
+        }
+        AddViewButton("−", "Zoom out", "ColorGrading_CurveZoomOut", graph => graph.StepZoom(-1));
+        AddViewButton("+", "Zoom in", "ColorGrading_CurveZoomIn", graph => graph.StepZoom(1));
+        AddViewButton("Fit", "Reset curve view", "ColorGrading_CurveFit", graph => graph.ResetView());
+        modeBar.Children.Add(zoomReadout);
+        c.ViewChanged += UpdateZoom;
+        hc.ViewChanged += UpdateZoom;
+        btnTabColor.Click += (_, _) => UpdateZoom();
+        btnTabHsl.Click += (_, _) => UpdateZoom();
+        UpdateZoom();
         void UpdateHslModeStyles(HSLCurveMode m)
         {
             btnHvh.FontWeight = m == HSLCurveMode.HueVsHue ? FontWeights.Bold : FontWeights.Normal;

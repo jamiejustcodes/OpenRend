@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.Windows;
-using System.Windows.Automation.Peers;
 using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
@@ -18,9 +17,8 @@ public enum CurveChannel
 /// <summary>
 /// Interactive master and RGB curves with editable control points.
 /// </summary>
-public sealed class ColorCurvesControl : FrameworkElement
+public sealed class ColorCurvesControl : CurveGraphControl
 {
-    private const double Padding = 14.0;
     private const double PointRadius = 4.5;
     private const double HitRadius = 9.0;
 
@@ -28,7 +26,7 @@ public sealed class ColorCurvesControl : FrameworkElement
     private ColorCurvesData curves = new();
     private int selectedPointIndex = -1;
     private ColorCurvesData? beforeDrag;
-    internal bool IsDragging => beforeDrag is not null;
+    internal override bool IsDragging => beforeDrag is not null;
 
     public event Action? CurvesChanged;
     internal event Action? CurvePreviewChanged;
@@ -70,14 +68,6 @@ public sealed class ColorCurvesControl : FrameworkElement
         CurveChannel.Blue => curves.Blue,
         _ => curves.Master
     };
-
-    public ColorCurvesControl()
-    {
-        Focusable = true;
-        Cursor = Cursors.Cross;
-        MinHeight = 180;
-        MinWidth = 180;
-    }
 
     public void ResetActive()
     {
@@ -131,22 +121,6 @@ public sealed class ColorCurvesControl : FrameworkElement
         CurvesChanged?.Invoke();
     }
 
-    private Rect GraphRect => new(Padding, Padding, Math.Max(10, ActualWidth - Padding * 2), Math.Max(10, ActualHeight - Padding * 2));
-
-    private Point NormalizedToScreen(double x, double y)
-    {
-        var rect = GraphRect;
-        return new Point(rect.Left + x * rect.Width, rect.Bottom - y * rect.Height);
-    }
-
-    private Point ScreenToNormalized(Point p)
-    {
-        var rect = GraphRect;
-        var x = Math.Clamp((p.X - rect.Left) / rect.Width, 0.0, 1.0);
-        var y = Math.Clamp((rect.Bottom - p.Y) / rect.Height, 0.0, 1.0);
-        return new Point(x, y);
-    }
-
     protected override void OnRender(DrawingContext dc)
     {
         var rect = GraphRect;
@@ -156,20 +130,22 @@ public sealed class ColorCurvesControl : FrameworkElement
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(24, 24, 26)), null, new Rect(0, 0, ActualWidth, ActualHeight));
         dc.DrawRectangle(new SolidColorBrush(Color.FromRgb(18, 18, 20)), new Pen(new SolidColorBrush(Color.FromRgb(45, 45, 48)), 1.0), rect);
 
-        // Grid lines at 25%, 50%, 75%
+        // Keep the grid in curve coordinates as the view pans and zooms.
         var gridPen = new Pen(new SolidColorBrush(Color.FromArgb(40, 255, 255, 255)), 1.0);
-        for (var i = 1; i < 4; i++)
+        var divisions = (int)Zoom * 4;
+        for (var i = 1; i < divisions; i++)
         {
-            var frac = i * 0.25;
-            var x = rect.Left + frac * rect.Width;
-            var y = rect.Bottom - frac * rect.Height;
-            dc.DrawLine(gridPen, new Point(x, rect.Top), new Point(x, rect.Bottom));
-            dc.DrawLine(gridPen, new Point(rect.Left, y), new Point(rect.Right, y));
+            var coordinate = i / (double)divisions;
+            var position = NormalizedToScreen(coordinate, coordinate);
+            if (position.X > rect.Left && position.X < rect.Right)
+                dc.DrawLine(gridPen, new Point(position.X, rect.Top), new Point(position.X, rect.Bottom));
+            if (position.Y > rect.Top && position.Y < rect.Bottom)
+                dc.DrawLine(gridPen, new Point(rect.Left, position.Y), new Point(rect.Right, position.Y));
         }
 
-        // Diagonal reference
+        BeginGraphClip(dc);
         var diagPen = new Pen(new SolidColorBrush(Color.FromArgb(30, 255, 255, 255)), 1.0) { DashStyle = DashStyles.Dash };
-        dc.DrawLine(diagPen, new Point(rect.Left, rect.Bottom), new Point(rect.Right, rect.Top));
+        dc.DrawLine(diagPen, NormalizedToScreen(0, 0), NormalizedToScreen(1, 1));
 
         // Draw inactive channel curves in faint colors
         DrawChannelCurve(dc, curves.Master, Color.FromArgb(70, 220, 220, 220), 1.0, activeChannel == CurveChannel.Master);
@@ -202,6 +178,7 @@ public sealed class ColorCurvesControl : FrameworkElement
 
             dc.DrawEllipse(new SolidColorBrush(activeColor), new Pen(Brushes.White, isSelected ? 1.5 : 1.0), screenPt, PointRadius, PointRadius);
         }
+        dc.Pop();
     }
 
     private void DrawChannelCurve(DrawingContext dc, ColorCurve curve, Color color, double thickness, bool isActive)
@@ -217,11 +194,11 @@ public sealed class ColorCurvesControl : FrameworkElement
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            var pStart = NormalizedToScreen(0, curve.Evaluate(0));
+            var pStart = NormalizedToScreen(VisibleLeft, curve.Evaluate(VisibleLeft));
             ctx.BeginFigure(pStart, isFilled: false, isClosed: false);
             for (var i = 1; i <= steps; i++)
             {
-                var x = i / (double)steps;
+                var x = VisibleLeft + (VisibleRight - VisibleLeft) * i / steps;
                 var y = curve.Evaluate(x);
                 ctx.LineTo(NormalizedToScreen(x, y), isStroked: true, isSmoothJoin: true);
             }
@@ -229,8 +206,6 @@ public sealed class ColorCurvesControl : FrameworkElement
         geometry.Freeze();
         dc.DrawGeometry(null, pen, geometry);
     }
-
-    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
 
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
@@ -244,14 +219,14 @@ public sealed class ColorCurvesControl : FrameworkElement
         for (var i = 0; i < pts.Count; i++)
         {
             var screenPt = NormalizedToScreen(pts[i].X, pts[i].Y);
-            if ((screenPt - pos).Length <= HitRadius)
+            if (IsVisiblePoint(screenPt) && (screenPt - pos).Length <= HitRadius)
             {
                 hitIdx = i;
                 break;
             }
         }
 
-        if (e.ChangedButton == MouseButton.Left)
+        if (e.ChangedButton == MouseButton.Left && (hitIdx >= 0 || GraphRect.Contains(pos)))
         {
             e.Handled = true;
             if (e.ClickCount == 2 && hitIdx > 0 && hitIdx < pts.Count - 1)
@@ -351,6 +326,8 @@ public sealed class ColorCurvesControl : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
         if (IsDragging)
         {
             if (e.Key == Key.Escape || e.Key == Key.Delete)
@@ -369,6 +346,17 @@ public sealed class ColorCurvesControl : FrameworkElement
             CurvesChanged?.Invoke();
             e.Handled = true;
         }
+    }
+
+    protected override void SelectAdjacentPoint(int direction)
+    {
+        var points = ActiveCurve.Points;
+        if (points.Count == 0) return;
+        selectedPointIndex = AdjacentPointIndex(selectedPointIndex, points.Count, direction);
+        var point = points[selectedPointIndex];
+        RevealPoint(point.X, point.Y);
+        InvalidateVisual();
+        UpdateReadout();
     }
 
     private void UpdateReadout()

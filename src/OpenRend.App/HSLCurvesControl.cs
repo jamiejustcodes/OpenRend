@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
-using System.Windows.Automation.Peers;
 using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
@@ -12,9 +11,8 @@ namespace OpenRend.App;
 /// <summary>
 /// Interactive HSL curves with periodic interpolation for hue.
 /// </summary>
-public sealed class HSLCurvesControl : FrameworkElement
+public sealed class HSLCurvesControl : CurveGraphControl
 {
-    private const double Padding = 14.0;
     private const double PointRadius = 4.5;
     private const double HitRadius = 9.0;
 
@@ -22,7 +20,7 @@ public sealed class HSLCurvesControl : FrameworkElement
     private HSLCurvesData curves = new();
     private int selectedPointIndex = -1;
     private HSLCurvesData? beforeDrag;
-    internal bool IsDragging => beforeDrag is not null;
+    internal override bool IsDragging => beforeDrag is not null;
 
     public event Action? CurvesChanged;
     internal event Action? CurvePreviewChanged;
@@ -69,14 +67,6 @@ public sealed class HSLCurvesControl : FrameworkElement
 
     private bool IsHueMode => activeMode is HSLCurveMode.HueVsHue or HSLCurveMode.HueVsSat or HSLCurveMode.HueVsLum;
 
-    public HSLCurvesControl()
-    {
-        Focusable = true;
-        Cursor = Cursors.Cross;
-        MinHeight = 180;
-        MinWidth = 180;
-    }
-
     public void ResetActive()
     {
         CancelDrag();
@@ -105,22 +95,6 @@ public sealed class HSLCurvesControl : FrameworkElement
         CurvesChanged?.Invoke();
     }
 
-    private Rect GraphRect => new(Padding, Padding, Math.Max(10, ActualWidth - Padding * 2), Math.Max(10, ActualHeight - Padding * 2));
-
-    private Point NormalizedToScreen(double x, double y)
-    {
-        var rect = GraphRect;
-        return new Point(rect.Left + x * rect.Width, rect.Bottom - y * rect.Height);
-    }
-
-    private Point ScreenToNormalized(Point p)
-    {
-        var rect = GraphRect;
-        var x = Math.Clamp((p.X - rect.Left) / rect.Width, 0.0, 1.0);
-        var y = Math.Clamp((rect.Bottom - p.Y) / rect.Height, 0.0, 1.0);
-        return new Point(x, y);
-    }
-
     protected override void OnRender(DrawingContext dc)
     {
         var rect = GraphRect;
@@ -132,7 +106,7 @@ public sealed class HSLCurvesControl : FrameworkElement
 
         // Spectrum Gradient bar along bottom (4px height)
         var spectrumRect = new Rect(rect.Left, rect.Bottom - 6, rect.Width, 6);
-        Brush spectrumBrush;
+        LinearGradientBrush spectrumBrush;
         if (IsHueMode)
         {
             spectrumBrush = new LinearGradientBrush(
@@ -158,17 +132,23 @@ public sealed class HSLCurvesControl : FrameworkElement
             spectrumBrush = new LinearGradientBrush(
                 Colors.Black, Colors.White, 0.0);
         }
+        spectrumBrush.MappingMode = BrushMappingMode.Absolute;
+        spectrumBrush.StartPoint = new Point(NormalizedToScreen(0, 0).X, spectrumRect.Top);
+        spectrumBrush.EndPoint = new Point(NormalizedToScreen(1, 0).X, spectrumRect.Top);
         dc.DrawRectangle(spectrumBrush, null, spectrumRect);
 
+        BeginGraphClip(dc);
         // Neutral center baseline (Y = 0.5)
         var centerPen = new Pen(new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)), 1.0) { DashStyle = DashStyles.Dash };
-        var yCenter = rect.Bottom - 0.5 * rect.Height;
+        var yCenter = NormalizedToScreen(0, 0.5).Y;
         dc.DrawLine(centerPen, new Point(rect.Left, yCenter), new Point(rect.Right, yCenter));
 
         // Upper & lower guideline (+50%, -50%)
         var guidePen = new Pen(new SolidColorBrush(Color.FromArgb(35, 255, 255, 255)), 1.0);
-        dc.DrawLine(guidePen, new Point(rect.Left, rect.Bottom - 0.75 * rect.Height), new Point(rect.Right, rect.Bottom - 0.75 * rect.Height));
-        dc.DrawLine(guidePen, new Point(rect.Left, rect.Bottom - 0.25 * rect.Height), new Point(rect.Right, rect.Bottom - 0.25 * rect.Height));
+        var upperGuide = NormalizedToScreen(0, 0.75).Y;
+        var lowerGuide = NormalizedToScreen(0, 0.25).Y;
+        dc.DrawLine(guidePen, new Point(rect.Left, upperGuide), new Point(rect.Right, upperGuide));
+        dc.DrawLine(guidePen, new Point(rect.Left, lowerGuide), new Point(rect.Right, lowerGuide));
 
         // Draw curve polyline
         var curve = ActiveCurve;
@@ -177,11 +157,11 @@ public sealed class HSLCurvesControl : FrameworkElement
         var geometry = new StreamGeometry();
         using (var ctx = geometry.Open())
         {
-            var pStart = NormalizedToScreen(0, curve.Evaluate(0, IsHueMode));
+            var pStart = NormalizedToScreen(VisibleLeft, curve.Evaluate(VisibleLeft, IsHueMode));
             ctx.BeginFigure(pStart, isFilled: false, isClosed: false);
             for (var i = 1; i <= steps; i++)
             {
-                var x = i / (double)steps;
+                var x = VisibleLeft + (VisibleRight - VisibleLeft) * i / steps;
                 var y = curve.Evaluate(x, IsHueMode);
                 ctx.LineTo(NormalizedToScreen(x, y), isStroked: true, isSmoothJoin: true);
             }
@@ -207,6 +187,7 @@ public sealed class HSLCurvesControl : FrameworkElement
 
             dc.DrawEllipse(new SolidColorBrush(ptColor), new Pen(Brushes.White, isSelected ? 1.5 : 1.0), screenPt, PointRadius, PointRadius);
         }
+        dc.Pop();
     }
 
     private Color ColorFromCoordinate(double x)
@@ -239,8 +220,6 @@ public sealed class HSLCurvesControl : FrameworkElement
         return Color.FromRgb(l, l, l);
     }
 
-    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
-
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
@@ -253,14 +232,14 @@ public sealed class HSLCurvesControl : FrameworkElement
         for (var i = 0; i < pts.Count; i++)
         {
             var screenPt = NormalizedToScreen(pts[i].X, pts[i].Y);
-            if ((screenPt - pos).Length <= HitRadius)
+            if (IsVisiblePoint(screenPt) && (screenPt - pos).Length <= HitRadius)
             {
                 hitIdx = i;
                 break;
             }
         }
 
-        if (e.ChangedButton == MouseButton.Left)
+        if (e.ChangedButton == MouseButton.Left && (hitIdx >= 0 || GraphRect.Contains(pos)))
         {
             e.Handled = true;
             if (e.ClickCount == 2 && hitIdx >= 0 && pts.Count > 2)
@@ -356,6 +335,8 @@ public sealed class HSLCurvesControl : FrameworkElement
 
     protected override void OnKeyDown(KeyEventArgs e)
     {
+        base.OnKeyDown(e);
+        if (e.Handled) return;
         if (IsDragging)
         {
             if (e.Key == Key.Escape || e.Key == Key.Delete)
@@ -374,6 +355,17 @@ public sealed class HSLCurvesControl : FrameworkElement
             CurvesChanged?.Invoke();
             e.Handled = true;
         }
+    }
+
+    protected override void SelectAdjacentPoint(int direction)
+    {
+        var points = ActiveCurve.Points;
+        if (points.Count == 0) return;
+        selectedPointIndex = AdjacentPointIndex(selectedPointIndex, points.Count, direction);
+        var point = points[selectedPointIndex];
+        RevealPoint(point.X, point.Y);
+        InvalidateVisual();
+        UpdateReadout();
     }
 
     private void UpdateReadout()

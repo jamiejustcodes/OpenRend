@@ -29,6 +29,7 @@
     <Compile Include="../../src/OpenRend.App/WhiteBalanceSampleDialog.cs" Link="WhiteBalanceSampleDialog.cs" />
     <Compile Include="../../src/OpenRend.App/ColorGradingWheelControl.cs" Link="ColorGradingWheelControl.cs" />
     <Compile Include="../../src/OpenRend.App/ColorCurvesControl.cs" Link="ColorCurvesControl.cs" />
+    <Compile Include="../../src/OpenRend.App/CurveGraphControl.cs" Link="CurveGraphControl.cs" />
     <Compile Include="../../src/OpenRend.App/HSLCurvesControl.cs" Link="HSLCurvesControl.cs" />
     <Compile Include="../../src/OpenRend.App/InsertTimeDialog.cs" Link="InsertTimeDialog.cs" />
     <Compile Include="../../src/OpenRend.App/TimelineEditDialog.cs" Link="TimelineEditDialog.cs" />
