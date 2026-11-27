@@ -55,6 +55,7 @@ public sealed partial class ColorGradingDockControl : UserControl
     private List<VideoEffect>? targetEffects;
     private bool updating;
     private bool showingCurvePreview;
+    private bool exportingLut;
 
     internal event Action<GradingPreview?>? GradingPreviewRequested;
     private static readonly VideoEffect NeutralGrade = VideoEffect.Create(VideoEffectKind.ColorGrading);
@@ -67,6 +68,7 @@ public sealed partial class ColorGradingDockControl : UserControl
     private readonly ToggleButton bypassBtn;
     private readonly Button resetAllBtn;
     private readonly ComboBox presetCombo;
+    private readonly Button exportLutBtn;
     private readonly Button popoutBtn;
     private readonly Button undoBtn;
     private readonly Button redoBtn;
@@ -194,6 +196,12 @@ public sealed partial class ColorGradingDockControl : UserControl
         presetCombo.Margin = new Thickness(0, 0, 4, 4);
         presetCombo.SelectionChanged += (_, _) => SelectLut(1, presetCombo);
         tools.Children.Add(presetCombo);
+
+        exportLutBtn = new Button { Content = "Export LUT…", Margin = new Thickness(0, 0, 4, 4) };
+        exportLutBtn.ToolTip = "Save the current target's grade as a .cube file";
+        AutomationProperties.SetAutomationId(exportLutBtn, "ColorGrading_ExportLut");
+        exportLutBtn.Click += ExportGradeLut;
+        tools.Children.Add(exportLutBtn);
 
         popoutBtn = new Button { Content = "Open panel…", Margin = new Thickness(0, 0, 4, 4) };
         AutomationProperties.SetAutomationId(popoutBtn, "ColorGrading_PopoutButton");
@@ -396,6 +404,7 @@ public sealed partial class ColorGradingDockControl : UserControl
         targetLabel.Text = name;
         targetLabel.ToolTip = name;
         bypassBtn.IsEnabled = resetAllBtn.IsEnabled = ActiveEffect is not null;
+        UpdateLutExportAvailability();
         presetCombo.IsEnabled = popoutBtn.IsEnabled = pageContainer.IsEnabled = targetEffects is not null;
         undoBtn.IsEnabled = vm?.Editor.CanUndo == true;
         redoBtn.IsEnabled = vm?.Editor.CanRedo == true;
@@ -1229,6 +1238,59 @@ public sealed partial class ColorGradingDockControl : UserControl
                 [$"LUTEnable_{slot}"] = 0
             }) || cleared;
         });
+    }
+
+    private void UpdateLutExportAvailability() =>
+        exportLutBtn.IsEnabled = !exportingLut && ActiveEffect is { IsEnabled: true };
+
+    private async void ExportGradeLut(object sender, RoutedEventArgs e)
+    {
+        if (vm is not { } viewModel || ActiveEffect is not { IsEnabled: true } effect || exportingLut) return;
+        if (Window.GetWindow(this) is not { } owner) return;
+
+        var grade = effect.DeepClone();
+        var protectedPaths = viewModel.Project.Media.Select(media => media.Path)
+            .Where(path => !path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase))
+            .Append(viewModel.ProjectPath).OfType<string>().ToArray();
+        var position = viewModel.Position;
+        if (scope == EffectScope.Event &&
+            viewModel.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(clip => clip.Id == targetId) is { } clip)
+            position = Math.Max(0, position - clip.StartFrame);
+
+        var dialog = new SaveFileDialog
+        {
+            Title = "Export Color Grading LUT",
+            FileName = "Color Grade",
+            DefaultExt = ".cube",
+            Filter = "33-point CUBE (*.cube)|*.cube|65-point CUBE (*.cube)|*.cube",
+            RestoreDirectory = true
+        };
+        if (dialog.ShowDialog(owner) != true) return;
+
+        exportingLut = true;
+        UpdateLutExportAvailability();
+        try
+        {
+            var output = Path.GetFullPath(dialog.FileName);
+            if (!string.Equals(Path.GetExtension(output), ".cube", StringComparison.OrdinalIgnoreCase))
+                throw new InvalidOperationException("Use a .cube filename for the LUT.");
+            if (protectedPaths.Any(path => string.Equals(Path.GetFullPath(path), output, StringComparison.OrdinalIgnoreCase)))
+                throw new InvalidOperationException("Choose a LUT destination different from the project and source media.");
+
+            var size = dialog.FilterIndex == 2 ? 65 : 33;
+            viewModel.Status = $"Exporting {size}-point LUT…";
+            await Task.Run(() => GradingLutExporter.Save(grade, position, size, output));
+            viewModel.Status = $"Saved {Path.GetFileName(output)}.";
+        }
+        catch (Exception error)
+        {
+            MessageBox.Show(owner, error.Message, "Export Color Grading LUT", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            exportingLut = false;
+            UpdateLutExportAvailability();
+        }
     }
 
     // --- Wheel Callbacks ---

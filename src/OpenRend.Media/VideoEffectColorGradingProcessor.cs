@@ -7,13 +7,46 @@ internal static partial class VideoEffectProcessor
     private static byte[] ApplyColorGrading(byte[] source, VideoEffect effect)
     {
         var output = source;
-        double P(string key) => effect.GetParameter(key);
+        if (CreateGradeLutTransform(effect, 0, effect.Lut) is { } camera) output = Color(output, camera);
+        output = Color(output, CreatePrimaryGradeTransform(effect));
+        if (CreateGradeLutTransform(effect, 1, effect.LookLut) is { } look) output = Color(output, look);
+        return output;
+    }
 
-        // 1. Camera LUT (Slot 0)
-        if (effect.Lut is not null && P("LUTEnable_0") == 0 && P("LUTGain_0") > 0)
+    private static Func<double, double, double, (double R, double G, double B)>? CreateGradeLutTransform(VideoEffect effect, int slot, CubeLut? lut)
+    {
+        if (lut is null || effect.GetParameter($"LUTEnable_{slot}") != 0) return null;
+        var strength = effect.GetParameter($"LUTGain_{slot}");
+        return strength > 0 ? CreateLutTransform(lut, strength, effect.GetParameter($"LUTInterpolation_{slot}") == 1) : null;
+    }
+
+    internal static Func<double, double, double, (double R, double G, double B)> CreateGradeLutSampler(VideoEffect effect)
+    {
+        var camera = CreateGradeLutTransform(effect, 0, effect.Lut);
+        var primary = CreatePrimaryGradeTransform(effect);
+        var look = CreateGradeLutTransform(effect, 1, effect.LookLut);
+        return (r, g, b) =>
         {
-            output = ApplyLut(output, effect.Lut, P("LUTGain_0"), P("LUTInterpolation_0") == 1);
-        }
+            // Keep the renderer's quantization between stages, with precise cube coordinates at input.
+            if (camera is not null) (r, g, b) = QuantizeColor(camera(r, g, b));
+            (r, g, b) = primary(r, g, b);
+            if (look is not null)
+            {
+                (r, g, b) = QuantizeColor((r, g, b));
+                (r, g, b) = look(r, g, b);
+            }
+            return (Normalize(r), Normalize(g), Normalize(b));
+        };
+
+        static double Normalize(double value) => double.IsFinite(value) ? Math.Clamp(value, 0, 1) : Channel(value) / 255.0;
+    }
+
+    private static (double R, double G, double B) QuantizeColor((double R, double G, double B) color) =>
+        (Channel(color.R) / 255.0, Channel(color.G) / 255.0, Channel(color.B) / 255.0);
+
+    private static Func<double, double, double, (double R, double G, double B)> CreatePrimaryGradeTransform(VideoEffect effect)
+    {
+        double P(string key) => effect.GetParameter(key);
 
         // 2. Precompute Levels parameters
         var inMin = P("InMinAdjust");
@@ -92,7 +125,7 @@ internal static partial class VideoEffectProcessor
         var lvsLut = hasHslCurves && !hslCurves!.LumVsSat.IsIdentity ? hslCurves.LumVsSat.BuildLut(256, false) : null;
 
         // Apply primary grading operations in single color transform pass
-        output = Color(output, (red, green, blue) =>
+        return (red, green, blue) =>
         {
             // Levels
             if (hasLevels)
@@ -269,15 +302,7 @@ internal static partial class VideoEffectProcessor
             }
 
             return (red, green, blue);
-        });
-
-        // 7. Look LUT (Slot 1)
-        if (effect.LookLut is not null && P("LUTEnable_1") == 0 && P("LUTGain_1") > 0)
-        {
-            output = ApplyLut(output, effect.LookLut, P("LUTGain_1"), P("LUTInterpolation_1") == 1);
-        }
-
-        return output;
+        };
     }
 
     private static double WrapAngle(double value, double size) => (value % size + size) % size;

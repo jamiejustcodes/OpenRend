@@ -4,11 +4,14 @@ namespace OpenRend.Media;
 
 internal static partial class VideoEffectProcessor
 {
-    private static byte[] ApplyLut(byte[] source, CubeLut lut, double strength, bool tetrahedral)
+    private static byte[] ApplyLut(byte[] source, CubeLut lut, double strength, bool tetrahedral) =>
+        Color(source, CreateLutTransform(lut, strength, tetrahedral));
+
+    private static Func<double, double, double, (double R, double G, double B)> CreateLutTransform(CubeLut lut, double strength, bool tetrahedral)
     {
         var size = lut.Size;
         var samples = lut.Samples;
-        return Color(source, (red, green, blue) =>
+        return (red, green, blue) =>
         {
             var x = Coordinate(red, 0); var y = Coordinate(green, 1); var z = Coordinate(blue, 2);
             var ix = Math.Min((int)x, size - 2); var iy = Math.Min((int)y, size - 2); var iz = Math.Min((int)z, size - 2);
@@ -44,7 +47,7 @@ internal static partial class VideoEffectProcessor
             }
             return ((1 - strength) * red + strength * Sample(0),
                 (1 - strength) * green + strength * Sample(1), (1 - strength) * blue + strength * Sample(2));
-        });
+        };
 
         double Coordinate(double value, int channel) =>
             Math.Clamp((value - lut.DomainMinimum[channel]) / (lut.DomainMaximum[channel] - lut.DomainMinimum[channel]), 0, 1) * (size - 1);
