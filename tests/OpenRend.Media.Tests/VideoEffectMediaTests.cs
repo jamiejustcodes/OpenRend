@@ -88,4 +88,38 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
         }
         Assert.Equal(201, preview[(12 * 64 + 16) * 4]);
     }
+
+    [Fact]
+    public async Task TonalGradeChangesShadowPixelsInPreviewAndEncodedOutput()
+    {
+        using var media = new MediaService();
+        var source = await media.ProbeAsync(fixture.Quadrants);
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.SetParameter(TonalRangeGrading.LowerKey, .4);
+        grade.SetParameter(TonalRangeGrading.Shadows + "_B", .15);
+        var clip = new TimelineClip { MediaId = source.Id, DurationFrames = 3 };
+        var project = new ProjectDocument
+        {
+            Width = 64, Height = 48, Media = [source],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [clip] }],
+            VideoOutputEffects = [grade]
+        };
+
+        using var renderer = new TimelineRenderService(media);
+        var preview = renderer.RenderFrame(project, 0, 64, 48);
+        var original = media.GetFrame(source.Path, 0, 64, 48);
+        var red = (12 * 64 + 16) * 4;
+        Assert.Equal(0, original[red]);
+        Assert.Equal(38, preview[red]);
+
+        var destination = Path.Combine(fixture.Directory, "tonal-grade.mp4");
+        await new ExportService(renderer).ExportAsync(project, destination);
+        var encoded = media.GetFrame(destination, 0, 64, 48);
+        foreach (var (x, y) in new[] { (16, 12), (48, 12), (16, 36), (48, 36) })
+        {
+            var offset = (y * 64 + x) * 4;
+            for (var channel = 0; channel < 3; channel++)
+                Assert.InRange(Math.Abs(encoded[offset + channel] - preview[offset + channel]), 0, 8);
+        }
+    }
 }

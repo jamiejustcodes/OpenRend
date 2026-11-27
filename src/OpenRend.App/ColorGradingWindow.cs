@@ -6,7 +6,10 @@ namespace OpenRend.App;
 
 public sealed class ColorGradingWindow : Window
 {
-    internal event Action<CurvePreview?>? CurvePreviewRequested;
+    private readonly ColorGradingDockControl panel;
+    internal event Action<GradingPreview?>? GradingPreviewRequested;
+    internal event Action? ScopeLimitsChanged;
+    internal LuminanceThresholds? ScopeLimits => panel.ScopeLimits;
 
     public ColorGradingWindow(EditorViewModel viewModel, EffectScope scope, Guid targetId, Guid? effectId = null, Action? onPreview = null)
     {
@@ -19,8 +22,9 @@ public sealed class ColorGradingWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         AutomationProperties.SetAutomationId(this, "ColorGradingWindow");
 
-        var panel = new ColorGradingDockControl();
-        panel.CurvePreviewRequested += preview => CurvePreviewRequested?.Invoke(preview);
+        panel = new ColorGradingDockControl();
+        panel.GradingPreviewRequested += preview => GradingPreviewRequested?.Invoke(preview);
+        panel.ScopeLimitsChanged += () => ScopeLimitsChanged?.Invoke();
         panel.BindScope(viewModel, scope, targetId, effectId, onPreview);
         Content = panel;
         Loaded += OnLoaded;

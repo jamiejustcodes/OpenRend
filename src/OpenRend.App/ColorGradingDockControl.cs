@@ -11,7 +11,8 @@ using OpenRend.Media;
 
 namespace OpenRend.App;
 
-internal sealed record CurvePreview(EffectScope Scope, Guid Target, Guid? Grade, ColorCurvesData? Rgb, HSLCurvesData? Hsl)
+internal sealed record GradingPreview(EffectScope Scope, Guid Target, Guid? Grade,
+    ColorCurvesData? Rgb = null, HSLCurvesData? Hsl = null, LuminanceThresholds? Thresholds = null)
 {
     public void Apply(ProjectDocument snapshot)
     {
@@ -26,6 +27,11 @@ internal sealed record CurvePreview(EffectScope Scope, Guid Target, Guid? Grade,
         }
         if (Rgb is not null) grade.Curves = Rgb;
         if (Hsl is not null) grade.HSLCurves = Hsl;
+        if (Thresholds is { } thresholds)
+        {
+            grade.SetParameter(TonalRangeGrading.LowerKey, thresholds.Lower);
+            grade.SetParameter(TonalRangeGrading.UpperKey, thresholds.Upper);
+        }
     }
 }
 
@@ -35,7 +41,7 @@ internal sealed record CurvePreview(EffectScope Scope, Guid Target, Guid? Grade,
 /// dual 3D LUT slots with built-in camera/look presets, interactive color wheels,
 /// curves, tone, levels, white balance, and HSL controls.
 /// </summary>
-public sealed class ColorGradingDockControl : UserControl
+public sealed partial class ColorGradingDockControl : UserControl
 {
     private EditorViewModel? vm;
     private Action? previewCallback;
@@ -47,7 +53,7 @@ public sealed class ColorGradingDockControl : UserControl
     private bool updating;
     private bool showingCurvePreview;
 
-    internal event Action<CurvePreview?>? CurvePreviewRequested;
+    internal event Action<GradingPreview?>? GradingPreviewRequested;
     private static readonly VideoEffect NeutralGrade = VideoEffect.Create(VideoEffectKind.ColorGrading);
     private static readonly ColorCurvesData NeutralRgb = new();
     private static readonly HSLCurvesData NeutralHsl = new();
@@ -194,6 +200,7 @@ public sealed class ColorGradingDockControl : UserControl
         navList.Items.Add(MakeNavItem("Tone & Levels", "UtilitiesItem"));
         navList.Items.Add(MakeNavItem("White Balance / HSL", "WbHslItem"));
         navList.Items.Add(MakeNavItem("Curves", "CurvesItem"));
+        navList.Items.Add(MakeNavItem("Tonal Ranges", "TonalRangesItem"));
 
         navList.SelectedIndex = 0;
         navList.SelectionChanged += (_, _) => SelectPage(navList.SelectedIndex);
@@ -233,12 +240,14 @@ public sealed class ColorGradingDockControl : UserControl
 
         // Page 4: Curves
         curvesPage = CreateCurvesPage(out curvesControl, out curveReadout, out hslCurvesControl, out hslCurveReadout);
+        rangePage = CreateRangePage(out var rangeWheelsGrid);
 
         pageContainer.Children.Add(lutsPage);
         pageContainer.Children.Add(wheelsPage);
         pageContainer.Children.Add(toneLevelsPage);
         pageContainer.Children.Add(wbHslPage);
         pageContainer.Children.Add(curvesPage);
+        pageContainer.Children.Add(rangePage);
 
         var scroll = new ScrollViewer
         {
@@ -248,7 +257,7 @@ public sealed class ColorGradingDockControl : UserControl
         };
         Grid.SetColumn(scroll, 1);
         body.Children.Add(scroll);
-        var sections = new[] { lutsPage, wheelsPage, toneLevelsPage, wbHslPage };
+        var sections = new[] { lutsPage, wheelsPage, toneLevelsPage, wbHslPage, rangeWheelsGrid };
         var columnCount = 1;
         foreach (var page in sections) ArrangeSections(page, columnCount);
         body.SizeChanged += (_, args) =>
@@ -267,7 +276,18 @@ public sealed class ColorGradingDockControl : UserControl
         Content = root;
         SelectPage(0);
         BindToClip(null);
-        Unloaded += (_, _) => CancelCurveDrags();
+        Loaded += (_, _) => ScopeLimitsChanged?.Invoke();
+        Unloaded += (_, _) =>
+        {
+            CancelCurveDrags();
+            CancelThresholdDrag();
+            ScopeLimitsChanged?.Invoke();
+        };
+        IsVisibleChanged += (_, _) =>
+        {
+            if (!IsVisible) CancelThresholdDrag();
+            ScopeLimitsChanged?.Invoke();
+        };
 
         Button AddWindowAction(string title, string id, Action action)
         {
@@ -321,6 +341,7 @@ public sealed class ColorGradingDockControl : UserControl
     internal void RefreshTarget()
     {
         CancelCurveDrags();
+        CancelThresholdDrag();
         var (effects, name) = FindTarget(vm?.Project, scope, targetId);
         var targetChanged = !ReferenceEquals(targetEffects, effects);
         targetEffects = effects;
@@ -367,11 +388,14 @@ public sealed class ColorGradingDockControl : UserControl
     private void SelectPage(int index)
     {
         if (index != 4) CancelCurveDrags();
+        if (index != 5) CancelThresholdDrag();
         lutsPage.Visibility = index == 0 ? Visibility.Visible : Visibility.Collapsed;
         wheelsPage.Visibility = index == 1 ? Visibility.Visible : Visibility.Collapsed;
         toneLevelsPage.Visibility = index == 2 ? Visibility.Visible : Visibility.Collapsed;
         wbHslPage.Visibility = index == 3 ? Visibility.Visible : Visibility.Collapsed;
         curvesPage.Visibility = index == 4 ? Visibility.Visible : Visibility.Collapsed;
+        rangePage.Visibility = index == 5 ? Visibility.Visible : Visibility.Collapsed;
+        ScopeLimitsChanged?.Invoke();
     }
 
     private static void ArrangeSections(Grid page, int columns)
@@ -950,6 +974,8 @@ public sealed class ColorGradingDockControl : UserControl
             var or = fx.GetParameter("Offset_R"); var og = fx.GetParameter("Offset_G"); var ob = fx.GetParameter("Offset_B"); var oy = fx.GetParameter("Offset_Y");
             offsetWheel.SetValues(or, og, ob, oy);
 
+            SyncRangeControls(fx);
+
             // Levels
             inMinSlider.Value = fx.GetParameter("InMinAdjust");
             inMaxSlider.Value = fx.GetParameter("InMaxAdjust");
@@ -999,6 +1025,7 @@ public sealed class ColorGradingDockControl : UserControl
         {
             updating = false;
         }
+        ScopeLimitsChanged?.Invoke();
     }
 
     private void EditGrade(Func<VideoEffect, bool> edit)
@@ -1077,7 +1104,7 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void PreviewCurves()
     {
-        if (CurvePreviewRequested is not { } request) return;
+        if (GradingPreviewRequested is not { } request) return;
         if (scope is { } current && targetEffects is not null && (curvesControl.IsDragging || hslCurvesControl.IsDragging))
         {
             showingCurvePreview = true;

@@ -19,13 +19,60 @@ public sealed class ColorGradingPixelTests
         return buffer;
     }
 
-    [Fact]
-    public void ColorGradingDefaultStateIsIdentityAndDoesNotModifyPixels()
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ColorGradingDefaultStateIsIdentityAndDoesNotModifyPixels(bool legacy)
     {
-        var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        var effect = legacy ? new VideoEffect { Kind = VideoEffectKind.ColorGrading }
+            : VideoEffect.Create(VideoEffectKind.ColorGrading);
+        effect.Validate();
         var source = SolidBgra(50, 100, 150, 200);
         var result = VideoEffectProcessor.Apply(source, 4, 4, [effect]);
         Assert.Same(source, result);
+    }
+
+    [Theory]
+    [InlineData(TonalRangeGrading.Shadows, 0)]
+    [InlineData(TonalRangeGrading.Midtones, 1)]
+    [InlineData(TonalRangeGrading.Highlights, 2)]
+    public void TonalWheelsChangeOnlyTheirBandAwayFromTransitions(string wheel, int selectedBand)
+    {
+        var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        effect.SetParameter(wheel + "_R", .08);
+        effect.SetParameter(wheel + "_Y", .01);
+        byte[] levels = [26, 128, 220];
+        byte[] source = [.. levels.SelectMany(level => new byte[] { level, level, level, 207 })];
+        var result = VideoEffectProcessor.Apply(source, 3, 1, [effect]);
+
+        for (var band = 0; band < levels.Length; band++)
+        {
+            var level = levels[band];
+            Assert.Equal(band == selectedBand ? new byte[] { (byte)(level + 3), (byte)(level + 3), (byte)(level + 23), 207 }
+                : [level, level, level, 207], result[(band * 4)..(band * 4 + 4)]);
+        }
+    }
+
+    [Fact]
+    public void TonalBoundariesFeatherTheCorrectionAndOffsetReachesBothEnds()
+    {
+        var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        effect.SetParameter(TonalRangeGrading.LowerKey, 102.0 / 255);
+        effect.SetParameter(TonalRangeGrading.UpperKey, 178.0 / 255);
+        var source = SolidBgra(102, 102, 102, 255, 1);
+        Assert.Same(source, VideoEffectProcessor.Apply(source, [effect]));
+        effect.SetParameter(TonalRangeGrading.Shadows + "_G", 64.0 / 255);
+        Assert.Equal(new byte[] { 102, 134, 102, 255 }, VideoEffectProcessor.Apply(source, [effect]));
+
+        effect.SetParameter(TonalRangeGrading.Shadows + "_G", 0);
+        effect.SetParameter(TonalRangeGrading.Offset + "_B", 20.0 / 255);
+        byte[] plate = [25, 25, 25, 255, 128, 128, 128, 255, 230, 230, 230, 255];
+        var result = VideoEffectProcessor.Apply(plate, [effect]);
+        Assert.Equal(new byte[] { 35, 25, 25, 255, 148, 128, 128, 255, 240, 230, 230, 255 }, result);
+
+        effect.SetParameter(TonalRangeGrading.LowerKey, 178.0 / 255);
+        effect.SetParameter(TonalRangeGrading.UpperKey, 102.0 / 255);
+        Assert.Equal(result, VideoEffectProcessor.Apply(plate, [effect]));
     }
 
     [Fact]

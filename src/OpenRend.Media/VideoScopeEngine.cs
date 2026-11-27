@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using OpenRend.Core;
 
 namespace OpenRend.Media;
 
@@ -25,7 +26,6 @@ public enum VideoScopeScale
 
 /// <summary>
 /// High-performance real-time video scopes analysis and rasterization engine.
-/// Provides 1:1 parity with Vegas Pro and DaVinci Resolve scopes:
 /// - Rec. 709 Luminance and RGB Waveform monitor with IRE graticule
 /// - Polar Vectorscope with Rec. 709 75%/100% color targets and skin tone line
 /// - RGB Parade with individual channel separation
@@ -33,7 +33,6 @@ public enum VideoScopeScale
 /// </summary>
 public static class VideoScopeEngine
 {
-    // Authentic phosphor palette colors matching hardware monitors & Vegas Pro
     private const uint PhosphorDim = 0xFF003B14;
     private const uint PhosphorMid = 0xFF00A03C;
     private const uint PhosphorBright = 0xFF20FF70;
@@ -75,7 +74,8 @@ public static class VideoScopeEngine
         int scopeHeight,
         VideoScopeMode mode,
         VideoScopeScale scale = VideoScopeScale.StudioRgb,
-        double traceIntensity = 1.0)
+        double traceIntensity = 1.0,
+        LuminanceThresholds? limits = null)
     {
         if (scopeWidth < 64 || scopeHeight < 64)
         {
@@ -89,10 +89,8 @@ public static class VideoScopeEngine
         if (bgraSource.IsEmpty || srcWidth <= 0 || srcHeight <= 0)
         {
             RenderGraticule(buffer, scopeWidth, scopeHeight, mode, scale);
-            return ConvertToByteArray(buffer);
         }
-
-        switch (mode)
+        else switch (mode)
         {
             case VideoScopeMode.Waveform:
                 RenderWaveform(bgraSource, srcWidth, srcHeight, srcStride, buffer, scopeWidth, scopeHeight, scale, traceIntensity);
@@ -108,7 +106,29 @@ public static class VideoScopeEngine
                 break;
         }
 
+        if (limits is { } thresholds && mode != VideoScopeMode.Vectorscope)
+        {
+            DrawLuminanceLimit(buffer, scopeWidth, scopeHeight, mode, thresholds.Lower, 0xFF7BC7E9);
+            DrawLuminanceLimit(buffer, scopeWidth, scopeHeight, mode, thresholds.Upper, 0xFFE3B16A);
+        }
         return ConvertToByteArray(buffer);
+    }
+
+    private static void DrawLuminanceLimit(uint[] buffer, int width, int height, VideoScopeMode mode, double normalized, uint color)
+    {
+        var code = (int)Math.Round(Math.Clamp(normalized, 0, 1) * 255);
+        if (mode == VideoScopeMode.Histogram)
+        {
+            var column = (int)Math.Ceiling(code * (width - 1) / 255.0);
+            for (var y = 0; y < height; y++)
+                if (y % 9 < 5) buffer[y * width + column] = color;
+        }
+        else
+        {
+            var row = height - 1 - code * (height - 1) / 255;
+            for (var x = 0; x < width; x++)
+                if (x % 9 < 5) buffer[row * width + x] = color;
+        }
     }
 
     #region Waveform Monitor

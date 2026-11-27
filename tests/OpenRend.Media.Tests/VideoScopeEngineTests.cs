@@ -1,4 +1,5 @@
 using System;
+using OpenRend.Core;
 using OpenRend.Media;
 using Xunit;
 
@@ -6,6 +7,32 @@ namespace OpenRend.Media.Tests;
 
 public sealed class VideoScopeEngineTests
 {
+    [Theory]
+    [InlineData(VideoScopeMode.Waveform)]
+    [InlineData(VideoScopeMode.RgbParade)]
+    [InlineData(VideoScopeMode.Histogram)]
+    [InlineData(VideoScopeMode.Vectorscope)]
+    public void TonalThresholdGuidesFollowTheScopeCodeAxis(VideoScopeMode mode)
+    {
+        const int size = 256;
+        byte[] source = [128, 128, 128, 255];
+        var baseline = VideoScopeEngine.RenderScope(source, 1, 1, 4, size, size, mode);
+        var guides = VideoScopeEngine.RenderScope(source, 1, 1, 4, size, size, mode,
+            limits: new LuminanceThresholds(64.0 / 255, 192.0 / 255));
+
+        if (mode == VideoScopeMode.Vectorscope)
+        {
+            Assert.Equal(baseline, guides);
+            return;
+        }
+
+        var lower = mode == VideoScopeMode.Histogram ? 64 : (255 - 64) * size;
+        var upper = mode == VideoScopeMode.Histogram ? 192 : (255 - 192) * size;
+        Assert.Equal(new byte[] { 0xE9, 0xC7, 0x7B, 0xFF }, guides[(lower * 4)..(lower * 4 + 4)]);
+        Assert.Equal(new byte[] { 0x6A, 0xB1, 0xE3, 0xFF }, guides[(upper * 4)..(upper * 4 + 4)]);
+        Assert.Equal(baseline[(128 * size + 128) * 4], guides[(128 * size + 128) * 4]);
+    }
+
     [Theory]
     [InlineData(16, 0)]
     [InlineData(235, 100)]

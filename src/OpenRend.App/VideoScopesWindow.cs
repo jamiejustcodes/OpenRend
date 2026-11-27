@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
+using OpenRend.Core;
 using OpenRend.Media;
 
 namespace OpenRend.App;
@@ -12,7 +13,7 @@ public sealed class VideoScopesWindow : Window
 {
     internal readonly record struct ScopeOptions(VideoScopeMode Mode, VideoScopeScale Scale, double Intensity, bool FollowPlayback);
     private readonly record struct ScopeFrame(byte[]? Pixels, int Width, int Height);
-    private readonly record struct RenderSettings(ScopeOptions Options, int Width, int Height);
+    private readonly record struct RenderSettings(ScopeOptions Options, int Width, int Height, LuminanceThresholds? Limits);
 
     private readonly MainWindow? mainWindow;
     private readonly ComboBox modeCombo = new() { MinWidth = 112, SelectedValuePath = nameof(ComboBoxItem.Tag) };
@@ -25,6 +26,7 @@ public sealed class VideoScopesWindow : Window
     private WriteableBitmap? bitmap;
     private ScopeFrame source;
     private ScopeFrame? testSource;
+    private LuminanceThresholds? limits;
     private RenderSettings? displayed;
     private bool queued;
     private bool rendering;
@@ -172,7 +174,14 @@ public sealed class VideoScopesWindow : Window
     {
         var dpi = VisualTreeHelper.GetDpi(graph);
         return new(Options, Math.Max(64, (int)Math.Round(graph.ActualWidth * dpi.DpiScaleX)),
-            Math.Max(64, (int)Math.Round(graph.ActualHeight * dpi.DpiScaleY)));
+            Math.Max(64, (int)Math.Round(graph.ActualHeight * dpi.DpiScaleY)), limits);
+    }
+
+    internal void SetScopeLimits(LuminanceThresholds? value)
+    {
+        if (limits == value) return;
+        limits = value;
+        QueueRender();
     }
 
     private async void QueueRender()
@@ -192,7 +201,7 @@ public sealed class VideoScopesWindow : Window
                 {
                     var pixels = await Task.Run(() => VideoScopeEngine.RenderScope(
                         image.Pixels, image.Width, image.Height, image.Width * 4, settings.Width, settings.Height,
-                        settings.Options.Mode, settings.Options.Scale, settings.Options.Intensity));
+                        settings.Options.Mode, settings.Options.Scale, settings.Options.Intensity, settings.Limits));
                     if (closed || settings != CurrentSettings()) continue;
                     Present(pixels, settings);
                 }

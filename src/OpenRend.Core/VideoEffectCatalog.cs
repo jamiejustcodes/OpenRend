@@ -73,7 +73,7 @@ public static class VideoEffectCatalog
         D(VideoEffectKind.AiUpscale, "AI Upscale", "AI", P("Scaling", "Scaling", 1, 4, 2, .1), Choice("Models", "Model", "Smooth", "Sharp", "Denoise"), Choice("ImproveSharpness", "Improve Sharpness", "No", "Yes"), Choice("FitOption", "Fit", "short side", "long side")),
         D(VideoEffectKind.AiZDepth, "AI Z-Depth", "AI", Choice("Mode", "Mode", "Absolute Values", "Normalized Values"), P("DepthMin", "Furthest", 0, 1, 0), P("DepthMax", "Nearest", 0, 1, 1), Choice("Visualization", "Visualization", "None", "Thresholded depth", "Depth", "Opacity"), Choice("Invert", "Invert", "No", "Yes"), P("Feather", "Feather", 0, 1, 0)),
         D(VideoEffectKind.AiSmartMask, "AI Smart Mask 2.0", "AI", Choice("MaskChooser", "Mask", "Mask 1 (blue)", "Mask 2 (green)", "Mask 3 (red)", "Mask 4 (yellow)", "Mask 5 (violet)", "Mask 6 (cyan)", "Mask 7 (magenta)", "Mask 8 (turquoise)"), Choice("Precision", "Precision", "Low, fast", "High, slow"), P("Confidence", "Confidence offset", -1, 1, 0), P("Feather", "Feather", 0, 1, .1), Choice("Invert", "Invert", "No", "Yes"), Choice("Visualization", "View Masking Results", "Normal", "View Matte", "Mask Overlay")),
-        D(VideoEffectKind.ColorGrading, "Color Grading", "Color",
+        D(VideoEffectKind.ColorGrading, "Color Grading", "Color", [
             P("Lift_R", "Lift Red", -1, 1, 0), P("Lift_G", "Lift Green", -1, 1, 0), P("Lift_B", "Lift Blue", -1, 1, 0), P("Lift_Y", "Lift Luma", -1, 1, 0),
             P("Gamma_R", "Gamma Red", 0, 5, 1), P("Gamma_G", "Gamma Green", 0, 5, 1), P("Gamma_B", "Gamma Blue", 0, 5, 1), P("Gamma_Y", "Gamma Luma", 0, 5, 1),
             P("Gain_R", "Gain Red", 0, 2, 1), P("Gain_G", "Gain Green", 0, 2, 1), P("Gain_B", "Gain Blue", 0, 2, 1), P("Gain_Y", "Gain Luma", 0, 2, 1),
@@ -83,7 +83,8 @@ public static class VideoEffectCatalog
             P("InMinAdjust", "Input Min", 0, 1, 0), P("InMaxAdjust", "Input Max", 0, 1, 1), P("OutMinAdjust", "Output Min", 0, 1, 0), P("OutMaxAdjust", "Output Max", 0, 1, 1),
             P("HueAdjust", "Hue", 0, 1, 0), P("SatAdjust", "HSL Saturation", 0, 2, 1), P("ValAdjust", "HSL Luminance", 0, 2, 1),
             P("LUTGain_0", "Camera LUT Strength", 0, 1, 1), Choice("LUTInterpolation_0", "Camera LUT Interpolation", "Trilinear", "Tetrahedral"), Choice("LUTEnable_0", "Camera LUT Bypass", "Enabled", "Bypassed"),
-            P("LUTGain_1", "Look LUT Strength", 0, 1, 1), Choice("LUTInterpolation_1", "Look LUT Interpolation", "Trilinear", "Tetrahedral"), Choice("LUTEnable_1", "Look LUT Bypass", "Enabled", "Bypassed"))
+            P("LUTGain_1", "Look LUT Strength", 0, 1, 1), Choice("LUTInterpolation_1", "Look LUT Interpolation", "Trilinear", "Tetrahedral"), Choice("LUTEnable_1", "Look LUT Bypass", "Enabled", "Bypassed"),
+            .. TonalRangeGrading.Parameters])
     });
 
     public static VideoEffectDefinition Get(VideoEffectKind kind) => Definitions.FirstOrDefault(definition => definition.Kind == kind)

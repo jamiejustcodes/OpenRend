@@ -30,10 +30,10 @@ public partial class MainWindow : Window
     private CancellationTokenSource? exportCancellation;
     private long revision;
     private ProjectDocument? cachedPreviewProject;
-    private CurvePreview? cachedCurvePreview;
-    private CurvePreview? curvePreview;
-    private ProjectDocument? curvePreviewProject;
-    private long curvePreviewGesture;
+    private GradingPreview? cachedGradingPreview;
+    private GradingPreview? gradingPreview;
+    private ProjectDocument? gradingPreviewProject;
+    private long gradingPreviewGesture;
     private long cachedPreviewRevision = -1;
     private bool previewRunning;
     private bool previewRequested;
@@ -90,6 +90,7 @@ public partial class MainWindow : Window
         }
     }
     private VideoScopesWindow? videoScopesWindow;
+    private ColorGradingWindow? scopedColorGradingWindow;
     private MixingConsoleWindow? mixingConsoleWindow;
     private EditDetailsWindow? editDetailsWindow;
     public MainWindow(EditorViewModel viewModel)
@@ -651,7 +652,8 @@ public partial class MainWindow : Window
         Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
         Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
         DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
-        DockColorGrading.CurvePreviewRequested += SetCurvePreview;
+        DockColorGrading.GradingPreviewRequested += SetGradingPreview;
+        DockColorGrading.ScopeLimitsChanged += UpdateGradingScopeLimits;
         Timeline.LoopRegionChanged += range =>
         {
             vm.LoopRegion = range;
@@ -1132,14 +1134,14 @@ public partial class MainWindow : Window
         Timeline.Position = vm.Position; Timeline.InvalidateVisual();
         Timecode.Text = TimecodeFormatter.Format(vm.Position, vm.Project.FrameRate, vm.Project.RulerFormat, vm.Project.AudioSampleRate, vm.Project.BeatsPerMinute, vm.Project.BeatsPerMeasure, vm.Project.RulerStartTimeFrames);
     }
-    private void SetCurvePreview(CurvePreview? preview)
+    private void SetGradingPreview(GradingPreview? preview)
     {
-        if (ReferenceEquals(curvePreview, preview)) return;
-        if (curvePreview is null || preview is null ||
-            curvePreview.Scope != preview.Scope || curvePreview.Target != preview.Target)
-            curvePreviewGesture++;
-        curvePreview = preview;
-        curvePreviewProject = preview is null ? null : vm.Project;
+        if (ReferenceEquals(gradingPreview, preview)) return;
+        if (gradingPreview is null || preview is null ||
+            gradingPreview.Scope != preview.Scope || gradingPreview.Target != preview.Target)
+            gradingPreviewGesture++;
+        gradingPreview = preview;
+        gradingPreviewProject = preview is null ? null : vm.Project;
         RequestPreview();
     }
 
@@ -1154,16 +1156,16 @@ public partial class MainWindow : Window
             while (previewRequested && IsLoaded && explorerPreviewName is null)
             {
                 previewRequested = false;
-                var draft = ReferenceEquals(curvePreviewProject, vm.Project) ? curvePreview : null;
-                if (cachedPreviewProject is null || cachedPreviewRevision != revision || !ReferenceEquals(cachedCurvePreview, draft))
+                var draft = ReferenceEquals(gradingPreviewProject, vm.Project) ? gradingPreview : null;
+                if (cachedPreviewProject is null || cachedPreviewRevision != revision || !ReferenceEquals(cachedGradingPreview, draft))
                 {
                     cachedPreviewProject = vm.Project.DeepClone();
                     draft?.Apply(cachedPreviewProject);
-                    cachedCurvePreview = draft;
+                    cachedGradingPreview = draft;
                     cachedPreviewRevision = revision;
                 }
                 var project = cachedPreviewProject;
-                var gesture = curvePreviewGesture;
+                var gesture = gradingPreviewGesture;
                 var frame = vm.Position;
                 var activeClip = SelectedClip;
                 if (activeClip != null && frame >= activeClip.StartFrame && frame < activeClip.EndFrame)
@@ -1215,7 +1217,7 @@ public partial class MainWindow : Window
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
                 // Present completed frames while the same drag is moving. Dropping or cancelling invalidates them.
-                if (IsLoaded && explorerPreviewName is null && gesture == curvePreviewGesture &&
+                if (IsLoaded && explorerPreviewName is null && gesture == gradingPreviewGesture &&
                     request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
                     Preview.Present(pixels, width, height);
@@ -2074,9 +2076,17 @@ public partial class MainWindow : Window
     private void ShowScopedColorGrading(EffectScope scope, Guid target)
     {
         var window = new ColorGradingWindow(vm, scope, target, null, RequestPreview) { Owner = this };
-        window.CurvePreviewRequested += SetCurvePreview;
+        scopedColorGradingWindow = window;
+        window.GradingPreviewRequested += SetGradingPreview;
+        window.ScopeLimitsChanged += UpdateGradingScopeLimits;
+        UpdateGradingScopeLimits();
         try { window.ShowDialog(); }
-        finally { SetCurvePreview(null); }
+        finally
+        {
+            scopedColorGradingWindow = null;
+            SetGradingPreview(null);
+            UpdateGradingScopeLimits();
+        }
     }
     private void MotionTrackingClick(object sender, RoutedEventArgs e) => OpenMotionTracking();
     private void OpenMotionTracking(Guid? requestedClip = null) => Guard(() =>
@@ -3043,6 +3053,7 @@ public partial class MainWindow : Window
         if (videoScopesWindow == null || !videoScopesWindow.IsLoaded)
         {
             videoScopesWindow = new VideoScopesWindow(this, videoScopesWindow?.Options) { Owner = this };
+            UpdateGradingScopeLimits();
             videoScopesWindow.Closed += (_, _) => VideoScopesWindowMenu.IsChecked = false;
             videoScopesWindow.Show();
             VideoScopesWindowMenu.IsChecked = true;
@@ -3052,6 +3063,9 @@ public partial class MainWindow : Window
             videoScopesWindow.Activate();
         }
     }
+
+    private void UpdateGradingScopeLimits() => videoScopesWindow?.SetScopeLimits(scopedColorGradingWindow is { } grading
+        ? grading.ScopeLimits : DockColorGrading.ScopeLimits);
 
     private void EditDetailsClick(object sender, RoutedEventArgs e)
     {
@@ -3311,6 +3325,9 @@ public partial class MainWindow : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
+        if (key == Key.Escape && DockColorGrading.IsThresholdDragging) return;
+        if (!ctrl && !alt && DockColorGrading.IsThresholdSliderFocused &&
+            key is Key.Left or Key.Right or Key.Home or Key.End or Key.PageUp or Key.PageDown) return;
         if (key == Key.Escape && Keyboard.FocusedElement is ColorCurvesControl { IsDragging: true } or HSLCurvesControl { IsDragging: true }) return;
         if (key == Key.Delete && Keyboard.FocusedElement is ColorCurvesControl or HSLCurvesControl) return;
         if (key == Key.Enter && !ctrl && !alt && !shift &&

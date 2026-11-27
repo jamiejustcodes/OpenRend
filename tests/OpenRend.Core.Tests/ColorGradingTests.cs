@@ -9,12 +9,13 @@ namespace OpenRend.Core.Tests;
 public sealed class ColorGradingTests
 {
     [Fact]
-    public void ColorGradingDefinitionHasAll36ParametersWithValidRangesAndDefaults()
+    public void ColorGradingDefinitionHasUniqueParametersWithValidRangesAndDefaults()
     {
         var def = VideoEffectCatalog.Get(VideoEffectKind.ColorGrading);
         Assert.Equal("Color Grading", def.Name);
         Assert.Equal("Color", def.Category);
-        Assert.Equal(36, def.Parameters.Count);
+        Assert.Equal(54, def.Parameters.Count);
+        Assert.Equal(def.Parameters.Count, def.Parameters.Select(parameter => parameter.Key).Distinct().Count());
 
         var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
         effect.Validate();
@@ -36,6 +37,11 @@ public sealed class ColorGradingTests
         Assert.Equal(0, effect.GetParameter("Offset_G"));
         Assert.Equal(0, effect.GetParameter("Offset_B"));
         Assert.Equal(0, effect.GetParameter("Offset_Y"));
+
+        foreach (var prefix in new[] { TonalRangeGrading.Shadows, TonalRangeGrading.Midtones, TonalRangeGrading.Highlights, TonalRangeGrading.Offset })
+        foreach (var channel in new[] { "R", "G", "B", "Y" })
+            Assert.Equal(0, effect.GetParameter(prefix + "_" + channel));
+        Assert.Equal(new LuminanceThresholds(.3, .7), TonalRangeGrading.GetThresholds(effect));
 
         // Tone defaults
         Assert.Equal(0, effect.GetParameter("ExposureLnAdjust"));
@@ -79,6 +85,9 @@ public sealed class ColorGradingTests
         Assert.Throws<InvalidDataException>(() => effect.SetParameter("TemperatureAdjust", 4001));
         Assert.Throws<InvalidDataException>(() => effect.SetParameter("TintAdjust", -101));
         Assert.Throws<InvalidDataException>(() => effect.SetParameter("ExposureLnAdjust", 6));
+        Assert.Throws<InvalidDataException>(() => effect.SetParameter(TonalRangeGrading.LowerKey, -.01));
+        Assert.Throws<InvalidDataException>(() => effect.SetParameter(TonalRangeGrading.UpperKey, 1.01));
+        Assert.Throws<InvalidDataException>(() => effect.SetParameter(TonalRangeGrading.Highlights + "_Y", 1.01));
         Assert.Throws<ArgumentException>(() => effect.SetParameter("NonExistentKey", 0));
     }
 
@@ -133,6 +142,8 @@ public sealed class ColorGradingTests
         effect.SetParameter("TintAdjust", -25);
         effect.SetParameter("InMinAdjust", 0.05);
         effect.SetParameter("InMaxAdjust", 0.95);
+        effect.SetParameter(TonalRangeGrading.LowerKey, .45);
+        effect.SetParameter(TonalRangeGrading.Highlights + "_G", -.12);
         effect.Lut = CubeLutParser.Parse("LUT_3D_SIZE 2\n0 0 0\n0 0 1\n0 1 0\n0 1 1\n1 0 0\n1 0 1\n1 1 0\n1 1 1\n");
         clip.VideoEffects.Add(effect);
 
@@ -154,6 +165,8 @@ public sealed class ColorGradingTests
             Assert.Equal(-25, loadedFx.GetParameter("TintAdjust"));
             Assert.Equal(0.05, loadedFx.GetParameter("InMinAdjust"));
             Assert.Equal(0.95, loadedFx.GetParameter("InMaxAdjust"));
+            Assert.Equal(.45, loadedFx.GetParameter(TonalRangeGrading.LowerKey));
+            Assert.Equal(-.12, loadedFx.GetParameter(TonalRangeGrading.Highlights + "_G"));
             Assert.NotNull(loadedFx.Lut);
             Assert.Equal(2, loadedFx.Lut.Size);
         }

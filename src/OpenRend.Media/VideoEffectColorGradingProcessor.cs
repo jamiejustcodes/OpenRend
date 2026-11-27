@@ -30,6 +30,7 @@ internal static partial class VideoEffectProcessor
         var hasWB = temp != 0 || tint != 0;
         var deltaT = temp / 4000.0;
         var deltaTint = tint / 100.0;
+        var tonalRange = TonalRangeGrading.HasAdjustments(effect) ? new TonalRangeTransform(effect) : null;
 
         // 4. Precompute Tone parameters
         var exposure = P("ExposureLnAdjust");
@@ -107,6 +108,11 @@ internal static partial class VideoEffectProcessor
                 red += deltaT * 0.2 + deltaTint * 0.075;
                 green -= deltaTint * 0.15;
                 blue += -deltaT * 0.2 + deltaTint * 0.075;
+            }
+
+            if (tonalRange is not null)
+            {
+                (red, green, blue) = tonalRange.Apply(red, green, blue);
             }
 
             // Exposure
