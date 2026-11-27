@@ -359,39 +359,84 @@ public sealed class EditorViewModel : ObservableObject
     public bool LoopNewEvents { get; set; }
 
     public void Place(Guid mediaId, Guid? trackId = null, long? at = null, bool advanceCursor = true)
+        => PlaceMedia([mediaId], trackId, at, advanceCursor, 0);
+
+    internal void PlaceMedia(IReadOnlyList<Guid> mediaIds, Guid? trackId, long? at, bool advanceCursor, long requestedOverlap,
+        bool placeOnNewTracks = false)
     {
-        var asset = Project.Media.Single(m => m.Id == mediaId);
+        if (mediaIds.Count == 0) return;
         var start = at ?? Position;
-        var duration = Math.Max(1, Project.FrameRate.Frames(asset.DurationSeconds));
         var chosen = trackId.HasValue ? Project.Tracks.Single(t => t.Id == trackId) : null;
+        var added = new List<Guid>();
         Editor.Execute(p =>
         {
-            var primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
-            var target = chosen ?? p.Tracks.FirstOrDefault(t => t.Kind == primaryKind && !t.IsLocked);
-            if (target is null)
+            var newTracks = new Dictionary<TrackKind, TimelineTrack>();
+            (TimelineTrack Track, TimelineClip Clip)? previous = null;
+            (TimelineTrack Track, TimelineClip Clip)? previousSound = null;
+            foreach (var mediaId in mediaIds)
             {
-                target = new TimelineTrack { Kind = primaryKind, Name = $"{primaryKind} {p.Tracks.Count(t => t.Kind == primaryKind) + 1}" };
-                if (primaryKind == TrackKind.Video) p.Tracks.Insert(0, target); else p.Tracks.Add(target);
+                var asset = p.Media.Single(media => media.Id == mediaId);
+                var primaryKind = chosen?.Kind ?? (asset.HasVideo ? TrackKind.Video : TrackKind.Audio);
+                var target = chosen ?? FindOrCreateTrack(primaryKind);
+                if (target.IsLocked) throw new InvalidOperationException("Unlock the track before placing media.");
+                if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
+                    throw new InvalidOperationException("This media has no stream for the selected track.");
+
+                var duration = Math.Max(1, p.FrameRate.Frames(asset.DurationSeconds));
+                var soundTrack = primaryKind == TrackKind.Video && asset.HasAudio ? FindOrCreateTrack(TrackKind.Audio, "Audio") : null;
+                var overlap = 0L;
+                if (requestedOverlap > 0 && previous is { } preceding && preceding.Track == target)
+                {
+                    overlap = Math.Min(requestedOverlap, Math.Min(duration - 1,
+                        preceding.Clip.DurationFrames - Math.Max(1, preceding.Clip.FadeInFrames)));
+                    if (overlap > 0 && (HasOtherCoverage(target, preceding.Clip, start - overlap, start) ||
+                        previousSound is { } earlierSound && earlierSound.Track == soundTrack &&
+                        HasOtherCoverage(earlierSound.Track, earlierSound.Clip, start - overlap, start))) overlap = 0;
+                    if (overlap > 0) preceding.Clip.FadeOutFrames = overlap;
+                }
+
+                var clip = new TimelineClip { MediaId = mediaId, Name = asset.Name, StartFrame = start - overlap,
+                    DurationFrames = duration, FadeInFrames = overlap };
+                ApplyPlacementSourceMode(clip, asset, primaryKind);
+                target.Clips.Add(clip);
+                added.Add(clip.Id);
+                var soundBefore = previousSound;
+                previous = (target, clip);
+                previousSound = null;
+                if (soundTrack is not null)
+                {
+                    clip.GroupId = Guid.NewGuid();
+                    var sound = clip.DeepClone();
+                    sound.Id = Guid.NewGuid();
+                    sound.FadeInFrames = 0;
+                    ApplyPlacementSourceMode(sound, asset, TrackKind.Audio);
+                    if (overlap > 0 && soundBefore is { } paired && paired.Track == soundTrack)
+                        paired.Clip.FadeOutFrames = sound.FadeInFrames = overlap;
+                    soundTrack.Clips.Add(sound);
+                    added.Add(sound.Id);
+                    previousSound = (soundTrack, sound);
+                }
+                start = checked(clip.StartFrame + duration);
             }
-            if (target.IsLocked) throw new InvalidOperationException("Unlock the track before placing media.");
-            if (primaryKind == TrackKind.Video && !asset.HasVideo || primaryKind == TrackKind.Audio && !asset.HasAudio)
-                throw new InvalidOperationException("This media has no stream for the selected track.");
-            var clip = new TimelineClip { MediaId = mediaId, Name = asset.Name, StartFrame = start, DurationFrames = duration };
-            ApplyPlacementSourceMode(clip, asset, primaryKind);
-            target.Clips.Add(clip); Selection.Clear(); Selection.Add(clip.Id);
-            if (primaryKind == TrackKind.Video && asset.HasAudio)
+
+            TimelineTrack FindOrCreateTrack(TrackKind kind, string? name = null)
             {
-                clip.GroupId = Guid.NewGuid();
-                var audio = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Audio && !t.IsLocked);
-                if (audio is null) { audio = new TimelineTrack { Kind = TrackKind.Audio, Name = "Audio" }; p.Tracks.Add(audio); }
-                var sound = clip.DeepClone();
-                sound.Id = Guid.NewGuid();
-                ApplyPlacementSourceMode(sound, asset, TrackKind.Audio);
-                audio.Clips.Add(sound);
-                Selection.Add(sound.Id);
+                var track = placeOnNewTracks ? newTracks.GetValueOrDefault(kind)
+                    : p.Tracks.FirstOrDefault(t => t.Kind == kind && !t.IsLocked && !t.IsAdjustmentTrack);
+                if (track is not null) return track;
+                track = new TimelineTrack { Kind = kind, Name = name ?? $"{kind} {p.Tracks.Count(t => t.Kind == kind) + 1}" };
+                if (kind == TrackKind.Video) p.Tracks.Insert(0, track); else p.Tracks.Add(track);
+                if (placeOnNewTracks) newTracks.Add(kind, track);
+                return track;
             }
         });
-        if (advanceCursor) { Position = start + duration; Changed?.Invoke(); }
+        Selection.Clear();
+        Selection.UnionWith(added);
+        if (advanceCursor) Position = start;
+        Changed?.Invoke();
+
+        static bool HasOtherCoverage(TimelineTrack track, TimelineClip previous, long first, long last) =>
+            track.Clips.Any(clip => clip != previous && clip.StartFrame < last && clip.EndFrame > first);
     }
 
     public void PlaceSubclip(Guid mediaId, long sourceIn, long duration, Guid? trackId = null, long? at = null, bool advanceCursor = true, bool? ripple = null, AutoRippleMode? rippleMode = null, TrimmerPlacementStream stream = TrimmerPlacementStream.VideoAndAudio, double? playbackRate = null, bool placeOnNewTrack = false)

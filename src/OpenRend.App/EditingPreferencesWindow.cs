@@ -181,8 +181,18 @@ public sealed class EditingPreferencesWindow : Window
             Margin = new Thickness(12, 8, 12, 4)
         };
         AutomationProperties.SetAutomationId(loopNewEvents, "LoopNewEvents");
+        var overlapNewMedia = new CheckBox
+        {
+            Content = "_Overlap multiple sources when placing them",
+            IsChecked = settings.OverlapNewMedia,
+            Foreground = TextBrush(),
+            Margin = new Thickness(12, 4, 12, 4),
+            ToolTip = "Uses the overlap amount below while Automatic Crossfades is enabled."
+        };
+        AutomationProperties.SetAutomationId(overlapNewMedia, "OverlapNewMedia");
         var editingFields = new StackPanel { Margin = new Thickness(8) };
         editingFields.Children.Add(loopNewEvents);
+        editingFields.Children.Add(overlapNewMedia);
         editingFields.Children.Add(new GroupBox
         {
             Header = "Cut-to-overlap conversion",
@@ -401,7 +411,8 @@ public sealed class EditingPreferencesWindow : Window
             {
                 CutOverlapSeconds = value,
                 CutOverlapAlignment = (CutTransitionAlignment)alignment.SelectedIndex,
-                LoopNewEvents = loopNewEvents.IsChecked == true
+                LoopNewEvents = loopNewEvents.IsChecked == true,
+                OverlapNewMedia = overlapNewMedia.IsChecked == true
             };
             GeneralResult = new GeneralPreferences
             {

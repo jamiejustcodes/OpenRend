@@ -94,7 +94,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid>? SelectAllInGroupRequested;
     public event Action<Guid, string>? TrackAction;
     public event Action<TrackLevelGesture>? TrackLevelRequested;
-    public event Action<Guid, Guid, long>? MediaDropped;
+    public event Action<Guid[], Guid?, long>? MediaDropped;
     public event Action<string[], Guid?, long>? FilesDropped;
     public event Action<TrimmerRangeDrag, Guid?, long>? TrimmerRangeDropped;
     public event Action<MediaGeneratorPreset, Guid?, long>? GeneratedMediaDropped;
@@ -322,13 +322,15 @@ public sealed partial class TimelineView : FrameworkElement
             }
             if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
             {
-                FilesDropped?.Invoke(files, track?.Id, frame);
+                if (CanDropSources(p, track)) FilesDropped?.Invoke(files, track?.Id, frame);
                 e.Handled = true;
                 return;
             }
-            if (e.Data.GetData("OpenRend.Media") is Guid media)
+            if (e.Data.GetData("OpenRend.Media") is Guid[] { Length: > 0 } media)
             {
-                if (track is not null) { MediaDropped?.Invoke(media, track.Id, frame); e.Handled = true; }
+                if (MediaDropFirstAsset(media, p, track) is not null)
+                    MediaDropped?.Invoke(media, track?.Id, frame);
+                e.Handled = true;
             }
         };
         ContextMenu = CreateEventMenu();
@@ -352,6 +354,7 @@ public sealed partial class TimelineView : FrameworkElement
         }
 
         hoverDropDuration = null;
+        hoverDropIsBatch = false;
         if (e.Data.GetData(typeof(MediaGeneratorPreset)) is MediaGeneratorPreset generator)
         {
             var target = TrackAt(p.Y);
@@ -393,14 +396,17 @@ public sealed partial class TimelineView : FrameworkElement
 
         if (e.Data.GetDataPresent(DataFormats.FileDrop) && e.Data.GetData(DataFormats.FileDrop) is string[] files && files.Length > 0)
         {
-            e.Effects = DragDropEffects.Copy;
+            var target = TrackAt(p.Y);
+            hoverFileDropActive = CanDropSources(p, target);
+            e.Effects = hoverFileDropActive ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
-            hoverFileDropActive = true;
+            if (!hoverFileDropActive) { InvalidateVisual(); return; }
             hoverFileDropPoint = p;
             hoverFileDropFrame = Math.Max(0, FrameAt(p.X));
-            hoverFileDropTrack = TrackAt(p.Y);
+            hoverFileDropTrack = target;
             var firstFile = files[0];
-            hoverFileDropName = System.IO.Path.GetFileName(firstFile);
+            hoverDropIsBatch = files.Length > 1;
+            hoverFileDropName = hoverDropIsBatch ? $"{files.Length} files" : System.IO.Path.GetFileName(firstFile);
             var ext = System.IO.Path.GetExtension(firstFile).ToLowerInvariant();
             var isAudioOnly = ext is ".mp3" or ".wav" or ".flac" or ".aac" or ".ogg" or ".m4a" or ".wma";
             hoverFileDropNewTrackKind = isAudioOnly ? TrackKind.Audio : TrackKind.Video;
@@ -409,18 +415,24 @@ public sealed partial class TimelineView : FrameworkElement
             return;
         }
 
-        if (e.Data.GetDataPresent("OpenRend.Media") && e.Data.GetData("OpenRend.Media") is Guid mediaId)
+        if (e.Data.GetData("OpenRend.Media") is Guid[] { Length: > 0 } media)
         {
-            e.Effects = DragDropEffects.Copy;
+            var target = TrackAt(p.Y);
+            var asset = MediaDropFirstAsset(media, p, target);
+            hoverFileDropActive = asset is not null;
+            e.Effects = hoverFileDropActive ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
-            hoverFileDropActive = true;
-            hoverFileDropPoint = p;
-            hoverFileDropFrame = Math.Max(0, FrameAt(p.X));
-            hoverFileDropTrack = TrackAt(p.Y);
-            var asset = Project.Media.FirstOrDefault(m => m.Id == mediaId);
-            hoverFileDropName = asset?.Name ?? "Media";
-            hoverFileDropNewTrackKind = asset?.HasVideo == true ? TrackKind.Video : TrackKind.Audio;
-            hoverFileDropIsNewTrack = hoverFileDropTrack is null;
+            if (asset is not null)
+            {
+                hoverFileDropPoint = p;
+                hoverFileDropFrame = FrameAt(p.X);
+                hoverFileDropTrack = target;
+                hoverDropIsBatch = media.Length > 1;
+                hoverFileDropName = hoverDropIsBatch ? $"{media.Length} sources" : asset.Name;
+                hoverFileDropNewTrackKind = asset.HasVideo ? TrackKind.Video : TrackKind.Audio;
+                hoverFileDropIsNewTrack = target is null;
+                if (media.Length == 1) hoverDropDuration = Math.Max(1, Project.FrameRate.Frames(asset.DurationSeconds));
+            }
             InvalidateVisual();
             return;
         }
@@ -429,6 +441,28 @@ public sealed partial class TimelineView : FrameworkElement
     }
 
     private long? hoverDropDuration;
+    private bool hoverDropIsBatch;
+
+    private bool CanDropSources(Point point, TimelineTrack? target)
+    {
+        if (point.X < HeaderWidth || point.Y < RulerHeight) return false;
+        return target is null ? point.Y >= RulerHeight + TotalTimelineContentHeight - VerticalOffset
+            : !target.IsLocked && !target.IsAdjustmentTrack;
+    }
+
+    private MediaAsset? MediaDropFirstAsset(Guid[] media, Point point, TimelineTrack? target)
+    {
+        if (!CanDropSources(point, target)) return null;
+        MediaAsset? first = null;
+        foreach (var id in media)
+        {
+            var asset = Project.Media.Find(source => source.Id == id);
+            if (asset is null || target?.Kind == TrackKind.Video && !asset.HasVideo ||
+                target?.Kind == TrackKind.Audio && !asset.HasAudio) return null;
+            first ??= asset;
+        }
+        return first;
+    }
 
     private bool CanDropGenerator(Point point, TimelineTrack? track)
     {
@@ -1384,7 +1418,8 @@ public sealed partial class TimelineView : FrameworkElement
         {
             var ghostFrame = hoverFileDropFrame;
             var ghostX = X(ghostFrame);
-            var ghostWidth = hoverDropDuration is long span ? Math.Max(2, Project.FrameRate.Seconds(span) * PixelsPerSecond) : Math.Max(90.0, 5.0 * PixelsPerSecond);
+            var ghostWidth = hoverDropIsBatch ? 160 : hoverDropDuration is long span
+                ? Math.Max(2, Project.FrameRate.Seconds(span) * PixelsPerSecond) : Math.Max(90.0, 5.0 * PixelsPerSecond);
             double ghostY;
             var ghostHeight = TrackHeight;
             if (hoverFileDropTrack != null)
@@ -1404,8 +1439,13 @@ public sealed partial class TimelineView : FrameworkElement
                     HeaderWidth + 20, ghostY + TrackHeight / 2 - 6, Brush("#4D7790"), 11);
             }
 
-            var ghostRect = new Rect(ghostX, ghostY + 2, ghostWidth, ghostHeight - 4);
-            dc.DrawRoundedRectangle(Brush("#400078D4"), FrozenPen("#0078D4", 1.5), ghostRect, 2, 2);
+            if (hoverDropIsBatch)
+                dc.DrawLine(FrozenPen("#00D2FF", 2), new Point(ghostX, ghostY + 2), new Point(ghostX, ghostY + ghostHeight - 2));
+            else
+            {
+                var ghostRect = new Rect(ghostX, ghostY + 2, ghostWidth, ghostHeight - 4);
+                dc.DrawRoundedRectangle(Brush("#400078D4"), FrozenPen("#0078D4", 1.5), ghostRect, 2, 2);
+            }
             var ghostBanner = new Rect(ghostX, ghostY + 2, ghostWidth, 18);
             dc.DrawRoundedRectangle(Brush("#800078D4"), null, ghostBanner, 2, 2);
             Text(dc, $"{hoverFileDropName} ({FormatTimecode(ghostFrame, Project.FrameRate)})", ghostX + 6, ghostY + 4, Brushes.White, 10.5, ghostWidth - 12);

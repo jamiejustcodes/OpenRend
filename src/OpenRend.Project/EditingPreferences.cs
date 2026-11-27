@@ -10,6 +10,8 @@ public sealed record EditingPreferences
     public CutTransitionAlignment CutOverlapAlignment { get; init; } = CutTransitionAlignment.CenteredOnCut;
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool LoopNewEvents { get; init; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool OverlapNewMedia { get; init; }
 
     public void Validate()
     {

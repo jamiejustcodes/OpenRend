@@ -11,7 +11,8 @@ public sealed class EditingPreferencesTests
     {
         var directory = Path.Combine(Path.GetTempPath(), "OpenRendTests", Guid.NewGuid().ToString("N"));
         var path = Path.Combine(directory, "editing.json");
-        var settings = new EditingPreferences { CutOverlapSeconds = .5, CutOverlapAlignment = CutTransitionAlignment.BeforeCut, LoopNewEvents = true };
+        var settings = new EditingPreferences { CutOverlapSeconds = .5, CutOverlapAlignment = CutTransitionAlignment.BeforeCut,
+            LoopNewEvents = true, OverlapNewMedia = true };
         try
         {
             EditingPreferencesStore.Save(settings, path);

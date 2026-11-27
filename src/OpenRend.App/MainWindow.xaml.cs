@@ -160,7 +160,12 @@ public partial class MainWindow : Window
             Pause();
             vm.Editor.SetTrackAutomationMode(id, mode);
         });
-        Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.MediaDropped += (media, track, frame) => Guard(() =>
+        {
+            Pause();
+            vm.PlaceMedia(media, track, frame, advanceCursor: false, requestedOverlap: NewMediaOverlapFrames(),
+                placeOnNewTracks: track is null);
+        });
         Timeline.GeneratedMediaDropped += PlaceGenerator;
         Timeline.TrimmerRangeDropped += (drag, track, frame) => Guard(() =>
         {
@@ -174,16 +179,17 @@ public partial class MainWindow : Window
             Pause();
             await GuardAsync(async () =>
             {
-                var beforeIds = vm.Project.Media.Select(m => m.Id).ToHashSet();
-                await ImportPathsAsync(files);
-                var newMedia = vm.Project.Media.Where(m => !beforeIds.Contains(m.Id)).ToList();
-                var insertFrame = frame;
-                foreach (var media in newMedia)
+                var editor = vm.Editor;
+                var sources = new List<Guid>(files.Length);
+                foreach (var file in files)
                 {
-                    vm.Place(media.Id, track, insertFrame, advanceCursor: false);
-                    insertFrame += Math.Max(1, vm.Project.FrameRate.Frames(media.DurationSeconds));
+                    if (!ReferenceEquals(editor, vm.Editor)) return;
+                    sources.Add((await vm.ImportAsync(file)).Id);
                 }
-                Refresh();
+                if (!ReferenceEquals(editor, vm.Editor)) return;
+                vm.PlaceMedia(sources, track, frame, advanceCursor: false, requestedOverlap: NewMediaOverlapFrames(),
+                    placeOnNewTracks: track is null);
+                await PopulateMediaVisualsAsync();
             });
         };
         Timeline.ClipMoveHover += (clipId, newStart) =>
@@ -728,7 +734,7 @@ public partial class MainWindow : Window
             LoadWorkspace();
             ApplyLayoutConstraints();
             LoadGeneralPreferences();
-            LoadNewEventLoopPreference();
+            LoadPlacementPreferences();
             InitializeLayoutManager();
             InitializeTransitionBrowser();
             InitializeToolsViews();
@@ -934,9 +940,13 @@ public partial class MainWindow : Window
             VerticalAlignment = VerticalAlignment.Center
         };
     }
-    private MediaItem? SelectedLibraryItem =>
-        (MediaDetailsList?.Visibility == Visibility.Visible ? MediaDetailsList.SelectedItem :
-         MediaCompactList?.Visibility == Visibility.Visible ? MediaCompactList.SelectedItem : MediaList?.SelectedItem) as MediaItem;
+    private ListBox? ActiveMediaList => MediaDetailsList?.Visibility == Visibility.Visible ? MediaDetailsList :
+        MediaCompactList?.Visibility == Visibility.Visible ? MediaCompactList : MediaList;
+
+    private MediaItem? SelectedLibraryItem => ActiveMediaList?.SelectedItem as MediaItem;
+
+    private MediaItem[] SelectedLibraryItems() => ActiveMediaList is { } list
+        ? list.Items.OfType<MediaItem>().Where(list.SelectedItems.Contains).ToArray() : [];
 
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -958,6 +968,7 @@ public partial class MainWindow : Window
 
     private void MediaViewModeClick(object sender, RoutedEventArgs e)
     {
+        var selected = SelectedLibraryItems();
         var source = sender as System.Windows.Controls.Primitives.ToggleButton;
         if (MediaViewThumbnails is not null) MediaViewThumbnails.IsChecked = source == MediaViewThumbnails;
         if (MediaViewDetails is not null) MediaViewDetails.IsChecked = source == MediaViewDetails;
@@ -966,6 +977,9 @@ public partial class MainWindow : Window
         if (MediaList is not null) MediaList.Visibility = MediaViewThumbnails?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         if (MediaDetailsList is not null) MediaDetailsList.Visibility = MediaViewDetails?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
         if (MediaCompactList is not null) MediaCompactList.Visibility = MediaViewList?.IsChecked == true ? Visibility.Visible : Visibility.Collapsed;
+        if (ActiveMediaList is not { } list) return;
+        list.SelectedItems.Clear();
+        foreach (var item in selected) list.SelectedItems.Add(item);
     }
 
     private void UpdateMediaFilter()
@@ -1479,8 +1493,11 @@ public partial class MainWindow : Window
     });
     private void PlaceSelectedClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        if (SelectedLibraryItem is not MediaItem item) { vm.Status = "Select a source in Project Media."; return; }
-        Pause(); vm.Place(item.Asset.Id);
+        var selected = SelectedLibraryItems();
+        if (selected.Length == 0) { vm.Status = "Select a source in Project Media."; return; }
+        Pause();
+        vm.PlaceMedia(selected.Select(item => item.Asset.Id).ToArray(), null, null, advanceCursor: true,
+            requestedOverlap: NewMediaOverlapFrames());
     });
     private void RemoveUnusedClick(object sender, RoutedEventArgs e) => Guard(() => vm.Editor.Execute(p =>
     {
@@ -1489,7 +1506,8 @@ public partial class MainWindow : Window
     }));
     private void MediaDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (SelectedLibraryItem is MediaItem item && item.Asset.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))
+        if (ActiveMediaList?.SelectedItems.Count == 1 && SelectedLibraryItem is MediaItem item &&
+            item.Asset.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase))
         {
             var clip = vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => c.MediaId == item.Asset.Id);
             Pause();
@@ -1500,24 +1518,18 @@ public partial class MainWindow : Window
         }
         PlaceSelectedClick(sender, e);
     }
-    private void MediaMouseMove(object sender, MouseEventArgs e)
-    {
-        if (e.LeftButton == MouseButtonState.Pressed && SelectedLibraryItem is MediaItem item)
-        {
-            var sourceElement = sender as FrameworkElement ?? MediaList;
-            DragDrop.DoDragDrop(sourceElement, new DataObject("OpenRend.Media", item.Asset.Id), DragDropEffects.Copy);
-        }
-    }
     private void MediaSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
+        if (sender != ActiveMediaList) return;
         var item = SelectedLibraryItem;
-        if (item is not null)
+        if (ActiveMediaList is { SelectedItems.Count: > 1 } list)
         {
-            if (sender != MediaList && MediaList is not null && MediaList.SelectedItem != item) MediaList.SelectedItem = item;
-            if (sender != MediaDetailsList && MediaDetailsList is not null && MediaDetailsList.SelectedItem != item) MediaDetailsList.SelectedItem = item;
-            if (sender != MediaCompactList && MediaCompactList is not null && MediaCompactList.SelectedItem != item) MediaCompactList.SelectedItem = item;
-            MediaDetails.Text = $"{item.Name}  â€¢  {item.Details}  â€¢  Used {item.UseCount}x  â€¢  {item.Path}";
-            vm.Status = $"{item.Name}  â€¢  {item.Details}";
+            MediaDetails.Text = $"{list.SelectedItems.Count} sources selected";
+        }
+        else if (item is not null)
+        {
+            MediaDetails.Text = $"{item.Name} · {item.Details} · Used {item.UseCount}x · {item.Path}";
+            vm.Status = $"{item.Name} · {item.Details}";
         }
         else
         {
@@ -3366,6 +3378,8 @@ public partial class MainWindow : Window
             return;
         }
         if (!ctrl && !alt && DockColorGrading.HandlesScopePickerKey(key)) return;
+        if (ctrl && !shift && !alt && key == Key.A &&
+            (ActiveMediaList?.IsKeyboardFocusWithin == true || ExplorerList?.IsKeyboardFocusWithin == true)) return;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         if (key == Key.Escape && DockColorGrading.IsThresholdDragging) return;
         if (!ctrl && !alt && DockColorGrading.IsThresholdSliderFocused &&

@@ -16,6 +16,7 @@ public partial class MainWindow
     private ListBoxItem? transitionDragItem;
     private bool transitionBrowserLoaded;
     private TransitionBrowserPreferences transitionPreferences = new();
+    private EditingPreferences placementPreferences = new();
 
     private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
     private string GeneralPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "general.json");
@@ -123,20 +124,29 @@ public partial class MainWindow
         var dialog = new EditingPreferencesWindow(editing, general) { Owner = this };
         if (dialog.ShowDialog() != true) return;
         EditingPreferencesStore.Save(dialog.Result, EditingPreferencesPath);
-        vm.LoopNewEvents = dialog.Result.LoopNewEvents;
+        ApplyPlacementPreferences(dialog.Result);
         GeneralPreferencesStore.Save(dialog.GeneralResult, GeneralPreferencesPath);
         ApplyGeneralPreferences(dialog.GeneralResult);
         vm.Status = "Preferences saved.";
     });
 
-    private void LoadNewEventLoopPreference()
+    private void LoadPlacementPreferences()
     {
-        try { vm.LoopNewEvents = EditingPreferencesStore.Load(EditingPreferencesPath).LoopNewEvents; }
+        try { ApplyPlacementPreferences(EditingPreferencesStore.Load(EditingPreferencesPath)); }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            vm.LoopNewEvents = false;
+            ApplyPlacementPreferences(new());
         }
     }
+
+    private void ApplyPlacementPreferences(EditingPreferences settings)
+    {
+        placementPreferences = settings;
+        vm.LoopNewEvents = settings.LoopNewEvents;
+    }
+
+    private long NewMediaOverlapFrames() => autoCrossfade && placementPreferences.OverlapNewMedia
+        ? placementPreferences.OverlapFrames(vm.Project.FrameRate) : 0;
 
     private void TransitionSearchChanged(object sender, TextChangedEventArgs e)
         => RefreshTransitionBrowser();
