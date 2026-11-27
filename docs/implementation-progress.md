@@ -36,6 +36,8 @@ Marker and region editors use the same form layout and color picker as each othe
 
 Pan/Crop uses the shared editable dropdown for position presets. Type a name and use Save preset to store the current crop. Choosing a preset applies it at the current frame, and deleting a preset removes it from the list while preserving the event crop. The desktop workflow types a name, restarts the application, reapplies the saved crop and verifies that deletion preserves the edited width in the project.
 
+Text-Based Editing uses labeled filter and search controls. Selected events follows the timeline selection, and Find next advances through visible matches before wrapping. The Edit Word form uses the common validation and keyboard behavior. The desktop workflow searches two matching words, edits one and verifies the saved word frames and event ranges.
+
 ## Auto Ripple and ruler regions
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.

@@ -2110,7 +2110,10 @@ public partial class MainWindow : Window
     public void OpenTextBasedEditing(Guid? clipId = null) => Guard(() =>
     {
         Pause();
-        new TextBasedEditingWindow(vm, clipId, RequestPreview) { Owner = this }.Show();
+        var transcript = new TextBasedEditingWindow(vm, clipId, RequestPreview) { Owner = this };
+        transcript.Show();
+        Timeline.SelectionChanged += transcript.TimelineSelectionChanged;
+        transcript.Closed += (_, _) => Timeline.SelectionChanged -= transcript.TimelineSelectionChanged;
     });
     private void AiAutoReframeClick(object sender, RoutedEventArgs e) => Guard(() =>
     {

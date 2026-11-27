@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Automation;
+using System.Windows.Automation.Peers;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -12,10 +13,7 @@ using OpenRend.Timeline;
 namespace OpenRend.App;
 
 /// <summary>
-/// Vegas Pro 1:1 Text-Based Editing window.
-/// Provides speech transcription arrangement, word-level timeline navigation,
-/// synchronized playback cursor highlighting, middle/head/tail range cutting with ripple,
-/// word boundary splitting, pause detection and deletion, and find & replace.
+/// Edits the transcripts attached to timeline events.
 /// </summary>
 public sealed class TextBasedEditingWindow : Window
 {
@@ -36,40 +34,37 @@ public sealed class TextBasedEditingWindow : Window
     private readonly List<int> selectedWordIndices = [];
 
     // Controls
-    private readonly ComboBox cbMode = new() { Width = 110 };
-    private readonly ToggleButton btnShowSelected = new() { Width = 32, Height = 26, ToolTip = "Show Only Selected Events" };
-    private readonly ToggleButton btnAutoRipple = new() { Width = 32, Height = 26, IsChecked = true, ToolTip = "Auto Ripple (Affected Tracks)" };
+    private readonly CheckBox btnShowSelected = new() { Content = "Selected events", ToolTip = "Show only the selected timeline events" };
+    private readonly CheckBox btnAutoRipple = new() { Content = "Ripple edits", IsChecked = true, ToolTip = "Close gaps on affected tracks" };
     private readonly CheckBox chkShowPauses = new() { Content = "Pauses", IsChecked = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) };
     private readonly Slider sliderMinPause = new() { Minimum = 0.2, Maximum = 2.0, Value = 0.5, Width = 80, TickFrequency = 0.1, IsSnapToTickEnabled = true, VerticalAlignment = VerticalAlignment.Center };
-    private readonly TextBlock lblMinPause = new() { Text = "0.5s", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 8, 0), Foreground = Brushes.Silver, Width = 30 };
-    private readonly Button btnDeletePauses = new() { Content = "Delete Pauses", Height = 26, Padding = new Thickness(8, 0, 8, 0), ToolTip = "Remove all detected pauses on the timeline" };
+    private readonly TextBlock lblMinPause = new() { Text = "0.5 s", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 8, 0), Width = 30 };
+    private readonly Button btnDeletePauses = new() { Content = "Delete pauses", Height = 26, Padding = new Thickness(8, 0, 8, 0), ToolTip = "Remove all detected pauses on the timeline" };
     private readonly CheckBox chkShowTimecodes = new() { Content = "Timecodes", IsChecked = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) };
     private readonly CheckBox chkShowSpeakers = new() { Content = "Speakers", IsChecked = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 8, 0) };
-    private readonly Button btnTranscribe = new() { Content = "Transcribe Audio…", Height = 26, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(4, 0, 4, 0) };
+    private readonly Button btnTranscribe = new() { Content = "Transcribe audio…", Height = 26, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(4, 0, 4, 0) };
 
     // Find and Replace
     private readonly TextBox txtFind = new() { Width = 110, Height = 24, VerticalContentAlignment = VerticalAlignment.Center };
     private readonly TextBox txtReplace = new() { Width = 110, Height = 24, VerticalContentAlignment = VerticalAlignment.Center };
-    private readonly Button btnFindNext = new() { Content = "Find", Height = 24, Padding = new Thickness(6, 0, 6, 0) };
+    private readonly Button btnFindNext = new() { Content = "Find next", Height = 24, Padding = new Thickness(6, 0, 6, 0) };
     private readonly Button btnReplace = new() { Content = "Replace", Height = 24, Padding = new Thickness(6, 0, 6, 0) };
-    private readonly Button btnReplaceAll = new() { Content = "All", Height = 24, Padding = new Thickness(6, 0, 6, 0) };
+    private readonly Button btnReplaceAll = new() { Content = "Replace all", Height = 24, Padding = new Thickness(6, 0, 6, 0) };
+    private readonly TextBlock findStatus = new() { Margin = new Thickness(10, 0, 0, 0) };
 
     // Action panel
     private readonly Border selectionActionBar = new()
     {
-        Background = new SolidColorBrush(Color.FromRgb(32, 38, 46)),
-        BorderBrush = new SolidColorBrush(Color.FromRgb(45, 110, 190)),
-        BorderThickness = new Thickness(1),
-        CornerRadius = new CornerRadius(4),
+        BorderThickness = new Thickness(0, 1, 0, 0),
         Padding = new Thickness(10, 6, 10, 6),
         Margin = new Thickness(12, 0, 12, 10),
         Visibility = Visibility.Collapsed
     };
-    private readonly TextBlock lblSelectionInfo = new() { Foreground = Brushes.White, VerticalAlignment = VerticalAlignment.Center, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 12, 0) };
-    private readonly Button btnCutSelected = new() { Content = "Cut (Ctrl+X)", Height = 26, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 6, 0) };
-    private readonly Button btnDeleteSelected = new() { Content = "Delete (Del)", Height = 26, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 6, 0) };
-    private readonly Button btnSplitAtWord = new() { Content = "Split Here (S)", Height = 26, Padding = new Thickness(8, 0, 8, 0), Margin = new Thickness(0, 0, 6, 0) };
-    private readonly Button btnCopySelected = new() { Content = "Copy (Ctrl+C)", Height = 26, Padding = new Thickness(8, 0, 8, 0) };
+    private readonly TextBlock lblSelectionInfo = new() { FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 12, 0) };
+    private readonly Button btnCutSelected = new() { Content = "Cut", ToolTip = "Cut (Ctrl+X)", Margin = new Thickness(0, 0, 6, 0) };
+    private readonly Button btnDeleteSelected = new() { Content = "Delete", ToolTip = "Delete (Del)", Margin = new Thickness(0, 0, 6, 0) };
+    private readonly Button btnSplitAtWord = new() { Content = "Split at word", ToolTip = "Split at word (S)", Margin = new Thickness(0, 0, 6, 0) };
+    private readonly Button btnCopySelected = new() { Content = "Copy", ToolTip = "Copy (Ctrl+C)" };
 
     // Word display container
     private readonly StackPanel eventsContainer = new() { Margin = new Thickness(12) };
@@ -86,7 +81,7 @@ public sealed class TextBasedEditingWindow : Window
         showSelectedOnly = targetClipId.HasValue;
 
         Style = (Style)FindResource(typeof(Window));
-        Title = "Text-Based Editing — Vegas Pro Parity";
+        Title = "Text-Based Editing";
         Width = 980;
         Height = 680;
         MinWidth = 800;
@@ -111,6 +106,18 @@ public sealed class TextBasedEditingWindow : Window
 
     private UIElement BuildLayout()
     {
+        selectionActionBar.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
+        selectionActionBar.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        lblMinPause.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        findStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
+        AutomationProperties.SetAutomationId(btnShowSelected, "TranscriptSelectedEvents");
+        AutomationProperties.SetAutomationId(txtFind, "TranscriptFind");
+        AutomationProperties.SetAutomationId(txtReplace, "TranscriptReplaceWith");
+        AutomationProperties.SetAutomationId(btnFindNext, "TranscriptFindNext");
+        AutomationProperties.SetAutomationId(btnReplace, "TranscriptReplace");
+        AutomationProperties.SetAutomationId(findStatus, "TranscriptFindStatus");
+        AutomationProperties.SetLiveSetting(findStatus, AutomationLiveSetting.Polite);
+
         var root = new Grid();
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Toolbar
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Find & Replace
@@ -118,22 +125,12 @@ public sealed class TextBasedEditingWindow : Window
         root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Action bar
 
         // 1. Toolbar
-        var toolbar = new ToolBarTray { Background = new SolidColorBrush(Color.FromRgb(30, 30, 30)) };
+        var toolbar = new ToolBarTray { IsLocked = true };
+        toolbar.SetResourceReference(ToolBarTray.BackgroundProperty, "HeaderBrush");
         var tb = new ToolBar { Background = Brushes.Transparent };
-
-        // Mode combobox
-        cbMode.Items.Add("Editing");
-        cbMode.Items.Add("Script");
-        cbMode.Items.Add("Subtitles");
-        cbMode.SelectedIndex = 0;
-        cbMode.SelectionChanged += (_, _) => PopulateEvents();
-        tb.Items.Add(new TextBlock { Text = "Mode: ", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 2, 0) });
-        tb.Items.Add(cbMode);
-        tb.Items.Add(new Separator());
 
         // Show selected toggle
         btnShowSelected.IsChecked = showSelectedOnly;
-        btnShowSelected.Content = "🎯";
         btnShowSelected.Click += (_, _) =>
         {
             showSelectedOnly = btnShowSelected.IsChecked == true;
@@ -142,7 +139,6 @@ public sealed class TextBasedEditingWindow : Window
         tb.Items.Add(btnShowSelected);
 
         // Auto ripple toggle
-        btnAutoRipple.Content = "⇄";
         btnAutoRipple.Click += (_, _) => autoRipple = btnAutoRipple.IsChecked == true;
         tb.Items.Add(btnAutoRipple);
         tb.Items.Add(new Separator());
@@ -153,7 +149,7 @@ public sealed class TextBasedEditingWindow : Window
         sliderMinPause.ValueChanged += (_, e) =>
         {
             minPauseSeconds = Math.Round(e.NewValue, 1);
-            lblMinPause.Text = $"{minPauseSeconds:0.0}s";
+            lblMinPause.Text = $"{minPauseSeconds:0.0} s";
             PopulateEvents();
         };
         btnDeletePauses.Click += OnDeleteAllPausesClick;
@@ -183,25 +179,33 @@ public sealed class TextBasedEditingWindow : Window
         // 2. Find and Replace bar
         var findBar = new Border
         {
-            Background = new SolidColorBrush(Color.FromRgb(24, 24, 24)),
-            BorderBrush = new SolidColorBrush(Color.FromRgb(40, 40, 40)),
             BorderThickness = new Thickness(0, 0, 0, 1),
             Padding = new Thickness(10, 4, 10, 4)
         };
+        findBar.SetResourceReference(Border.BackgroundProperty, "WindowBrush");
+        findBar.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         var findPanel = new StackPanel { Orientation = Orientation.Horizontal };
-        findPanel.Children.Add(new TextBlock { Text = "Find:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var findLabel = new Label { Content = "_Find", Target = txtFind, Padding = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        findLabel.SetResourceReference(ForegroundProperty, "TextBrush");
+        AutomationProperties.SetLabeledBy(txtFind, findLabel);
+        txtFind.TextChanged += (_, _) => findStatus.Text = string.Empty;
+        findPanel.Children.Add(findLabel);
         findPanel.Children.Add(txtFind);
         btnFindNext.Margin = new Thickness(6, 0, 12, 0);
         btnFindNext.Click += OnFindNextClick;
         findPanel.Children.Add(btnFindNext);
 
-        findPanel.Children.Add(new TextBlock { Text = "Replace:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var replaceLabel = new Label { Content = "Replace _with", Target = txtReplace, Padding = new Thickness(0, 0, 4, 0), VerticalAlignment = VerticalAlignment.Center };
+        replaceLabel.SetResourceReference(ForegroundProperty, "TextBrush");
+        AutomationProperties.SetLabeledBy(txtReplace, replaceLabel);
+        findPanel.Children.Add(replaceLabel);
         findPanel.Children.Add(txtReplace);
         btnReplace.Margin = new Thickness(6, 0, 4, 0);
         btnReplace.Click += OnReplaceClick;
         findPanel.Children.Add(btnReplace);
         btnReplaceAll.Click += OnReplaceAllClick;
         findPanel.Children.Add(btnReplaceAll);
+        findPanel.Children.Add(findStatus);
 
         findBar.Child = findPanel;
         Grid.SetRow(findBar, 1);
@@ -232,18 +236,25 @@ public sealed class TextBasedEditingWindow : Window
         return root;
     }
 
+    internal void TimelineSelectionChanged()
+    {
+        targetClipId = null;
+        if (showSelectedOnly) PopulateEvents();
+    }
+
     private void PopulateEvents()
     {
         eventsContainer.Children.Clear();
         activeWordTokens.Clear();
         ClearSelection();
+        findStatus.Text = string.Empty;
 
         var clips = new List<(TimelineTrack Track, TimelineClip Clip)>();
         foreach (var track in vm.Project.Tracks)
         {
             foreach (var clip in track.Clips.OrderBy(c => c.StartFrame))
             {
-                if (showSelectedOnly && targetClipId.HasValue && clip.Id != targetClipId.Value && !vm.Selection.Contains(clip.Id))
+                if (showSelectedOnly && clip.Id != targetClipId && !vm.Selection.Contains(clip.Id))
                     continue;
 
                 clips.Add((track, clip));
@@ -254,7 +265,7 @@ public sealed class TextBasedEditingWindow : Window
         {
             eventsContainer.Children.Add(new TextBlock
             {
-                Text = showSelectedOnly ? "No selected event has transcript data." : "No clips found on timeline. Import media and transcribe dialogue to edit text.",
+                Text = showSelectedOnly ? "Select an event on the timeline." : "Add an event to the timeline to edit its transcript.",
                 Foreground = Brushes.Gray,
                 FontSize = 14,
                 Margin = new Thickness(24)
@@ -453,6 +464,7 @@ public sealed class TextBasedEditingWindow : Window
             Foreground = isSelected ? Brushes.White : Brushes.WhiteSmoke,
             FontSize = 13
         };
+        AutomationProperties.SetAutomationId(textBlock, $"TranscriptWord_{clip.Id:N}_{wordIndex}");
 
         if (showSpeakerNames && !string.IsNullOrEmpty(word.Speaker))
         {
@@ -569,9 +581,9 @@ public sealed class TextBasedEditingWindow : Window
 
     private void OnWordTokenRightClicked(Guid clipId, int wordIndex, WordTiming word)
     {
-        selectedClipId = clipId;
-        if (!selectedWordIndices.Contains(wordIndex))
+        if (selectedClipId != clipId || !selectedWordIndices.Contains(wordIndex))
         {
+            selectedClipId = clipId;
             selectedWordIndices.Clear();
             selectedWordIndices.Add(wordIndex);
         }
@@ -594,6 +606,7 @@ public sealed class TextBasedEditingWindow : Window
         cm.Items.Add(new Separator());
 
         var miEdit = new MenuItem { Header = "Edit Word Text…" };
+        AutomationProperties.SetAutomationId(miEdit, "EditTranscriptWordMenu");
         miEdit.Click += (_, _) => PromptEditWord(clipId, wordIndex, word);
         cm.Items.Add(miEdit);
 
@@ -771,42 +784,29 @@ public sealed class TextBasedEditingWindow : Window
 
     private void PromptEditWord(Guid clipId, int wordIndex, WordTiming word)
     {
-        var win = new Window
+        var dialog = new WordEditDialog(word.Word) { Owner = this };
+        if (dialog.ShowDialog() != true) return;
+        var clip = vm.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(item => item.Id == clipId);
+        var transcript = clip?.Transcript?.DeepClone();
+        if (transcript is null || wordIndex >= transcript.Words.Count || transcript.Words[wordIndex].Word == dialog.Word) return;
+        transcript.Words[wordIndex].Word = dialog.Word;
+        vm.Editor.SetClipTranscript(clipId, transcript);
+    }
+
+    private sealed class WordEditDialog : TimelineEditDialog
+    {
+        private readonly TextBox input;
+        public string Word => input.Text.Trim();
+
+        public WordEditDialog(string word) : base("Edit Word", 350)
         {
-            Title = "Edit Word (Vegas Pro In-Place)",
-            Width = 340,
-            Height = 150,
-            WindowStartupLocation = WindowStartupLocation.CenterOwner,
-            Owner = this,
-            Style = (Style)FindResource(typeof(Window))
-        };
-        var sp = new StackPanel { Margin = new Thickness(16) };
-        var tb = new TextBox { Text = word.Word, Height = 28, VerticalContentAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 0, 12) };
-        var bp = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-        var ok = new Button { Content = "OK", Width = 75, Height = 26, IsDefault = true, Margin = new Thickness(0, 0, 8, 0) };
-        var cancel = new Button { Content = "Cancel", Width = 75, Height = 26, IsCancel = true };
-        ok.Click += (_, _) =>
-        {
-            var newText = tb.Text.Trim();
-            if (!string.IsNullOrEmpty(newText))
-            {
-                var clip = vm.Project.Tracks.SelectMany(t => t.Clips).First(c => c.Id == clipId);
-                var transcript = clip.Transcript?.DeepClone() ?? new ClipTranscript();
-                if (wordIndex < transcript.Words.Count)
-                {
-                    transcript.Words[wordIndex].Word = newText;
-                    vm.Editor.SetClipTranscript(clipId, transcript);
-                    PopulateEvents();
-                }
-            }
-            win.DialogResult = true;
-        };
-        bp.Children.Add(ok);
-        bp.Children.Add(cancel);
-        sp.Children.Add(tb);
-        sp.Children.Add(bp);
-        win.Content = sp;
-        win.ShowDialog();
+            input = new TextBox { Text = word };
+            AutomationProperties.SetAutomationId(input, "TranscriptWordText");
+            Form.Children.Add(Field("Word", input));
+            FocusOnOpen(input);
+        }
+
+        protected override bool TryAccept() => Word.Length > 0 || Reject(input, "Enter a word.");
     }
 
     private void OnFindNextClick(object sender, RoutedEventArgs e)
@@ -814,19 +814,29 @@ public sealed class TextBasedEditingWindow : Window
         var query = txtFind.Text.Trim();
         if (string.IsNullOrEmpty(query)) return;
 
-        foreach (var (cId, wIdx, border, timing) in activeWordTokens)
+        var matches = activeWordTokens.Where(token => token.Timing.Word.Contains(query, StringComparison.OrdinalIgnoreCase)).ToList();
+        if (matches.Count == 0)
         {
-            if (timing.Word.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                selectedClipId = cId;
-                selectedWordIndices.Clear();
-                selectedWordIndices.Add(wIdx);
-                UpdateSelectionActionBar();
-                RefreshTokenVisuals();
-                border.BringIntoView();
-                return;
-            }
+            ShowFindStatus("No matches");
+            return;
         }
+
+        var current = matches.FindIndex(token => token.ClipId == selectedClipId && selectedWordIndices.Contains(token.WordIndex));
+        var next = (current + 1) % matches.Count;
+        var match = matches[next];
+        selectedClipId = match.ClipId;
+        selectedWordIndices.Clear();
+        selectedWordIndices.Add(match.WordIndex);
+        UpdateSelectionActionBar();
+        RefreshTokenVisuals();
+        match.TokenBorder.BringIntoView();
+        ShowFindStatus($"{next + 1} of {matches.Count}");
+    }
+
+    private void ShowFindStatus(string message)
+    {
+        findStatus.Text = message;
+        UIElementAutomationPeer.CreatePeerForElement(findStatus)?.RaiseAutomationEvent(AutomationEvents.LiveRegionChanged);
     }
 
     private void OnReplaceClick(object sender, RoutedEventArgs e)
@@ -900,6 +910,7 @@ public sealed class TextBasedEditingWindow : Window
 
     private void OnWindowKeyDown(object sender, KeyEventArgs e)
     {
+        if (Keyboard.FocusedElement is TextBoxBase) return;
         if (e.Key == Key.Delete)
         {
             e.Handled = true;
