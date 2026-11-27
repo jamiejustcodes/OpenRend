@@ -82,9 +82,10 @@ public sealed class TransitionPropertiesWindow : Window
         var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
             .FirstOrDefault(item => item.Clip.Id == clipId);
         var clip = item.Clip;
-        heading.Text = clip?.FadeInTransition is { } effect ? $"{effect.Kind} — {effect.Preset}" : "No transition plug-in";
+        heading.Text = clip?.FadeInTransition is { } effect ? $"{TransitionCatalog.DisplayNameFor(effect.Kind)} · {effect.Preset}" : "No transition plug-in";
         timing.Text = clip is null ? "Event is no longer in the project." : $"Fade in: {clip.FadeInFrames} frames";
-        remove.IsEnabled = clip?.FadeInTransition is not null && !item.Track.IsLocked;
+        var editable = clip is { IsLocked: false, FadeInTransition: not null } && !item.Track.IsLocked;
+        remove.IsEnabled = paramPanel.IsEnabled = presetCombo.IsEnabled = editable;
         undo.IsEnabled = vm.Editor.CanUndo; redo.IsEnabled = vm.Editor.CanRedo;
 
         updatingControls = true;
@@ -103,7 +104,6 @@ public sealed class TransitionPropertiesWindow : Window
                 }
                 BuildParameterControls(trans);
             }
-            presetCombo.IsEnabled = clip?.FadeInTransition is not null && !item.Track.IsLocked;
         }
         finally
         {

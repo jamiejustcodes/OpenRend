@@ -275,23 +275,25 @@ internal sealed class TimelineEventButtonAutomationPeer(TimelineAutomationPeer t
     protected override string GetAutomationIdCore() => $"Clip_{clipId:N}_{action}";
     protected override string GetClassNameCore() => "TimelineEventButton";
     protected override string GetNameCore() => $"{TimelineView.EventButtonLabel(action)} {Clip.Name}";
-    protected override string GetHelpTextCore() => TimelineView.EventButtonLabel(action);
+    protected override string GetHelpTextCore() => TimelineView.EventButtonDescription(Clip, action);
     protected override string GetItemStatusCore() => action == "VideoEffects" ? $"{Clip.VideoEffects.Count(effect => effect.IsEnabled)} enabled effects" : "";
     protected override AutomationControlType GetAutomationControlTypeCore() => AutomationControlType.Button;
-    protected override bool IsEnabledCore() => View.IsEnabled && !Track.IsLocked;
+    protected override bool IsEnabledCore() => View.IsEventButtonEnabled(Track, Clip, action);
     protected override Rect GetBoundingRectangleCore() => View.ToScreenBounds(View.EventButtonBounds(trackId, Clip, action), clipContent: true);
     protected override void SetFocusCore() { EnsureEnabled(); View.SelectClip(clipId, false); View.Focus(); }
     public override object? GetPattern(PatternInterface patternInterface) => patternInterface == PatternInterface.Invoke ? this : null;
     public void Invoke()
     {
-        EnsureEnabled(); _ = Clip;
-        if (Track.IsLocked) throw new ElementNotEnabledException();
+        EnsureEnabled();
+        if (!View.IsEventButtonEnabled(Track, Clip, action)) throw new ElementNotEnabledException();
         // UIA must return before a dialog starts its modal message loop.
         View.Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
         {
             var track = View.Project.Tracks.FirstOrDefault(t => t.Id == trackId);
-            if (!View.IsEnabled || track is null || track.IsLocked || !track.Clips.Any(c => c.Id == clipId)) return;
+            var clip = track?.Clips.Find(c => c.Id == clipId);
+            if (track is null || clip is null || !View.IsEventButtonEnabled(track, clip, action)) return;
             if (action != "More" && track.Kind != TrackKind.Video) return;
+            if (action == "Transition" && clip.FadeInTransition is null) return;
             View.InvokeEventAction(clipId, action);
         }));
     }

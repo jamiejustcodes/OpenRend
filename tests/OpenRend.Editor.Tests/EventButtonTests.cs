@@ -72,10 +72,12 @@ public sealed class EventButtonTests
         Assert.False(invoked);
     });
 
-    [Fact]
-    public void LockedButtonsCannotInvokeOrStartATrim() => Sta(() =>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void LockedButtonsCannotInvokeOrStartATrim(bool lockTrack) => Sta(() =>
     {
-        var (view, track, clip) = Create(); track.IsLocked = true; var invoked = false;
+        var (view, track, clip) = Create(); track.IsLocked = lockTrack; clip.IsLocked = !lockTrack; var invoked = false;
         view.VideoEventActionRequested += (_, _) => invoked = true;
         var point = Center(view.EventButtonBounds(track.Id, clip, "VideoEffects"));
         Assert.True(view.BeginEventButton(point)); view.CompleteEventButton(point);
@@ -221,9 +223,10 @@ public sealed class EventButtonTests
     });
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public void QueuedAutomationInvocationIgnoresEventsLockedOrDeletedBeforeDispatch(bool delete) => Sta(() =>
+    [InlineData("Track lock")]
+    [InlineData("Event lock")]
+    [InlineData("Delete")]
+    public void QueuedAutomationInvocationIgnoresEventsLockedOrDeletedBeforeDispatch(string edit) => Sta(() =>
     {
         var (view, track, clip) = Create();
         var peer = UIElementAutomationPeer.CreatePeerForElement(view)!;
@@ -231,7 +234,9 @@ public sealed class EventButtonTests
         var button = clipPeer.GetChildren().Single(child => child.GetAutomationId() == $"Clip_{clip.Id:N}_PanCrop");
         var invoked = false; view.VideoEventActionRequested += (_, _) => invoked = true;
         ((IInvokeProvider)button.GetPattern(PatternInterface.Invoke)).Invoke();
-        if (delete) track.Clips.Clear(); else track.IsLocked = true;
+        if (edit == "Delete") track.Clips.Clear();
+        else if (edit == "Track lock") track.IsLocked = true;
+        else clip.IsLocked = true;
         PumpDispatcher(); Assert.False(invoked);
     });
 

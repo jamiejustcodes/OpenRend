@@ -1140,7 +1140,7 @@ public sealed partial class TimelineView : FrameworkElement
             return Cursors.Arrow;
         }
 
-        if (HitEventButton(point) is { } button) return button.Track.IsLocked || (button.Clip.IsLocked && button.Action != "More") ? Cursors.No : Cursors.Hand;
+        if (HitEventButton(point) is { } button) return IsEventButtonEnabled(button.Track, button.Clip, button.Action) ? Cursors.Hand : Cursors.No;
         var hit = HitClip(point);
         if (hit is null) return Cursors.Arrow;
 
@@ -1157,7 +1157,7 @@ public sealed partial class TimelineView : FrameworkElement
     private void UpdateHover(Point point)
     {
         var button = HitEventButton(point);
-        ToolTip = button is { } target ? EventButtonLabel(target.Action) : null;
+        ToolTip = button is { } target ? EventButtonDescription(target.Clip, target.Action) : null;
         var nextButton = button is { } hovered ? (hovered.Clip.Id, hovered.Action) : ((Guid, string)?)null;
         if (hoverEventButton != nextButton) { hoverEventButton = nextButton; InvalidateVisual(); }
         var hit = HitClip(point);

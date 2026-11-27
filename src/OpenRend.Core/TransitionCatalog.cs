@@ -375,6 +375,8 @@ public static class TransitionCatalog
     public static TransitionPluginInfo? FindPlugin(VideoTransitionKind kind)
         => Plugins.FirstOrDefault(p => p.Kind == kind);
 
+    public static string DisplayNameFor(VideoTransitionKind kind) => FindPlugin(kind)?.DisplayName ?? kind.ToString();
+
     public static TransitionPresetInfo? FindPreset(VideoTransitionKind kind, string presetName)
         => FindPlugin(kind)?.Presets.FirstOrDefault(p => string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
 

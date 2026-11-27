@@ -14,7 +14,7 @@ Dragging Default to an existing cut instead extends the events' source handles. 
 
 ## Remove the plug-in
 
-Click the properties icon on the overlap's Dissolve strip, or open the incoming event's options menu and choose Transition Properties. Remove Selected Plug-In clears the preset while preserving the overlap and fades. Undo and Redo are available in that window. The result remains an ordinary crossfade; removal does not convert it to a cut.
+Click the properties icon on the overlap strip, or choose Transition Properties from the incoming event's options menu. The strip shows the effect name and its tooltip includes the preset. Locked events disable the properties button. Remove Selected Plug-In clears the effect and leaves an ordinary crossfade. Undo and Redo are available in the properties window.
 
 ## Convert an overlap to a cut
 
@@ -22,11 +22,11 @@ Focus the timeline, activate the video track and place the cursor inside a compl
 
 Conversion trims the outgoing tail and incoming head, advances the incoming source/crop offsets, and removes the two overlap fades and their plug-ins. Outer event bounds, independent outer fades, later events and other tracks retain their timing. The complete edit is one undo step; it also works after removing the Dissolve plug-in.
 
-Centered conversion requires an even number of overlap frames. An odd overlap would require a half-frame cut, so OpenRend reports the limitation and leaves the project unchanged. Split envelopes, nested/contained or three-way overlaps and locked tracks are unsupported for this command.
+For an odd overlap, Centered uses the earlier whole project frame. Split envelopes, nested or three-way overlaps, and locked events or tracks are outside this command's supported cases.
 
 ## Video source looping
 
-For a finite video event, open its options menu and choose Switches > Loop. Checked repeats the source when an event extends beyond it; unchecked explicitly uses its last decoded frame. Edge trimming and automatic overlap placement use the selected source mode. This setting affects video only; linked audio keeps its existing source bounds.
+For a finite video event, open its options menu and choose Switches > Loop. Checked repeats the source when an event extends beyond it. Unchecked holds the last decoded frame. Linked audio has its own Loop switch, which chooses between repetition and silence beyond source end.
 
 Older events keep bounded playback until you explicitly select a source mode. Loop phase is stored in integer project frames and reduced against the probed source duration at evaluation time. Turning Loop off preserves its starting source position when it can be represented in whole project frames; otherwise the command reports the fractional-offset limitation without editing. Crop animation keeps its event-relative timing.
 

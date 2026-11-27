@@ -25,6 +25,14 @@ public sealed partial class TimelineView
         _ => "Event options"
     };
 
+    internal static string EventButtonDescription(TimelineClip clip, string action) =>
+        action == "Transition" && clip.FadeInTransition is { } transition
+            ? $"{TransitionCatalog.DisplayNameFor(transition.Kind)} · {transition.Preset}"
+            : EventButtonLabel(action);
+
+    internal bool IsEventButtonEnabled(TimelineTrack track, TimelineClip clip, string action) =>
+        IsEnabled && !track.IsLocked && (action == "More" || !clip.IsLocked);
+
     internal IEnumerable<string> EventButtonActions(TimelineTrack track, TimelineClip clip)
     {
         if (!EventButtonBounds(track.Id, clip, "Transition").IsEmpty) yield return "Transition";
@@ -74,7 +82,7 @@ public sealed partial class TimelineView
         var hit = HitEventButton(point);
         if (hit is null) return false;
         SelectClip(hit.Value.Clip.Id, false, ensureVisible: false);
-        if (hit.Value.Track.IsLocked || !IsEnabled) return true;
+        if (!IsEventButtonEnabled(hit.Value.Track, hit.Value.Clip, hit.Value.Action)) return true;
         pressedEventButton = (hit.Value.Clip.Id, hit.Value.Action);
         CaptureMouse(); InvalidateVisual(); return true;
     }
@@ -86,16 +94,16 @@ public sealed partial class TimelineView
         var hit = HitEventButton(point);
         // Dialogs and menus take their own capture, so release ours before invoking them.
         ReleaseMouseCapture(); UpdateHover(point);
-        if (pressed is { } button && hit is { } target && target.Clip.Id == button.ClipId && target.Action == button.Action && !target.Track.IsLocked)
+        if (pressed is { } button && hit is { } target && target.Clip.Id == button.ClipId && target.Action == button.Action &&
+            IsEventButtonEnabled(target.Track, target.Clip, target.Action))
             InvokeEventAction(button.ClipId, button.Action);
     }
 
     internal void InvokeEventAction(Guid clipId, string action)
     {
         var track = Project.Tracks.FirstOrDefault(t => t.Clips.Any(c => c.Id == clipId)) ?? throw new ElementNotAvailableException();
-        if (!IsEnabled || track.IsLocked) throw new ElementNotEnabledException();
         var targetClip = track.Clips.Single(c => c.Id == clipId);
-        if (action != "More" && targetClip.IsLocked) throw new ElementNotEnabledException();
+        if (!IsEventButtonEnabled(track, targetClip, action)) throw new ElementNotEnabledException();
         if (action != "More" && track.Kind != TrackKind.Video) throw new InvalidOperationException("This event has no video.");
         SelectClip(clipId, false, ensureVisible: false);
         if (action == "Transition")
@@ -829,11 +837,12 @@ public sealed partial class TimelineView
         foreach (var action in actions)
         {
             var bounds = EventButtonBounds(track.Id, clip, action);
-            var hovered = hoverEventButton == (clip.Id, action);
+            var enabled = IsEventButtonEnabled(track, clip, action);
+            var hovered = enabled && hoverEventButton == (clip.Id, action);
             var effectsActive = action == "VideoEffects" && clip.VideoEffects.Any(effect => effect.IsEnabled);
-            var fill = hovered && !track.IsLocked ? "#59636A" : effectsActive && !track.IsLocked ? "#3D663D" : "#293137";
+            var fill = hovered ? "#59636A" : effectsActive && enabled ? "#3D663D" : "#293137";
             dc.DrawRectangle(Brush(fill), FrozenPen("#819099", .5), bounds);
-            var inkHex = track.IsLocked ? "#80858A" : "#F5F5F5";
+            var inkHex = enabled ? "#F5F5F5" : "#80858A";
             var ink = Brush(inkHex);
             var pen = FrozenPen(inkHex, 1);
             var x = bounds.X; var y = bounds.Y;
@@ -866,15 +875,18 @@ public sealed partial class TimelineView
     private void DrawTransitionStrip(DrawingContext dc, TimelineTrack track, TimelineClip clip)
     {
         var strip = TransitionStripBounds(track.Id, clip);
-        if (strip.IsEmpty) return;
-        dc.DrawRectangle(Brush(track.IsLocked ? "#485B69" : "#438AC8"), FrozenPen("#84BBE4", .5), strip);
+        if (strip.IsEmpty || clip.FadeInTransition is not { } transition) return;
+        var enabled = IsEventButtonEnabled(track, clip, "Transition");
+        dc.DrawRectangle(Brush(enabled ? "#438AC8" : "#485B69"), FrozenPen(enabled ? "#84BBE4" : "#6B7B86", .5), strip);
         var button = EventButtonBounds(track.Id, clip, "Transition");
         var labelWidth = strip.Width - (button.IsEmpty ? 0 : EventButtonSize);
-        if (labelWidth > 24) Text(dc, "Dissolve", strip.Left + 2, strip.Top + 1, Brushes.WhiteSmoke, 10, labelWidth - 4, TextAlignment.Center);
+        if (labelWidth > 24) Text(dc, TransitionCatalog.DisplayNameFor(transition.Kind), strip.Left + 2, strip.Top + 1,
+            enabled ? Brushes.WhiteSmoke : Brush("#B4BEC5"), 10, labelWidth - 4, TextAlignment.Center);
         if (button.IsEmpty) return;
-        var hovered = hoverEventButton == (clip.Id, "Transition");
-        dc.DrawRectangle(Brush(hovered && !track.IsLocked ? "#C2DDF1" : "#95BBD8"), FrozenPen("#1D3F59", .5), button);
-        var pen = FrozenPen("#183448", 1);
+        var hovered = enabled && hoverEventButton == (clip.Id, "Transition");
+        var buttonFill = hovered ? "#C2DDF1" : enabled ? "#95BBD8" : "#667987";
+        dc.DrawRectangle(Brush(buttonFill), FrozenPen("#1D3F59", .5), button);
+        var pen = FrozenPen(enabled ? "#183448" : "#314650", 1);
         var x = button.Left + 3; var y = button.Top + 4;
         dc.DrawLine(pen, new Point(x, y), new Point(x + 12, y + 10));
         dc.DrawLine(pen, new Point(x, y + 10), new Point(x + 12, y));
