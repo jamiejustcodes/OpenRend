@@ -1635,12 +1635,8 @@ public sealed partial class TimelineEditor
         if (newEffects.Any(effect => effect is null) || newEffects.Select(effect => effect.Id).Distinct().Count() != newEffects.Count)
             throw new InvalidDataException("Video effects require unique identities.");
         foreach (var effect in newEffects) effect.Validate();
+        if (effects.Count == newEffects.Count && effects.Zip(newEffects).All(pair => pair.First.ContentEquals(pair.Second))) return;
         var snapshot = newEffects.Select(effect => effect.DeepClone()).ToList();
-        var same = effects.Count == snapshot.Count && effects.Zip(snapshot).All(pair =>
-            pair.First.Id == pair.Second.Id && pair.First.Kind == pair.Second.Kind && pair.First.IsEnabled == pair.Second.IsEnabled &&
-            (pair.First.Lut is { } lut ? lut.ContentEquals(pair.Second.Lut) : pair.Second.Lut is null) &&
-            VideoEffectCatalog.Get(pair.First.Kind).Parameters.All(parameter => pair.First.GetParameter(parameter.Key) == pair.Second.GetParameter(parameter.Key)));
-        if (same) return;
         Execute(_ =>
         {
             effects.Clear();
