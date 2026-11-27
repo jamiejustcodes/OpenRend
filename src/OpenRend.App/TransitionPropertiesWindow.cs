@@ -192,7 +192,7 @@ public sealed class TransitionPropertiesWindow : Window
 
     private void BuildParameterControls(VideoTransition trans)
     {
-        var paramsDict = trans.Parameters ?? new Dictionary<string, string>();
+        var paramsDict = TransitionCatalog.ResolveParameters(trans);
 
         switch (trans.Kind)
         {
@@ -267,6 +267,18 @@ public sealed class TransitionPropertiesWindow : Window
                 AddSlider("Angle (°)", "Angle", 0, 360, GetFloat(paramsDict, "Angle", 0), 1);
                 AddSlider("Number of Blinds", "NumberOfBlinds", 1, 30, GetFloat(paramsDict, "NumberOfBlinds", 5), 0);
                 AddSlider("Feather", "Feather", 0, 1, GetFloat(paramsDict, "Feather", 0), 2);
+                break;
+            }
+            case VideoTransitionKind.Squeeze:
+            {
+                AddChoice("Origin", ["Bottom", "Top", "Right", "Left", "Horizontal center", "Vertical center"],
+                    (int)GetFloat(paramsDict, "Direction", 2), index => SetParam("Direction", index.ToString(CultureInfo.InvariantCulture)),
+                    "TransitionParameter_Direction");
+                AddToggle("Squeeze previous image", GetBool(paramsDict, "SqueezePreviousImage", true),
+                    enabled => SetParam("SqueezePreviousImage", enabled ? "true" : "false"));
+                AddSlider("Border Size", "BorderSize", 0, .2, GetFloat(paramsDict, "BorderSize", 0), 3);
+                AddSlider("Border Feather", "BorderFeather", 0, 1, GetFloat(paramsDict, "BorderFeather", 0), 2);
+                AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), value => SetParam("BorderColor", value));
                 break;
             }
             case VideoTransitionKind.Dissolve:
@@ -361,11 +373,13 @@ public sealed class TransitionPropertiesWindow : Window
         finally { updatingControls = wasUpdating; }
     }
 
-    private void AddChoice(string label, string[] options, int selectedIndex, Action<int> onSelect)
+    private void AddChoice(string label, string[] options, int selectedIndex, Action<int> onSelect, string? automationId = null)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var text = new TextBlock { Text = label, Width = 110, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var combo = new ComboBox { Margin = new Thickness(6, 0, 0, 0) };
+        AutomationProperties.SetName(combo, label);
+        if (automationId is not null) AutomationProperties.SetAutomationId(combo, automationId);
         foreach (var opt in options) combo.Items.Add(opt);
         if (selectedIndex >= 0 && selectedIndex < options.Length) combo.SelectedIndex = selectedIndex;
         combo.SelectionChanged += (_, _) =>

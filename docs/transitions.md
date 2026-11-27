@@ -62,16 +62,15 @@ Projects save as version 10 and read versions 1–10. Older projects without sav
 
 ## Transition catalog and spatial reveals
 
-Open the Transitions tab to browse 18 transition entries by category:
-- **All Plug-ins**: Complete collection of all 18 plug-ins.
-- **Favorites**: User-selected favorite plug-ins (toggled with the ★ star icon, persisted in `transitions.json`).
-- **Fades**: `Dissolve` (23 presets including Crossfade, Additive, Fade Through Color, Color Bleed), `Flash` (Hard/Soft Flash).
-- **Wipes**: `Linear Wipe` (12 presets, angle/feather parameters), `Clock Wipe` (6 presets), `Venetian Blinds` (6 presets), `Star Wipe` (18 presets).
-- **Reveals**: `Barn Door` (10 presets, horizontal/vertical, in/out, borders), `Iris` (14 presets, circle/square/diamond), `Split` (8 presets).
-- **Transforms**: `Push` (12 presets, 4 directions, push off), `Slide` (10 presets), `Zoom` (14 presets), `Swap` (8 presets), `Squeeze` (14 presets), `Cross Effect` (5 presets).
-- **3D and Peels**: `Page Loop` (4 presets), `Page Peel` (4 presets), `Page Roll` (4 presets).
+The Transitions tab groups 18 entries by effect type. All Plug-ins shows the full catalog. Favorites shows the entries marked with the star and saves that list in `transitions.json`.
 
-Each plug-in lists its preset cards with vector thumbnails, preset name, `+` add button, and drag-and-drop support to cuts and existing overlaps.
+- **Fades** includes Dissolve and Flash.
+- **Wipes** includes Linear Wipe, Clock Wipe, Venetian Blinds, and Star Wipe.
+- **Reveals** includes Barn Door, Iris, and Split.
+- **Transforms** includes Push, Slide, Zoom, Swap, Squeeze, and Cross Effect.
+- **3D and Peels** includes Page Loop, Page Peel, and Page Roll.
+
+Choose an entry to see its presets. Use Apply, press Enter, or double-click a preset to apply it to selected events. Drag a preset to a cut or existing overlap to place it directly.
 
 ### Transition Properties Window
 
@@ -87,8 +86,10 @@ Clicking the transition strip on an overlap, or choosing **Transition Properties
 
 Dragging a parameter slider previews the setting and commits it in one edit on release. Escape restores the previous setting and preview. The arrow keys adjust the focused slider by one displayed unit.
 
+Squeeze rescales both pictures into regions that change size over the overlap. Choose an edge or center origin. Clear **Squeeze previous image** to keep the outgoing picture at its original scale. The border controls set the width, feather, and color at the moving seam.
+
 ## Current limits
 
-Swap, Squeeze, Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
+Swap, Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
 
 Legacy bounded events require source handles. Video Loop or Hold and audio Loop or silence padding permit extensions. The Editing preference sets the Loop default for new finite events. Same-start overlaps at project zero and exact-gap displacement remain limited. OpenRend initializes the cut overlap to 0.25 seconds, centered. Source-duration probing and arbitrary VFR behavior remain limited.

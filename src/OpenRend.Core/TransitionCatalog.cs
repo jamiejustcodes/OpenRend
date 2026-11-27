@@ -292,8 +292,8 @@ public static class TransitionCatalog
                 Preset("Squeeze Up", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "0")),
                 Preset("Squeeze Right-Left", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "2")),
                 Preset("Squeeze Left-Right", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "3")),
-                Preset("Lateral", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "2")),
-                Preset("Vertical", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "0"))
+                Preset("Lateral", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "4")),
+                Preset("Vertical", VideoTransitionKind.Squeeze, "Transforms", ("Direction", "5"))
             ]));
 
         // 15. Cross Effect (Transforms)
@@ -379,6 +379,16 @@ public static class TransitionCatalog
 
     public static TransitionPresetInfo? FindPreset(VideoTransitionKind kind, string presetName)
         => FindPlugin(kind)?.Presets.FirstOrDefault(p => string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
+
+    public static Dictionary<string, string> ResolveParameters(VideoTransition effect)
+    {
+        var values = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (FindPreset(effect.Kind, effect.Preset) is { } preset)
+            foreach (var (key, value) in preset.Parameters) values[key] = value;
+        if (effect.Parameters is { } overrides)
+            foreach (var (key, value) in overrides) values[key] = value;
+        return values;
+    }
 
     public static IReadOnlyList<TransitionPluginInfo> GetPluginsForCategory(string category, HashSet<string>? favorites = null)
     {

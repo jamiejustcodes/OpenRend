@@ -150,12 +150,14 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [x] Support overlap transitions for one event, two events, selected events and adjacent events, including ripple behavior.
 - [x] Persist transition settings in project frames and preserve them through move, trim, split, clipboard, save/reopen and undo/redo.
 - [x] Share transition evaluation across preview and export.
-- [ ] Implement distinct rendering for the six catalog entries that currently render as dissolves.
+- [ ] Implement distinct rendering for the five catalog entries that currently render as dissolves.
 - [x] Verify the desktop workflow and encoded output.
 
-The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer. Swap, Squeeze, Cross Effect, Page Loop, Page Peel, and Page Roll currently use its dissolve fallback.
+The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer. Swap, Cross Effect, Page Loop, Page Peel, and Page Roll currently use its dissolve fallback.
 
 Transition parameter slider drags send the draft setting through the preview renderer. Release saves one undoable edit. Escape restores the original value and pixels. Keyboard increments keep focus on the slider. The desktop workflow verifies all three gestures and the saved angle of a Linear Wipe.
+
+Squeeze uses premultiplied sampling to rescale each shot along the chosen axis. Native preview and decoded export tests distinguish rescaled detail from a cropped reveal. The checks cover four edge origins, two center origins, transparency over lower tracks, and the feathered border. The desktop workflow changes the origin, measures the preview, and verifies Undo, Redo and restart.
 
 Verified parts:
 
