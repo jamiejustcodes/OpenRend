@@ -33,6 +33,17 @@ public sealed partial class EditorWorkflowTests
                 var window = running.Window;
                 OpenTransitions(window);
                 Assert.Equal(corrupt, await File.ReadAllTextAsync(preferences));
+                var search = Find(window, "TransitionSearch").AsTextBox();
+                var categories = Find(window, "TransitionCategories");
+                var apply = Find(window, "AddDefaultDissolve");
+                SelectBrowserTab(categories, "Wipes");
+                WaitFor(() => apply.IsEnabled && !PresetVisible(window),
+                    "Changing category did not select a visible transition and load its presets.");
+                search.Text = "Dissolve";
+                WaitFor(() => !apply.IsEnabled, "The search bypassed the selected category.");
+                Find(window, "AllTransitionPlugins").Patterns.SelectionItem.Pattern.Select();
+                WaitFor(() => PresetVisible(window) && apply.IsEnabled, "All did not show the matching Dissolve preset.");
+                search.Text = "";
                 Find(window, "FavoriteTransitions").Patterns.SelectionItem.Pattern.Select();
                 WaitFor(() => !PresetVisible(window), "An unfavorited transition appeared in Favorites.");
                 Find(window, "AllTransitionPlugins").Patterns.SelectionItem.Pattern.Select();
@@ -42,7 +53,6 @@ public sealed partial class EditorWorkflowTests
                 WaitFor(() => TransitionBrowserPreferencesStore.Load(preferences).FavoriteDissolve, "The favorite was not saved.");
                 Find(window, "FavoriteTransitions").Patterns.SelectionItem.Pattern.Select();
                 WaitFor(() => PresetVisible(window), "The favorite was not listed.");
-                var search = Find(window, "TransitionSearch").AsTextBox();
                 search.Text = "missing";
                 WaitFor(() => !PresetVisible(window), "Search did not filter the favorite.");
                 search.Text = "Fades";

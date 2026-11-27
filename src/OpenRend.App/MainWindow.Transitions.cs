@@ -4,7 +4,6 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using OpenRend.Core;
 using OpenRend.Project;
 using OpenRend.UI;
@@ -14,11 +13,9 @@ namespace OpenRend.App;
 public partial class MainWindow
 {
     private Point transitionDragStart;
-    private bool transitionDragReady;
+    private ListBoxItem? transitionDragItem;
     private bool transitionBrowserLoaded;
     private TransitionBrowserPreferences transitionPreferences = new();
-    private VideoTransition? draggedTransition;
-    private FrameworkElement? draggedElement;
 
     private string EditingPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "editing.json");
     private string GeneralPreferencesPath => Path.Combine(Path.GetDirectoryName(recoveryPath)!, "general.json");
@@ -35,13 +32,9 @@ public partial class MainWindow
 
         FavoriteDissolve.IsChecked = transitionPreferences.FavoriteDissolve;
 
-        // Build list of all 18 Vegas Pro transition plugins
         TransitionPlugIns.Items.Clear();
-        // Always add Dissolve first with its existing XAML DissolvePluginItem
         DissolvePluginItem.DataContext = TransitionCatalog.FindPlugin(VideoTransitionKind.Dissolve);
         TransitionPlugIns.Items.Add(DissolvePluginItem);
-
-        var starTemplate = (ControlTemplate)FavoriteDissolve.Template;
 
         foreach (var plugin in TransitionCatalog.Plugins)
         {
@@ -58,16 +51,12 @@ public partial class MainWindow
             var dock = new DockPanel();
             var star = new ToggleButton
             {
-                Content = transitionPreferences.IsFavorite(plugin.DisplayName) ? "★" : "☆",
+                Style = (Style)FindResource("FavoritesToggleButton"),
                 Width = 22,
                 Height = 20,
-                Padding = new Thickness(0),
                 Margin = new Thickness(0, 0, 4, 0),
-                Foreground = new SolidColorBrush(Color.FromRgb(0xE3, 0xC4, 0x54)),
-                FocusVisualStyle = (Style)FindResource("KeyboardFocus"),
                 IsChecked = transitionPreferences.IsFavorite(plugin.DisplayName),
                 ToolTip = $"Favorite {plugin.DisplayName}",
-                Template = starTemplate,
                 Tag = plugin.DisplayName
             };
             AutomationProperties.SetName(star, $"Favorite {plugin.DisplayName}");
@@ -92,39 +81,28 @@ public partial class MainWindow
         RefreshTransitionBrowser();
     }
 
-    private void TransitionFavoriteChanged(object sender, RoutedEventArgs e)
-    {
-        if (!transitionBrowserLoaded) return;
-        var isFav = FavoriteDissolve.IsChecked == true;
-        try
-        {
-            transitionPreferences = transitionPreferences.WithFavorite("Dissolve", isFav);
-            TransitionBrowserPreferencesStore.Save(transitionPreferences, TransitionPreferencesPath);
-        }
-        catch (Exception error)
-        {
-            transitionBrowserLoaded = false;
-            FavoriteDissolve.IsChecked = transitionPreferences.FavoriteDissolve;
-            transitionBrowserLoaded = true;
-            ShowError(error);
-        }
-        RefreshTransitionBrowser();
-    }
+    private void TransitionFavoriteChanged(object sender, RoutedEventArgs e) => SaveTransitionFavorite(FavoriteDissolve, "Dissolve");
 
     private void PluginFavoriteChanged(object sender, RoutedEventArgs e)
     {
-        if (!transitionBrowserLoaded || sender is not ToggleButton star || star.Tag is not string pluginName) return;
-        var isFav = star.IsChecked == true;
-        star.Content = isFav ? "★" : "☆";
-        try
+        if (sender is ToggleButton { Tag: string name } favorite) SaveTransitionFavorite(favorite, name);
+    }
+
+    private void SaveTransitionFavorite(ToggleButton favorite, string name)
+    {
+        if (!transitionBrowserLoaded) return;
+        var before = transitionPreferences.IsFavorite(name);
+        var isFavorite = favorite.IsChecked == true;
+        if (before == isFavorite) return;
+        var updated = transitionPreferences.WithFavorite(name, isFavorite);
+        try { TransitionBrowserPreferencesStore.Save(updated, TransitionPreferencesPath); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
-            transitionPreferences = transitionPreferences.WithFavorite(pluginName, isFav);
-            TransitionBrowserPreferencesStore.Save(transitionPreferences, TransitionPreferencesPath);
+            favorite.IsChecked = before;
+            vm.Status = "Transition favorites could not be saved. " + error.Message;
+            return;
         }
-        catch (Exception error)
-        {
-            ShowError(error);
-        }
+        transitionPreferences = updated;
         RefreshTransitionBrowser();
     }
 
@@ -155,261 +133,140 @@ public partial class MainWindow
 
     private void RefreshTransitionBrowser()
     {
-        if (DissolvePluginItem is null || DefaultDissolvePreset is null || FavoriteDissolve is null || EmptyTransitions is null) return;
+        if (TransitionSearch is null || TransitionPlugIns is null || EmptyTransitions is null) return;
         var query = TransitionSearch.Text.Trim();
-        var selectedCategoryTab = TransitionCategories.SelectedItem as TabItem;
-        var category = selectedCategoryTab?.Header as string;
-        var isFavoritesTab = selectedCategoryTab == FavoriteTransitionsCategory;
+        var selectedTab = TransitionCategories.SelectedItem as TabItem;
+        var category = selectedTab?.Tag as string;
+        var favorites = selectedTab == FavoriteTransitionsCategory;
 
-        FavoriteDissolve.Content = transitionPreferences.FavoriteDissolve ? "★" : "☆";
-        FavoriteDissolve.IsChecked = transitionPreferences.FavoriteDissolve;
-
-        var anyPluginVisible = false;
-        foreach (var obj in TransitionPlugIns.Items)
+        ListBoxItem? firstVisible = null;
+        foreach (var item in TransitionPlugIns.Items.OfType<ListBoxItem>())
         {
-            if (obj is not ListBoxItem item || item.DataContext is not TransitionPluginInfo plugin) continue;
-
-            var isFav = transitionPreferences.IsFavorite(plugin.DisplayName);
-            var categoryMatch = isFavoritesTab
-                ? isFav
-                : (category is null || string.Equals(plugin.Category, category, StringComparison.OrdinalIgnoreCase));
-
-            var queryMatch = query.Length == 0 ||
-                plugin.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                plugin.Category.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                plugin.Presets.Any(p => p.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
-
-            var visible = categoryMatch && queryMatch;
-            item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-            if (visible) anyPluginVisible = true;
+            if (item.DataContext is not TransitionPluginInfo plugin) continue;
+            var inCategory = favorites ? transitionPreferences.IsFavorite(plugin.DisplayName)
+                : category is null || category == plugin.Category;
+            var matches = TransitionMatches(plugin, query)
+                || plugin.Presets.Any(preset => preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+            item.Visibility = inCategory && matches ? Visibility.Visible : Visibility.Collapsed;
+            if (item.Visibility == Visibility.Visible) firstVisible ??= item;
         }
 
-        PopulatePresetsForSelectedPlugin();
+        if (TransitionPlugIns.SelectedItem is not ListBoxItem { Visibility: Visibility.Visible })
+            TransitionPlugIns.SelectedItem = firstVisible;
+        else
+            PopulatePresetsForSelectedPlugin();
 
-        EmptyTransitions.Text = isFavoritesTab && !transitionPreferences.Favorites.Any() && !transitionPreferences.FavoriteDissolve
-            ? "No favorite transitions." : "No transitions match your search.";
-        EmptyTransitions.Visibility = anyPluginVisible ? Visibility.Collapsed : Visibility.Visible;
+        EmptyTransitions.Text = favorites && query.Length == 0
+            ? "No favorite transitions. Use the star beside a transition to add it."
+            : "No matching transitions.";
+        EmptyTransitions.Visibility = firstVisible is null ? Visibility.Visible : Visibility.Collapsed;
     }
+
+    private static bool TransitionMatches(TransitionPluginInfo plugin, string query) =>
+        plugin.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || plugin.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private void PopulatePresetsForSelectedPlugin()
     {
         if (TransitionPresets is null || DefaultDissolvePreset is null) return;
-
-        var selectedItem = TransitionPlugIns.SelectedItem as ListBoxItem;
-        if (selectedItem is not { Visibility: Visibility.Visible, DataContext: TransitionPluginInfo plugin })
-        {
-            TransitionPresets.Items.Clear();
+        var previous = (TransitionPresets.SelectedItem as ListBoxItem)?.DataContext as TransitionPresetInfo;
+        TransitionPresets.Items.Clear();
+        if (TransitionPlugIns.SelectedItem is not ListBoxItem { Visibility: Visibility.Visible, DataContext: TransitionPluginInfo plugin })
             return;
-        }
 
         var query = TransitionSearch.Text.Trim();
-        var showAllPresets = query.Length == 0 ||
-            plugin.DisplayName.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-            plugin.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
-        TransitionPresets.Items.Clear();
-
-        if (plugin.Kind == VideoTransitionKind.Dissolve)
+        var showAllPresets = TransitionMatches(plugin, query);
+        foreach (var preset in plugin.Presets)
         {
-            var defaultPreset = plugin.Presets[0];
-            if (showAllPresets || defaultPreset.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-            {
-                DefaultDissolvePreset.DataContext = defaultPreset;
-                TransitionPresets.Items.Add(DefaultDissolvePreset);
-            }
+            if (!showAllPresets && !preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
+            var item = plugin.Kind == VideoTransitionKind.Dissolve && preset == plugin.Presets[0]
+                ? DefaultDissolvePreset
+                : new ListBoxItem
+                {
+                    Padding = new Thickness(8, 5, 8, 5),
+                    Content = preset.Name,
+                    ToolTip = "Drag to a video overlap or apply to the selected events"
+                };
+            item.DataContext = preset;
+            TransitionPresets.Items.Add(item);
+            if (preset == previous) item.IsSelected = true;
         }
-        foreach (var preset in plugin.Presets.Skip(plugin.Kind == VideoTransitionKind.Dissolve ? 1 : 0))
-        {
-            if (showAllPresets || preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-                TransitionPresets.Items.Add(CreatePresetItem(plugin, preset));
-        }
-
-        if (TransitionPresets.Items.Count > 0 && TransitionPresets.SelectedItem is null)
-            TransitionPresets.SelectedIndex = 0;
+        if (TransitionPresets.SelectedItem is null) TransitionPresets.SelectedIndex = 0;
     }
 
-    private ListBoxItem CreatePresetItem(TransitionPluginInfo plugin, TransitionPresetInfo preset)
+    private void TransitionPresetSelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var item = new ListBoxItem
-        {
-            Width = 128,
-            Height = 108,
-            Padding = new Thickness(4),
-            Margin = new Thickness(3),
-            DataContext = preset,
-            ToolTip = "Double-click to add to the selection, or drag to a video overlap."
-        };
-        AutomationProperties.SetName(item, preset.Name);
-
-        var grid = new Grid();
-        var stack = new StackPanel();
-
-        var border = new Border
-        {
-            Width = 116,
-            Height = 70,
-            BorderBrush = (Brush)FindResource("ColorL"),
-            BorderThickness = new Thickness(1),
-            CornerRadius = new CornerRadius(1),
-            Background = GetThumbnailBrush(plugin.Category, plugin.Kind),
-            Child = new Border
-            {
-                VerticalAlignment = VerticalAlignment.Bottom,
-                Height = 2,
-                Background = (Brush)FindResource("ActiveColor")
-            }
-        };
-
-        var label = new TextBlock
-        {
-            Text = preset.Name,
-            TextAlignment = TextAlignment.Center,
-            Margin = new Thickness(0, 5, 0, 0),
-            Foreground = (Brush)FindResource("TextColor"),
-            FontSize = 11,
-            TextTrimming = TextTrimming.CharacterEllipsis
-        };
-
-        stack.Children.Add(border);
-        stack.Children.Add(label);
-
-        var addButton = new Button
-        {
-            Style = (Style)FindResource("IconButton"),
-            ContentTemplate = (DataTemplate)FindResource("ic_add"),
-            Width = 22,
-            Height = 22,
-            Background = (Brush)FindResource("ColorM"),
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Top,
-            Margin = new Thickness(2),
-            ToolTip = "Add to selected events",
-            Tag = preset
-        };
-        AutomationProperties.SetName(addButton, $"Add {preset.Name}");
-        addButton.Click += (s, e) =>
-        {
-            e.Handled = true;
-            ApplyPreset(preset);
-        };
-
-        grid.Children.Add(stack);
-        grid.Children.Add(addButton);
-        item.Content = grid;
-
-        item.MouseDoubleClick += (s, e) =>
-        {
-            if (e.ChangedButton == MouseButton.Left) ApplyPreset(preset);
-        };
-        item.PreviewMouseLeftButtonDown += (s, e) =>
-        {
-            transitionDragReady = true;
-            transitionDragStart = e.GetPosition(item);
-            draggedTransition = new VideoTransition
-            {
-                Kind = preset.Kind,
-                Preset = preset.Name,
-                Parameters = preset.Parameters.ToDictionary(k => k.Key, v => v.Value)
-            };
-            draggedElement = item;
-            item.IsSelected = true;
-        };
-
-        return item;
+        if (ApplyTransitionButton is not null)
+            ApplyTransitionButton.IsEnabled = TransitionPresets.SelectedItem is ListBoxItem { DataContext: TransitionPresetInfo };
     }
 
-    private Brush GetThumbnailBrush(string category, VideoTransitionKind kind)
+    private static VideoTransition MakeTransition(TransitionPresetInfo preset) => new()
     {
-        return category switch
-        {
-            "Fades" => kind == VideoTransitionKind.Flash
-                ? new LinearGradientBrush(Color.FromRgb(0xFF, 0xF9, 0xC4), Color.FromRgb(0xF5, 0x7F, 0x17), 45)
-                : new LinearGradientBrush(Color.FromRgb(0x31, 0x6E, 0x9C), Color.FromRgb(0xB9, 0x73, 0x44), 0),
-            "Wipes" => new LinearGradientBrush(Color.FromRgb(0x00, 0xA8, 0xFF), Color.FromRgb(0x9C, 0x27, 0xB0), 45),
-            "Reveals" => new LinearGradientBrush(Color.FromRgb(0xFF, 0x98, 0x00), Color.FromRgb(0x37, 0x47, 0x4F), 90),
-            "Transforms" => new LinearGradientBrush(Color.FromRgb(0x00, 0x96, 0x88), Color.FromRgb(0xE9, 0x1E, 0x63), 0),
-            "3D and Peels" => new LinearGradientBrush(Color.FromRgb(0x3F, 0x51, 0xB5), Color.FromRgb(0xFF, 0xD7, 0x00), 45),
-            _ => new LinearGradientBrush(Color.FromRgb(0x42, 0x42, 0x42), Color.FromRgb(0x61, 0x61, 0x61), 45)
-        };
-    }
+        Kind = preset.Kind,
+        Preset = preset.Name,
+        Parameters = preset.Parameters.ToDictionary(parameter => parameter.Key, parameter => parameter.Value)
+    };
 
-    private void ApplyPreset(TransitionPresetInfo preset)
+    private void ApplyTransitionClick(object sender, RoutedEventArgs e) => ApplyTransition(TransitionPresets.SelectedItem);
+
+    private void ApplyTransition(object? item)
     {
+        if (item is not ListBoxItem { DataContext: TransitionPresetInfo preset }) return;
         Guard(() =>
         {
-            if (vm.Selection.Count == 0) { vm.Status = $"Select a video event to apply {preset.Kind}."; return; }
+            if (vm.Selection.Count == 0)
+            {
+                vm.Status = "Select a video event to apply the transition.";
+                return;
+            }
             Pause();
             var settings = EditingPreferencesStore.Load(EditingPreferencesPath);
-            var trans = new VideoTransition
-            {
-                Kind = preset.Kind,
-                Preset = preset.Name,
-                Parameters = preset.Parameters.ToDictionary(k => k.Key, v => v.Value)
-            };
-            var count = vm.Editor.ApplyDissolveToSelection(vm.Selection, settings.OverlapFrames(vm.Project.FrameRate), vm.Ripple, trans);
-            vm.Status = count == 0 ? "No adjacent video overlap found for the selection." :
-                $"{preset.Kind} ({preset.Name}) applied to {count} overlap{(count == 1 ? "" : "s")}.";
+            var transition = item == DefaultDissolvePreset ? null : MakeTransition(preset);
+            var count = vm.Editor.ApplyDissolveToSelection(vm.Selection, settings.OverlapFrames(vm.Project.FrameRate), vm.Ripple, transition);
+            vm.Status = count == 0 ? "No adjacent video overlap found for the selection."
+                : count == 1 ? $"Applied {preset.Name} to one overlap." : $"Applied {preset.Name} to {count} overlaps.";
         });
     }
 
-    private void ApplyDefaultDissolveClick(object sender, RoutedEventArgs e)
-    {
-        e.Handled = true;
-        Guard(() =>
-        {
-            if (vm.Selection.Count == 0) { vm.Status = "Select a video event to apply Dissolve."; return; }
-            Pause();
-            var settings = EditingPreferencesStore.Load(EditingPreferencesPath);
-            var count = vm.Editor.ApplyDissolveToSelection(vm.Selection, settings.OverlapFrames(vm.Project.FrameRate), vm.Ripple);
-            vm.Status = count == 0 ? "No adjacent video overlap found for the selection." :
-                $"Default Dissolve applied to {count} overlap{(count == 1 ? "" : "s")}.";
-        });
-    }
-
-    private bool IsTransitionAddButton(object source)
-    {
-        for (var node = source as DependencyObject; node is not null;
-            node = node is Visual ? VisualTreeHelper.GetParent(node) : LogicalTreeHelper.GetParent(node))
-            if (node == AddDefaultDissolve) return true;
-        return false;
-    }
+    private ListBoxItem? TransitionPresetItem(object source) => source is DependencyObject element
+        ? ItemsControl.ContainerFromElement(TransitionPresets, element) as ListBoxItem
+        : null;
 
     private void TransitionPresetDoubleClick(object sender, MouseButtonEventArgs e)
     {
-        if (e.ChangedButton == MouseButton.Left && !IsTransitionAddButton(e.OriginalSource))
-            ApplyDefaultDissolveClick(sender, e);
+        if (e.ChangedButton != MouseButton.Left || TransitionPresetItem(e.OriginalSource) is not { } item) return;
+        ApplyTransition(item);
+        e.Handled = true;
     }
 
     private void TransitionPresetKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key == Key.Enter)
-        {
-            if (TransitionPresets.SelectedItem is ListBoxItem item)
-            {
-                if (item == DefaultDissolvePreset) ApplyDefaultDissolveClick(sender, e);
-                else if (item.DataContext is TransitionPresetInfo preset) ApplyPreset(preset);
-            }
-        }
+        if (e.Key != Key.Enter || Keyboard.Modifiers != ModifierKeys.None) return;
+        if (!e.IsRepeat) ApplyTransition(TransitionPresets.SelectedItem);
+        e.Handled = true;
     }
 
     private void TransitionPresetMouseDown(object sender, MouseButtonEventArgs e)
     {
-        transitionDragReady = !IsTransitionAddButton(e.OriginalSource);
-        transitionDragStart = e.GetPosition(DefaultDissolvePreset);
-        draggedTransition = new VideoTransition { Kind = VideoTransitionKind.Dissolve, Preset = "Default" };
-        draggedElement = DefaultDissolvePreset;
-        if (transitionDragReady) DefaultDissolvePreset.IsSelected = true;
+        transitionDragItem = TransitionPresetItem(e.OriginalSource);
+        transitionDragStart = e.GetPosition(TransitionPresets);
     }
 
     private void TransitionPresetMouseMove(object sender, MouseEventArgs e)
     {
         if (e.LeftButton != MouseButtonState.Pressed && e.RightButton != MouseButtonState.Pressed)
-        { transitionDragReady = false; return; }
-        if (!transitionDragReady || draggedElement is null || draggedTransition is null) return;
-        var offset = e.GetPosition(draggedElement) - transitionDragStart;
-        if (Math.Abs(offset.X) < SystemParameters.MinimumHorizontalDragDistance &&
-            Math.Abs(offset.Y) < SystemParameters.MinimumVerticalDragDistance) return;
-        transitionDragReady = false;
-        DragDrop.DoDragDrop(draggedElement,
-            new DataObject(TimelineView.TransitionDataFormat, draggedTransition.DeepClone()), DragDropEffects.Copy);
+        {
+            transitionDragItem = null;
+            return;
+        }
+        if (transitionDragItem is not { DataContext: TransitionPresetInfo preset } item) return;
+        var offset = e.GetPosition(TransitionPresets) - transitionDragStart;
+        if (Math.Abs(offset.X) < SystemParameters.MinimumHorizontalDragDistance
+            && Math.Abs(offset.Y) < SystemParameters.MinimumVerticalDragDistance) return;
+        transitionDragItem = null;
+        var transition = item == DefaultDissolvePreset
+            ? new VideoTransition { Kind = VideoTransitionKind.Dissolve, Preset = "Default" }
+            : MakeTransition(preset);
+        DragDrop.DoDragDrop(item, new DataObject(TimelineView.TransitionDataFormat, transition), DragDropEffects.Copy);
     }
 }

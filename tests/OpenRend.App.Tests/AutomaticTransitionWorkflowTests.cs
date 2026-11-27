@@ -45,7 +45,15 @@ public sealed partial class EditorWorkflowTests
             if (ripple) Mouse.Click(Find(window, "RippleToggle").GetClickablePoint());
             var tab = window.FindFirstDescendant(c => c.ByControlType(ControlType.TabItem).And(c.ByName("Transitions")));
             Assert.NotNull(tab); tab.Patterns.SelectionItem.Pattern.Select();
-            Find(window, "AddDefaultDissolve").AsButton().Invoke();
+            if (ripple)
+            {
+                Find(window, "DefaultDissolvePreset").Focus();
+                Keyboard.Type(VirtualKeyShort.RETURN);
+            }
+            else
+            {
+                Find(window, "AddDefaultDissolve").AsButton().Invoke();
+            }
             WaitFor(() => window.Title.Contains('*'), "The automatic transition did not change the project.");
             SaveButton(window).Invoke();
             WaitFor(() => !window.Title.Contains('*'), "The automatic transition was not saved.");

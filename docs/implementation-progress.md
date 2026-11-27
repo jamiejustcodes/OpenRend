@@ -28,6 +28,8 @@ The Video FX browser combines the active category with search across effect and 
 
 Media Generator uses the same search and category controls as Video FX. Procedural cards show still frames from the generator renderer. Insert uses the cursor and the focused compatible video track. Dragging a preset uses its drop frame and track. When a new track is needed, its creation shares the asset and event's undo step. The desktop workflow compares the Blue thumbnail pixels to the saved color setting, drops Transparent Checkers on a different track and edits a title in Titles & Text.
 
+Transitions uses the same browser controls and a preset list. When a category or query hides the selection, the pane picks a visible transition and loads its presets. Use Apply, Enter or double-click to apply a preset to the selection. Drag a preset onto a video overlap or adjacent cut. Desktop workflows verify favorite persistence, combined category and text filtering, keyboard apply and drag placement.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

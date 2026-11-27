@@ -609,98 +609,77 @@
             </Grid>
           </Grid>
         </TabItem>
-        <!-- 1:1 Vegas Pro Transitions Tab -->
         <TabItem x:Name="TransitionsTab" Header="Transitions">
           <Grid Background="{StaticResource ColorBG}">
             <Grid.RowDefinitions>
-              <RowDefinition Height="30"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
-              <RowDefinition Height="26"/>
             </Grid.RowDefinitions>
 
-            <!-- 1:1 Vegas Pro Category Tabs with Embedded Search -->
-            <TabControl x:Name="TransitionCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="TransitionCategoryChanged" AutomationProperties.Name="Transition categories">
-              <TabItem x:Name="AllTransitionPluginsTab" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="AllTransitionPlugins">
-                <TabItem.Header>
-                  <Grid>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto"/>
-                      <ColumnDefinition Width="*" MinWidth="130" MaxWidth="220"/>
-                      <ColumnDefinition Width="Auto"/>
-                    </Grid.ColumnDefinitions>
-                    <ContentControl Grid.Column="0" ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Margin="4,0,2,0" Style="{StaticResource BaseContentControl}"/>
-                    <TextBox x:Name="TransitionSearch" Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Background="Transparent" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,2" VerticalContentAlignment="Center" TextChanged="TransitionSearchChanged" AutomationProperties.Name="Search transitions" AutomationProperties.AutomationId="TransitionSearch"/>
-                  </Grid>
-                </TabItem.Header>
-              </TabItem>
-              <TabItem x:Name="FavoriteTransitionsCategory" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="FavoriteTransitions">
-                <TabItem.Header>
-                  <StackPanel Orientation="Horizontal" Margin="4,0">
-                    <ContentControl ContentTemplate="{StaticResource ic_favorite}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,4,0"/>
-                    <TextBlock Text="Favorites" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
-                  </StackPanel>
-                </TabItem.Header>
-              </TabItem>
-              <TabItem Header="Fades" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Wipes" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Reveals" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Transforms" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="3D and Peels" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+            <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+              <DockPanel Margin="6,2">
+                <ContentControl ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Style="{StaticResource BaseContentControl}"/>
+                <TextBox x:Name="TransitionSearch" MinHeight="26" Style="{StaticResource SearchBoxStyle}" TextChanged="TransitionSearchChanged"
+                         AutomationProperties.Name="Search transitions" ToolTip="Search transitions and preset names"/>
+              </DockPanel>
+            </Border>
+
+            <TabControl x:Name="TransitionCategories" Grid.Row="1" TabStripPlacement="Top" Background="{StaticResource ColorD}"
+                        BorderThickness="0" SelectionChanged="TransitionCategoryChanged" AutomationProperties.Name="Transition categories">
+              <TabItem Header="All" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="AllTransitionPlugins"/>
+              <TabItem x:Name="FavoriteTransitionsCategory" Header="Favorites" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="FavoriteTransitions"/>
+              <TabItem Header="Fades" Tag="Fades" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Wipes" Tag="Wipes" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Reveals" Tag="Reveals" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Transforms" Tag="Transforms" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="3D and Peels" Tag="3D and Peels" Style="{StaticResource TabItemLabelHeaderStyle}"/>
             </TabControl>
 
-            <!-- Main Split: Plugins List (left) + Splitter + Presets (right) -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="192" MinWidth="125" MaxWidth="360"/>
                 <ColumnDefinition Width="4"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="120"/>
               </Grid.ColumnDefinitions>
-
-              <!-- Left Plugin List matching Vegas Pro ListViewListStyle -->
-              <ListBox x:Name="TransitionPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="TransitionPluginSelectionChanged" AutomationProperties.Name="Transition plug-ins">
-                <ListBoxItem x:Name="DissolvePluginItem" IsSelected="True" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Dissolve">
+              <ListBox x:Name="TransitionPlugIns" Background="{StaticResource ColorD}" BorderThickness="0"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="TransitionPluginSelectionChanged" AutomationProperties.Name="Transitions">
+                <ListBoxItem x:Name="DissolvePluginItem" HorizontalContentAlignment="Stretch" AutomationProperties.Name="Dissolve">
                   <DockPanel>
-                    <ToggleButton x:Name="FavoriteDissolve" Style="{StaticResource FavoritesToggleButton}" Width="22" Height="20" Margin="0,0,4,0" Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve" AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve"/>
-                    <ContentControl Width="20" Height="20" ContentTemplate="{StaticResource ic_transition}" Style="{StaticResource BaseContentControl}" Margin="0,0,6,0"/>
-                    <TextBlock Text="Dissolve" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
+                    <ToggleButton x:Name="FavoriteDissolve" Style="{StaticResource FavoritesToggleButton}" Width="22" Height="20" Margin="0,0,4,0"
+                                  Checked="TransitionFavoriteChanged" Unchecked="TransitionFavoriteChanged" AutomationProperties.Name="Favorite Dissolve"
+                                  AutomationProperties.AutomationId="FavoriteDissolve" ToolTip="Favorite Dissolve"/>
+                    <TextBlock Text="Dissolve" VerticalAlignment="Center"/>
                   </DockPanel>
                 </ListBoxItem>
               </ListBox>
-
               <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
-
-              <!-- Right Presets Grid matching Vegas Pro VideoFXWPFContainerStyle -->
-              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
-                <ListBox x:Name="TransitionPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" KeyDown="TransitionPresetKeyDown" PreviewMouseMove="TransitionPresetMouseMove" AutomationProperties.Name="Transition presets">
-                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                  <ListBoxItem x:Name="DefaultDissolvePreset" Width="128" Height="108" Padding="4" Margin="3" IsSelected="True" MouseDoubleClick="TransitionPresetDoubleClick" PreviewMouseLeftButtonDown="TransitionPresetMouseDown" PreviewMouseRightButtonDown="TransitionPresetMouseDown" AutomationProperties.Name="Default" ToolTip="Double-click to add to the selection, or drag to a video overlap.">
-                    <Grid>
-                      <StackPanel>
-                        <Border Width="116" Height="70" BorderBrush="{StaticResource ColorL}" BorderThickness="1" CornerRadius="1">
-                          <Border.Background>
-                            <LinearGradientBrush StartPoint="0,0" EndPoint="1,0">
-                              <GradientStop Color="#204060" Offset="0"/>
-                              <GradientStop Color="#406080" Offset="0.5"/>
-                              <GradientStop Color="#805030" Offset="1"/>
-                            </LinearGradientBrush>
-                          </Border.Background>
-                          <!-- 2px progress bar indicator matching Vegas Pro -->
-                          <Border VerticalAlignment="Bottom" Height="2" Background="{StaticResource ActiveColor}"/>
-                        </Border>
-                        <TextBlock Text="Default" TextAlignment="Center" Margin="0,5,0,0" Foreground="{StaticResource TextColor}" FontSize="11" TextTrimming="CharacterEllipsis"/>
-                      </StackPanel>
-                      <Button x:Name="AddDefaultDissolve" Style="{StaticResource IconButton}" ContentTemplate="{StaticResource ic_add}" Width="22" Height="22" Background="{StaticResource ColorM}" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="2" Click="ApplyDefaultDissolveClick" AutomationProperties.Name="Add Default Dissolve" ToolTip="Add to selected events"/>
-                    </Grid>
-                  </ListBoxItem>
+              <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1" Padding="8,3">
+                  <DockPanel>
+                    <Button x:Name="ApplyTransitionButton" DockPanel.Dock="Right" Style="{StaticResource TextButton}" Content="_Apply"
+                            IsEnabled="False" Click="ApplyTransitionClick" AutomationProperties.AutomationId="AddDefaultDissolve"
+                            AutomationProperties.Name="Apply transition" ToolTip="Apply this preset to the selected video events"/>
+                    <TextBlock Text="Presets" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                  </DockPanel>
+                </Border>
+                <ListBox x:Name="TransitionPresets" Grid.Row="1" Padding="3" BorderThickness="0" Background="{StaticResource ColorBG}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="TransitionPresetSelectionChanged"
+                         MouseDoubleClick="TransitionPresetDoubleClick" KeyDown="TransitionPresetKeyDown" PreviewMouseMove="TransitionPresetMouseMove"
+                         PreviewMouseLeftButtonDown="TransitionPresetMouseDown" PreviewMouseRightButtonDown="TransitionPresetMouseDown"
+                         AutomationProperties.Name="Transition presets">
+                  <ListBoxItem x:Name="DefaultDissolvePreset" Content="Default" Padding="8,5" AutomationProperties.Name="Default"
+                               ToolTip="Drag to a video overlap or apply to the selected events"/>
                 </ListBox>
-                <TextBlock x:Name="EmptyTransitions" Text="No transitions match your search." Foreground="{StaticResource TextColorGrey}" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+                <TextBlock x:Name="EmptyTransitions" Grid.Row="1" Text="No matching transitions." Foreground="{StaticResource TextColorGrey}"
+                           Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"
+                           IsHitTestVisible="False" TextWrapping="Wrap"/>
               </Grid>
             </Grid>
-
-            <!-- Bottom 26px Info Bar in ColorD -->
-            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
-              <TextBlock x:Name="TransitionInfoText" Text="Crossfade between overlapping video events." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
-            </Border>
           </Grid>
         </TabItem>
         <TabItem x:Name="VideoEffectsTab" Header="Video FX">
