@@ -246,7 +246,6 @@ public sealed partial class VideoEffectsWindow : Window
         status.TextTrimming = TextTrimming.CharacterEllipsis; bottom.Children.Add(status);
 
         Content = root;
-        SourceInitialized += (_, _) => { var dark = 1; DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); };
         editor.Changed += EditorChanged;
         Closed += (_, _) => { closed = true; previewRevision++; editor.Changed -= EditorChanged; };
         Loaded += (_, _) => Refresh();
@@ -571,6 +570,4 @@ public sealed partial class VideoEffectsWindow : Window
         finally { previewRunning = false; }
     }
 
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

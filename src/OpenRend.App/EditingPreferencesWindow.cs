@@ -1,7 +1,6 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -42,11 +41,6 @@ public sealed class EditingPreferencesWindow : Window
         if (FindStyle(typeof(Window)) is { } winStyle) Style = winStyle;
         Title = "Preferences"; Width = 600; Height = 390; MinWidth = 500; MinHeight = 340;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-        SourceInitialized += (_, _) =>
-        {
-            var dark = 1;
-            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-        };
 
         var root = new DockPanel { Margin = new Thickness(10) };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
@@ -406,6 +400,4 @@ public sealed class EditingPreferencesWindow : Window
         Content = root;
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

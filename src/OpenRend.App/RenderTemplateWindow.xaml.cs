@@ -1,6 +1,5 @@
 using System.Globalization;
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using OpenRend.Core;
@@ -167,11 +166,6 @@ public partial class RenderTemplateWindow : Window
         ResampleCombo.SelectedItem = template.ResampleMode;
 
         Loaded += (_, _) => { PresetName.Focus(); PresetName.SelectAll(); UpdateTabVisibility(0); };
-        SourceInitialized += (_, _) =>
-        {
-            var dark = 1;
-            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-        };
     }
 
     private void TabStripSelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -609,6 +603,4 @@ public partial class RenderTemplateWindow : Window
         }
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

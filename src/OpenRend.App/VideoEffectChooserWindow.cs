@@ -111,10 +111,6 @@ public sealed class VideoEffectChooserWindow : Window
         Grid.SetRow(status, 2); Grid.SetColumnSpan(status, 2); root.Children.Add(status);
         Content = root;
         PreviewKeyDown += OnPreviewKeyDown;
-        SourceInitialized += (_, _) =>
-        {
-            var dark = 1; DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-        };
         Loaded += (_, _) => search.Focus();
         all.IsSelected = true;
         RefreshChain(draft.Effects.Count > 0 ? 0 : -1);
@@ -261,6 +257,4 @@ public sealed class VideoEffectChooserWindow : Window
         else if (e.Key == Key.Escape) { DialogResult = false; e.Handled = true; }
     }
 
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

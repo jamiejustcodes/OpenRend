@@ -1,5 +1,4 @@
 using System.IO;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -62,11 +61,6 @@ public partial class RenderAsWindow : Window
         RefreshTemplates();
         UpdateEstimates();
 
-        SourceInitialized += (_, _) =>
-        {
-            var dark = 1;
-            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-        };
     }
 
     private void SearchChanged(object sender, TextChangedEventArgs e) => RefreshTemplates();
@@ -272,6 +266,4 @@ public partial class RenderAsWindow : Window
         { Error.Text = error.Message; }
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

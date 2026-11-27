@@ -1,5 +1,4 @@
 using System.Globalization;
-using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
@@ -59,11 +58,6 @@ public sealed class TransitionPropertiesWindow : Window
         root.Children.Add(scroll);
         Content = root;
 
-        SourceInitialized += (_, _) =>
-        {
-            var dark = 1;
-            DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
-        };
         vm.Editor.Changed += EditorChanged;
         Closed += (_, _) => vm.Editor.Changed -= EditorChanged;
         Refresh();
@@ -337,6 +331,4 @@ public sealed class TransitionPropertiesWindow : Window
         return def;
     }
 
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }

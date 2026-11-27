@@ -618,7 +618,6 @@ public sealed class PanCropWindow : Window
         transport.Children.Add(status);
         Content = root;
 
-        SourceInitialized += (_, _) => { var dark = 1; DwmSetWindowAttribute(new System.Windows.Interop.WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int)); };
         editor.Changed += EditorChanged;
         Closed += (_, _) => { closed = true; sourceRequest++; editor.Changed -= EditorChanged; };
         Loaded += (_, _) => { seek(checked(EventClip.StartFrame + localFrame)); Refresh(); };
@@ -959,8 +958,6 @@ public sealed class PanCropWindow : Window
         }
         finally { sourceRunning = false; }
     }
-    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(nint hwnd, int attribute, ref int value, int size);
 }
 
 public enum CropMoveConstraint { Free, HorizontalOnly, VerticalOnly }
