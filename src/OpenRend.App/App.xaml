@@ -759,7 +759,6 @@
         </Style.Triggers>
       </Style>
 
-      <!-- Vegas Pro Authentic BasicSliderStyle with 2px Center Rail and Dual-Slit Grip Thumb -->
       <Style TargetType="Slider">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{StaticResource TextColorGrey}"/>
@@ -770,23 +769,16 @@
           <Setter.Value>
             <ControlTemplate TargetType="Slider">
               <Grid Background="{TemplateBinding Background}" SnapsToDevicePixels="True">
-                <Border x:Name="Rail" Background="{StaticResource ScrollbarBackgroundColor}" BorderBrush="{StaticResource ColorEdge}" BorderThickness="0,1" Height="2" Margin="6,0" VerticalAlignment="Center"/>
+                <Border x:Name="Rail" Background="{DynamicResource MutedBrush}" Height="2" Margin="6,0" VerticalAlignment="Center" CornerRadius="1" IsHitTestVisible="False"/>
                 <Track x:Name="PART_Track" Orientation="{TemplateBinding Orientation}" IsDirectionReversed="{TemplateBinding IsDirectionReversed}">
                   <Track.DecreaseRepeatButton>
                     <RepeatButton Style="{StaticResource TrackRepeatButton}" Command="{x:Static Slider.DecreaseLarge}"/>
                   </Track.DecreaseRepeatButton>
                   <Track.Thumb>
-                    <Thumb x:Name="SliderThumb" Width="14" Height="16" Focusable="False">
+                    <Thumb x:Name="SliderThumb" Width="14" Height="16" Focusable="False" Background="{DynamicResource FocusBrush}">
                       <Thumb.Template>
                         <ControlTemplate TargetType="Thumb">
-                          <Grid x:Name="ThumbSurface" Background="#C4C4C4">
-                            <Border BorderBrush="#181818" BorderThickness="1"/>
-                            <!-- Vegas Pro dual vertical grip slits -->
-                            <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="6" Height="8" IsHitTestVisible="False">
-                              <Border Width="1" HorizontalAlignment="Left" Background="#555555"/>
-                              <Border Width="1" HorizontalAlignment="Right" Background="#555555"/>
-                            </Grid>
-                          </Grid>
+                          <Border x:Name="ThumbSurface" Background="{TemplateBinding Background}" BorderBrush="{DynamicResource WindowBrush}" BorderThickness="1" CornerRadius="2"/>
                           <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                               <Setter TargetName="ThumbSurface" Property="Background" Value="{StaticResource ActiveColorHover}"/>
@@ -808,37 +800,11 @@
                 <Trigger Property="Orientation" Value="Vertical">
                   <Setter TargetName="Rail" Property="Height" Value="Auto"/>
                   <Setter TargetName="Rail" Property="Width" Value="2"/>
-                  <Setter TargetName="Rail" Property="BorderThickness" Value="1,0"/>
                   <Setter TargetName="Rail" Property="Margin" Value="0,6"/>
                   <Setter TargetName="Rail" Property="VerticalAlignment" Value="Stretch"/>
                   <Setter TargetName="Rail" Property="HorizontalAlignment" Value="Center"/>
                   <Setter TargetName="SliderThumb" Property="Width" Value="16"/>
                   <Setter TargetName="SliderThumb" Property="Height" Value="14"/>
-                  <Setter TargetName="SliderThumb" Property="Template">
-                    <Setter.Value>
-                      <ControlTemplate TargetType="Thumb">
-                        <Grid x:Name="VThumbSurface" Background="#C4C4C4">
-                          <Border BorderBrush="#181818" BorderThickness="1"/>
-                          <!-- Vegas Pro dual horizontal grip slits -->
-                          <Grid HorizontalAlignment="Center" VerticalAlignment="Center" Width="8" Height="6" IsHitTestVisible="False">
-                            <Border Height="1" VerticalAlignment="Top" Background="#555555"/>
-                            <Border Height="1" VerticalAlignment="Bottom" Background="#555555"/>
-                          </Grid>
-                        </Grid>
-                        <ControlTemplate.Triggers>
-                          <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="VThumbSurface" Property="Background" Value="{StaticResource ActiveColorHover}"/>
-                          </Trigger>
-                          <Trigger Property="IsDragging" Value="True">
-                            <Setter TargetName="VThumbSurface" Property="Background" Value="{StaticResource ActiveColorDown}"/>
-                          </Trigger>
-                        </ControlTemplate.Triggers>
-                      </ControlTemplate>
-                    </Setter.Value>
-                  </Setter>
-                </Trigger>
-                <Trigger Property="IsKeyboardFocusWithin" Value="True">
-                  <Setter TargetName="SliderThumb" Property="Background" Value="{StaticResource FocusBrush}"/>
                 </Trigger>
                 <Trigger Property="IsEnabled" Value="False">
                   <Setter Property="Opacity" Value="0.35"/>

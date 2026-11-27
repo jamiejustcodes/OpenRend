@@ -24,7 +24,10 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
     private readonly Candidate? sourceCandidate;
     private readonly ComboBox events = new() { DisplayMemberPath = nameof(Candidate.Label) };
     private readonly ComboBox action = new() { Items = { "Split selected event", "Add scene regions", "Create subclips in Project Media" }, SelectedIndex = 0 };
-    private readonly Slider sensitivity = new() { Minimum = 10, Maximum = 95, Value = 65, TickFrequency = 5, IsSnapToTickEnabled = true };
+    private readonly Slider sensitivity = new()
+    {
+        Minimum = 10, Maximum = 95, Value = 65, SmallChange = 5, LargeChange = 10, TickFrequency = 5, IsSnapToTickEnabled = true
+    };
     private readonly TextBox minimumLength = TimeField("500");
     private readonly CheckBox grouped = new() { Content = "Split linked and grouped events at each cut", IsChecked = true };
     private readonly Button analyze = new() { Content = "Analyze", MinWidth = 80 };
@@ -66,6 +69,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         AutomationProperties.SetAutomationId(events, "SceneDetectionEvent");
         AutomationProperties.SetAutomationId(action, "SceneDetectionAction");
         AutomationProperties.SetAutomationId(minimumLength, "MinimumSceneLength");
+        AutomationProperties.SetAutomationId(sensitivity, "SceneDetectionSensitivity");
         AutomationProperties.SetAutomationId(analyze, "AnalyzeScenes");
         AutomationProperties.SetAutomationId(AcceptButton, "ApplySceneCuts");
         AutomationProperties.SetAutomationId(status, "SceneDetectionStatus");
