@@ -58,13 +58,17 @@ public sealed partial class EditorWorkflowTests
             Mouse.DoubleClick(Cell(events, "Interview cut").GetClickablePoint());
             WaitFor(() => Find(window, "Timecode").Name == "00:00:04.05", "Double-clicking an event row did not seek it.");
 
-            Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.KEY_O);
-            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatMenu")) is not null,
+            var options = window.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("Options")));
+            Assert.NotNull(options);
+            Mouse.Click(options.GetClickablePoint());
+            AutomationElement? rulerMenu = null;
+            WaitFor(() => (rulerMenu = window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatMenu"))) is not null,
                 "The Options menu did not show ruler formats.");
-            Keyboard.Type(VirtualKeyShort.KEY_F);
-            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatAbsoluteFrames")) is not null,
+            rulerMenu!.Patterns.ExpandCollapse.Pattern.Expand();
+            AutomationElement? absoluteFrames = null;
+            WaitFor(() => (absoluteFrames = window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatAbsoluteFrames"))) is not null,
                 "The Ruler Format menu did not open.");
-            Keyboard.Type(VirtualKeyShort.KEY_U);
+            absoluteFrames!.AsMenuItem().Invoke();
             WaitFor(() => events.FindFirstDescendant(c => c.ByName("125")) is not null &&
                 events.FindFirstDescendant(c => c.ByName("45")) is not null,
                 "The open table did not use the ruler origin for positions and a zero origin for lengths.");
