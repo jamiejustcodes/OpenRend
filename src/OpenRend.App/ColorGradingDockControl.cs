@@ -7,6 +7,7 @@ using System.Windows.Controls.Primitives;
 using System.Windows.Media;
 using Microsoft.Win32;
 using OpenRend.Core;
+using OpenRend.Media;
 
 namespace OpenRend.App;
 
@@ -297,7 +298,7 @@ public sealed class ColorGradingDockControl : UserControl
 
     internal void RefreshTarget()
     {
-        var (effects, name) = FindTarget();
+        var (effects, name) = FindTarget(vm?.Project);
         var targetChanged = !ReferenceEquals(targetEffects, effects);
         targetEffects = effects;
         targetLabel.Text = name;
@@ -309,10 +310,9 @@ public sealed class ColorGradingDockControl : UserControl
         UpdateControlsFromEffect(targetChanged);
     }
 
-    private (List<VideoEffect>? Effects, string Name) FindTarget()
+    private (List<VideoEffect>? Effects, string Name) FindTarget(ProjectDocument? project)
     {
-        if (vm is null || scope is null) return (null, "Select one unlocked video event");
-        var project = vm.Project;
+        if (project is null || scope is null) return (null, "Select one unlocked video event");
         switch (scope)
         {
             case EffectScope.Event:
@@ -658,13 +658,19 @@ public sealed class ColorGradingDockControl : UserControl
         wbHeader.Children.Add(new TextBlock { Text = "White Balance", FontWeight = FontWeights.SemiBold });
         var resetWbBtn = new Button { Content = "Reset", Padding = new Thickness(4, 0, 4, 0), FontSize = 10, HorizontalAlignment = HorizontalAlignment.Right };
         AutomationProperties.SetAutomationId(resetWbBtn, "whiteBalance_Reset_Button");
-        resetWbBtn.Click += (_, _) => ResetParams(new() { ["TemperatureAdjust"] = 0, ["TintAdjust"] = 0 });
+        resetWbBtn.Click += (_, _) => ResetParams(new() { [WhiteBalanceSampler.TemperatureKey] = 0, [WhiteBalanceSampler.TintKey] = 0 });
         DockPanel.SetDock(resetWbBtn, Dock.Right);
         wbHeader.Children.Add(resetWbBtn);
         wbPanel.Children.Add(wbHeader);
 
-        wbPanel.Children.Add(MakeSliderRow("Temperature", "temperature", -4000, 4000, 0, 10, out temp, out tempV, v => CommitSingleParam("TemperatureAdjust", v)));
-        wbPanel.Children.Add(MakeSliderRow("Tint", "tint", -100, 100, 0, 1, out tint, out tintV, v => CommitSingleParam("TintAdjust", v)));
+        wbPanel.Children.Add(MakeSliderRow("Temperature", "temperature", -WhiteBalanceSampler.TemperatureLimit, WhiteBalanceSampler.TemperatureLimit,
+            0, 10, out temp, out tempV, v => CommitSingleParam(WhiteBalanceSampler.TemperatureKey, v)));
+        wbPanel.Children.Add(MakeSliderRow("Tint", "tint", -WhiteBalanceSampler.TintLimit, WhiteBalanceSampler.TintLimit,
+            0, 1, out tint, out tintV, v => CommitSingleParam(WhiteBalanceSampler.TintKey, v)));
+        var sample = new Button { Content = "Sample _neutral tone…", HorizontalAlignment = HorizontalAlignment.Left };
+        AutomationProperties.SetAutomationId(sample, "ColorGrading_SampleNeutralTone");
+        sample.Click += (_, _) => SampleNeutralTone();
+        wbPanel.Children.Add(sample);
         wbBorder.Child = wbPanel;
         wbBorder.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
         wbBorder.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
@@ -930,8 +936,8 @@ public sealed class ColorGradingDockControl : UserControl
             saturationSlider.Value = fx.GetParameter("SaturationAdjust");
 
             // White Balance
-            temperatureSlider.Value = fx.GetParameter("TemperatureAdjust");
-            tintSlider.Value = fx.GetParameter("TintAdjust");
+            temperatureSlider.Value = fx.GetParameter(WhiteBalanceSampler.TemperatureKey);
+            tintSlider.Value = fx.GetParameter(WhiteBalanceSampler.TintKey);
 
             // HSL
             hueSlider.Value = fx.GetParameter("HueAdjust");
@@ -985,6 +991,38 @@ public sealed class ColorGradingDockControl : UserControl
             else effects.Add(grade);
         });
         previewCallback?.Invoke();
+    }
+
+    private void SampleNeutralTone()
+    {
+        if (vm is not { } viewModel || scope is not { } selectedScope || targetEffects is null) return;
+        var editor = viewModel.Editor;
+        var selectedTarget = targetId;
+        var existing = ActiveEffect;
+        var snapshot = viewModel.Project.DeepClone();
+        var (effects, _) = FindTarget(snapshot);
+        if (effects is null) return;
+
+        var grade = existing is null ? null : effects.FirstOrDefault(effect => effect.Id == existing.Id);
+        if (grade is null)
+        {
+            grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+            effects.Add(grade);
+        }
+
+        var dialog = new WhiteBalanceSampleDialog(snapshot, grade, viewModel.Media, viewModel.Position)
+        {
+            Owner = Window.GetWindow(this)
+        };
+        if (dialog.ShowDialog() != true) return;
+        if (!ReferenceEquals(editor, viewModel.Editor) || scope != selectedScope || targetId != selectedTarget ||
+            !ReferenceEquals(existing, ActiveEffect)) return;
+        var adjustment = dialog.Adjustment;
+        ResetParams(new()
+        {
+            [WhiteBalanceSampler.TemperatureKey] = adjustment.Temperature,
+            [WhiteBalanceSampler.TintKey] = adjustment.Tint
+        });
     }
 
     private void CommitSingleParam(string key, double value) => EditGrade(grade =>
