@@ -46,29 +46,34 @@ public sealed record MediaGeneratorPreset(
 
 public static class MediaGeneratorCatalog
 {
+    public const double DefaultDurationSeconds = 5;
+
+    private static MediaGeneratorPreset SolidColor(string name, string hex) =>
+        new(MediaGeneratorKind.SolidColor, name, hex, new Dictionary<string, string> { ["hex"] = hex });
+
     public static readonly IReadOnlyList<MediaGeneratorPreset> Presets = new List<MediaGeneratorPreset>
     {
-        // Test Pattern Presets (Vegas Pro 1:1)
-        new(MediaGeneratorKind.TestPattern, "(Default)", "Standard SMPTE 75% Color Bars", new Dictionary<string, string> { ["type"] = "smpte_ntsc" }),
-        new(MediaGeneratorKind.TestPattern, "SMPTE Bars (NTSC)", "SMPTE standard calibration bars for NTSC", new Dictionary<string, string> { ["type"] = "smpte_ntsc" }),
-        new(MediaGeneratorKind.TestPattern, "SMPTE Bars (PAL)", "EBU standard calibration bars for PAL", new Dictionary<string, string> { ["type"] = "smpte_pal" }),
+        // Test Pattern Presets
+        new(MediaGeneratorKind.TestPattern, "(Default)", "75% color bars with lower test patches", new Dictionary<string, string> { ["type"] = "smpte_ntsc" }),
+        new(MediaGeneratorKind.TestPattern, "SMPTE Bars (NTSC)", "75% color bars with lower test patches", new Dictionary<string, string> { ["type"] = "smpte_ntsc" }),
+        new(MediaGeneratorKind.TestPattern, "SMPTE Bars (PAL)", "Full-height PAL color bars", new Dictionary<string, string> { ["type"] = "smpte_pal" }),
         new(MediaGeneratorKind.TestPattern, "Color Bars (NTSC)", "75% saturation NTSC color bars", new Dictionary<string, string> { ["type"] = "color_bars_ntsc" }),
         new(MediaGeneratorKind.TestPattern, "Color Bars (PAL)", "100% saturation PAL color bars", new Dictionary<string, string> { ["type"] = "color_bars_pal" }),
         new(MediaGeneratorKind.TestPattern, "White Porches", "Step staircase of luma levels", new Dictionary<string, string> { ["type"] = "white_porches" }),
         new(MediaGeneratorKind.TestPattern, "Yellow Porches", "Step staircase of yellow chroma levels", new Dictionary<string, string> { ["type"] = "yellow_porches" }),
-        new(MediaGeneratorKind.TestPattern, "Pluge and Porches", "Precision pluge alignment stripes", new Dictionary<string, string> { ["type"] = "pluge" }),
+        new(MediaGeneratorKind.TestPattern, "Pluge and Porches", "Dark alignment stripes", new Dictionary<string, string> { ["type"] = "pluge" }),
         new(MediaGeneratorKind.TestPattern, "Ramp", "Full range horizontal grayscale gradient ramp", new Dictionary<string, string> { ["type"] = "ramp" }),
         new(MediaGeneratorKind.TestPattern, "Gradient", "Full visible color spectrum gradient", new Dictionary<string, string> { ["type"] = "gradient" }),
 
-        // Solid Color Presets (Vegas Pro 1:1)
-        new(MediaGeneratorKind.SolidColor, "Red", "Pure Red solid background", new Dictionary<string, string> { ["hex"] = "#E53935" }),
-        new(MediaGeneratorKind.SolidColor, "Green", "Pure Green solid background", new Dictionary<string, string> { ["hex"] = "#43A047" }),
-        new(MediaGeneratorKind.SolidColor, "Blue", "Pure Blue solid background", new Dictionary<string, string> { ["hex"] = "#1E88E5" }),
-        new(MediaGeneratorKind.SolidColor, "White", "Pure White solid background", new Dictionary<string, string> { ["hex"] = "#FFFFFF" }),
-        new(MediaGeneratorKind.SolidColor, "Black", "Pure Black solid background", new Dictionary<string, string> { ["hex"] = "#000000" }),
-        new(MediaGeneratorKind.SolidColor, "Yellow", "Pure Yellow solid background", new Dictionary<string, string> { ["hex"] = "#FDD835" }),
-        new(MediaGeneratorKind.SolidColor, "Cyan", "Pure Cyan solid background", new Dictionary<string, string> { ["hex"] = "#00ACC1" }),
-        new(MediaGeneratorKind.SolidColor, "Magenta", "Pure Magenta solid background", new Dictionary<string, string> { ["hex"] = "#D81B60" }),
+        // Solid Color Presets
+        SolidColor("Red", "#E53935"),
+        SolidColor("Green", "#43A047"),
+        SolidColor("Blue", "#1E88E5"),
+        SolidColor("White", "#FFFFFF"),
+        SolidColor("Black", "#000000"),
+        SolidColor("Yellow", "#FDD835"),
+        SolidColor("Cyan", "#00ACC1"),
+        SolidColor("Magenta", "#D81B60"),
 
         // Checkerboard Presets
         new(MediaGeneratorKind.Checkerboard, "(Default)", "Standard black and white checkerboard", new Dictionary<string, string> { ["size"] = "64", ["color1"] = "#FFFFFF", ["color2"] = "#000000" }),
@@ -83,8 +88,8 @@ public static class MediaGeneratorCatalog
         new(MediaGeneratorKind.ColorGradient, "Elliptical Transparent to Black", "Cinematic vignette framing", new Dictionary<string, string> { ["type"] = "vignette", ["color1"] = "#00000000", ["color2"] = "#FF000000" }),
 
         // Noise Texture Presets
-        new(MediaGeneratorKind.NoiseTexture, "(Default)", "Procedural perlin value noise", new Dictionary<string, string> { ["type"] = "perlin", ["scale"] = "20" }),
-        new(MediaGeneratorKind.NoiseTexture, "Clouds", "Multi-octave atmospheric clouds", new Dictionary<string, string> { ["type"] = "clouds", ["scale"] = "40" }),
+        new(MediaGeneratorKind.NoiseTexture, "(Default)", "Procedural grayscale noise", new Dictionary<string, string> { ["type"] = "perlin", ["scale"] = "20" }),
+        new(MediaGeneratorKind.NoiseTexture, "Clouds", "Coarse grayscale noise", new Dictionary<string, string> { ["type"] = "clouds", ["scale"] = "40" }),
         new(MediaGeneratorKind.NoiseTexture, "Turbulence", "High-frequency turbulent noise", new Dictionary<string, string> { ["type"] = "turbulence", ["scale"] = "15" })
     };
 

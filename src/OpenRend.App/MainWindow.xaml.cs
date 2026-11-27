@@ -153,6 +153,7 @@ public partial class MainWindow : Window
             vm.Editor.SetTrackAutomationMode(id, mode);
         });
         Timeline.MediaDropped += (media, track, frame) => Guard(() => { Pause(); vm.Place(media, track, frame, advanceCursor: false); });
+        Timeline.GeneratedMediaDropped += PlaceGenerator;
         Timeline.TrimmerRangeDropped += (drag, track, frame) => Guard(() =>
         {
             Pause();
@@ -3310,7 +3311,8 @@ public partial class MainWindow : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
-        if (key == Key.Enter && !ctrl && !alt && !shift && VideoFxPresets.IsKeyboardFocusWithin) return;
+        if (key == Key.Enter && !ctrl && !alt && !shift &&
+            (VideoFxPresets.IsKeyboardFocusWithin || MediaGenPresets.IsKeyboardFocusWithin)) return;
         if (HandleLayoutChordKey(e)) return;
         if (HandleTrimmerShortcut(e)) return;
         if (TrimmerDeck.IsKeyboardFocusWithin && TrimmerDeck.ActiveMedia is not null &&

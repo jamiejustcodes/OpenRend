@@ -62,7 +62,7 @@ public sealed partial class EditorWorkflowTests
                 var favorite = VisibleNamedItem(effects, "Sepia")!.FindFirstDescendant(c => c.ByName("Favorite Sepia"));
                 Assert.NotNull(favorite);
                 favorite.Patterns.Toggle.Pattern.Toggle();
-                WaitFor(() => VideoFxPreferencesStore.Load(preferences).Contains(VideoEffectKind.Sepia),
+                WaitFor(() => ToolBrowserFavoritesStore.Load<VideoEffectKind>(preferences).Contains(VideoEffectKind.Sepia),
                     "The favorite was not written to preferences.");
                 Find(window, "FavoriteVideoFx").Patterns.SelectionItem.Pattern.Select();
                 search.Text = "Subtle Warmth";
@@ -117,7 +117,7 @@ public sealed partial class EditorWorkflowTests
                 var favorite = sepia.FindFirstDescendant(c => c.ByName("Favorite Sepia"));
                 Assert.Equal(ToggleState.On, favorite?.Patterns.Toggle.Pattern.ToggleState.Value);
                 favorite!.Patterns.Toggle.Pattern.Toggle();
-                WaitFor(() => !VideoFxPreferencesStore.Load(preferences).Contains(VideoEffectKind.Sepia) &&
+                WaitFor(() => !ToolBrowserFavoritesStore.Load<VideoEffectKind>(preferences).Contains(VideoEffectKind.Sepia) &&
                     VisibleNamedItem(Find(window, "VideoFxPlugIns"), "Sepia") is null, "Removing the active favorite did not refresh the category.");
                 Assert.DoesNotContain('*', window.Title);
                 running.CloseGracefully();

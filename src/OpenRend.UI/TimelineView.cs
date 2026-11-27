@@ -86,6 +86,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, Guid, long>? MediaDropped;
     public event Action<string[], Guid?, long>? FilesDropped;
     public event Action<TrimmerRangeDrag, Guid?, long>? TrimmerRangeDropped;
+    public event Action<MediaGeneratorPreset, Guid?, long>? GeneratedMediaDropped;
     public event Action<TransitionGesture>? TransitionDropped;
     public event Action<Guid, long>? ClipMoveHover;
     public event Action<Guid, Guid>? OverlapToCutRequested;
@@ -293,6 +294,12 @@ public sealed partial class TimelineView : FrameworkElement
             var p = e.GetPosition(this);
             var track = TrackAt(p.Y);
             var frame = Math.Max(0, FrameAt(p.X));
+            if (e.Data.GetData(typeof(MediaGeneratorPreset)) is MediaGeneratorPreset generator)
+            {
+                if (CanDropGenerator(p, track)) GeneratedMediaDropped?.Invoke(generator, track?.Id, frame);
+                e.Handled = true;
+                return;
+            }
             if (e.Data.GetData(typeof(TrimmerRangeDrag)) is TrimmerRangeDrag trimmed)
             {
                 if (TrimmerDropAsset(trimmed, p, track) is not null) TrimmerRangeDropped?.Invoke(trimmed, track?.Id, frame);
@@ -331,6 +338,25 @@ public sealed partial class TimelineView : FrameworkElement
         }
 
         hoverDropDuration = null;
+        if (e.Data.GetData(typeof(MediaGeneratorPreset)) is MediaGeneratorPreset generator)
+        {
+            var target = TrackAt(p.Y);
+            hoverFileDropActive = CanDropGenerator(p, target);
+            e.Effects = hoverFileDropActive ? DragDropEffects.Copy : DragDropEffects.None;
+            e.Handled = true;
+            if (hoverFileDropActive)
+            {
+                hoverFileDropFrame = FrameAt(p.X);
+                hoverFileDropTrack = target;
+                hoverFileDropName = generator.Name;
+                hoverFileDropNewTrackKind = TrackKind.Video;
+                hoverFileDropIsNewTrack = target is null;
+                hoverDropDuration = Project.FrameRate.Frames(MediaGeneratorCatalog.DefaultDurationSeconds);
+            }
+            InvalidateVisual();
+            return;
+        }
+
         if (e.Data.GetData(typeof(TrimmerRangeDrag)) is TrimmerRangeDrag trimmed)
         {
             var target = TrackAt(p.Y);
@@ -389,6 +415,14 @@ public sealed partial class TimelineView : FrameworkElement
     }
 
     private long? hoverDropDuration;
+
+    private bool CanDropGenerator(Point point, TimelineTrack? track)
+    {
+        if (point.X < HeaderWidth || point.Y < RulerHeight) return false;
+        return track is null
+            ? point.Y >= RulerHeight + TotalTimelineContentHeight - VerticalOffset
+            : track is { Kind: TrackKind.Video, IsLocked: false, IsAdjustmentTrack: false };
+    }
 
     internal MediaAsset? TrimmerDropAsset(TrimmerRangeDrag drag, Point point, TimelineTrack? track)
     {

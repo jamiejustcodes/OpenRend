@@ -7,7 +7,6 @@ using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
-using System.Windows.Media;
 using OpenRend.Core;
 using OpenRend.Project;
 
@@ -246,7 +245,7 @@ public partial class MainWindow
 
     private void InitializeVideoFxView()
     {
-        try { favoriteVideoFx.UnionWith(VideoFxPreferencesStore.Load(VideoFxPreferencesPath)); }
+        try { favoriteVideoFx.UnionWith(ToolBrowserFavoritesStore.Load<VideoEffectKind>(VideoFxPreferencesPath)); }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
         {
             vm.Status = "Video effect favorites could not be loaded. " + error.Message;
@@ -301,7 +300,7 @@ public partial class MainWindow
         var updated = new HashSet<VideoEffectKind>(favoriteVideoFx);
         if (isFavorite) updated.Add(kind);
         else updated.Remove(kind);
-        try { VideoFxPreferencesStore.Save(updated, VideoFxPreferencesPath); }
+        try { ToolBrowserFavoritesStore.Save(updated, VideoFxPreferencesPath); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {
             favorite.IsChecked = wasFavorite;
@@ -428,253 +427,5 @@ public partial class MainWindow
                 : $"Added {definition.Name} to {clips.Length} selected events.";
             RequestPreview();
         });
-    }
-
-    private record MediaGeneratorDef(string Name, string Category, string[] Presets, string Description);
-
-    private static readonly MediaGeneratorDef[] MediaGenerators =
-    [
-        new("Checkerboard", "Utility", ["(Default)", "Large Tiles", "Small Tiles", "Horizontal Blinds", "Vertical Blinds", "Grate", "Fence", "Ridges", "Bumps", "Plaid", "Split Screen", "Horizon"], "Vegas Checkerboard: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
-        new("Color Gradient", "Creative", ["(Default)", "Linear White to Black", "Soft Contrast", "Radial White to Black", "Linear Black to White", "Sunset", "Sunrise", "Blue Sky", "Sepia Tone"], "Vegas Color Gradient: Generates multi-color smooth gradients with customizable angle and falloff."),
-        new("Credit Roll", "Titles and Text", ["(Default)", "Scrolling On Black", "Crawling On Black", "Subtitled Credits", "Dual Column Credits"], "Vegas Credit Roll: Automated scrolling credits generator with multiple text styles."),
-        new("Noise Texture", "Noise & Textures", ["(Default)", "Fine Grain", "Coarse Grain", "Perlin Noise", "Simplex Fog", "Turbulence"], "Vegas Noise Texture: Procedural animated noise pattern generator."),
-        new("Solid Color", "Solid Colors", ["(Default)", "Black", "White", "Red", "Green", "Blue", "Yellow", "Cyan", "Magenta"], "Vegas Solid Color: Generates solid uniform color frames."),
-        new("Test Pattern", "Test Patterns", ["(Default)", "SMPTE Bars (NTSC)", "SMPTE Bars (PAL)", "Color Bars (NTSC)", "Color Bars (PAL)", "White Porches", "Yellow Porches", "Pluge and Porches", "Ramp", "Gradient"], "Vegas Test Pattern: OFX, 32-bit floating point, GPU Accelerated, Grouping: Vegas, Version 1.0"),
-        new("Titles & Text", "Titles and Text", ["(Default)", "Title 01", "Subtitle", "Lower Third", "Banner Title", "Pop In", "Action Title", "Film Noir"], "Vegas Titles & Text: OFX high quality vector typography generator.")
-    ];
-
-    private void InitializeMediaGeneratorView()
-    {
-        if (MediaGenPlugIns is null) return;
-        MediaGenPlugIns.Items.Clear();
-
-        foreach (var def in MediaGenerators)
-        {
-            var item = new ListBoxItem
-            {
-                HorizontalContentAlignment = HorizontalAlignment.Stretch,
-                DataContext = def,
-                Tag = def.Name
-            };
-            AutomationProperties.SetName(item, def.Name);
-
-            var dock = new DockPanel();
-            var icon = new ContentControl
-            {
-                Width = 20,
-                Height = 20,
-                ContentTemplate = (DataTemplate)FindResource("ic_media_generator"),
-                Style = (Style)FindResource("BaseContentControl"),
-                Margin = new Thickness(0, 0, 6, 0)
-            };
-
-            var label = new TextBlock
-            {
-                Text = def.Name,
-                VerticalAlignment = VerticalAlignment.Center,
-                Foreground = (Brush)FindResource("TextColor")
-            };
-
-            dock.Children.Add(icon);
-            dock.Children.Add(label);
-            item.Content = dock;
-            MediaGenPlugIns.Items.Add(item);
-        }
-
-        if (MediaGenPlugIns.Items.Count > 0)
-            MediaGenPlugIns.SelectedIndex = 0;
-    }
-
-    private void MediaGenCategoryChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (MediaGenPlugIns is null) return;
-        var selectedTab = MediaGenCategories?.SelectedItem as TabItem;
-        var category = selectedTab?.Header?.ToString() ?? "All Plug-ins";
-
-        foreach (var obj in MediaGenPlugIns.Items)
-        {
-            if (obj is not ListBoxItem item || item.DataContext is not MediaGeneratorDef def) continue;
-            var visible = category == "All Plug-ins" ||
-                          (category == "Favorites" && false) ||
-                          string.Equals(def.Category, category, StringComparison.OrdinalIgnoreCase);
-            item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
-
-    private void MediaGenSearchChanged(object sender, TextChangedEventArgs e)
-    {
-        if (MediaGenPlugIns is null || MediaGenSearch is null) return;
-        var query = MediaGenSearch.Text.Trim();
-
-        foreach (var obj in MediaGenPlugIns.Items)
-        {
-            if (obj is not ListBoxItem item || item.DataContext is not MediaGeneratorDef def) continue;
-            var visible = query.Length == 0 ||
-                          def.Name.Contains(query, StringComparison.OrdinalIgnoreCase) ||
-                          def.Category.Contains(query, StringComparison.OrdinalIgnoreCase);
-            item.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        }
-    }
-
-    private void MediaGenPluginSelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (MediaGenPresets is null) return;
-        MediaGenPresets.Items.Clear();
-
-        if (MediaGenPlugIns.SelectedItem is ListBoxItem item && item.DataContext is MediaGeneratorDef def)
-        {
-            if (MediaGenInfoText is not null)
-                MediaGenInfoText.Text = def.Description;
-
-            foreach (var preset in def.Presets)
-            {
-                var card = new ListBoxItem
-                {
-                    Width = 128,
-                    Height = 108,
-                    Padding = new Thickness(4),
-                    Margin = new Thickness(3),
-                    DataContext = def,
-                    Tag = preset
-                };
-
-                var grid = new Grid();
-                var sp = new StackPanel();
-                var border = new Border
-                {
-                    Width = 116,
-                    Height = 70,
-                    BorderBrush = (Brush)FindResource("ColorL"),
-                    BorderThickness = new Thickness(1),
-                    Background = GetPresetThumbnailBrush(def.Name, preset),
-                    CornerRadius = new CornerRadius(1),
-                    Child = new Border { VerticalAlignment = VerticalAlignment.Bottom, Height = 2, Background = (Brush)FindResource("ActiveColor") }
-                };
-                var nameBlock = new TextBlock
-                {
-                    Text = preset,
-                    TextAlignment = TextAlignment.Center,
-                    Margin = new Thickness(0, 5, 0, 0),
-                    Foreground = (Brush)FindResource("TextColor"),
-                    FontSize = 11,
-                    TextTrimming = TextTrimming.CharacterEllipsis
-                };
-                sp.Children.Add(border);
-                sp.Children.Add(nameBlock);
-
-                var addBtn = new Button
-                {
-                    Style = (Style)FindResource("IconButton"),
-                    ContentTemplate = (DataTemplate)FindResource("ic_add"),
-                    Width = 22,
-                    Height = 22,
-                    Background = (Brush)FindResource("ColorM"),
-                    HorizontalAlignment = HorizontalAlignment.Right,
-                    VerticalAlignment = VerticalAlignment.Top,
-                    Margin = new Thickness(2),
-                    ToolTip = "Add to timeline at playhead"
-                };
-                addBtn.Click += (_, _) => InsertMediaGenerator(def.Name, preset);
-
-                grid.Children.Add(sp);
-                grid.Children.Add(addBtn);
-                card.Content = grid;
-                MediaGenPresets.Items.Add(card);
-            }
-        }
-    }
-
-    private static Brush GetPresetThumbnailBrush(string plugin, string preset)
-    {
-        return plugin switch
-        {
-            "Solid Color" => preset switch
-            {
-                "White" => Brushes.White,
-                "Red" => new SolidColorBrush(Color.FromRgb(0xEE, 0x33, 0x33)),
-                "Green" => new SolidColorBrush(Color.FromRgb(0x33, 0xCC, 0x33)),
-                "Blue" => new SolidColorBrush(Color.FromRgb(0x33, 0x66, 0xEE)),
-                "Yellow" => new SolidColorBrush(Color.FromRgb(0xFC, 0xBF, 0x45)),
-                "Cyan" => new SolidColorBrush(Color.FromRgb(0x00, 0xD2, 0xFF)),
-                "Magenta" => new SolidColorBrush(Color.FromRgb(0xEE, 0x33, 0xCC)),
-                _ => new SolidColorBrush(Color.FromRgb(0x18, 0x18, 0x18))
-            },
-            "Checkerboard" => new DrawingBrush
-            {
-                TileMode = TileMode.Tile,
-                Viewport = new Rect(0, 0, 16, 16),
-                ViewportUnits = BrushMappingMode.Absolute,
-                Drawing = new DrawingGroup
-                {
-                    Children =
-                    {
-                        new GeometryDrawing(Brushes.White, null, new RectangleGeometry(new Rect(0, 0, 16, 16))),
-                        new GeometryDrawing(Brushes.Black, null, new RectangleGeometry(new Rect(0, 0, 8, 8))),
-                        new GeometryDrawing(Brushes.Black, null, new RectangleGeometry(new Rect(8, 8, 8, 8)))
-                    }
-                }
-            },
-            "Color Gradient" => new LinearGradientBrush(
-                Color.FromRgb(0xFF, 0x85, 0x7A),
-                Color.FromRgb(0x46, 0x7D, 0x96),
-                new Point(0, 0), new Point(1, 1)),
-            "Test Pattern" => new LinearGradientBrush(
-                new GradientStopCollection
-                {
-                    new(Colors.White, 0.0),
-                    new(Colors.Yellow, 0.166),
-                    new(Colors.Cyan, 0.333),
-                    new(Colors.Green, 0.5),
-                    new(Colors.Magenta, 0.666),
-                    new(Colors.Red, 0.833),
-                    new(Colors.Blue, 1.0)
-                },
-                new Point(0, 0), new Point(1, 0)),
-            _ => new LinearGradientBrush(
-                Color.FromRgb(0x22, 0x33, 0x44),
-                Color.FromRgb(0x11, 0x18, 0x24),
-                new Point(0, 0), new Point(1, 1))
-        };
-    }
-
-    private void MediaGenPresetDoubleClick(object sender, MouseButtonEventArgs e)
-    {
-        if (MediaGenPresets.SelectedItem is ListBoxItem item && item.DataContext is MediaGeneratorDef def && item.Tag is string preset)
-        {
-            InsertMediaGenerator(def.Name, preset);
-        }
-    }
-
-    private void InsertMediaGenerator(string plugin, string preset)
-    {
-        Pause();
-        var kind = plugin switch
-        {
-            "Test Pattern" => MediaGeneratorKind.TestPattern,
-            "Solid Color" => MediaGeneratorKind.SolidColor,
-            "Checkerboard" => MediaGeneratorKind.Checkerboard,
-            "Color Gradient" => MediaGeneratorKind.ColorGradient,
-            "Noise Texture" => MediaGeneratorKind.NoiseTexture,
-            "Credit Roll" => MediaGeneratorKind.CreditRoll,
-            "Titles & Text" => MediaGeneratorKind.TitlesAndText,
-            _ => MediaGeneratorKind.SolidColor
-        };
-
-        var videoTracks = vm.Project.Tracks.Where(t => t.Kind == TrackKind.Video).ToList();
-        var targetTrack = videoTracks.ElementAtOrDefault(Timeline.ActiveTrackIndex)
-            ?? videoTracks.FirstOrDefault();
-
-        if (targetTrack is null)
-        {
-            targetTrack = vm.Editor.AddTrack(TrackKind.Video);
-        }
-
-        var startFrame = Math.Max(0, vm.Position);
-        var duration = vm.Project.FrameRate.Frames(5.0);
-        vm.Editor.AddGeneratedMediaClip(targetTrack.Id, startFrame, kind, preset, duration);
-
-        vm.Status = $"Inserted {plugin} ({preset}) at {OpenRend.UI.TimelineView.FormatTimecode(startFrame, vm.Project.FrameRate)}.";
-        RequestPreview();
-        Timeline.InvalidateVisual();
     }
 }

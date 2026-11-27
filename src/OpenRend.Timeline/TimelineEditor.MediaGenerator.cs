@@ -8,7 +8,7 @@ namespace OpenRend.Timeline;
 public sealed partial class TimelineEditor
 {
     /// <summary>
-    /// Builds an uncommitted procedural generator MediaAsset matching Vegas Pro specifications.
+    /// Builds an uncommitted procedural media asset.
     /// </summary>
     public MediaAsset BuildGeneratedMedia(MediaGeneratorKind kind, string presetName, IReadOnlyDictionary<string, string>? parameters = null)
     {
@@ -71,18 +71,25 @@ public sealed partial class TimelineEditor
     /// Undo/redo removes or restores both asset and event in a single atomic transaction.
     /// </summary>
     public TimelineClip AddGeneratedMediaClip(Guid trackId, long startFrame, MediaGeneratorKind kind, string presetName, long durationFrames = 150, IReadOnlyDictionary<string, string>? parameters = null)
+        => AddGeneratedMediaClip((Guid?)trackId, startFrame, kind, presetName, durationFrames, parameters);
+
+    public TimelineClip AddGeneratedMediaClip(Guid? trackId, long startFrame, MediaGeneratorKind kind, string presetName, long durationFrames, IReadOnlyDictionary<string, string>? parameters = null)
     {
-        var track = FindTrack(trackId);
-        EnsureUnlocked(track);
-        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Generated media clips can only be placed on video tracks.");
+        var track = trackId.HasValue ? FindTrack(trackId.Value) : null;
+        if (track is not null)
+        {
+            EnsureUnlocked(track);
+            if (track.Kind != TrackKind.Video || track.IsAdjustmentTrack)
+                throw new InvalidOperationException("Choose a video track that can hold media.");
+        }
 
         var media = BuildGeneratedMedia(kind, presetName, parameters);
-        var duration = durationFrames > 0 ? durationFrames : Project.FrameRate.Frames(5.0);
+        var duration = durationFrames > 0 ? durationFrames : Project.FrameRate.Frames(MediaGeneratorCatalog.DefaultDurationSeconds);
         var clip = new TimelineClip
         {
             Id = Guid.NewGuid(),
             MediaId = media.Id,
-            Name = $"{media.Generator?.Title ?? "Generator"} ({presetName})",
+            Name = $"{media.Generator!.Title} ({media.Generator.PresetName})",
             StartFrame = startFrame,
             DurationFrames = duration
         };
@@ -90,7 +97,12 @@ public sealed partial class TimelineEditor
         Execute(p =>
         {
             p.Media.Add(media.DeepClone());
-            var targetTrack = p.Tracks.First(t => t.Id == trackId);
+            var targetTrack = track ?? new TimelineTrack
+            {
+                Name = $"Video {p.Tracks.Count(item => item.Kind == TrackKind.Video) + 1}",
+                Kind = TrackKind.Video
+            };
+            if (track is null) p.Tracks.Add(targetTrack);
             targetTrack.Clips.Add(clip.DeepClone());
         });
 

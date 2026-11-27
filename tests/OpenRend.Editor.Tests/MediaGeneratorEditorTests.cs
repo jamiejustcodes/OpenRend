@@ -60,6 +60,26 @@ public sealed class MediaGeneratorEditorTests
     }
 
     [Fact]
+    public void PlacingGeneratorOnNewTrackUndoesTrackAssetAndClipTogether()
+    {
+        var doc = new ProjectDocument();
+        var editor = new TimelineEditor(doc);
+        var clip = editor.AddGeneratedMediaClip(null, 12, MediaGeneratorKind.Checkerboard, "Large Checkers", 150);
+
+        var track = Assert.Single(doc.Tracks);
+        Assert.Equal(TrackKind.Video, track.Kind);
+        Assert.Equal(clip.Id, Assert.Single(track.Clips).Id);
+        Assert.Equal("128", Assert.Single(doc.Media).Generator!.Parameters["size"]);
+
+        Assert.True(editor.Undo());
+        Assert.Empty(doc.Tracks);
+        Assert.Empty(doc.Media);
+        Assert.False(editor.CanUndo);
+        Assert.True(editor.Redo());
+        Assert.Equal(clip.Id, Assert.Single(Assert.Single(doc.Tracks).Clips).Id);
+    }
+
+    [Fact]
     public void TimelineEditor_AddGeneratedMediaClip_RejectsAudioTrack()
     {
         var doc = new ProjectDocument();

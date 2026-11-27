@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Media;
@@ -8,7 +9,7 @@ using OpenRend.Media;
 namespace OpenRend.App;
 
 /// <summary>
-/// VEGAS Titles &amp; Text generator editor matching the Vegas Pro OFX Titles &amp; Text dialog.
+/// Edits generated text and title events.
 /// Supports live timeline preview updates, multi-line typography, 9-point anchor alignment,
 /// custom strokes, drop shadows, and background box/banner layout.
 /// </summary>
@@ -41,7 +42,7 @@ public sealed class TitlesAndTextWindow : Window
     {
         vm = viewModel;
         Style = (Style)FindResource(typeof(Window));
-        Title = "VEGAS Titles & Text Generator";
+        Title = "Titles & Text";
         Width = 620;
         Height = 560;
         MinWidth = 520;
@@ -49,6 +50,8 @@ public sealed class TitlesAndTextWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
         var panelBrush = (Brush)FindResource("PanelBrush");
+        AutomationProperties.SetAutomationId(textEditor, "TitleTextEditor");
+        AutomationProperties.SetName(textEditor, "Title text");
 
         if (clip is not null && media is not null)
         {
@@ -73,7 +76,7 @@ public sealed class TitlesAndTextWindow : Window
             };
 
             var cursorFrame = vm.Position;
-            var durFrames = vm.Project.FrameRate.Frames(5.0); // 5 seconds default in Vegas
+            var durFrames = vm.Project.FrameRate.Frames(MediaGeneratorCatalog.DefaultDurationSeconds);
             targetClip = new TimelineClip
             {
                 MediaId = targetMedia.Id,
@@ -82,11 +85,12 @@ public sealed class TitlesAndTextWindow : Window
                 DurationFrames = durFrames
             };
 
-            // Insert into active video track or create new top video track
             vm.Editor.Execute(p =>
             {
                 p.Media.Add(targetMedia);
-                var vTrack = p.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
+                var focused = p.Tracks.ElementAtOrDefault(vm.ActiveTrackIndex);
+                var vTrack = focused is { Kind: TrackKind.Video, IsLocked: false, IsAdjustmentTrack: false } ? focused
+                    : p.Tracks.FirstOrDefault(track => track is { Kind: TrackKind.Video, IsLocked: false, IsAdjustmentTrack: false });
                 if (vTrack is null)
                 {
                     vTrack = new TimelineTrack { Name = "Titles & Text", Kind = TrackKind.Video };
@@ -219,11 +223,10 @@ public sealed class TitlesAndTextWindow : Window
         // Row 5: Action Buttons
         var bottomPanel = new DockPanel { Margin = new Thickness(0, 10, 0, 0), LastChildFill = false };
         var okButton = new Button { Content = "OK", Width = 80, Height = 28, IsDefault = true };
-        okButton.Click += (_, _) => { UpdateClipLive(); DialogResult = true; Close(); };
+        okButton.Click += (_, _) => { UpdateClipLive(); DialogResult = true; };
         bottomPanel.Children.Add(okButton);
 
         var closeButton = new Button { Content = "Close", Width = 80, Height = 28, IsCancel = true, Margin = new Thickness(8, 0, 0, 0) };
-        closeButton.Click += (_, _) => Close();
         bottomPanel.Children.Add(closeButton);
 
         Grid.SetRow(bottomPanel, 5); root.Children.Add(bottomPanel);
