@@ -44,6 +44,25 @@ public static class VideoScopeEngine
     private const uint GraticuleLabel = 0xFF58886E;
     private const uint BackgroundDark = 0xFF0A0E0C;
 
+    public static double LumaIre(int code, VideoScopeScale scale) =>
+        scale == VideoScopeScale.StudioRgb ? (code - 16) * (100.0 / 219) : code * (100.0 / 255);
+
+    public static int LumaCodeAtRow(int row, int height)
+    {
+        var lastRow = Math.Max(1, height - 1);
+        var inverted = lastRow - Math.Clamp(row, 0, lastRow);
+        return (int)((inverted * 255L + lastRow - 1) / lastRow);
+    }
+
+    public static (double Cb, double Cr) ChromaAt(double x, double y, int width, int height)
+    {
+        var (centerX, centerY, radius) = VectorscopeGeometry(width, height);
+        return radius <= 0 ? (0, 0) : ((x - centerX) / radius, (centerY - y) / radius);
+    }
+
+    private static (int CenterX, int CenterY, int Radius) VectorscopeGeometry(int width, int height) =>
+        (width / 2, height / 2, (int)(Math.Min(width, height) * 0.44));
+
     /// <summary>
     /// Renders a video scope to a 32-bit BGRA pixel array.
     /// </summary>
@@ -131,7 +150,7 @@ public static class VideoScopeEngine
                 int yLum = (54 * r + 183 * g + 19 * b) >> 8;
                 yLum = Math.Clamp(yLum, minVal, maxVal);
 
-                int sx = (x * (scopeW - 1)) / (srcW - 1);
+                int sx = srcW == 1 ? scopeW / 2 : (x * (scopeW - 1)) / (srcW - 1);
                 int sy = scopeH - 1 - (yLum * (scopeH - 1)) / 255;
 
                 if (sx >= 0 && sx < scopeW && sy >= 0 && sy < scopeH)
@@ -203,9 +222,7 @@ public static class VideoScopeEngine
         VideoScopeScale scale,
         double intensity)
     {
-        int centerX = scopeW / 2;
-        int centerY = scopeH / 2;
-        int radius = (int)(Math.Min(scopeW, scopeH) * 0.44);
+        var (centerX, centerY, radius) = VectorscopeGeometry(scopeW, scopeH);
         if (radius <= 0) return;
 
         var density = new int[scopeW * scopeH];
@@ -345,7 +362,7 @@ public static class VideoScopeEngine
                 byte g = src[p + 1];
                 byte r = src[p + 2];
 
-                int sx = (x * (paneW - 1)) / (srcW - 1);
+                int sx = srcW == 1 ? paneW / 2 : (x * (paneW - 1)) / (srcW - 1);
                 int syR = scopeH - 1 - (r * (scopeH - 1)) / 255;
                 int syG = scopeH - 1 - (g * (scopeH - 1)) / 255;
                 int syB = scopeH - 1 - (b * (scopeH - 1)) / 255;
@@ -521,7 +538,8 @@ public static class VideoScopeEngine
                 DrawWaveformGraticule(buffer, w, h, scale);
                 break;
             case VideoScopeMode.Vectorscope:
-                DrawVectorscopeGraticule(buffer, w, h, w / 2, h / 2, (int)(Math.Min(w, h) * 0.44));
+                var (centerX, centerY, radius) = VectorscopeGeometry(w, h);
+                DrawVectorscopeGraticule(buffer, w, h, centerX, centerY, radius);
                 break;
             case VideoScopeMode.RgbParade:
                 DrawWaveformGraticule(buffer, w, h, scale);

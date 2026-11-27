@@ -1,7 +1,5 @@
-using System;
-using System.Globalization;
-using System.Threading.Tasks;
 using System.Windows;
+using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -10,240 +8,237 @@ using OpenRend.Media;
 
 namespace OpenRend.App;
 
-/// <summary>
-/// 1:1 Vegas Pro Video Scopes window (Ctrl+Alt+2).
-/// Displays real-time Rec. 709 Luminance/RGB Waveform, Polar Vectorscope,
-/// RGB Parade, and 256-bin Histogram with authentic CRT phosphor traces.
-/// </summary>
 public sealed class VideoScopesWindow : Window
 {
-    private readonly MainWindow? mainWindow;
-    private readonly ComboBox modeCombo = new() { Width = 150, Height = 24, Margin = new Thickness(0, 0, 8, 0) };
-    private readonly ComboBox scaleCombo = new() { Width = 130, Height = 24, Margin = new Thickness(0, 0, 8, 0) };
-    private readonly Slider intensitySlider = new() { Minimum = 0.4, Maximum = 2.4, Value = 1.0, Width = 90, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) };
-    private readonly TextBlock intensityText = new() { Text = "100%", Width = 38, VerticalAlignment = VerticalAlignment.Center, FontSize = 11, Foreground = Brushes.Silver };
-    private readonly TextBlock readoutText = new() { Text = "Ready", FontSize = 11, Foreground = Brushes.Silver, VerticalAlignment = VerticalAlignment.Center };
-    private readonly Image scopeImage = new() { Stretch = Stretch.Fill };
-    private WriteableBitmap? writeableBmp;
-    private byte[]? customPixels;
-    private int customWidth, customHeight;
-    private bool isUpdating;
+    internal readonly record struct ScopeOptions(VideoScopeMode Mode, VideoScopeScale Scale, double Intensity, bool FollowPlayback);
+    private readonly record struct ScopeFrame(byte[]? Pixels, int Width, int Height);
+    private readonly record struct RenderSettings(ScopeOptions Options, int Width, int Height);
 
-    public VideoScopesWindow(MainWindow? window = null)
+    private readonly MainWindow? mainWindow;
+    private readonly ComboBox modeCombo = new() { MinWidth = 112, SelectedValuePath = nameof(ComboBoxItem.Tag) };
+    private readonly ComboBox scaleCombo = new() { MinWidth = 137, SelectedValuePath = nameof(ComboBoxItem.Tag) };
+    private readonly Slider intensity = new() { Minimum = .4, Maximum = 2.4, Width = 75, SmallChange = .05, LargeChange = .2 };
+    private readonly CheckBox followPlayback = new() { Content = "Update while playing", VerticalAlignment = VerticalAlignment.Center };
+    private readonly TextBlock intensityText = new() { Width = 36, TextAlignment = TextAlignment.Right };
+    private readonly TextBlock readout = new() { MinHeight = 16, TextTrimming = TextTrimming.CharacterEllipsis, Margin = new Thickness(0, 5, 0, 0) };
+    private readonly Image graph = new() { Stretch = Stretch.Fill };
+    private WriteableBitmap? bitmap;
+    private ScopeFrame source;
+    private ScopeFrame? testSource;
+    private RenderSettings? displayed;
+    private bool queued;
+    private bool rendering;
+    private bool closed;
+
+    internal ScopeOptions Options => new((VideoScopeMode)modeCombo.SelectedValue, (VideoScopeScale)scaleCombo.SelectedValue,
+        intensity.Value, followPlayback.IsChecked == true);
+
+    public VideoScopesWindow(MainWindow? window = null) : this(window, null)
+    {
+    }
+
+    internal VideoScopesWindow(MainWindow? window, ScopeOptions? saved)
     {
         mainWindow = window;
-        Style = (Style)FindResource(typeof(Window));
+        var initial = saved ?? new(VideoScopeMode.Waveform, VideoScopeScale.StudioRgb, 1, true);
+        SetResourceReference(StyleProperty, typeof(Window));
         Title = "Video Scopes";
-        Width = 520;
-        Height = 440;
-        MinWidth = 380;
-        MinHeight = 320;
+        Width = 580;
+        Height = 450;
+        MinWidth = 390;
+        MinHeight = 310;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
-
-        var panelBrush = (Brush)FindResource("PanelBrush");
-        var textBrush = (Brush)FindResource("TextBrush");
-        var borderBrush = (Brush)FindResource("BorderBrush");
-
-        var root = new Grid { Background = panelBrush, Margin = new Thickness(8) };
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Toolbar
-        root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) }); // Scope Canvas
-        root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto }); // Bottom readout
-
-        // 1. Toolbar
-        var toolBar = new WrapPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        AutomationProperties.SetAutomationId(this, "VideoScopesWindow");
 
         modeCombo.Items.Add(new ComboBoxItem { Content = "Waveform", Tag = VideoScopeMode.Waveform });
         modeCombo.Items.Add(new ComboBoxItem { Content = "Vectorscope", Tag = VideoScopeMode.Vectorscope });
         modeCombo.Items.Add(new ComboBoxItem { Content = "RGB Parade", Tag = VideoScopeMode.RgbParade });
         modeCombo.Items.Add(new ComboBoxItem { Content = "Histogram", Tag = VideoScopeMode.Histogram });
-        modeCombo.SelectedIndex = 0;
-        modeCombo.SelectionChanged += (_, _) => UpdateScope();
+        modeCombo.SelectedValue = initial.Mode;
+        scaleCombo.Items.Add(new ComboBoxItem { Content = "Studio RGB (16–235)", Tag = VideoScopeScale.StudioRgb });
+        scaleCombo.Items.Add(new ComboBoxItem { Content = "Full range (0–255)", Tag = VideoScopeScale.FullRange });
+        scaleCombo.SelectedValue = initial.Scale;
+        intensity.Value = initial.Intensity;
+        followPlayback.IsChecked = initial.FollowPlayback;
+        AutomationProperties.SetAutomationId(modeCombo, "VideoScopeMode");
+        AutomationProperties.SetAutomationId(scaleCombo, "VideoScopeScale");
+        AutomationProperties.SetAutomationId(intensity, "VideoScopeIntensity");
+        AutomationProperties.SetAutomationId(followPlayback, "VideoScopeFollowPlayback");
+        AutomationProperties.SetAutomationId(graph, "VideoScopeGraph");
+        AutomationProperties.SetAutomationId(readout, "VideoScopeReadout");
+        readout.SetResourceReference(TextBlock.ForegroundProperty, "MutedBrush");
 
-        scaleCombo.Items.Add(new ComboBoxItem { Content = "Studio RGB (16-235)", Tag = VideoScopeScale.StudioRgb });
-        scaleCombo.Items.Add(new ComboBoxItem { Content = "Full Range (0-255)", Tag = VideoScopeScale.FullRange });
-        scaleCombo.SelectedIndex = 0;
-        scaleCombo.SelectionChanged += (_, _) => UpdateScope();
+        var toolbar = new WrapPanel { Margin = new Thickness(0, 0, 0, 5) };
+        toolbar.Children.Add(Field("_Scope", modeCombo));
+        toolbar.Children.Add(Field("S_cale", scaleCombo));
+        toolbar.Children.Add(Field("_Intensity", intensity, intensityText));
+        var refresh = new Button { Content = "_Refresh", Margin = new Thickness(0) };
+        AutomationProperties.SetAutomationId(refresh, "VideoScopeRefresh");
 
-        intensitySlider.ValueChanged += (_, e) =>
-        {
-            intensityText.Text = $"{(int)Math.Round(e.NewValue * 100)}%";
-            UpdateScope();
-        };
+        var frame = new Border { Child = graph, BorderThickness = new Thickness(1), ClipToBounds = true };
+        frame.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+        frame.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
 
-        var refreshBtn = new Button
-        {
-            Content = "↻ Refresh",
-            Padding = new Thickness(8, 2, 8, 2),
-            Margin = new Thickness(8, 0, 0, 0)
-        };
-        refreshBtn.Click += (_, _) => UpdateScope();
-
-        toolBar.Children.Add(new TextBlock { Text = "Scope: ", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0), Foreground = textBrush });
-        toolBar.Children.Add(modeCombo);
-        toolBar.Children.Add(new TextBlock { Text = "Scale: ", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0), Foreground = textBrush });
-        toolBar.Children.Add(scaleCombo);
-        toolBar.Children.Add(new TextBlock { Text = "Gain: ", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0), Foreground = textBrush });
-        toolBar.Children.Add(intensitySlider);
-        toolBar.Children.Add(intensityText);
-        toolBar.Children.Add(refreshBtn);
-
-        Grid.SetRow(toolBar, 0);
-        root.Children.Add(toolBar);
-
-        // 2. Scope Display Area
-        var border = new Border
-        {
-            Background = new SolidColorBrush(Color.FromRgb(10, 14, 12)),
-            BorderBrush = borderBrush,
-            BorderThickness = new Thickness(1),
-            Child = scopeImage,
-            ClipToBounds = true
-        };
-        border.MouseMove += ScopeMouseMove;
-        border.MouseLeave += (_, _) => readoutText.Text = "Ready";
-
-        Grid.SetRow(border, 1);
-        root.Children.Add(border);
-
-        // 3. Status Readout
-        var statusPanel = new DockPanel { Margin = new Thickness(0, 6, 0, 0) };
-        DockPanel.SetDock(readoutText, Dock.Left);
-        statusPanel.Children.Add(readoutText);
-
-        var hintText = new TextBlock
-        {
-            Text = "Rec. 709 Phosphor CRT | Real-Time",
-            Foreground = Brushes.Gray,
-            FontSize = 10,
-            HorizontalAlignment = HorizontalAlignment.Right,
-            VerticalAlignment = VerticalAlignment.Center
-        };
-        DockPanel.SetDock(hintText, Dock.Right);
-        statusPanel.Children.Add(hintText);
-
-        Grid.SetRow(statusPanel, 2);
-        root.Children.Add(statusPanel);
-
+        var footer = new Grid { Margin = new Thickness(0, 6, 0, 0) };
+        footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        footer.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        var playbackControls = new DockPanel { LastChildFill = false };
+        DockPanel.SetDock(refresh, Dock.Right);
+        playbackControls.Children.Add(refresh);
+        playbackControls.Children.Add(followPlayback);
+        footer.Children.Add(playbackControls);
+        Grid.SetRow(readout, 1);
+        footer.Children.Add(readout);
+        var root = new DockPanel { Margin = new Thickness(10) };
+        DockPanel.SetDock(toolbar, Dock.Top);
+        DockPanel.SetDock(footer, Dock.Bottom);
+        root.Children.Add(toolbar);
+        root.Children.Add(footer);
+        root.Children.Add(frame);
         Content = root;
 
+        refresh.Click += (_, _) => RefreshSource();
+        followPlayback.Checked += (_, _) => RefreshSource();
+        followPlayback.Unchecked += (_, _) => QueueRender();
+        modeCombo.SelectionChanged += (_, _) => UpdateControls();
+        scaleCombo.SelectionChanged += (_, _) => QueueRender();
+        intensity.ValueChanged += (_, _) => UpdateControls();
+        graph.SizeChanged += (_, _) => QueueRender();
+        DpiChanged += (_, _) => QueueRender();
+        graph.MouseMove += (_, args) => ReadCursor(args.GetPosition(graph));
+        graph.MouseLeave += (_, _) => readout.Text = "";
+        PreviewKeyDown += (_, args) =>
+        {
+            var key = args.Key == Key.System ? args.SystemKey : args.Key;
+            if (args.IsRepeat || Keyboard.Modifiers != (ModifierKeys.Control | ModifierKeys.Alt) || key is not (Key.D2 or Key.NumPad2)) return;
+            args.Handled = true;
+            Close();
+        };
         Loaded += (_, _) =>
         {
-            if (mainWindow != null) mainWindow.FrameRendered += OnFrameRendered;
-            UpdateScope();
+            if (mainWindow is not null) mainWindow.ScopeFrameRendered += OnFrameRendered;
+            RefreshSource();
         };
-
         Closed += (_, _) =>
         {
-            if (mainWindow != null) mainWindow.FrameRendered -= OnFrameRendered;
+            closed = true;
+            if (mainWindow is not null) mainWindow.ScopeFrameRendered -= OnFrameRendered;
         };
+        UpdateControls();
+    }
 
-        SizeChanged += (_, _) => UpdateScope();
+    private static StackPanel Field(string name, Control input, TextBlock? value = null)
+    {
+        var label = new Label { Content = name, Target = input, Padding = new Thickness(0, 0, 5, 0), VerticalAlignment = VerticalAlignment.Center };
+        label.SetResourceReference(Control.ForegroundProperty, "TextBrush");
+        AutomationProperties.SetLabeledBy(input, label);
+        var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 10, 5) };
+        panel.Children.Add(label);
+        panel.Children.Add(input);
+        if (value is not null) panel.Children.Add(value);
+        return panel;
     }
 
     public void SetTestPixels(byte[] pixels, int width, int height)
     {
-        customPixels = pixels;
-        customWidth = width;
-        customHeight = height;
-        UpdateScope();
+        testSource = new(pixels, width, height);
+        RefreshSource();
+    }
+
+    private void UpdateControls()
+    {
+        var options = Options;
+        scaleCombo.IsEnabled = options.Mode is VideoScopeMode.Waveform or VideoScopeMode.RgbParade;
+        intensity.IsEnabled = options.Mode != VideoScopeMode.Histogram;
+        intensityText.Text = $"{options.Intensity * 100:0}%";
+        QueueRender();
     }
 
     private void OnFrameRendered(byte[] pixels, int width, int height)
     {
-        Dispatcher.BeginInvoke(() => UpdateScopeWithPixels(pixels, width, height));
+        if (testSource.HasValue || (followPlayback.IsChecked != true && mainWindow?.IsTimelinePlaying == true)) return;
+        source = new(pixels, width, height);
+        QueueRender();
     }
 
-    private void UpdateScope()
+    private void RefreshSource()
     {
-        if (customPixels != null && customWidth > 0 && customHeight > 0)
-        {
-            UpdateScopeWithPixels(customPixels, customWidth, customHeight);
-            return;
-        }
-        var (pixels, width, height) = mainWindow != null ? mainWindow.GetCurrentFrame() : (null, 0, 0);
-        UpdateScopeWithPixels(pixels, width, height);
+        var (pixels, width, height) = mainWindow?.GetCurrentScopeFrame() ?? default;
+        source = testSource ?? new(pixels, width, height);
+        QueueRender();
     }
 
-    private async void UpdateScopeWithPixels(byte[]? pixels, int width, int height)
+    private RenderSettings CurrentSettings()
     {
-        if (isUpdating) return;
-        isUpdating = true;
+        var dpi = VisualTreeHelper.GetDpi(graph);
+        return new(Options, Math.Max(64, (int)Math.Round(graph.ActualWidth * dpi.DpiScaleX)),
+            Math.Max(64, (int)Math.Round(graph.ActualHeight * dpi.DpiScaleY)));
+    }
 
+    private async void QueueRender()
+    {
+        if (!IsLoaded || closed) return;
+        queued = true;
+        if (rendering) return;
+        rendering = true;
         try
         {
-            int targetW = (int)scopeImage.ActualWidth;
-            int targetH = (int)scopeImage.ActualHeight;
-
-            if (targetW < 120 || targetH < 90)
+            while (queued && !closed)
             {
-                targetW = 384;
-                targetH = 288;
-            }
-
-            var mode = (modeCombo.SelectedItem as ComboBoxItem)?.Tag as VideoScopeMode? ?? VideoScopeMode.Waveform;
-            var scale = (scaleCombo.SelectedItem as ComboBoxItem)?.Tag as VideoScopeScale? ?? VideoScopeScale.StudioRgb;
-            double intensity = intensitySlider.Value;
-
-            byte[]? bgraScope = await Task.Run(() =>
-            {
-                if (pixels == null || width <= 0 || height <= 0)
+                queued = false;
+                var image = source;
+                var settings = CurrentSettings();
+                try
                 {
-                    return VideoScopeEngine.RenderScope(ReadOnlySpan<byte>.Empty, 0, 0, 0, targetW, targetH, mode, scale, intensity);
+                    var pixels = await Task.Run(() => VideoScopeEngine.RenderScope(
+                        image.Pixels, image.Width, image.Height, image.Width * 4, settings.Width, settings.Height,
+                        settings.Options.Mode, settings.Options.Scale, settings.Options.Intensity));
+                    if (closed || settings != CurrentSettings()) continue;
+                    Present(pixels, settings);
                 }
-                return VideoScopeEngine.RenderScope(pixels, width, height, width * 4, targetW, targetH, mode, scale, intensity);
-            });
-
-            if (bgraScope != null)
-            {
-                if (writeableBmp == null || writeableBmp.PixelWidth != targetW || writeableBmp.PixelHeight != targetH)
+                catch (Exception error)
                 {
-                    writeableBmp = new WriteableBitmap(targetW, targetH, 96, 96, PixelFormats.Bgra32, null);
-                    scopeImage.Source = writeableBmp;
+                    if (!closed && settings == CurrentSettings()) readout.Text = $"Scope render failed. {error.Message}";
                 }
-
-                writeableBmp.WritePixels(new Int32Rect(0, 0, targetW, targetH), bgraScope, targetW * 4, 0);
             }
         }
-        catch (Exception ex)
-        {
-            readoutText.Text = "Error: " + ex.Message;
-        }
-        finally
-        {
-            isUpdating = false;
-        }
+        finally { rendering = false; }
     }
 
-    private void ScopeMouseMove(object sender, MouseEventArgs e)
+    private void Present(byte[] pixels, RenderSettings settings)
     {
-        var pos = e.GetPosition(scopeImage);
-        int w = (int)scopeImage.ActualWidth;
-        int h = (int)scopeImage.ActualHeight;
-        if (w <= 0 || h <= 0) return;
+        var (width, height) = (settings.Width, settings.Height);
+        if (bitmap is null || bitmap.PixelWidth != width || bitmap.PixelHeight != height)
+        {
+            bitmap = new WriteableBitmap(width, height, 96, 96, PixelFormats.Bgra32, null);
+            graph.Source = bitmap;
+        }
+        bitmap.WritePixels(new Int32Rect(0, 0, width, height), pixels, width * 4, 0);
+        displayed = settings;
+        AutomationProperties.SetName(graph, settings.Options.Mode == VideoScopeMode.RgbParade ? "RGB Parade" : settings.Options.Mode.ToString());
+        if (graph.IsMouseOver) ReadCursor(Mouse.GetPosition(graph));
+    }
 
-        double normX = Math.Clamp(pos.X / w, 0.0, 1.0);
-        double normY = Math.Clamp(1.0 - (pos.Y / h), 0.0, 1.0); // 0 at bottom, 1 at top
-
-        var mode = (modeCombo.SelectedItem as ComboBoxItem)?.Tag as VideoScopeMode? ?? VideoScopeMode.Waveform;
-        switch (mode)
+    private void ReadCursor(Point position)
+    {
+        if (displayed is not { } chart || graph.ActualWidth <= 0 || graph.ActualHeight <= 0) return;
+        var x = Math.Clamp(position.X * chart.Width / graph.ActualWidth, 0, chart.Width - 1);
+        var y = Math.Clamp(position.Y * chart.Height / graph.ActualHeight, 0, chart.Height - 1);
+        switch (chart.Options.Mode)
         {
             case VideoScopeMode.Waveform:
             case VideoScopeMode.RgbParade:
-                int code = (int)Math.Round(normY * 255);
-                double ire = normY * 100.0;
-                readoutText.Text = $"Position: X={normX * 100:0.0}%, Y={normY * 100:0.0}% | Code: {code} | IRE: {ire:0.0}%";
+                var code = VideoScopeEngine.LumaCodeAtRow((int)y, chart.Height);
+                var ire = VideoScopeEngine.LumaIre(code, chart.Options.Scale);
+                readout.Text = $"Code {code} · {ire:0.0} IRE";
                 break;
             case VideoScopeMode.Vectorscope:
-                double u = (normX - 0.5) * 2.0;
-                double v = (normY - 0.5) * 2.0;
-                double sat = Math.Sqrt(u * u + v * v) * 100.0;
-                double angleDeg = Math.Atan2(v, u) * 180.0 / Math.PI;
-                if (angleDeg < 0) angleDeg += 360;
-                readoutText.Text = $"Vectorscope: Cb/U={u:+0.00;-0.00}, Cr/V={v:+0.00;-0.00} | Sat: {sat:0.0}% | Angle: {angleDeg:0.0}°";
+                var (cb, cr) = VideoScopeEngine.ChromaAt(x, y, chart.Width, chart.Height);
+                var angle = (Math.Atan2(cr, cb) * (180 / Math.PI) + 360) % 360;
+                readout.Text = $"Cb {cb:+0.00;-0.00;0.00} · Cr {cr:+0.00;-0.00;0.00} · {angle:0.0}°";
                 break;
             case VideoScopeMode.Histogram:
-                int bin = (int)Math.Round(normX * 255);
-                readoutText.Text = $"Histogram Code: {bin} ({(bin * 100.0 / 255):0.0}%)";
+                readout.Text = $"Code {(int)x * 255 / (chart.Width - 1)}";
                 break;
         }
     }

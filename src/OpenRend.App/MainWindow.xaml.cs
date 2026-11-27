@@ -65,9 +65,11 @@ public partial class MainWindow : Window
     private readonly string recoveryPath = Path.Combine(Environment.GetEnvironmentVariable("OPENREND_DATA_DIR")
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "OpenRend"), "recovery.openrend");
     private readonly Dictionary<Guid, string> cachedMediaPaths = [];
-    public event Action<byte[], int, int>? FrameRendered;
+    internal event Action<byte[], int, int>? ScopeFrameRendered;
+    private byte[]? currentScopePixels;
     private byte[]? currentPreviewPixels;
-    public (byte[]? Pixels, int Width, int Height) GetCurrentFrame() => (currentPreviewPixels, previewWidth, previewHeight);
+    internal (byte[]? Pixels, int Width, int Height) GetCurrentScopeFrame() => (currentScopePixels, previewWidth, previewHeight);
+    internal bool IsTimelinePlaying => playback is not null;
     public void SetPreviewImageOverride(ImageSource? source)
     {
         if (source != null)
@@ -1170,8 +1172,9 @@ public partial class MainWindow : Window
                     2 => (project.Width, project.Height),
                     _ => FitSize(project, 640)
                 };
+                SplitScreenDivision? comparison = splitScreenEnabled ? splitScreenDivision : null;
                 byte[]? referencePixels = null;
-                if (splitScreenEnabled)
+                if (comparison.HasValue)
                 {
                     if (splitScreenSource == SplitScreenSource.FxBypassed)
                     {
@@ -1183,16 +1186,24 @@ public partial class MainWindow : Window
                     }
                 }
                 var mainBypass = bypassAllFx;
-                var pixels = await Task.Run(() =>
+                var (pixels, scopePixels) = await Task.Run(() =>
                 {
                     var baseRender = vm.Renderer.RenderFrame(project, frame, width, height, bypassVideoEffects: mainBypass);
-                    return PreviewDisplay.Apply(baseRender, width, height, zoom, overlay, referencePixels, splitScreenEnabled ? splitScreenDivision : null);
+                    var measured = PreviewDisplay.Apply(baseRender, width, height, 1, PreviewOverlayMode.None, referencePixels, comparison);
+                    return (PreviewDisplay.Apply(measured, width, height, zoom, overlay), measured);
                 });
                 // The audio clock can advance during decoding. Show completed playback frames,
                 // then catch up to its latest position instead of discarding every late frame.
                 if (IsLoaded && explorerPreviewName is null && request.CanPresent(revision, playbackGeneration, vm.Position, playback is not null))
                 {
-                    Preview.Present(pixels, width, height); currentPreviewPixels = pixels; previewWidth = width; previewHeight = height; lastPreview = frame; UpdatePreviewStatus(); FrameRendered?.Invoke(pixels, width, height);
+                    Preview.Present(pixels, width, height);
+                    currentPreviewPixels = pixels;
+                    currentScopePixels = scopePixels;
+                    previewWidth = width;
+                    previewHeight = height;
+                    lastPreview = frame;
+                    UpdatePreviewStatus();
+                    ScopeFrameRendered?.Invoke(scopePixels, width, height);
                 }
                 else previewRequested = true;
             }
@@ -2994,10 +3005,18 @@ public partial class MainWindow : Window
 
     private void VideoScopesClick(object sender, RoutedEventArgs e)
     {
+        if (videoScopesWindow is { IsLoaded: true } open) open.Close();
+        else ShowVideoScopes();
+    }
+
+    private void ShowVideoScopes()
+    {
         if (videoScopesWindow == null || !videoScopesWindow.IsLoaded)
         {
-            videoScopesWindow = new VideoScopesWindow(this) { Owner = this };
+            videoScopesWindow = new VideoScopesWindow(this, videoScopesWindow?.Options) { Owner = this };
+            videoScopesWindow.Closed += (_, _) => VideoScopesWindowMenu.IsChecked = false;
             videoScopesWindow.Show();
+            VideoScopesWindowMenu.IsChecked = true;
         }
         else
         {
@@ -3349,8 +3368,8 @@ public partial class MainWindow : Window
             Key.M when ctrl && shift => () => MuteAudioClipClick(this, e),
             Key.P when ctrl && shift => () => AiTextToSpeechClick(this, e),
             Key.G when ctrl && shift => () => ColorGradingClick(this, e),
-            Key.D2 when ctrl && alt => () => VideoScopesClick(this, e),
-            Key.NumPad2 when ctrl && alt => () => VideoScopesClick(this, e),
+            Key.D2 when ctrl && alt && !e.IsRepeat => () => VideoScopesClick(this, e),
+            Key.NumPad2 when ctrl && alt && !e.IsRepeat => () => VideoScopesClick(this, e),
             Key.D4 when ctrl && alt => () => EditDetailsClick(this, e),
             Key.NumPad4 when ctrl && alt => () => EditDetailsClick(this, e),
             Key.D4 when !ctrl && alt && !shift => () => EditDetailsClick(this, e),

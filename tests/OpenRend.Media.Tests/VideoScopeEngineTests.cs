@@ -7,6 +7,38 @@ namespace OpenRend.Media.Tests;
 public sealed class VideoScopeEngineTests
 {
     [Theory]
+    [InlineData(16, 0)]
+    [InlineData(235, 100)]
+    [InlineData(0, -7.305936)]
+    [InlineData(255, 109.132420)]
+    public void StudioWaveformReadoutUsesLegalBlackAndWhiteAndShowsExcursions(int code, double expected)
+    {
+        const int height = 401;
+        var row = height - 1 - code * (height - 1) / 255;
+        Assert.Equal(code, VideoScopeEngine.LumaCodeAtRow(row, height));
+        Assert.Equal(expected, VideoScopeEngine.LumaIre(code, VideoScopeScale.StudioRgb), 6);
+        Assert.Equal(code * (100.0 / 255), VideoScopeEngine.LumaIre(code, VideoScopeScale.FullRange), 9);
+    }
+
+    [Fact]
+    public void VectorscopeCursorUsesTheSameCircleAtWideAspectRatios()
+    {
+        Assert.Equal((0d, 0d), VideoScopeEngine.ChromaAt(320, 100, 640, 200));
+        Assert.Equal((1d, 0d), VideoScopeEngine.ChromaAt(408, 100, 640, 200));
+        Assert.Equal((0d, 1d), VideoScopeEngine.ChromaAt(320, 12, 640, 200));
+    }
+
+    [Theory]
+    [InlineData(VideoScopeMode.Waveform)]
+    [InlineData(VideoScopeMode.RgbParade)]
+    public void OnePixelWideVideoStillProducesATrace(VideoScopeMode mode)
+    {
+        var trace = VideoScopeEngine.RenderScope([110, 126, 160, 255], 1, 1, 4, 128, 96, mode);
+        var grid = VideoScopeEngine.RenderScope([], 0, 0, 0, 128, 96, mode);
+        Assert.False(trace.AsSpan().SequenceEqual(grid));
+    }
+
+    [Theory]
     [InlineData(VideoScopeMode.Waveform)]
     [InlineData(VideoScopeMode.Vectorscope)]
     [InlineData(VideoScopeMode.RgbParade)]

@@ -100,7 +100,7 @@ public partial class MainWindow
 
         if (layout.VideoScopesOpen)
         {
-            VideoScopesClick(this, new RoutedEventArgs());
+            ShowVideoScopes();
         }
         else if (videoScopesWindow != null && videoScopesWindow.IsLoaded)
         {
