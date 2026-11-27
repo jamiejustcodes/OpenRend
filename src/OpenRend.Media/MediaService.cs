@@ -82,7 +82,8 @@ public sealed class MediaService : IDisposable
         if (asset.SourceRange is not { } range) return seconds;
         // Keep end previews and hold-last playback on the included side of the decoder's PTS tolerance.
         var last = Math.Max(range.StartSeconds, range.EndSeconds - 0.000001);
-        return Math.Clamp(range.StartSeconds + seconds, range.StartSeconds, last);
+        var fileTime = range.IsReversed ? last - seconds : range.StartSeconds + seconds;
+        return Math.Clamp(fileTime, range.StartSeconds, last);
     }
 
     public byte[] GetFrame(string path, double seconds, int width, int height)
@@ -156,10 +157,45 @@ public sealed class MediaService : IDisposable
             return;
         }
 
+        var count = range.IsReversed
+            ? DecodeReversedAudio(asset.Path, range, seconds, frames, destination)
+            : DecodeForwardSubclipAudio(asset.Path, range, seconds, frames, destination);
+        Array.Clear(destination, count * Channels, (frames - count) * Channels);
+    }
+
+    private int DecodeForwardSubclipAudio(string path, MediaSourceRange range, double seconds, int frames, float[] destination)
+    {
         var available = Math.Max(0, range.DurationSeconds - seconds);
         var count = (int)Math.Clamp(Math.Ceiling(available * SampleRate - 1e-7), 0, frames);
-        DecodeAudio(asset.Path, range.StartSeconds + seconds, count, destination);
-        Array.Clear(destination, count * Channels, (frames - count) * Channels);
+        DecodeAudio(path, range.StartSeconds + seconds, count, destination);
+        return count;
+    }
+
+    private int DecodeReversedAudio(string path, MediaSourceRange range, double seconds, int frames, float[] destination)
+    {
+        if (seconds >= range.DurationSeconds) return 0;
+        // Anchor all blocks to the same sample grid so adjacent requests do not repeat or skip a sample.
+        var durationSamples = AudioFramesInRange(range.TickCount, range.TicksPerSecond);
+        var remaining = durationSamples - Math.Round(seconds * SampleRate, MidpointRounding.AwayFromZero);
+        var count = (int)Math.Clamp(remaining, 0, frames);
+        if (count == 0) return 0;
+
+        var first = range.StartSeconds + (remaining - count) / SampleRate;
+        DecodeAudio(path, first, count, destination);
+        ReverseStereo(destination, count);
+        return count;
+    }
+
+    internal static long AudioFramesInRange(Int128 ticks, long ticksPerSecond) =>
+        checked((long)((ticks * SampleRate + ticksPerSecond - 1) / ticksPerSecond));
+
+    internal static void ReverseStereo(float[] samples, int frames)
+    {
+        for (int left = 0, right = (frames - 1) * Channels; left < right; left += Channels, right -= Channels)
+        {
+            (samples[left], samples[right]) = (samples[right], samples[left]);
+            (samples[left + 1], samples[right + 1]) = (samples[right + 1], samples[left + 1]);
+        }
     }
 
     public async Task<float[]> GetWaveformAsync(string path, int bins = 256, CancellationToken cancellationToken = default) =>

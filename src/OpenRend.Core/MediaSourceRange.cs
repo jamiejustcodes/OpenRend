@@ -2,7 +2,8 @@ using System.Text.Json.Serialization;
 
 namespace OpenRend.Core;
 
-public readonly record struct MediaSourceRange(long StartTick, long TickCount, long TicksPerSecond)
+public readonly record struct MediaSourceRange(long StartTick, long TickCount, long TicksPerSecond,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsReversed = false)
 {
     [JsonIgnore] public double StartSeconds => (double)StartTick / TicksPerSecond;
     [JsonIgnore] public double EndSeconds => (double)checked(StartTick + TickCount) / TicksPerSecond;
@@ -16,27 +17,34 @@ public readonly record struct MediaSourceRange(long StartTick, long TickCount, l
         return new(start, FrameAt(checked(StartTick + TickCount)) - start);
     }
 
-    public static MediaSourceRange FromFrames(FrameRange frames, Rational rate, MediaSourceRange? parent = null)
+    public static MediaSourceRange FromFrames(FrameRange frames, Rational rate, MediaSourceRange? parent = null, bool reverse = false)
     {
         var parentRate = parent?.TicksPerSecond ?? 1;
         // A shared integer timebase preserves both the parent offset and the new frame grid.
         var scale = checked(parentRate / Gcd(parentRate, rate.Numerator) * rate.Numerator);
         var projectFrameTicks = (Int128)rate.Denominator * (scale / rate.Numerator);
         var parentScale = scale / parentRate;
-        var first = (Int128)(parent?.StartTick ?? 0) * parentScale + frames.StartFrame * projectFrameTicks;
+        var first = frames.StartFrame * projectFrameTicks;
         var last = first + frames.FrameCount * projectFrameTicks;
+        var origin = (Int128)(parent?.StartTick ?? 0) * parentScale;
         if (parent is { } bounded)
         {
-            var parentEnd = ((Int128)bounded.StartTick + bounded.TickCount) * parentScale;
-            last = Int128.Min(last, parentEnd);
+            var parentLength = (Int128)bounded.TickCount * parentScale;
+            last = Int128.Min(last, parentLength);
+            if (bounded.IsReversed)
+            {
+                // Convert a selection on the reversed local grid to the original file's forward interval.
+                (first, last) = (parentLength - last, parentLength - first);
+                reverse = !reverse;
+            }
         }
 
-        var start = checked((long)first);
+        var start = checked((long)(origin + first));
         var count = checked((long)(last - first));
         _ = checked(start + count);
         if (start < 0 || count <= 0) throw new ArgumentOutOfRangeException(nameof(frames));
         var divisor = Gcd(Gcd(start, count), scale);
-        return new(start / divisor, count / divisor, scale / divisor);
+        return new(start / divisor, count / divisor, scale / divisor, reverse);
     }
 
     internal void Validate()

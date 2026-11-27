@@ -251,6 +251,22 @@ public sealed class TrimmerEditorTests
     });
 
     [Fact]
+    public void NestedSubclipsMapReversedLocalSelectionsToTheOriginalFile() => RunSta(() =>
+    {
+        var source = new MediaAsset { Path = "interview.mp4", DurationSeconds = 20, HasVideo = true };
+        var vm = CreateViewModel();
+        vm.Replace(new ProjectDocument { FrameRate = new(30, 1), Media = [source] }, null);
+        var parent = vm.Editor.CreateSubclip(source.Id, new(30, 60), "Reverse", reverse: true);
+        var inherited = vm.Editor.CreateSubclip(parent.Id, new(15, 15), "Inherit direction");
+        var forward = vm.Editor.CreateSubclip(parent.Id, new(15, 15), "Flip direction", reverse: true);
+        Assert.Equal(new MediaSourceRange(1, 2, 1, true), parent.SourceRange);
+        Assert.Equal(new MediaSourceRange(4, 1, 2, true), inherited.SourceRange);
+        Assert.Equal(new MediaSourceRange(4, 1, 2), forward.SourceRange);
+        Assert.True(vm.Editor.Undo());
+        Assert.Equal(inherited.SourceRange, vm.Project.Media.Last().SourceRange);
+    });
+
+    [Fact]
     public void TrimmerControl_PlacementStreamModes_VideoOnlyAndAudioOnly() => RunSta(() =>
     {
         var trimmer = new TrimmerControl();

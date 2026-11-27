@@ -5,6 +5,20 @@ namespace OpenRend.Core.Tests;
 
 public sealed class SubclipInterchangeTests
 {
+    [Fact]
+    public void InterchangeReportsReversedSubclipsInsteadOfWritingAForwardEdit()
+    {
+        var range = new MediaSourceRange(4, 1, 1, true);
+        var source = new MediaAsset { Path = "shot.mp4", HasVideo = true, DurationSeconds = 1, SourceRange = range };
+        var project = new ProjectDocument { FrameRate = new(30, 1), Media = [source] };
+        Assert.NotEmpty(FcpxmlInterchange.ExportToXml(project));
+        project.Tracks.Add(new() { Kind = TrackKind.Video, Clips = [new() { MediaId = source.Id, DurationFrames = 30 }] });
+
+        Assert.Throws<NotSupportedException>(() => EdlInterchange.ExportToEdl(project));
+        Assert.Throws<NotSupportedException>(() => Fcp7XmlInterchange.ExportToXml(project));
+        Assert.Throws<NotSupportedException>(() => FcpxmlInterchange.ExportToXml(project));
+    }
+
     [Theory]
     [InlineData("EDL")]
     [InlineData("FCP7 XML")]

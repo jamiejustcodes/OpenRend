@@ -107,12 +107,13 @@ public sealed partial class EditorWorkflowTests
                 "The event command did not open Create Subclip.");
             const string createdName = "Named from event";
             Find(dialog!, "SubclipName").AsTextBox().Text = createdName;
+            Find(dialog!, "SubclipReversePlayback").Patterns.Toggle.Pattern.Toggle();
             var accept = dialog!.FindFirstDescendant(condition => condition.ByControlType(ControlType.Button).And(condition.ByName("OK")));
             Assert.NotNull(accept);
             accept.AsButton().Invoke();
             WaitFor(() => window.ModalWindows.Length == 0 && window.Title.Contains('*'), "Creating a subclip did not edit Project Media.");
             var saved = await SaveGrade(window, projectPath);
-            Assert.Equal(subclip.SourceRange, Assert.Single(saved.Media, asset => asset.Name == createdName).SourceRange);
+            Assert.Equal(new MediaSourceRange(1, 1, 1, true), Assert.Single(saved.Media, asset => asset.Name == createdName).SourceRange);
             Assert.Equal(new[] { originalEvent.Id, subclipEvent.Id }, saved.Tracks[0].Clips.Select(clip => clip.Id));
 
             OpenInTrimmerCommand(window, subclipEvent.Id, "OpenEventParentInTrimmer").AsMenuItem().Invoke();

@@ -551,13 +551,22 @@ public sealed partial class TimelineRenderService : IDisposable
                     }
 
                     var localStart = seconds + (double)first / MediaService.SampleRate - start;
-                    var sourceStart = Math.Max(0, project.FrameRate.Seconds(clip.SourceInFrame) + localStart);
-                    var sampleCount = (last - first);
+                    var sampleCount = last - first;
+                    var sourceIn = project.FrameRate.Seconds(clip.SourceInFrame);
+                    var sourceStart = sourceIn + localStart;
+                    if (clip.IsReversed)
+                    {
+                        var rate = project.FrameRate;
+                        var durationSamples = MediaService.AudioFramesInRange((Int128)clip.DurationFrames * rate.Denominator, rate.Numerator);
+                        var firstSample = Math.Round(localStart * MediaService.SampleRate, MidpointRounding.AwayFromZero);
+                        sourceStart = sourceIn + (durationSamples - firstSample - sampleCount) / MediaService.SampleRate;
+                    }
                     var decodedSamples = sampleCount * MediaService.Channels;
                     var rentedDecoded = ExactBufferPool.RentFloats(decodedSamples);
                     try
                     {
-                        media.GetAudio(asset, sourceStart, sampleCount, rentedDecoded);
+                        media.GetAudio(asset, Math.Max(0, sourceStart), sampleCount, rentedDecoded);
+                        if (clip.IsReversed) MediaService.ReverseStereo(rentedDecoded, sampleCount);
                         if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
                         {
                             AudioDspService.ProcessAudioChain(rentedDecoded, MediaService.SampleRate, clip.AudioEffects);

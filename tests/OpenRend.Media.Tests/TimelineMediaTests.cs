@@ -491,20 +491,82 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
         await new ExportService(renderer).ExportAsync(preview, destination);
         Pixel(media.GetFrame(destination, 0, 160, 90), red: 0, blue: 255, tolerance: 12);
         var exported = media.GetAudio(destination, .25, 4800);
-        Assert.True(TonePower(880) > 8 * TonePower(440), "The encoded audio should contain the second scene's 880 Hz tone.");
+        Assert.True(TonePower(exported, 880) > 8 * TonePower(exported, 440), "The encoded audio should contain the second scene's 880 Hz tone.");
+    }
 
-        double TonePower(int frequency)
+    [Fact]
+    public async Task ReversedSubclipPreviewAndExportStartOnTheLastIncludedShot()
+    {
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media);
+        var source = await media.ProbeAsync(fixture.Source);
+        var project = new ProjectDocument { Width = 160, Height = 90, FrameRate = new(30, 1), Media = [source] };
+        var reversed = new TimelineEditor(project).CreateSubclip(source.Id, new(15, 30), "Reversed", reverse: true);
+        var preview = MediaService.CreateSourcePreview(reversed, project.FrameRate);
+        Pixel(renderer.RenderFrame(preview, 0, 160, 90), red: 0, blue: 255);
+        Pixel(renderer.RenderFrame(preview, 15, 160, 90), red: 255, blue: 0);
+        Pixel(media.GetFrame(reversed, 1, 160, 90), red: 255, blue: 0);
+
+        var destination = Path.Combine(fixture.Directory, "reversed-subclip.mp4");
+        await new ExportService(renderer).ExportAsync(preview, destination);
+        Pixel(media.GetFrame(destination, 0, 160, 90), red: 0, blue: 255, tolerance: 12);
+        Pixel(media.GetFrame(destination, .5, 160, 90), red: 255, blue: 0, tolerance: 12);
+        var firstAudio = media.GetAudio(destination, .2, 4800);
+        var secondAudio = media.GetAudio(destination, .7, 4800);
+        Assert.True(TonePower(firstAudio, 880) > 8 * TonePower(firstAudio, 440));
+        Assert.True(TonePower(secondAudio, 440) > 8 * TonePower(secondAudio, 880));
+    }
+
+    [Theory]
+    [InlineData(30, 1, 15, 30)]
+    [InlineData(30000, 1001, 13, 24)]
+    public async Task ReversedSubclipAudioIsSampleAlignedAcrossBlocksAndPreservesStereo(int numerator, int denominator, long start, long length)
+    {
+        const int sampleRate = MediaService.SampleRate;
+        var path = Path.Combine(fixture.Directory, "stereo-subclip.wav");
+        MediaFixture.Run("ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i",
+            "aevalsrc=0.4*sin(2*PI*331*t)|0.2*sin(2*PI*607*t):s=48000:d=2", "-c:a", "pcm_f32le", path);
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media);
+        var source = await media.ProbeAsync(path);
+        var project = new ProjectDocument { FrameRate = new(numerator, denominator), Media = [source] };
+        var reversed = new TimelineEditor(project).CreateSubclip(source.Id, new(start, length), "Reverse stereo", reverse: true);
+        var sampleCount = (int)Math.Ceiling(reversed.DurationSeconds * sampleRate);
+        var original = media.GetAudio(path, project.FrameRate.Seconds(start), sampleCount);
+        Assert.NotEqual(original[0], original[1]);
+        var expected = new float[original.Length];
+        for (var frame = 0; frame < sampleCount; frame++)
         {
-            var cosine = 0d;
-            var sine = 0d;
-            for (var sample = 0; sample < exported.Length / 2; sample++)
-            {
-                var phase = 2 * Math.PI * frequency * sample / MediaService.SampleRate;
-                cosine += exported[2 * sample] * Math.Cos(phase);
-                sine += exported[2 * sample] * Math.Sin(phase);
-            }
-            return cosine * cosine + sine * sine;
+            var sourceIndex = 2 * (sampleCount - 1 - frame);
+            expected[2 * frame] = original[sourceIndex];
+            expected[2 * frame + 1] = original[sourceIndex + 1];
         }
+
+        Assert.Equal(expected, media.GetAudio(reversed, 0, sampleCount));
+        var preview = MediaService.CreateSourcePreview(reversed, project.FrameRate);
+        var firstLength = 1001;
+        var first = renderer.RenderAudio(preview, 0, firstLength);
+        var second = renderer.RenderAudio(preview, (double)firstLength / sampleRate, 2 * firstLength);
+        Assert.Equal(expected[..(first.Length + second.Length)], first.Concat(second));
+        var atEnd = media.GetAudio(reversed, (sampleCount - firstLength) / (double)sampleRate, 2 * firstLength);
+        Assert.Equal(expected[^(firstLength * 2)..], atEnd[..(firstLength * 2)]);
+        Assert.All(atEnd[(firstLength * 2)..], sample => Assert.Equal(0, sample));
+
+        Assert.Single(preview.Tracks).Clips[0].IsReversed = true;
+        Assert.Equal(original[..(firstLength * 2)], renderer.RenderAudio(preview, 0, firstLength));
+    }
+
+    private static double TonePower(float[] stereo, int frequency)
+    {
+        var cosine = 0d;
+        var sine = 0d;
+        for (var sample = 0; sample < stereo.Length / 2; sample++)
+        {
+            var phase = 2 * Math.PI * frequency * sample / MediaService.SampleRate;
+            cosine += stereo[2 * sample] * Math.Cos(phase);
+            sine += stereo[2 * sample] * Math.Sin(phase);
+        }
+        return cosine * cosine + sine * sine;
     }
 
     [Fact]

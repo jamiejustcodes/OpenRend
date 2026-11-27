@@ -4,15 +4,15 @@ namespace OpenRend.Timeline;
 
 public sealed partial class TimelineEditor
 {
-    public MediaAsset CreateSubclip(Guid sourceId, FrameRange frames, string name)
+    public MediaAsset CreateSubclip(Guid sourceId, FrameRange frames, string name, bool reverse = false)
     {
         var source = Project.Media.SingleOrDefault(asset => asset.Id == sourceId) ?? throw new KeyNotFoundException("Media was not found.");
-        var subclip = MakeSubclip(source, frames, name);
+        var subclip = MakeSubclip(source, frames, name, reverse);
         Execute("Create subclip", project => project.Media.Add(subclip));
         return subclip;
     }
 
-    private MediaAsset MakeSubclip(MediaAsset source, FrameRange frames, string name)
+    private MediaAsset MakeSubclip(MediaAsset source, FrameRange frames, string name, bool reverse = false)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(name);
         if (source.IsGenerated || source.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase))
@@ -22,7 +22,7 @@ public sealed partial class TimelineEditor
         var subclip = source.DeepClone();
         subclip.Id = Guid.NewGuid();
         subclip.DisplayName = name.Trim();
-        var range = MediaSourceRange.FromFrames(frames, Project.FrameRate, source.SourceRange);
+        var range = MediaSourceRange.FromFrames(frames, Project.FrameRate, source.SourceRange, reverse);
         subclip.SourceRange = range;
         subclip.DurationSeconds = range.DurationSeconds;
         return subclip;

@@ -4,6 +4,8 @@ internal static class InterchangeSourceTiming
 {
     public static FrameRange FileRange(TimelineClip clip, MediaAsset? asset, Rational rate)
     {
+        if (asset?.SourceRange is { IsReversed: true })
+            throw new NotSupportedException("XML and EDL interchange cannot export reversed subclips.");
         // Interchange clips reference the original file and use the sequence frame grid.
         var offset = asset?.SourceRange?.OnFrameGrid(rate).StartFrame ?? 0;
         return new(checked(offset + clip.SourceInFrame), clip.DurationFrames);
