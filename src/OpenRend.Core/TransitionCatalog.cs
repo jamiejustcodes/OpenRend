@@ -304,8 +304,8 @@ public static class TransitionCatalog
             "Transforms",
             [
                 Preset("Cross Zoom A/B", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "Zoom")),
-                Preset("Cross Zoom A Only", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "ZoomA")),
-                Preset("Cross Zoom B Only", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "ZoomB")),
+                Preset("Cross Zoom A Only", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "ZoomA"), ("ApplyTo", "Source")),
+                Preset("Cross Zoom B Only", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "ZoomB"), ("ApplyTo", "Destination")),
                 Preset("Cross Pixelate A/B", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "Pixelate")),
                 Preset("Cross Blur A/B", VideoTransitionKind.CrossEffect, "Transforms", ("EffectType", "Blur"))
             ]));

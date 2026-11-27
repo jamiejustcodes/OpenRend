@@ -11,6 +11,7 @@ namespace OpenRend.App;
 
 public sealed class TransitionPropertiesWindow : Window
 {
+    private const double ParameterLabelWidth = 110;
     private readonly EditorViewModel vm;
     private readonly Guid clipId;
     private readonly Action<VideoTransition?>? previewParameter;
@@ -67,9 +68,10 @@ public sealed class TransitionPropertiesWindow : Window
         timing.Foreground = (Brush)FindResource("SubtleTextBrush");
 
         var presetRow = new DockPanel { Margin = new Thickness(0, 0, 0, 12) };
-        var presetLabel = new TextBlock { Text = "Preset:", Width = 60, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
-        presetCombo.Margin = new Thickness(4, 0, 0, 0);
+        var presetLabel = new TextBlock { Text = "Preset", Width = ParameterLabelWidth, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
+        presetCombo.Margin = new Thickness(6, 0, 0, 0);
         presetCombo.SelectionChanged += PresetChanged;
+        AutomationProperties.SetName(presetCombo, "Preset");
         AutomationProperties.SetAutomationId(presetCombo, "TransitionPresetCombo");
         presetRow.Children.Add(presetLabel);
         presetRow.Children.Add(presetCombo);
@@ -290,6 +292,37 @@ public sealed class TransitionPropertiesWindow : Window
                 AddColorChoice("Border Color", paramsDict.GetValueOrDefault("BorderColor", "0 0 0"), value => SetParam("BorderColor", value));
                 break;
             }
+            case VideoTransitionKind.CrossEffect:
+            {
+                var cross = CrossEffectSettings.Read(paramsDict);
+                AddChoice("Effect", Enum.GetNames<CrossEffectMode>(), (int)cross.Mode,
+                    index => SetParam("EffectType", ((CrossEffectMode)index).ToString()), "TransitionParameter_EffectType");
+                if (cross.Mode != CrossEffectMode.None)
+                    AddChoice("Apply to", ["Both", "Source", "Destination"], (int)cross.Target,
+                        index => SetParam("ApplyTo", ((CrossEffectTarget)index).ToString()), "TransitionParameter_ApplyTo");
+                AddSlider("Fade Range", "FadeRange", 0, 1, cross.FadeRange, 2);
+                if (cross.Mode == CrossEffectMode.Zoom)
+                {
+                    if (cross.Target != CrossEffectTarget.Destination)
+                    {
+                        AddSlider("Source Center X", "SourceCenterX", 0, 1, cross.SourceCenter.X, 2);
+                        AddSlider("Source Center Y", "SourceCenterY", 0, 1, cross.SourceCenter.Y, 2);
+                    }
+                    if (cross.Target != CrossEffectTarget.Source)
+                    {
+                        AddSlider("Destination X", "DestinationCenterX", 0, 1, cross.DestinationCenter.X, 2);
+                        AddSlider("Destination Y", "DestinationCenterY", 0, 1, cross.DestinationCenter.Y, 2);
+                    }
+                }
+                else if (cross.Mode == CrossEffectMode.Pixelate)
+                {
+                    AddSlider("Maximum Block X", "MaxX", 0, 1, cross.PixelWidth, 2);
+                    AddSlider("Maximum Block Y", "MaxY", 0, 1, cross.PixelHeight, 2);
+                }
+                else if (cross.Mode == CrossEffectMode.Blur)
+                    AddSlider("Maximum Blur", "MaxBlur", 0, 1, cross.Blur, 2);
+                break;
+            }
             case VideoTransitionKind.Dissolve:
             {
                 var types = new[] { "Crossfade", "Additive", "Subtractive", "Color Bleed", "Color Morph", "Threshold Dissolve", "Threshold Appear", "Fade Through Grayscale", "Fade Through Color", "RGB Crossfade" };
@@ -325,7 +358,7 @@ public sealed class TransitionPropertiesWindow : Window
         var format = $"F{decimals}";
         string Format(double value) => value.ToString(format, CultureInfo.InvariantCulture);
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-        var text = new TextBlock { Text = label, Width = 110, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
+        var text = new TextBlock { Text = label, Width = ParameterLabelWidth, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var valText = new TextBlock { Width = 54, TextAlignment = TextAlignment.Right, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var slider = new Slider { Minimum = min, Maximum = max, Value = current, Margin = new Thickness(6, 0, 6, 0),
             SmallChange = Math.Pow(10, -decimals), LargeChange = Math.Max(Math.Pow(10, -decimals), (max - min) / 10),
@@ -385,7 +418,7 @@ public sealed class TransitionPropertiesWindow : Window
     private void AddChoice(string label, string[] options, int selectedIndex, Action<int> onSelect, string? automationId = null)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-        var text = new TextBlock { Text = label, Width = 110, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
+        var text = new TextBlock { Text = label, Width = ParameterLabelWidth, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var combo = new ComboBox { Margin = new Thickness(6, 0, 0, 0) };
         AutomationProperties.SetName(combo, label);
         if (automationId is not null) AutomationProperties.SetAutomationId(combo, automationId);
@@ -413,7 +446,7 @@ public sealed class TransitionPropertiesWindow : Window
     private void AddColorChoice(string label, string currentColor, Action<string> onColor)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
-        var text = new TextBlock { Text = label, Width = 110, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
+        var text = new TextBlock { Text = label, Width = ParameterLabelWidth, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var combo = new ComboBox { Margin = new Thickness(6, 0, 0, 0) };
         var colorOptions = new (string Name, string Value)[]
         {

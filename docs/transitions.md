@@ -90,8 +90,10 @@ Squeeze rescales both pictures into regions that change size over the overlap. C
 
 Swap moves the outgoing picture in the chosen direction and brings the incoming picture to the foreground. Both pictures use the border settings, and the area between them reveals lower tracks.
 
+Cross Effect gradually zooms, pixelates, or blurs either shot or both. The effect is strongest at the midpoint. Fade Range determines how much of the overlap is used to mix the two pictures. A range of 1 uses the full overlap, and 0 switches images at the midpoint. Zoom centers, maximum block dimensions and the blur maximum are editable in the properties window.
+
 ## Current limits
 
-Cross Effect, Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Several parameters in the other effects also remain unimplemented.
+Page Loop, Page Peel, and Page Roll currently render as ordinary dissolves. Projects retain each saved transition kind and preset. Cross Effect uses a box blur and two-dimensional zoom. Several parameters in the other effects also remain unimplemented.
 
 Legacy bounded events require source handles. Video Loop or Hold and audio Loop or silence padding permit extensions. The Editing preference sets the Loop default for new finite events. Same-start overlaps at project zero and exact-gap displacement remain limited. OpenRend initializes the cut overlap to 0.25 seconds, centered. Source-duration probing and arbitrary VFR behavior remain limited.
