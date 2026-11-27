@@ -1659,6 +1659,23 @@ public sealed partial class TimelineEditor
 
     // Existing event-scoped convenience methods
     public VideoEffect AddVideoEffect(Guid clipId, VideoEffectKind kind) => AddScopedVideoEffect(EffectScope.Event, clipId, kind);
+    public void AddVideoEffectToEvents(IEnumerable<Guid> clipIds, VideoEffectKind kind, IReadOnlyDictionary<string, double>? parameters)
+    {
+        var additions = clipIds.Distinct().Select(id =>
+        {
+            var clip = EditableVideoClip(id);
+            var effect = VideoEffect.Create(kind);
+            if (parameters is not null)
+                foreach (var (key, value) in parameters) effect.SetParameter(key, value);
+            return (Clip: clip, Effect: effect);
+        }).ToArray();
+        if (additions.Length == 0) return;
+        Execute(_ =>
+        {
+            foreach (var (clip, effect) in additions) clip.VideoEffects.Add(effect);
+        });
+    }
+
     public void UpdateVideoEffect(Guid clipId, Guid effectId, double amount, double secondaryAmount, bool isEnabled) => UpdateScopedVideoEffect(EffectScope.Event, clipId, effectId, amount, secondaryAmount, isEnabled);
     public void RemoveVideoEffect(Guid clipId, Guid effectId) => RemoveScopedVideoEffect(EffectScope.Event, clipId, effectId);
     public void UpdateVideoEffectParameters(Guid clipId, Guid effectId, IReadOnlyDictionary<string, double> parameters, bool isEnabled) => UpdateScopedVideoEffectParameters(EffectScope.Event, clipId, effectId, parameters, isEnabled);

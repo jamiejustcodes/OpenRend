@@ -24,6 +24,8 @@ Edit Details, Project Media Details and Organize Layouts share row, selection an
 
 In Edit Details, click a column heading or press Enter on it to sort. A second activation reverses the order. The table keeps that order while filtering and copies rows in the displayed sequence. Position columns use the live project ruler and its origin. Length and source-relative columns use a zero origin. The desktop workflow changes the ruler with Edit Details open and checks numeric sorting across two- and three-digit frame displays.
 
+The Video FX browser combines the active category with search across effect and preset names. When a query matches only a preset, the list shows the matching presets. Favorites use application preferences and survive restart. Apply adds the chosen parameter values to all selected video events in one undo step. The desktop workflow applies Sepia to two selected events, verifies the saved blend and linked audio, and checks Undo and favorite persistence.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

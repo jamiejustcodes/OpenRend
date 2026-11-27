@@ -703,69 +703,68 @@
             </Border>
           </Grid>
         </TabItem>
-        <!-- 1:1 Vegas Pro Video FX Tab -->
         <TabItem x:Name="VideoEffectsTab" Header="Video FX">
           <Grid Background="{StaticResource ColorBG}">
             <Grid.RowDefinitions>
-              <RowDefinition Height="30"/>
+              <RowDefinition Height="Auto"/>
+              <RowDefinition Height="Auto"/>
               <RowDefinition Height="*"/>
-              <RowDefinition Height="26"/>
             </Grid.RowDefinitions>
 
-            <!-- Video FX Category Tabs with Embedded Search -->
-            <TabControl x:Name="VideoFxCategories" Grid.Row="0" Background="{StaticResource ColorD}" BorderThickness="0" SelectionChanged="VideoFxCategoryChanged" AutomationProperties.Name="Video FX categories">
-              <TabItem x:Name="AllVideoFxPluginsTab" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="AllVideoFxPlugins">
-                <TabItem.Header>
-                  <Grid>
-                    <Grid.ColumnDefinitions>
-                      <ColumnDefinition Width="Auto"/>
-                      <ColumnDefinition Width="*" MinWidth="130" MaxWidth="220"/>
-                    </Grid.ColumnDefinitions>
-                    <ContentControl Grid.Column="0" ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Margin="4,0,2,0" Style="{StaticResource BaseContentControl}"/>
-                    <TextBox x:Name="VideoFxSearch" Grid.Column="1" Style="{StaticResource SearchBoxStyle}" Background="Transparent" Foreground="{StaticResource TextColor}" BorderThickness="0" Padding="4,2" VerticalContentAlignment="Center" TextChanged="VideoFxSearchChanged" AutomationProperties.Name="Search video FX" AutomationProperties.AutomationId="VideoFxSearch"/>
-                  </Grid>
-                </TabItem.Header>
-              </TabItem>
-              <TabItem x:Name="FavoriteFxCategory" Style="{StaticResource TabItemCustomHeaderStyle}" AutomationProperties.AutomationId="FavoriteVideoFx">
-                <TabItem.Header>
-                  <StackPanel Orientation="Horizontal" Margin="4,0">
-                    <ContentControl ContentTemplate="{StaticResource ic_favorite}" Width="18" Height="18" Style="{StaticResource BaseContentControl}" Margin="0,0,4,0"/>
-                    <TextBlock Text="Favorites" VerticalAlignment="Center" Foreground="{StaticResource TextColor}"/>
-                  </StackPanel>
-                </TabItem.Header>
-              </TabItem>
-              <TabItem Header="AI/ML" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Color" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Blur" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Light" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="360&#x00B0;°" Style="{StaticResource TabItemLabelHeaderStyle}"/>
-              <TabItem Header="Third Party" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+            <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1">
+              <DockPanel Margin="6,2">
+                <ContentControl ContentTemplate="{StaticResource ic_search}" Width="20" Height="20" Style="{StaticResource BaseContentControl}"/>
+                <TextBox x:Name="VideoFxSearch" MinHeight="26" Style="{StaticResource SearchBoxStyle}" TextChanged="VideoFxSearchChanged"
+                         AutomationProperties.Name="Search video effects" ToolTip="Search effects and preset names"/>
+              </DockPanel>
+            </Border>
+
+            <TabControl x:Name="VideoFxCategories" Grid.Row="1" TabStripPlacement="Top" Background="{StaticResource ColorD}"
+                        BorderThickness="0" SelectionChanged="VideoFxCategoryChanged" AutomationProperties.Name="Video effect categories">
+              <TabItem Header="All" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="AllVideoFxPlugins"/>
+              <TabItem x:Name="FavoriteFxCategory" Header="Favorites" Style="{StaticResource TabItemLabelHeaderStyle}" AutomationProperties.AutomationId="FavoriteVideoFx"/>
+              <TabItem Header="Color" Tag="Color" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Creative" Tag="Creative" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Blur" Tag="Blur" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Light" Tag="Light" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="Utility" Tag="Utility" Style="{StaticResource TabItemLabelHeaderStyle}"/>
+              <TabItem Header="AI/ML" Tag="AI/ML" Style="{StaticResource TabItemLabelHeaderStyle}"/>
             </TabControl>
 
-            <!-- Video FX Split: Left Plugins + Splitter + Right Presets -->
-            <Grid Grid.Row="1">
+            <Grid Grid.Row="2">
               <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="192" MinWidth="150" MaxWidth="360"/>
+                <ColumnDefinition Width="192" MinWidth="125" MaxWidth="360"/>
                 <ColumnDefinition Width="4"/>
-                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*" MinWidth="120"/>
               </Grid.ColumnDefinitions>
-
-              <ListBox x:Name="VideoFxPlugIns" Background="{StaticResource ColorD}" Foreground="{StaticResource TextColor}" BorderThickness="0" FontSize="11" SelectionChanged="VideoFxPluginSelectionChanged" AutomationProperties.Name="Video FX plug-ins"/>
+              <ListBox x:Name="VideoFxPlugIns" Background="{StaticResource ColorD}" BorderThickness="0"
+                       ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="VideoFxPluginSelectionChanged"
+                       AutomationProperties.Name="Video effects"/>
               <GridSplitter Grid.Column="1" Width="4" Style="{StaticResource TabGridSplitterStyle}"/>
-              <Grid Grid.Column="2" Background="{StaticResource ColorBG}">
-                <ListBox x:Name="VideoFxPresets" Padding="6" BorderThickness="0" Background="{StaticResource ColorBG}" ScrollViewer.HorizontalScrollBarVisibility="Disabled" MouseDoubleClick="VideoFxPresetDoubleClick" AutomationProperties.Name="Video FX presets">
-                  <ListBox.ItemsPanel><ItemsPanelTemplate><WrapPanel/></ItemsPanelTemplate></ListBox.ItemsPanel>
-                </ListBox>
-                <TextBlock x:Name="EmptyVideoFx" Text="No video effects match your search." Foreground="{StaticResource TextColorGrey}" Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" TextWrapping="Wrap"/>
+              <Grid Grid.Column="2">
+                <Grid.RowDefinitions>
+                  <RowDefinition Height="Auto"/>
+                  <RowDefinition Height="*"/>
+                  <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <Border Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,0,0,1" Padding="8,3">
+                  <DockPanel>
+                    <Button x:Name="ApplyVideoFxButton" DockPanel.Dock="Right" Style="{StaticResource TextButton}"
+                            Content="_Apply" IsEnabled="False" Click="ApplyVideoFxClick"
+                            AutomationProperties.Name="Apply video effect" ToolTip="Add this preset to the selected video events"/>
+                    <TextBlock Text="Presets" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                  </DockPanel>
+                </Border>
+                <ListBox x:Name="VideoFxPresets" Grid.Row="1" Padding="3" BorderThickness="0" Background="{StaticResource ColorBG}"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="VideoFxPresetSelectionChanged"
+                         MouseDoubleClick="VideoFxPresetDoubleClick" KeyDown="VideoFxPresetKeyDown" AutomationProperties.Name="Video effect presets"/>
+                <TextBlock x:Name="EmptyVideoFx" Grid.Row="1" Text="No matching video effects." Foreground="{StaticResource TextColorGrey}"
+                           Margin="16" VerticalAlignment="Center" HorizontalAlignment="Center" Visibility="Collapsed"
+                           IsHitTestVisible="False" TextWrapping="Wrap"/>
+                <TextBlock x:Name="VideoFxInfoText" Grid.Row="2" Foreground="{StaticResource TextColorGrey}" FontSize="11" Margin="8,3"
+                           TextTrimming="CharacterEllipsis" ToolTip="{Binding Text, RelativeSource={RelativeSource Self}}"/>
               </Grid>
             </Grid>
-
-            <!-- Bottom 26px Info Bar in ColorD -->
-            <Border Grid.Row="2" Background="{StaticResource ColorD}" BorderBrush="{StaticResource ColorM}" BorderThickness="0,1,0,0" Padding="8,4">
-              <TextBlock x:Name="VideoFxInfoText" Text="Apply GPU and CPU video effects to events or tracks." Foreground="{StaticResource TextColorGrey}" FontSize="11" TextTrimming="CharacterEllipsis"/>
-            </Border>
           </Grid>
         </TabItem>
 
