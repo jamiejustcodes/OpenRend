@@ -373,10 +373,9 @@ public partial class MainWindow
             var item = new ListBoxItem
             {
                 DataContext = definition,
-                Tag = preset,
-                Padding = new Thickness(8, 5, 8, 5),
-                Content = preset.Name
+                Tag = preset
             };
+            SetVideoFxPresetContent(item, definition.Kind, preset);
             VideoFxPresets.Items.Add(item);
             if (previous is { DataContext: VideoEffectDefinition oldDefinition, Tag: VideoFxPreset other }
                 && oldDefinition.Kind == definition.Kind && other.Name == preset.Name)

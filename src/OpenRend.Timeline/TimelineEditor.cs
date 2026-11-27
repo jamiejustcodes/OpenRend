@@ -1681,10 +1681,7 @@ public sealed partial class TimelineEditor
         var additions = clipIds.Distinct().Select(id =>
         {
             var clip = EditableVideoClip(id);
-            var effect = VideoEffect.Create(kind);
-            if (parameters is not null)
-                foreach (var (key, value) in parameters) effect.SetParameter(key, value);
-            return (Clip: clip, Effect: effect);
+            return (Clip: clip, Effect: VideoEffect.Create(kind, parameters));
         }).ToArray();
         if (additions.Length == 0) return;
         Execute(_ =>

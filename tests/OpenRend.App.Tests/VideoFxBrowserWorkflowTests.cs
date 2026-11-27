@@ -1,4 +1,5 @@
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Capturing;
 using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
@@ -59,6 +60,28 @@ public sealed partial class EditorWorkflowTests
                 Find(window, "AllVideoFxPlugins").Patterns.SelectionItem.Pattern.Select();
                 WaitFor(() => VisibleNamedItem(effects, "Sepia") is not null && apply.IsEnabled,
                     "All effects did not restore the matching effect.");
+                Mouse.MoveTo(search.GetClickablePoint());
+                AutomationElement? subtleImage = null, strongImage = null;
+                WaitFor(() => (subtleImage = PresetImage(presets, "Subtle Warmth")) is not null &&
+                    (strongImage = PresetImage(presets, "Strong Sepia")) is not null && SampleRed(subtleImage) > 20,
+                    "The Sepia preset images did not render.");
+                Assert.NotNull(subtleImage);
+                Assert.NotNull(strongImage);
+                var subtleRed = SampleRed(subtleImage);
+                var strongRed = SampleRed(strongImage);
+                Assert.True(strongRed > subtleRed + 20, "The stronger preset did not change the thumbnail more.");
+                Mouse.MoveTo(ThumbnailCenter(subtleImage));
+                Assert.True(ReadSystemAnimationSetting(GetClientAreaAnimation, 0, out var animationsEnabled, 0));
+                if (animationsEnabled != 0)
+                    WaitFor(() => SampleRed(subtleImage) <= 4, "The hover preview did not show the original color bars.");
+                Mouse.MoveTo(search.GetClickablePoint());
+                WaitFor(() => SampleRed(subtleImage) == subtleRed, "Leaving hover did not restore the processed thumbnail.");
+                Assert.Equal(strongRed, SampleRed(strongImage));
+                Assert.DoesNotContain('*', window.Title);
+                var artifacts = Path.Combine(root, ".local", "desktop-validation");
+                Directory.CreateDirectory(artifacts);
+                using (var capture = Capture.Element(Find(window, "ToolsTabs")))
+                    capture.ToFile(Path.Combine(artifacts, "video-fx-preset-previews.png"));
                 var favorite = VisibleNamedItem(effects, "Sepia")!.FindFirstDescendant(c => c.ByName("Favorite Sepia"));
                 Assert.NotNull(favorite);
                 favorite.Patterns.Toggle.Pattern.Toggle();
@@ -124,6 +147,15 @@ public sealed partial class EditorWorkflowTests
             }
         }
         finally { Directory.Delete(temporary, recursive: true); }
+
+        static AutomationElement? PresetImage(AutomationElement presets, string name) =>
+            VisibleNamedItem(presets, name)?.FindFirstDescendant(c => c.ByAutomationId("VideoFxPresetThumbnail"));
+
+        static byte SampleRed(AutomationElement image)
+        {
+            using var capture = Capture.Element(image);
+            return capture.Bitmap.GetPixel(capture.Bitmap.Width / 3, capture.Bitmap.Height / 4).R;
+        }
     }
 
     private static void OpenVideoFxBrowser(Window window) => SelectBrowserTab(window, "Video FX");

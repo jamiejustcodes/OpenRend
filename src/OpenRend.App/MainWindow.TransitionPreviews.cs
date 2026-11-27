@@ -1,26 +1,19 @@
 using System.Windows;
-using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Input;
-using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using OpenRend.Core;
-using OpenRend.Media;
 
 namespace OpenRend.App;
 
 public partial class MainWindow
 {
-    private const int TransitionThumbnailWidth = 144;
-    private const int TransitionThumbnailHeight = 81;
     private const int DemoStartFrame = 12;
     private const int DemoFadeFrames = 24;
     private const int DemoRestFrames = 5;
     private readonly Dictionary<TransitionPresetInfo, BitmapSource> transitionPosterFrames = new();
     private readonly ProjectDocument transitionDemo = CreateTransitionDemo();
-    private TimelineRenderService? transitionDemoRenderer;
-    private MediaService? transitionDemoMedia;
     private TransitionPresetInfo? transitionDemoPreset;
     private DispatcherTimer? transitionDemoTimer;
     private (Image Image, TransitionPresetInfo Preset)? animatedTransition;
@@ -28,27 +21,8 @@ public partial class MainWindow
 
     private void SetTransitionPresetContent(ListBoxItem item, TransitionPresetInfo preset)
     {
-        var image = new Image { MaxWidth = 88, MaxHeight = 49.5, IsHitTestVisible = false };
-        AutomationProperties.SetName(image, $"{preset.Name} preview");
-        AutomationProperties.SetAutomationId(image, "TransitionPresetThumbnail");
-        var imageBorder = new Border
-        {
-            BorderThickness = new Thickness(1), BorderBrush = (Brush)FindResource("ColorM"),
-            Child = image, Margin = new Thickness(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Left
-        };
-        var label = new TextBlock { Text = preset.Name, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center };
-        var content = new Grid { Background = Brushes.Transparent };
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star), MaxWidth = 98 });
-        content.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(2, GridUnitType.Star) });
-        Grid.SetColumn(label, 1);
-        content.Children.Add(imageBorder);
-        content.Children.Add(label);
-        item.Content = content;
-        item.HorizontalContentAlignment = HorizontalAlignment.Stretch;
-        item.Padding = new Thickness(5, 3, 5, 3);
-        item.ToolTip = "Drag to a video overlap or apply to the selected events";
-        AutomationProperties.SetName(item, preset.Name);
+        var image = SetPresetPreviewContent(item, preset.Name, "TransitionPresetThumbnail",
+            "Drag to a video overlap or apply to the selected events");
 
         item.IsVisibleChanged += (_, _) =>
         {
@@ -111,28 +85,14 @@ public partial class MainWindow
         animatedTransition = null;
     }
 
-    protected override void OnClosed(EventArgs e)
-    {
-        StopTransitionDemo();
-        transitionDemoRenderer?.Dispose();
-        transitionDemoMedia?.Dispose();
-        base.OnClosed(e);
-    }
-
     private BitmapSource RenderTransitionDemo(TransitionPresetInfo preset, int frame)
     {
-        transitionDemoMedia ??= new MediaService();
-        transitionDemoRenderer ??= new TimelineRenderService(transitionDemoMedia, useGpuCompositing: false);
         if (!ReferenceEquals(transitionDemoPreset, preset))
         {
             transitionDemo.Tracks[0].Clips[1].FadeInTransition = MakeTransition(preset);
             transitionDemoPreset = preset;
         }
-        var pixels = transitionDemoRenderer.RenderFrame(transitionDemo, frame, TransitionThumbnailWidth, TransitionThumbnailHeight);
-        var bitmap = BitmapSource.Create(TransitionThumbnailWidth, TransitionThumbnailHeight, 96, 96, PixelFormats.Bgra32,
-            null, pixels, TransitionThumbnailWidth * 4);
-        bitmap.Freeze();
-        return bitmap;
+        return RenderPresetFrame(transitionDemo, frame);
     }
 
     private static ProjectDocument CreateTransitionDemo()
@@ -141,7 +101,7 @@ public partial class MainWindow
         var second = new MediaAsset { Path = "openrend://generator?kind=Checkerboard&size=12&color1=57C7B3&color2=225763", HasVideo = true };
         return new ProjectDocument
         {
-            Width = TransitionThumbnailWidth, Height = TransitionThumbnailHeight, FrameRate = new(24, 1), Media = [first, second],
+            Width = PresetPreviewWidth, Height = PresetPreviewHeight, FrameRate = new(24, 1), Media = [first, second],
             Tracks = [new() { Kind = TrackKind.Video, Clips =
             [
                 new() { MediaId = first.Id, DurationFrames = DemoStartFrame + DemoFadeFrames, FadeOutFrames = DemoFadeFrames },

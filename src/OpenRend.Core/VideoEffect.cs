@@ -47,12 +47,16 @@ public sealed class VideoEffect
     public double SecondaryAmount { get; set; }
     public Dictionary<string, double> Parameters { get; set; } = [];
 
-    public static VideoEffect Create(VideoEffectKind kind)
+    public static VideoEffect Create(VideoEffectKind kind) => Create(kind, null);
+
+    public static VideoEffect Create(VideoEffectKind kind, IReadOnlyDictionary<string, double>? parameters)
     {
         var effect = new VideoEffect { Kind = kind };
         if (kind == VideoEffectKind.ColorGrading) effect.GradingSequence = ColorGradingSequence.CurvesBeforeWheels;
         foreach (var parameter in VideoEffectCatalog.Get(kind).Parameters)
             effect.SetParameter(parameter.Key, parameter.DefaultValue);
+        if (parameters is not null)
+            foreach (var (key, value) in parameters) effect.SetParameter(key, value);
         effect.Validate();
         return effect;
     }
