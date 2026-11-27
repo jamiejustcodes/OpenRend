@@ -875,6 +875,21 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public TransitionProgressCurve? FadeInProgress { get; set; }
     public long FadeOffsetFrames { get; set; }
     public long? FadeDurationFrames { get; set; }
+
+    public FrameRange FadeBounds(bool fadeOut)
+    {
+        var end = FadeDurationFrames ?? DurationFrames;
+        var fadeStart = fadeOut ? end - FadeOutFrames : 0;
+        var fadeEnd = fadeOut ? end : FadeInFrames;
+        var start = Math.Max(FadeOffsetFrames, fadeStart);
+        var stop = Math.Min(FadeOffsetFrames + DurationFrames, fadeEnd);
+        return stop > start ? new(StartFrame + (start - FadeOffsetFrames), stop - start) : default;
+    }
+
+    public bool SharesFadeEnvelope(TimelineClip other, bool fadeOut) => Id == other.Id ||
+        FadeDurationFrames is not null && FadeDurationFrames == other.FadeDurationFrames && MediaId == other.MediaId &&
+        StartFrame - FadeOffsetFrames == other.StartFrame - other.FadeOffsetFrames &&
+        (fadeOut ? FadeOutFrames == other.FadeOutFrames : FadeInFrames == other.FadeInFrames);
     public double Pan { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public CropAnimation? Crop { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public long CropOffsetFrames { get; set; }

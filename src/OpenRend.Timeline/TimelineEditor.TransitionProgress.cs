@@ -10,6 +10,7 @@ public sealed partial class TimelineEditor
         if (track is null || track.IsLocked) return false;
         var incoming = track.Clips.Single(clip => clip.Id == incomingId);
         if (incoming.FadeInFrames <= incoming.FadeOffsetFrames || ProgressPieces(track, incoming).Any(clip => clip.IsLocked)) return false;
+        if (incoming.FadeInTransition is not null && !incoming.IsAdjustmentEvent) return true;
         var end = incoming.StartFrame + Math.Min(incoming.DurationFrames, incoming.FadeInFrames - incoming.FadeOffsetFrames);
         return track.Clips.Exists(outgoing =>
             outgoing != incoming && outgoing.FadeOutFrames > 0 && outgoing.StartFrame < end &&
@@ -34,6 +35,5 @@ public sealed partial class TimelineEditor
 
     private static TimelineClip[] ProgressPieces(TimelineTrack track, TimelineClip incoming) => incoming.FadeDurationFrames is null
         ? [incoming]
-        : track.Clips.Where(clip => clip.MediaId == incoming.MediaId && clip.FadeDurationFrames == incoming.FadeDurationFrames &&
-            clip.FadeInFrames == incoming.FadeInFrames && clip.StartFrame - clip.FadeOffsetFrames == incoming.StartFrame - incoming.FadeOffsetFrames).ToArray();
+        : track.Clips.Where(clip => incoming.SharesFadeEnvelope(clip, fadeOut: false)).ToArray();
 }

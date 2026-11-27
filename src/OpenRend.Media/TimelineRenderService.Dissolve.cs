@@ -10,8 +10,7 @@ public sealed partial class TimelineRenderService
     private byte[] RenderDissolve(ProjectDocument project, long frame, EvaluatedClip outgoing, EvaluatedClip incoming,
         EvaluatedDissolve dissolve, int width, int height, bool bypassVideoEffects)
     {
-        var output = new byte[checked(width * height * 4)];
-        if (outgoing.Track.Opacity <= 0) return output;
+        if (outgoing.Track.Opacity <= 0) return new byte[checked(width * height * 4)];
         var firstWeight = (float)(outgoing.Clip.Opacity * (dissolve.OutgoingWeight ?? (1 - dissolve.Progress)));
         var secondWeight = (float)(incoming.Clip.Opacity * (dissolve.IncomingWeight ?? dissolve.Progress));
         var firstOpacity = (float)outgoing.Clip.Opacity;
@@ -19,7 +18,29 @@ public sealed partial class TimelineRenderService
         var first = outgoing.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, outgoing, width, height, bypassVideoEffects);
         var second = incoming.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, incoming, width, height, bypassVideoEffects);
 
-        var transition = dissolve.Transition;
+        return RenderTransition(first, second, dissolve.Transition, dissolve.Progress, width, height,
+            firstOpacity, secondOpacity, firstWeight, secondWeight);
+    }
+
+    private byte[] RenderEdgeTransition(ProjectDocument project, long frame, EvaluatedClip layer, EvaluatedEdgeTransition edge,
+        int width, int height, bool bypassVideoEffects)
+    {
+        // A transparent input allows lower layers to show through the changing part of the image.
+        var source = PrepareDissolveLayer(project, frame, layer, width, height, bypassVideoEffects);
+        var progress = edge.Progress;
+        var effect = edge.Effect;
+        // A single image in an additive dissolve contributes only its own fade weight.
+        var useFade = progress is <= 0 or >= 1 || effect.Kind == VideoTransitionKind.Dissolve &&
+            GetParamFloat(TransitionCatalog.ResolveParameters(effect), "Type", 0) == 1;
+        return edge.FadeOut
+            ? RenderTransition(source, null, useFade ? null : effect, progress, width, height, 1, 0, (float)(1 - progress), 0)
+            : RenderTransition(null, source, useFade ? null : effect, progress, width, height, 0, 1, 0, (float)progress);
+    }
+
+    private static byte[] RenderTransition(DissolveSource? first, DissolveSource? second, VideoTransition? transition, double progress,
+        int width, int height, float firstOpacity, float secondOpacity, float firstWeight, float secondWeight)
+    {
+        var output = new byte[checked(width * height * 4)];
         if (transition is null || (transition.Kind == VideoTransitionKind.Dissolve && (transition.Preset == "Default" || string.IsNullOrEmpty(transition.Preset))))
         {
             // Standard crossfade fast path
@@ -38,7 +59,7 @@ public sealed partial class TimelineRenderService
             return output;
         }
 
-        var p = (float)Math.Clamp(dissolve.Progress, 0.0, 1.0);
+        var p = (float)Math.Clamp(progress, 0.0, 1.0);
         var parameters = TransitionCatalog.ResolveParameters(transition);
         if (transition.Kind == VideoTransitionKind.CrossEffect)
         {

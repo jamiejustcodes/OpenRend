@@ -164,6 +164,17 @@ public sealed partial class TimelineRenderService : IDisposable
                             }
                         }
                         if (layer.Opacity <= 0) continue;
+                        if (layer.EdgeTransition is { } edge)
+                        {
+                            var transitionPixels = RenderEdgeTransition(project, frame, layer, edge, width, height, bypassVideoEffects);
+                            if (currentCompositor is not null)
+                            {
+                                if (NativeMethods.CompositorLayer(currentCompositor, transitionPixels, width, height, width * 4, effOpacity) < 0)
+                                    throw NativeMethods.Error("Could not composite event transition layer");
+                            }
+                            else Composite(trackBuffer, width, height, transitionPixels, width, height, effOpacity);
+                            continue;
+                        }
                         if (IsSubtitleLayer(layer))
                         {
                             if (string.IsNullOrWhiteSpace(layer.Clip.Name)) continue;

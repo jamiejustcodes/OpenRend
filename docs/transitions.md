@@ -12,6 +12,12 @@ With Ripple off, source and crop offsets move with the event's left edge, so sou
 
 Dragging Default to an existing cut instead extends the events' source handles. Before cut, Centered on cut and After cut determine where the overlap lies. These extensions retain the source timing of existing timeline content.
 
+## Add a transition at a clip edge
+
+Drag a preset to the start or end of a video event, or onto a fade already at that edge. A new fade uses the Editing overlap length, limited by the available frames. An existing fade keeps its length. The effect reveals the lower tracks as the event enters or leaves, and the event stays in place.
+
+Use the properties button on either transition strip to edit that edge. Hold Shift while dropping the preset to apply it without opening the properties window. Fade-in transitions support the Transition Progress editor. Fade-out transitions advance over their full duration.
+
 ## Remove the plug-in
 
 Click the properties icon on the overlap strip, or choose Transition Properties from the incoming event's options menu. The strip shows the effect name and its tooltip includes the preset. Locked events disable the properties button. Remove Selected Plug-In clears the effect and leaves an ordinary crossfade. Undo and Redo are available in the properties window.

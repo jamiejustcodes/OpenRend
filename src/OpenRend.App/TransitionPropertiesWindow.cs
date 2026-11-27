@@ -24,15 +24,17 @@ public sealed class TransitionPropertiesWindow : Window
     private bool updatingControls;
     private bool showingProgress;
     private bool committingSlider;
+    private readonly bool fadeOut;
     private ParameterDrag? parameterDrag;
 
     private sealed record ParameterDrag(Slider Slider, Thumb Thumb, double StartValue);
 
     public TransitionPropertiesWindow(EditorViewModel viewModel, Guid eventId, bool showProgress = false, Action<long>? seek = null,
-        Action<VideoTransition?>? previewParameter = null)
+        Action<VideoTransition?>? previewParameter = null, bool fadeOut = false)
     {
         vm = viewModel; clipId = eventId;
         this.previewParameter = previewParameter;
+        this.fadeOut = fadeOut;
         showingProgress = showProgress;
         progress = new(curve => vm.Editor.SetTransitionProgress(clipId, curve), offset =>
         {
@@ -46,7 +48,7 @@ public sealed class TransitionPropertiesWindow : Window
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Background = (Brush)FindResource("PanelBrush") };
         var tools = new StackPanel { Orientation = Orientation.Horizontal, Background = (Brush)FindResource("HeaderBrush") };
-        remove = Button("Remove Selected Plug-In", "RemoveTransitionPlugin", () => vm.Editor.RemoveVideoTransition(clipId));
+        remove = Button("Remove Selected Plug-In", "RemoveTransitionPlugin", () => vm.Editor.RemoveVideoTransition(clipId, fadeOut));
         undo = Button("Undo", "UndoTransitionEdit", () => vm.Editor.Undo());
         redo = Button("Redo", "RedoTransitionEdit", () => vm.Editor.Redo());
         switchPanel = Button("Transition Progress", "TransitionProgressPanel", () =>
@@ -126,17 +128,19 @@ public sealed class TransitionPropertiesWindow : Window
         var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
             .FirstOrDefault(item => item.Clip.Id == clipId);
         var clip = item.Clip;
-        var canEditProgress = vm.Editor.CanEditTransitionProgress(clipId);
+        var canEditProgress = !fadeOut && vm.Editor.CanEditTransitionProgress(clipId);
+        var selected = CurrentTransition(clip);
         switchPanel.IsEnabled = canEditProgress;
-        switchPanel.Visibility = clip?.FadeInTransition is null ? Visibility.Collapsed : Visibility.Visible;
-        heading.Text = clip?.FadeInTransition is { } effect ? $"{TransitionCatalog.DisplayNameFor(effect.Kind)} · {effect.Preset}"
+        switchPanel.Visibility = canEditProgress && selected is not null ? Visibility.Visible : Visibility.Collapsed;
+        heading.Text = selected is { } effect ? $"{TransitionCatalog.DisplayNameFor(effect.Kind)} · {effect.Preset}"
             : canEditProgress ? "Crossfade" : "No transition plug-in";
-        timing.Text = clip is null ? "Event is no longer in the project." : $"Fade in: {clip.FadeInFrames} frames";
-        var editable = clip is { IsLocked: false, FadeInTransition: not null } && !item.Track.IsLocked;
+        timing.Text = clip is null ? "Event is no longer in the project." : fadeOut
+            ? $"Fade out: {clip.FadeOutFrames} frames" : $"Fade in: {clip.FadeInFrames} frames";
+        var editable = clip is { IsLocked: false } && selected is not null && !item.Track.IsLocked;
         remove.IsEnabled = paramPanel.IsEnabled = presetCombo.IsEnabled = editable;
         UpdateHistoryButtons();
         progress.Bind(clip?.FadeInFrames ?? 1, clip?.FadeInProgress, canEditProgress);
-        showingProgress = canEditProgress && (showingProgress || clip?.FadeInTransition is null);
+        showingProgress = canEditProgress && (showingProgress || selected is null);
         ShowPanel();
 
         updatingControls = true;
@@ -144,7 +148,7 @@ public sealed class TransitionPropertiesWindow : Window
         {
             presetCombo.Items.Clear();
             paramPanel.Children.Clear();
-            if (clip?.FadeInTransition is { } trans)
+            if (selected is { } trans)
             {
                 var plugin = TransitionCatalog.FindPlugin(trans.Kind);
                 if (plugin is not null)
@@ -180,7 +184,7 @@ public sealed class TransitionPropertiesWindow : Window
         if (updatingControls || presetCombo.SelectedItem is not string selectedPreset) return;
         var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
             .FirstOrDefault(item => item.Clip.Id == clipId);
-        if (item.Clip?.FadeInTransition is not { } current) return;
+        if (CurrentTransition(item.Clip) is not { } current) return;
         var presetInfo = TransitionCatalog.FindPreset(current.Kind, selectedPreset);
         var parameters = presetInfo?.Parameters.ToDictionary(k => k.Key, v => v.Value) ?? new Dictionary<string, string>();
         var updated = new VideoTransition
@@ -189,7 +193,7 @@ public sealed class TransitionPropertiesWindow : Window
             Preset = selectedPreset,
             Parameters = parameters
         };
-        vm.Editor.SetVideoTransition(clipId, updated);
+        vm.Editor.SetVideoTransition(clipId, updated, fadeOut);
     }
 
     private void BuildParameterControls(VideoTransition trans)
@@ -355,12 +359,14 @@ public sealed class TransitionPropertiesWindow : Window
     private void SetParam(string key, string value)
     {
         if (ParameterValue(key, value) is not { } updated) return;
-        vm.Editor.SetVideoTransition(clipId, updated);
+        vm.Editor.SetVideoTransition(clipId, updated, fadeOut);
     }
+
+    private VideoTransition? CurrentTransition(TimelineClip? clip) => fadeOut ? clip?.FadeOutTransition : clip?.FadeInTransition;
 
     private VideoTransition? ParameterValue(string key, string value)
     {
-        var current = vm.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(clip => clip.Id == clipId)?.FadeInTransition;
+        var current = CurrentTransition(vm.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(clip => clip.Id == clipId));
         if (current is null) return null;
         var parameters = current.Parameters is null ? new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             : new Dictionary<string, string>(current.Parameters, StringComparer.OrdinalIgnoreCase);

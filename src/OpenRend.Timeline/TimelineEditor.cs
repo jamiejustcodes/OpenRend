@@ -173,31 +173,31 @@ public sealed partial class TimelineEditor
         });
     }
 
-    public void SetVideoTransition(Guid clipId, VideoTransition transition)
+    public void SetVideoTransition(Guid clipId, VideoTransition transition, bool fadeOut = false)
     {
         ArgumentNullException.ThrowIfNull(transition);
         transition.Validate();
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track, clip);
-        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Transitions are only available for video clips.");
-        var cloned = transition.DeepClone();
+        var pieces = EditableTransitionPieces(track, clip, fadeOut);
         Execute(_ =>
         {
-            clip.FadeInTransition = cloned;
+            foreach (var piece in pieces)
+                if (fadeOut) piece.FadeOutTransition = transition.DeepClone();
+                else piece.FadeInTransition = transition.DeepClone();
         });
     }
 
     public void RemoveVideoTransition(Guid clipId, bool fadeOut = false)
     {
         var (track, clip) = FindClip(clipId);
-        EnsureUnlocked(track, clip);
-        if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Transitions are only available for video clips.");
-        if ((fadeOut ? clip.FadeOutTransition : clip.FadeInTransition) is null) return;
+        var pieces = EditableTransitionPieces(track, clip, fadeOut);
+        if (pieces.All(piece => (fadeOut ? piece.FadeOutTransition : piece.FadeInTransition) is null)) return;
         Execute(_ =>
         {
             // Removing the plug-in leaves the event's fade and overlap edit decisions intact.
-            if (fadeOut) clip.FadeOutTransition = null;
-            else clip.FadeInTransition = null;
+            foreach (var piece in pieces)
+                if (fadeOut) piece.FadeOutTransition = null;
+                else piece.FadeInTransition = null;
         });
     }
 
@@ -212,7 +212,7 @@ public sealed partial class TimelineEditor
         EnsureUnlocked(track, clip);
         if (track.Kind != TrackKind.Video) throw new InvalidOperationException("Fade curves are only available for video events.");
         var recip = reciprocalCurve ?? curve;
-        if (fadeOut ? (clip.FadeOutCurve == curve && clip.FadeOutReciprocalCurve == recip)
+        if (fadeOut ? (clip.FadeOutCurve == curve && clip.FadeOutReciprocalCurve == recip && clip.FadeOutTransition is null)
                     : (clip.FadeInCurve == curve && clip.FadeInReciprocalCurve == recip && clip.FadeInTransition is null)) return;
         Execute(_ =>
         {

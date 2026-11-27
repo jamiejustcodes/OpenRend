@@ -99,6 +99,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<TrimmerRangeDrag, Guid?, long>? TrimmerRangeDropped;
     public event Action<MediaGeneratorPreset, Guid?, long>? GeneratedMediaDropped;
     public event Action<TransitionGesture>? TransitionDropped;
+    public event Action<Guid, bool, VideoTransition, bool>? EdgeTransitionDropped;
     public event Action<EffectScope, Guid, VideoEffectDrag, bool>? VideoEffectDropped;
     public event Action<Guid, long>? ClipMoveHover;
     public event Action<Guid, Guid>? OverlapToCutRequested;
@@ -111,6 +112,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? VideoEffectsRequested;
     public event Action? ColorGradingRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
+    public event Action<Guid>? FadeOutTransitionPropertiesRequested;
     public event Action<Guid>? TransitionProgressRequested;
     public Func<Guid, bool>? CanEditTransitionProgress { get; set; }
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
@@ -304,7 +306,10 @@ public sealed partial class TimelineView : FrameworkElement
             }
             if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
             {
-                if (TransitionAt(e.GetPosition(this), transition) is { } target) TransitionDropped?.Invoke(target);
+                var position = e.GetPosition(this);
+                if (TransitionAt(position, transition) is { } target) TransitionDropped?.Invoke(target);
+                else if (TransitionEdgeAt(position) is { } edge)
+                    EdgeTransitionDropped?.Invoke(edge.Id, edge.FadeOut, transition, (e.KeyStates & DragDropKeyStates.ShiftKey) != 0);
                 e.Handled = true;
                 return;
             }
@@ -350,7 +355,9 @@ public sealed partial class TimelineView : FrameworkElement
     {
         if (e.Data.GetData(TransitionDataFormat) is VideoTransition transition)
         {
-            e.Effects = TransitionAt(e.GetPosition(this), transition) is null ? DragDropEffects.None : DragDropEffects.Copy;
+            var position = e.GetPosition(this);
+            e.Effects = TransitionAt(position, transition) is not null || TransitionEdgeAt(position) is not null
+                ? DragDropEffects.Copy : DragDropEffects.None;
             e.Handled = true;
             return;
         }

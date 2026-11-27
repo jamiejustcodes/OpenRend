@@ -8,9 +8,11 @@ public sealed record EvaluatedClip(TimelineTrack Track, TimelineClip Clip, Media
     public double? SourceTimeSeconds { get; init; }
     // Dissolve participants form one composite group; scalar opacity alone cannot describe source coverage.
     public EvaluatedDissolve? Dissolve { get; init; }
+    public EvaluatedEdgeTransition? EdgeTransition { get; init; }
     public TrackMotionKeyframe? TrackMotion { get; init; }
 }
 public sealed record EvaluatedDissolve(Guid OutgoingClipId, Guid IncomingClipId, double Progress, double? OutgoingWeight = null, double? IncomingWeight = null, VideoTransition? Transition = null);
+public readonly record struct EvaluatedEdgeTransition(VideoTransition Effect, double Progress, bool FadeOut);
 public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnlyList<EvaluatedClip> Audio);
 
 public static class TimelineEvaluator
@@ -208,6 +210,9 @@ public static class TimelineEvaluator
                 if (asset is null) continue;
 
                 var local = frame - clip.StartFrame;
+                var dissolve = dissolves?.GetValueOrDefault(clip.Id);
+                var edgeTransition = track.Kind == TrackKind.Video && asset.HasVideo && !clip.IsAdjustmentEvent && dissolve is null
+                    ? EdgeTransitionAt(clip, local) : null;
                 var fade = (transitionOpacity is not null && transitionOpacity.TryGetValue(clip.Id, out var blend))
                     ? blend
                     : track.Kind == TrackKind.Video ? VideoFadeAt(clip, local) : FadeAt(clip, local);
@@ -219,7 +224,7 @@ public static class TimelineEvaluator
                 local = sourcePhase.SampledEventFrame(local);
                 var sourceFrame = sourcePhase.SourceFrameAtSample(local);
 
-                var opacity = clip.Opacity * track.Opacity * fade;
+                var opacity = clip.Opacity * track.Opacity * (edgeTransition is null ? fade : 1);
                 if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Composite) is { } trackComp)
                 {
                     opacity *= trackComp.ValueAt(frame);
@@ -247,7 +252,7 @@ public static class TimelineEvaluator
                 var item = new EvaluatedClip(track, clip, asset, sourceFrame, opacity, gain, pan);
                 var trackMotion = track.Motion?.Evaluate(frame, project.Width, project.Height);
                 if (track.Kind == TrackKind.Video && asset.HasVideo) video.Add(item with
-                    { Crop = CropAt(clip, asset, local), Dissolve = dissolves?.GetValueOrDefault(clip.Id),
+                    { Crop = CropAt(clip, asset, local), Dissolve = dissolve, EdgeTransition = edgeTransition,
                         SourceTimeSeconds = VideoSourceTime.Seconds(project.FrameRate, item.SourceFrame, asset.DurationSeconds, clip.VideoSourceMode),
                         TrackMotion = trackMotion });
                 if (track.Kind == TrackKind.Audio && asset.HasAudio)
@@ -291,6 +296,19 @@ public static class TimelineEvaluator
             }
         }
         return true;
+    }
+
+    private static EvaluatedEdgeTransition? EdgeTransitionAt(TimelineClip clip, long localFrame)
+    {
+        // Fade coordinates follow the edit even when playback retimes the source or the event is split.
+        var position = localFrame + clip.FadeOffsetFrames;
+        if (clip.FadeInTransition is { } head && position < clip.FadeInFrames)
+            return new(head, clip.FadeInProgress?.ValueAt(position, clip.FadeInFrames)
+                ?? (double)position / clip.FadeInFrames, false);
+        var tailStart = (clip.FadeDurationFrames ?? clip.DurationFrames) - clip.FadeOutFrames;
+        if (clip.FadeOutTransition is { } tail && position >= tailStart && clip.FadeOutFrames > 0)
+            return new(tail, (double)(position - tailStart) / clip.FadeOutFrames, true);
+        return null;
     }
 
     public static double VideoFadeAt(TimelineClip clip, double localFrame)

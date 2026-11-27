@@ -233,6 +233,13 @@ public partial class MainWindow : Window
                     ? "Default Dissolve applied to the dropped overlap."
                     : $"{gesture.Transition.Kind} ({gesture.Transition.Preset}) applied to the dropped overlap.");
         });
+        Timeline.EdgeTransitionDropped += (id, fadeOut, effect, skipProperties) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.ApplyEdgeTransition(id, fadeOut, effect, placementPreferences.OverlapFrames(vm.Project.FrameRate));
+            vm.Status = $"Applied {TransitionCatalog.DisplayNameFor(effect.Kind)} to the event {(fadeOut ? "end" : "start")}.";
+            if (!skipProperties) _ = Dispatcher.BeginInvoke(() => ShowTransitionProperties(id, showProgress: false, fadeOut));
+        });
         Timeline.VideoEffectDropped += ApplyVideoFxDrop;
         Timeline.SplitRequested += SplitAtCursor;
         Timeline.OverlapToCutRequested += (outgoing, incoming) => Guard(() =>
@@ -333,6 +340,7 @@ public partial class MainWindow : Window
             vm.Status = "Deleted region.";
         });
         Timeline.TransitionPropertiesRequested += id => ShowTransitionProperties(id, showProgress: false);
+        Timeline.FadeOutTransitionPropertiesRequested += id => ShowTransitionProperties(id, showProgress: false, fadeOut: true);
         Timeline.CanEditTransitionProgress = id => vm.Editor.CanEditTransitionProgress(id);
         Timeline.TransitionProgressRequested += OpenTransitionProgress;
         Timeline.VideoSourceModeRequested += (id, mode) => Guard(() =>
@@ -1185,9 +1193,14 @@ public partial class MainWindow : Window
                 {
                     cachedPreviewProject = vm.Project.DeepClone();
                     draft?.Apply(cachedPreviewProject);
-                    if (transition is not null && cachedPreviewProject.Tracks.SelectMany(track => track.Clips)
-                        .FirstOrDefault(clip => clip.Id == transition.ClipId) is { } edited)
-                        edited.FadeInTransition = transition.Effect;
+                    if (transition is not null && cachedPreviewProject.Tracks
+                        .FirstOrDefault(track => track.Clips.Any(clip => clip.Id == transition.ClipId)) is { } transitionTrack)
+                    {
+                        var edited = transitionTrack.Clips.First(clip => clip.Id == transition.ClipId);
+                        foreach (var piece in transitionTrack.Clips.Where(clip => edited.SharesFadeEnvelope(clip, transition.FadeOut)))
+                            if (transition.FadeOut) piece.FadeOutTransition = transition.Effect;
+                            else piece.FadeInTransition = transition.Effect;
+                    }
                     cachedGradingPreview = draft;
                     cachedTransitionParameterPreview = transition;
                     cachedPreviewRevision = revision;
@@ -3240,7 +3253,7 @@ public partial class MainWindow : Window
 
     private void OpenTransitionProgress(Guid id) => ShowTransitionProperties(id, showProgress: true);
 
-    private void ShowTransitionProperties(Guid id, bool showProgress) => Guard(() =>
+    private void ShowTransitionProperties(Guid id, bool showProgress, bool fadeOut = false) => Guard(() =>
     {
         if (showProgress && !vm.Editor.CanEditTransitionProgress(id)) return;
         Pause();
@@ -3250,9 +3263,9 @@ public partial class MainWindow : Window
             vm.Position = frame;
             UpdatePosition();
             RequestPreview();
-        }, effect => SetTransitionParameterPreview(project, id, effect)) { Owner = this };
+        }, effect => SetTransitionParameterPreview(project, id, effect, fadeOut), fadeOut) { Owner = this };
         try { window.ShowDialog(); }
-        finally { SetTransitionParameterPreview(project, id, null); }
+        finally { SetTransitionParameterPreview(project, id, null, fadeOut); }
     });
 
     private Guid? TransitionProgressTarget()

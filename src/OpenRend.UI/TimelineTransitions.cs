@@ -53,4 +53,26 @@ public sealed partial class TimelineView
             clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame)) return null;
         return new TransitionGesture(outgoing.Id, incoming.Id, transition.DeepClone());
     }
+
+    private (Guid Id, bool FadeOut)? TransitionEdgeAt(Point point)
+    {
+        if (point.X < HeaderWidth || point.Y < RulerHeight ||
+            TrackAt(point.Y) is not { Kind: TrackKind.Video, IsLocked: false } track) return null;
+        var frame = FrameAt(point.X);
+        if (track.Clips.Count(clip => clip.StartFrame <= frame && frame < clip.EndFrame) > 1) return null;
+        foreach (var clip in track.Clips.AsEnumerable().Reverse())
+        {
+            if (clip.IsLocked || clip.IsAdjustmentEvent) continue;
+            var bounds = ClipBounds(track.Id, clip);
+            if (bounds.IsEmpty || point.Y < bounds.Top || point.Y > bounds.Bottom) continue;
+            var left = Math.Abs(X(clip.StartFrame) - point.X);
+            var right = Math.Abs(X(clip.EndFrame) - point.X);
+            if (Math.Min(left, right) <= 8) return (clip.Id, right < left);
+            var head = clip.FadeBounds(false);
+            var tail = clip.FadeBounds(true);
+            if (head.FrameCount > 0 && frame >= head.StartFrame && frame < head.EndFrame) return (clip.Id, false);
+            if (tail.FrameCount > 0 && frame >= tail.StartFrame && frame < tail.EndFrame) return (clip.Id, true);
+        }
+        return null;
+    }
 }
