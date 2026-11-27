@@ -163,13 +163,13 @@ public sealed class EditDetailsEditorTests
             Assert.Equal(2, m2.Index);
             Assert.Equal(90, m2.Frame);
             Assert.Equal("Cut to B-Roll", m2.Label);
-            Assert.Equal("Green", m2.ColorName);
+            Assert.Equal("Teal", m2.ColorName);
 
             var m3 = window.CurrentMarkerRows[2];
             Assert.Equal(3, m3.Index);
             Assert.Equal(240, m3.Frame);
             Assert.Equal("Dialogue End", m3.Label);
-            Assert.Equal("Red", m3.ColorName);
+            Assert.Equal("Gold", m3.ColorName);
         });
     }
 
@@ -232,7 +232,7 @@ public sealed class EditDetailsEditorTests
             var markerLines = markersTsv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries);
             Assert.Equal(2, markerLines.Length); // Header + 1 marker
             Assert.Equal("Marker\tPosition\tFrame\tName\tColor", markerLines[0]);
-            Assert.Contains("Action Marker\tOrange", markerLines[1]);
+            Assert.Equal("1\t00:00:01.15\t45\tAction Marker\tCoral", markerLines[1]);
         });
     }
 

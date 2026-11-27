@@ -4,7 +4,6 @@ using System.Text.Json;
 using OpenRend.App;
 using OpenRend.Core;
 using OpenRend.Timeline;
-using OpenRend.UI;
 using Xunit;
 
 namespace OpenRend.Editor.Tests;
@@ -158,13 +157,15 @@ public sealed class ClipSnapOffsetEditorTests
             };
             track.Clips.Add(clip);
             vm.Project.Tracks.Add(track);
+            vm.Project.RulerFormat = RulerFormat.AbsoluteFrames;
+            vm.Project.RulerStartTimeFrames = 100;
 
             var window = new EditDetailsWindow(vm, () => { });
             var tsv = window.GetTableText(selectedOnly: false);
             Assert.Contains("Snap Offset", tsv);
             Assert.Contains("Media File\tSnap Offset", tsv);
-            var expectedTimecode = TimelineView.FormatTimecode(30, vm.Project.FrameRate);
-            Assert.Contains(expectedTimecode, tsv);
+            var eventRow = Assert.Single(tsv.Split(new[] { "\r\n", "\n" }, StringSplitOptions.RemoveEmptyEntries).Skip(1));
+            Assert.Equal("30", eventRow.Split('\t')[^1]);
         });
     }
 }

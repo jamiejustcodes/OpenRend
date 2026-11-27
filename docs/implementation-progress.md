@@ -22,6 +22,8 @@ The shared tab template follows the control's configured placement. Settings tab
 
 Edit Details, Project Media Details and Organize Layouts share row, selection and column header styles. The header keeps the Windows resize handle and drag preview. The desktop workflow resizes and reorders Edit Details columns, double-clicks an event to seek the timeline and verifies the Project Media Details view shows the source file.
 
+In Edit Details, click a column heading or press Enter on it to sort. A second activation reverses the order. The table keeps that order while filtering and copies rows in the displayed sequence. Position columns use the live project ruler and its origin. Length and source-relative columns use a zero origin. The desktop workflow changes the ruler with Edit Details open and checks numeric sorting across two- and three-digit frame displays.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

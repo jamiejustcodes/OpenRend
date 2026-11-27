@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Globalization;
 using System.IO;
 using System.Text;
@@ -8,15 +9,11 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
-using OpenRend.UI;
 
 namespace OpenRend.App;
 
 /// <summary>
-/// Vegas Pro 1:1 Edit Details spreadsheet window (Ctrl+Alt+4 / Alt+4).
-/// Provides tabular EDL inspection and editing across timeline events and markers,
-/// supporting search filtering, track filtering, bidirectional timeline navigation,
-/// and tab-separated clipboard export for spreadsheet workflows.
+/// Shows timeline events, markers, regions and track groups in sortable tables.
 /// </summary>
 public sealed class EditDetailsWindow : Window
 {
@@ -55,6 +52,10 @@ public sealed class EditDetailsWindow : Window
 
     private readonly List<EditDetailsTrackGroupRow> currentTrackGroupRows = [];
     private readonly ListView trackGroupsListView;
+    private readonly Dictionary<ListView, ColumnOrder> columnOrders = [];
+    private (Rational Rate, RulerFormat Format, int SampleRate, double Tempo, int BeatsPerMeasure, long Origin) displayedRuler;
+
+    private sealed record ColumnOrder(GridViewColumn Column, string Caption, string Property, ListSortDirection Direction);
 
     public EditDetailsWindow(EditorViewModel viewModel, Action projectChanged, Window? owner = null)
     {
@@ -171,6 +172,7 @@ public sealed class EditDetailsWindow : Window
             BorderBrush = borderBrush,
             ToolTip = "Filter rows by name, media path, or marker label"
         };
+        AutomationProperties.SetAutomationId(searchBox, "DetailsFilter");
         searchBox.TextChanged += (_, _) => RefreshGrid();
         leftStack.Children.Add(searchBox);
 
@@ -178,7 +180,7 @@ public sealed class EditDetailsWindow : Window
         Grid.SetRow(topBar, 0);
         root.Children.Add(topBar);
 
-        var headerStyle = TryFindResource("DetailsColumnHeader") as Style;
+        var headerStyle = TryFindResource("SortableDetailsColumnHeader") as Style;
         var tableStyle = TryFindResource("DetailsTable") as Style;
         ListView CreateTable(string automationId, Visibility visibility = Visibility.Collapsed)
         {
@@ -189,6 +191,7 @@ public sealed class EditDetailsWindow : Window
                 Visibility = visibility
             };
             AutomationProperties.SetAutomationId(list, automationId);
+            list.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(SortColumn));
             return list;
         }
 
@@ -296,7 +299,68 @@ public sealed class EditDetailsWindow : Window
 
         KeyDown += EditDetailsWindow_KeyDown;
         RefreshGrid();
+        vm.Changed += RefreshRuler;
+        Closed += (_, _) => vm.Changed -= RefreshRuler;
     }
+
+    private void SortColumn(object sender, RoutedEventArgs e)
+    {
+        if (sender is not ListView table || e.OriginalSource is not GridViewColumnHeader
+            { Role: GridViewColumnHeaderRole.Normal, Column: { } column } ||
+            column.DisplayMemberBinding is not Binding { Path.Path: { } property } || !table.Items.CanSort)
+            return;
+
+        columnOrders.TryGetValue(table, out var previous);
+        if (previous is not null) previous.Column.Header = previous.Caption;
+        var direction = previous is not null && previous.Column == column && previous.Direction == ListSortDirection.Ascending
+            ? ListSortDirection.Descending
+            : ListSortDirection.Ascending;
+        var sortProperty = property switch
+        {
+            nameof(EditDetailsEventRow.TrackDisplay) => nameof(EditDetailsEventRow.TrackIndex),
+            nameof(EditDetailsMarkerRow.Timecode) => nameof(EditDetailsMarkerRow.Frame),
+            nameof(EditDetailsEventRow.StartTimecode) => nameof(EditDetailsEventRow.StartFrame),
+            nameof(EditDetailsEventRow.EndTimecode) => nameof(EditDetailsEventRow.EndFrame),
+            nameof(EditDetailsEventRow.LengthTimecode) => nameof(EditDetailsEventRow.LengthFrames),
+            nameof(EditDetailsEventRow.SnapOffsetTimecode) => nameof(EditDetailsEventRow.SnapOffsetFrames),
+            nameof(EditDetailsEventRow.SourceInTimecode) => nameof(EditDetailsEventRow.SourceInFrame),
+            nameof(EditDetailsEventRow.PlaybackRateText) => nameof(EditDetailsEventRow.PlaybackRate),
+            _ => property
+        };
+        var caption = Convert.ToString(column.Header, CultureInfo.CurrentCulture) ?? string.Empty;
+        var order = new ColumnOrder(column, caption, sortProperty, direction);
+        columnOrders[table] = order;
+        column.Header = caption + (direction == ListSortDirection.Ascending ? " ↑" : " ↓");
+        ApplyColumnOrder(table, order);
+        e.Handled = true;
+    }
+
+    private static void ApplyColumnOrder(ListView table, ColumnOrder order)
+    {
+        using var refresh = table.Items.DeferRefresh();
+        table.Items.SortDescriptions.Clear();
+        table.Items.SortDescriptions.Add(new SortDescription(order.Property, order.Direction));
+    }
+
+    private void PresentRows<T>(ListView table, List<T> rows)
+    {
+        table.ItemsSource = null;
+        table.ItemsSource = rows;
+        if (columnOrders.TryGetValue(table, out var order)) ApplyColumnOrder(table, order);
+    }
+
+    private (Rational, RulerFormat, int, double, int, long) RulerSettings() =>
+        (vm.Project.FrameRate, vm.Project.RulerFormat, vm.Project.AudioSampleRate, vm.Project.BeatsPerMinute,
+            vm.Project.BeatsPerMeasure, vm.Project.RulerStartTimeFrames);
+
+    private void RefreshRuler()
+    {
+        if (displayedRuler != RulerSettings()) RefreshGrid();
+    }
+
+    private string FormatRuler(long frame, bool position = false) =>
+        TimecodeFormatter.Format(frame, displayedRuler.Rate, displayedRuler.Format, displayedRuler.SampleRate,
+            displayedRuler.Tempo, displayedRuler.BeatsPerMeasure, position ? displayedRuler.Origin : 0);
 
     private void EditDetailsWindow_KeyDown(object sender, KeyEventArgs e)
     {
@@ -481,6 +545,7 @@ public sealed class EditDetailsWindow : Window
     /// </summary>
     public void RefreshGrid()
     {
+        displayedRuler = RulerSettings();
         var modeStr = (showCombo?.SelectedItem as ComboBoxItem)?.Content?.ToString() ?? "Events";
         var filterText = searchBox?.Text?.Trim() ?? "";
         var selectedTrackOnly = selectedTrackOnlyCheck?.IsChecked == true;
@@ -508,7 +573,7 @@ public sealed class EditDetailsWindow : Window
                     MarkerId = m.Id,
                     Index = m.Index,
                     Frame = m.Frame,
-                    Timecode = TimelineView.FormatTimecode(m.Frame, vm.Project.FrameRate),
+                    Timecode = FormatRuler(m.Frame, position: true),
                     Label = m.Label,
                     ColorId = m.ColorId
                 });
@@ -516,8 +581,7 @@ public sealed class EditDetailsWindow : Window
 
             if (markersListView != null)
             {
-                markersListView.ItemsSource = null;
-                markersListView.ItemsSource = currentMarkerRows;
+                PresentRows(markersListView, currentMarkerRows);
             }
             if (summaryText != null) summaryText.Text = $"{currentMarkerRows.Count} markers listed";
         }
@@ -544,11 +608,11 @@ public sealed class EditDetailsWindow : Window
                     RegionId = r.Id,
                     Index = r.Index,
                     StartFrame = r.StartFrame,
-                    StartTimecode = TimelineView.FormatTimecode(r.StartFrame, vm.Project.FrameRate),
+                    StartTimecode = FormatRuler(r.StartFrame, position: true),
                     EndFrame = r.EndFrame,
-                    EndTimecode = TimelineView.FormatTimecode(r.EndFrame, vm.Project.FrameRate),
+                    EndTimecode = FormatRuler(r.EndFrame, position: true),
                     LengthFrames = r.DurationFrames,
-                    LengthTimecode = TimelineView.FormatTimecode(r.DurationFrames, vm.Project.FrameRate),
+                    LengthTimecode = FormatRuler(r.DurationFrames),
                     Label = r.Label,
                     ColorId = r.ColorId
                 });
@@ -556,8 +620,7 @@ public sealed class EditDetailsWindow : Window
 
             if (regionsListView != null)
             {
-                regionsListView.ItemsSource = null;
-                regionsListView.ItemsSource = currentRegionRows;
+                PresentRows(regionsListView, currentRegionRows);
             }
             if (summaryText != null) summaryText.Text = $"{currentRegionRows.Count} regions listed";
         }
@@ -600,8 +663,7 @@ public sealed class EditDetailsWindow : Window
 
             if (trackGroupsListView != null)
             {
-                trackGroupsListView.ItemsSource = null;
-                trackGroupsListView.ItemsSource = currentTrackGroupRows;
+                PresentRows(trackGroupsListView, currentTrackGroupRows);
             }
             if (summaryText != null) summaryText.Text = $"{currentTrackGroupRows.Count} track groups listed";
         }
@@ -655,17 +717,17 @@ public sealed class EditDetailsWindow : Window
                         TrackName = track.Name,
                         EventIndex = cIdx,
                         StartFrame = clip.StartFrame,
-                        StartTimecode = TimelineView.FormatTimecode(clip.StartFrame, vm.Project.FrameRate),
+                        StartTimecode = FormatRuler(clip.StartFrame, position: true),
                         EndFrame = clip.EndFrame,
-                        EndTimecode = TimelineView.FormatTimecode(clip.EndFrame, vm.Project.FrameRate),
+                        EndTimecode = FormatRuler(clip.EndFrame, position: true),
                         LengthFrames = clip.DurationFrames,
-                        LengthTimecode = TimelineView.FormatTimecode(clip.DurationFrames, vm.Project.FrameRate),
+                        LengthTimecode = FormatRuler(clip.DurationFrames),
                         SnapOffsetFrames = clip.SnapOffsetFrames,
-                        SnapOffsetTimecode = TimelineView.FormatTimecode(clip.SnapOffsetFrames, vm.Project.FrameRate),
+                        SnapOffsetTimecode = FormatRuler(clip.SnapOffsetFrames),
                         Name = clip.Name,
                         ActiveTake = activeTakeName,
                         SourceInFrame = clip.SourceInFrame,
-                        SourceInTimecode = TimelineView.FormatTimecode(clip.SourceInFrame, vm.Project.FrameRate),
+                        SourceInTimecode = FormatRuler(clip.SourceInFrame),
                         PlaybackRate = clip.PlaybackRate,
                         IsMuted = clip.IsMuted,
                         IsLocked = clip.IsLocked,
@@ -676,8 +738,7 @@ public sealed class EditDetailsWindow : Window
 
             if (eventsListView != null)
             {
-                eventsListView.ItemsSource = null;
-                eventsListView.ItemsSource = currentEventRows;
+                PresentRows(eventsListView, currentEventRows);
             }
             if (summaryText != null) summaryText.Text = $"{currentEventRows.Count} events listed";
         }
@@ -694,9 +755,7 @@ public sealed class EditDetailsWindow : Window
         if (modeStr == "Markers")
         {
             sb.AppendLine("Marker\tPosition\tFrame\tName\tColor");
-            var rows = selectedOnly && markersListView?.SelectedItems.Count > 0
-                ? markersListView.SelectedItems.OfType<EditDetailsMarkerRow>().ToList()
-                : currentMarkerRows;
+            var rows = RowsToCopy<EditDetailsMarkerRow>(markersListView, selectedOnly);
 
             foreach (var m in rows)
             {
@@ -706,9 +765,7 @@ public sealed class EditDetailsWindow : Window
         else if (modeStr == "Regions")
         {
             sb.AppendLine("Region\tStart\tEnd\tLength\tName\tColor");
-            var rows = selectedOnly && regionsListView?.SelectedItems.Count > 0
-                ? regionsListView.SelectedItems.OfType<EditDetailsRegionRow>().ToList()
-                : currentRegionRows;
+            var rows = RowsToCopy<EditDetailsRegionRow>(regionsListView, selectedOnly);
 
             foreach (var r in rows)
             {
@@ -718,9 +775,7 @@ public sealed class EditDetailsWindow : Window
         else if (modeStr == "Track Groups")
         {
             sb.AppendLine("Group\tName\tTracks\tMute\tSolo\tCollapsed");
-            var rows = selectedOnly && trackGroupsListView?.SelectedItems.Count > 0
-                ? trackGroupsListView.SelectedItems.OfType<EditDetailsTrackGroupRow>().ToList()
-                : currentTrackGroupRows;
+            var rows = RowsToCopy<EditDetailsTrackGroupRow>(trackGroupsListView, selectedOnly);
 
             foreach (var g in rows)
             {
@@ -730,9 +785,7 @@ public sealed class EditDetailsWindow : Window
         else
         {
             sb.AppendLine("Track\tEvent\tStart\tEnd\tLength\tName\tActive Take\tSource In\tRate\tMute\tLock\tMedia File\tSnap Offset");
-            var rows = selectedOnly && eventsListView?.SelectedItems.Count > 0
-                ? eventsListView.SelectedItems.OfType<EditDetailsEventRow>().ToList()
-                : currentEventRows;
+            var rows = RowsToCopy<EditDetailsEventRow>(eventsListView, selectedOnly);
 
             foreach (var r in rows)
             {
@@ -741,6 +794,14 @@ public sealed class EditDetailsWindow : Window
         }
 
         return sb.ToString();
+    }
+
+    private static IEnumerable<T> RowsToCopy<T>(ListView table, bool selectedOnly)
+    {
+        var rows = table.Items.OfType<T>();
+        return selectedOnly && table.SelectedItems.Count > 0
+            ? rows.Where(item => table.SelectedItems.Contains(item))
+            : rows;
     }
 
     /// <summary>
@@ -871,18 +932,7 @@ public sealed class EditDetailsMarkerRow
     public string Timecode { get; set; } = "";
     public string Label { get; set; } = "";
     public int ColorId { get; set; }
-    public string ColorName => ColorId switch
-    {
-        0 => "Blue",
-        1 => "Orange",
-        2 => "Green",
-        3 => "Red",
-        4 => "Yellow",
-        5 => "Cyan",
-        6 => "Magenta",
-        7 => "White",
-        _ => $"Color {ColorId}"
-    };
+    public string ColorName => TimelineAnnotationColors.NameOf(ColorId);
 }
 
 public sealed class EditDetailsRegionRow
@@ -897,18 +947,7 @@ public sealed class EditDetailsRegionRow
     public string LengthTimecode { get; set; } = "";
     public string Label { get; set; } = "";
     public int ColorId { get; set; }
-    public string ColorName => ColorId switch
-    {
-        0 => "Blue",
-        1 => "Orange",
-        2 => "Green",
-        3 => "Red",
-        4 => "Yellow",
-        5 => "Cyan",
-        6 => "Magenta",
-        7 => "White",
-        _ => $"Color {ColorId}"
-    };
+    public string ColorName => TimelineAnnotationColors.NameOf(ColorId);
 }
 
 public sealed class EditDetailsTrackGroupRow

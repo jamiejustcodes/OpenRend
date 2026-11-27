@@ -10,6 +10,8 @@ internal static class TimelineAnnotationColors
 {
     private static readonly string[] names = ["Blue", "Coral", "Teal", "Gold", "Sage", "Red", "Slate", "Violet"];
 
+    public static string NameOf(int colorId) => names[Math.Clamp(colorId, 0, names.Length - 1)];
+
     public static ComboBox CreatePicker(int colorId)
     {
         var picker = new ComboBox();

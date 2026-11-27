@@ -27,10 +27,11 @@ public sealed partial class EditorWorkflowTests
             Width = 320, Height = 180, DurationSeconds = 3, FrameRate = 30, HasVideo = true
         };
         var clip = new TimelineClip { MediaId = asset.Id, Name = "Interview cut", StartFrame = 75, DurationFrames = 45 };
+        var earlier = new TimelineClip { MediaId = asset.Id, Name = "Earlier cut", StartFrame = 1, DurationFrames = 30 };
         await ProjectStore.SaveAsync(new()
         {
-            Name = "UI integration", Width = 320, Height = 180, FrameRate = new(30, 1),
-            Media = [asset], Tracks = [new() { Name = "Video", Kind = TrackKind.Video, Clips = [clip] }]
+            Name = "UI integration", Width = 320, Height = 180, FrameRate = new(30, 1), RulerStartTimeFrames = 50,
+            Media = [asset], Tracks = [new() { Name = "Video", Kind = TrackKind.Video, Clips = [earlier, clip] }]
         }, path);
 
         try
@@ -54,10 +55,33 @@ public sealed partial class EditorWorkflowTests
             WaitFor(() => Header(events, "Event").BoundingRectangle.Left < Header(events, "Track").BoundingRectangle.Left,
                 "Dragging the column header did not reorder it.");
 
-            var name = events.FindFirstDescendant(c => c.ByName("Interview cut"));
-            Assert.NotNull(name);
-            Mouse.DoubleClick(name.GetClickablePoint());
-            WaitFor(() => Find(window, "Timecode").Name == "00:00:02.15", "Double-clicking an event row did not seek it.");
+            Mouse.DoubleClick(Cell(events, "Interview cut").GetClickablePoint());
+            WaitFor(() => Find(window, "Timecode").Name == "00:00:04.05", "Double-clicking an event row did not seek it.");
+
+            Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.KEY_O);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatMenu")) is not null,
+                "The Options menu did not show ruler formats.");
+            Keyboard.Type(VirtualKeyShort.KEY_F);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatAbsoluteFrames")) is not null,
+                "The Ruler Format menu did not open.");
+            Keyboard.Type(VirtualKeyShort.KEY_U);
+            WaitFor(() => events.FindFirstDescendant(c => c.ByName("125")) is not null &&
+                events.FindFirstDescendant(c => c.ByName("45")) is not null,
+                "The open table did not use the ruler origin for positions and a zero origin for lengths.");
+
+            Mouse.Click(Header(events, "Start").GetClickablePoint());
+            WaitFor(() => events.FindFirstDescendant(c => c.ByName("Start ↑")) is not null,
+                "The column did not indicate ascending sort order.");
+            Assert.True(Cell(events, "Earlier cut").BoundingRectangle.Top < Cell(events, "Interview cut").BoundingRectangle.Top);
+            var sortedHeader = Header(events, "Start ↑");
+            sortedHeader.Focus();
+            Chord(details, VirtualKeyShort.RETURN);
+            WaitFor(() => events.FindFirstDescendant(c => c.ByName("Start ↓")) is not null,
+                "The keyboard did not reverse the column order.");
+            Assert.True(Cell(events, "Interview cut").BoundingRectangle.Top < Cell(events, "Earlier cut").BoundingRectangle.Top);
+            Find(details, "DetailsFilter").AsTextBox().Text = "cut";
+            Assert.True(Cell(events, "Interview cut").BoundingRectangle.Top < Cell(events, "Earlier cut").BoundingRectangle.Top);
+
             details.Close();
             WaitFor(() => FloatingPane(window, "Edit Details") is null, "Edit Details stayed open.");
 
@@ -65,6 +89,8 @@ public sealed partial class EditorWorkflowTests
             var media = Find(window, "MediaDetailsList");
             Assert.True(Header(media, "Name").BoundingRectangle.Height > 0);
             Assert.NotNull(media.FindFirstDescendant(c => c.ByName("fixture.mp4")));
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The changed ruler format was not saved.");
             running.CloseGracefully();
         }
         finally
@@ -77,6 +103,13 @@ public sealed partial class EditorWorkflowTests
             var header = table.FindFirstDescendant(c => c.ByControlType(ControlType.HeaderItem).And(c.ByName(name)));
             Assert.NotNull(header);
             return header;
+        }
+
+        static AutomationElement Cell(AutomationElement table, string name)
+        {
+            var cell = table.FindFirstDescendant(c => c.ByName(name));
+            Assert.NotNull(cell);
+            return cell;
         }
     }
 }
