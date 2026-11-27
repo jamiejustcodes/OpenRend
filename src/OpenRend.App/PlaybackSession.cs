@@ -5,7 +5,7 @@ using OpenRend.Media;
 
 namespace OpenRend.App;
 
-public sealed class PlaybackSession : IDisposable, IAsyncDisposable
+public sealed class PlaybackSession : IDisposable, ISourceAudioSession
 {
     private const int BlockFrames = 16384;
     private readonly CancellationTokenSource cancellation = new();

@@ -650,6 +650,9 @@ public partial class MainWindow : Window
             UpdateWorkspaceSelectionDuration();
         };
         TrimmerDeck.Initialize(vm, () => vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex));
+        TrimmerDeck.ConfigureSourceAudio(PrepareTrimmerAudioAsync,
+            (project, start, rate, loop) => new PlaybackSession(vm.Renderer, project, start,
+                rate: rate, startImmediately: false, loopRange: loop));
         InitializeWorkspacePanes();
         vm.Changed += Refresh;
         vm.Changed += () =>
@@ -1647,6 +1650,7 @@ public partial class MainWindow : Window
     private async Task StartTimelinePlaybackAsync(bool rememberOrigin = true, double rate = 1, bool shuttle = false)
     {
         StopExplorerPreview();
+        TrimmerDeck.StopPlayback();
         if (vm.Project.DurationFrames == 0) { RequestPreview(); return; }
         StopTimelineScrub();
         var project = vm.Project.DeepClone();
@@ -1663,8 +1667,7 @@ public partial class MainWindow : Window
         timelineShuttle = shuttle;
         try
         {
-            await scrubShutdown;
-            await explorerPreviewTask;
+            await Task.WhenAll(scrubShutdown, explorerPreviewTask, TrimmerDeck.SourceAudioCompletion);
             if (generation != playbackGeneration || !IsLoaded) return;
             var session = await Task.Run(() => new PlaybackSession(vm.Renderer, project, start, masterGain, rate, startImmediately: false, loopRange: loop));
             if (generation != playbackGeneration || !IsLoaded) { await session.DisposeAsync(); return; }
@@ -1687,6 +1690,12 @@ public partial class MainWindow : Window
                 if (playback is null) ResetShuttleState();
             }
         }
+    }
+
+    private async Task PrepareTrimmerAudioAsync()
+    {
+        Pause();
+        await Task.WhenAll(scrubShutdown, explorerPreviewTask);
     }
 
     private void Pause(long? seekTo = null)
@@ -1725,6 +1734,7 @@ public partial class MainWindow : Window
         if (MasterLevel is not null) MasterLevel.Text = masterMuted ? "Muted" : e.NewValue > 0 ? $"{20 * Math.Log10(e.NewValue):0.0} dB" : "−∞ dB";
         if (playback is not null) playback.MasterGain = masterMuted ? 0 : e.NewValue;
         if (explorerPlayback is not null) explorerPlayback.MasterGain = masterMuted ? 0 : e.NewValue;
+        TrimmerDeck?.SetSourceMonitorGain(masterMuted ? 0 : e.NewValue);
     }
     private void ResetMasterClick(object sender, RoutedEventArgs e) { masterMuted = false; MasterGain.Value = 1; MasterGainChanged(sender, new(0, MasterGain.Value)); }
     private void MuteMasterClick(object sender, RoutedEventArgs e) { masterMuted = !masterMuted; MasterGainChanged(sender, new(MasterGain.Value, MasterGain.Value)); }
@@ -3304,7 +3314,7 @@ public partial class MainWindow : Window
         if (HandleLayoutChordKey(e)) return;
         if (HandleTrimmerShortcut(e)) return;
         if (TrimmerDeck.IsKeyboardFocusWithin && TrimmerDeck.ActiveMedia is not null &&
-            (key == Key.A && !alt || !ctrl && key is Key.Space or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q))
+            (key == Key.A && !alt || !ctrl && key is Key.Space or Key.Escape or Key.Home or Key.End or Key.Left or Key.Right or Key.J or Key.K or Key.L or Key.Q))
             return;
         if (HandleShuttleKeyDown(e)) return;
         if (alt && !ctrl && !shift && key == Key.D)
@@ -3438,8 +3448,9 @@ public partial class MainWindow : Window
         try
         {
             if (!await ConfirmUnsavedAsync()) return;
+            TrimmerDeck.StopPlayback();
             Pause(); autosave.Stop(); recoverySaveTimer.Stop(); SaveWorkspace();
-            await explorerPreviewTask;
+            await Task.WhenAll(explorerPreviewTask, scrubShutdown, TrimmerDeck.SourceAudioCompletion);
             SessionRecoveryManager.RecordCleanExit(Path.GetDirectoryName(recoveryPath)!);
             allowClose = true;
             // Complete the cancelled Closing event before requesting the final close.

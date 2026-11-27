@@ -39,11 +39,13 @@ public sealed class MediaService : IDisposable
         };
     }, cancellationToken);
 
-    public static ProjectDocument CreateSourcePreview(MediaAsset source, Rational frameRate)
+    public static ProjectDocument CreateSourcePreview(MediaAsset source, Rational frameRate, FrameRange? sourceRange = null)
     {
         var asset = source.DeepClone();
         var preview = new ProjectDocument { FrameRate = frameRate, Media = [asset] };
         var length = Math.Max(1, frameRate.Frames(asset.DurationSeconds));
+        var range = sourceRange ?? new FrameRange(0, length);
+        range.Validate(length);
         if (asset.HasVideo)
         {
             preview.Width = asset.Width;
@@ -55,7 +57,7 @@ public sealed class MediaService : IDisposable
 
         void AddTrack(TrackKind kind) => preview.Tracks.Add(new TimelineTrack
         {
-            Kind = kind, Clips = [new TimelineClip { MediaId = asset.Id, DurationFrames = length }]
+            Kind = kind, Clips = [new TimelineClip { MediaId = asset.Id, SourceInFrame = range.StartFrame, DurationFrames = range.FrameCount }]
         });
     }
 

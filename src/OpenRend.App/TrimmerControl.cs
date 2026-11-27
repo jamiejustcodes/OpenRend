@@ -21,7 +21,7 @@ namespace OpenRend.App;
 /// 2-point, 3-point, and 4-point (Fit to Fill) editing, audio waveform scrubbing,
 /// and J-K-L shuttle playback.
 /// </summary>
-public sealed class TrimmerControl : UserControl
+public sealed partial class TrimmerControl : UserControl
 {
     private EditorViewModel? vm;
     private Func<TimelineTrack?>? getActiveTrack;
@@ -456,6 +456,7 @@ public sealed class TrimmerControl : UserControl
         shuttleSpeed = 0;
         playbackTimer.Stop();
         playbackClock.Stop();
+        StopSourceAudio();
         playPauseBtn.Content = "▶";
         AutomationProperties.SetName(playPauseBtn, "Play source");
         UpdateShuttleLabel();
@@ -640,9 +641,14 @@ public sealed class TrimmerControl : UserControl
 
     private void OnPlaybackTick(object? sender, EventArgs e)
     {
-        if (!isPlaying || activeMedia is null) return;
+        if (!isPlaying || activeMedia is null || sourceAudioRequest is not null) return;
         var rate = vm?.Project.FrameRate ?? new Rational(30, 1);
         var (frame, finished) = PlaybackFrameAt(PlacementRange, playbackAnchor, rate, shuttleSpeed, playbackClock.Elapsed, isLooping);
+        ShowPlaybackFrame(frame, finished);
+    }
+
+    private void ShowPlaybackFrame(long frame, bool finished)
+    {
         if (frame == currentFrame && !finished) return;
         currentFrame = frame;
         if (finished) StopPlayback();
@@ -654,6 +660,12 @@ public sealed class TrimmerControl : UserControl
     private void RestartPlaybackClock()
     {
         if (!isPlaying) return;
+        ResetElapsedPlayback();
+        RestartSourceAudio();
+    }
+
+    private void ResetElapsedPlayback()
+    {
         playbackAnchor = currentFrame;
         playbackClock.Restart();
     }
@@ -738,7 +750,7 @@ public sealed class TrimmerControl : UserControl
         else if (e.Key == Key.A && ctrl && !shift) { SelectAll(); e.Handled = true; }
         else if (e.Key == Key.Space) { TogglePlayPause(); e.Handled = true; }
         else if (e.Key == Key.J) { ShuttleReverse(); e.Handled = true; }
-        else if (e.Key == Key.K) { StopPlayback(); e.Handled = true; }
+        else if (e.Key is Key.K or Key.Escape) { StopPlayback(); e.Handled = true; }
         else if (e.Key == Key.L) { ShuttleForward(); e.Handled = true; }
         else if (e.Key == Key.Q) { SetLoopPlayback(!isLooping); e.Handled = true; }
         else if (e.Key == Key.Left) { StepFrame(alt ? -5 : -1); e.Handled = true; }

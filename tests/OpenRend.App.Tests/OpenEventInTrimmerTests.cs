@@ -91,6 +91,17 @@ public sealed partial class EditorWorkflowTests
             Assert.Equal((0L, 59L, 30L), (beforeCursor.StartFrame, beforeCursor.SourceInFrame, beforeCursor.DurationFrames));
             Assert.Equal(2, placement.Tracks[0].Clips.Count);
             Assert.Single(placement.Tracks[1].Clips);
+
+            var play = Find(window, "TrimmerPlayButton");
+            play.AsButton().Invoke();
+            WaitFor(() => window.FindFirstDescendant(c => c.ByName("Playing Trimmer audio.").And(c.ByControlType(ControlType.Text))) is not null,
+                "The Trimmer did not start its audio device.");
+            var timeline = Find(window, "Timeline").BoundingRectangle;
+            var rulerPoint = new Point(eventBounds.Left + eventBounds.Width / 2, timeline.Top + 24);
+            Assert.Equal(window.Properties.ProcessId.Value, window.Automation.FromPoint(rulerPoint).Properties.ProcessId.Value);
+            Mouse.Click(rulerPoint);
+            WaitFor(() => play.Name == "Play source", "Seeking the timeline did not stop Trimmer playback.");
+            Assert.DoesNotContain('*', window.Title);
             running.CloseGracefully();
 
             void CheckReadouts(params string[] values)

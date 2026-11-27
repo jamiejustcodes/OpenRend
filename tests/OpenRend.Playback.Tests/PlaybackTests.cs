@@ -268,6 +268,46 @@ public sealed class PlaybackTests(ITestOutputHelper log)
 
     [Fact]
     [Trait("Category", "AudioDevice")]
+    public async Task WasapiLoopbackPlaysTheMarkedAudioRangeFromItsSourceInPoint()
+    {
+        var path = Path.Combine(Path.GetTempPath(), $"openrend-trimmer-audio-{Guid.NewGuid():N}.wav");
+        try
+        {
+            WriteStereoTone(path, silentLeadFrames: 24000);
+            using var media = new MediaService();
+            using var renderer = new TimelineRenderService(media);
+            var asset = await media.ProbeAsync(path);
+            var range = new FrameRange(15, 12);
+            var preview = MediaService.CreateSourcePreview(asset, new Rational(30, 1), range);
+            var eventClip = Assert.Single(Assert.Single(preview.Tracks).Clips);
+            Assert.Equal((15L, 12L), (eventClip.SourceInFrame, eventClip.DurationFrames));
+
+            using var capture = new WasapiLoopbackCapture();
+            var recorded = new ConcurrentQueue<byte[]>();
+            capture.DataAvailable += (_, args) => recorded.Enqueue(args.Buffer.AsSpan(0, args.BytesRecorded).ToArray());
+            await using (var playback = new PlaybackSession(renderer, preview, 0, .6, startImmediately: false,
+                loopRange: new FrameRange(0, preview.DurationFrames)))
+            {
+                capture.StartRecording();
+                playback.Start();
+                await Task.Delay(900);
+                await playback.CheckAsync();
+                Assert.False(playback.IsFinished);
+                Assert.InRange(playback.CurrentFrame, 0, range.FrameCount - 1);
+            }
+            capture.StopRecording();
+            var recordedBytes = recorded.SelectMany(chunk => chunk).ToArray();
+            Assert.NotEmpty(recordedBytes);
+            Assert.Equal(32, capture.WaveFormat.BitsPerSample);
+            var samples = MemoryMarshal.Cast<byte, float>(recordedBytes.AsSpan()).ToArray();
+            var tone = Amplitude(samples, capture.WaveFormat.Channels, capture.WaveFormat.SampleRate, 1733);
+            Assert.True(tone > .005, $"The tone after the source In point was missing. Amplitude {tone:F5}.");
+        }
+        finally { File.Delete(path); }
+    }
+
+    [Fact]
+    [Trait("Category", "AudioDevice")]
     public async Task TimelineScrubOutputsRecentAudioAndDisposesItsDevice()
     {
         var path = Path.Combine(Path.GetTempPath(), $"openrend-scrub-{Guid.NewGuid():N}.wav");
@@ -302,11 +342,11 @@ public sealed class PlaybackTests(ITestOutputHelper log)
         finally { File.Delete(path); }
     }
 
-    private static void WriteStereoTone(string path)
+    private static void WriteStereoTone(string path, int silentLeadFrames = 0)
     {
         using var writer = new WaveFileWriter(path, WaveFormat.CreateIeeeFloatWaveFormat(48000, 2));
         var samples = new float[48000 * 2];
-        for (var frame = 0; frame < 48000; frame++)
+        for (var frame = silentLeadFrames; frame < 48000; frame++)
             samples[frame * 2] = samples[frame * 2 + 1] = (float)(.12 * Math.Sin(2 * Math.PI * 1733 * frame / 48000));
         writer.WriteSamples(samples, 0, samples.Length);
     }

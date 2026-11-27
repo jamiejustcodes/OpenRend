@@ -31,12 +31,14 @@ public partial class MainWindow
 
     private void StartExplorerPreview(FileInfo file)
     {
+        TrimmerDeck.StopPlayback();
         Pause();
+        var predecessor = Task.WhenAll(explorerPreviewTask, scrubShutdown, TrimmerDeck.SourceAudioCompletion);
         var request = new CancellationTokenSource();
         explorerPreviewRequest = request;
         explorerPreviewName = file.Name;
         UpdatePreviewStatus();
-        explorerPreviewTask = PlayExplorerPreviewAsync(file.FullName, explorerPreviewTask, request);
+        explorerPreviewTask = PlayExplorerPreviewAsync(file.FullName, predecessor, request);
     }
 
     private void StopExplorerPreview()
@@ -53,7 +55,6 @@ public partial class MainWindow
         try
         {
             await predecessor;
-            await scrubShutdown;
             token.ThrowIfCancellationRequested();
             var source = await vm.Media.ProbeAsync(path, token);
             var project = MediaService.CreateSourcePreview(source, vm.Project.FrameRate);

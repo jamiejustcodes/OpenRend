@@ -12,6 +12,7 @@ public partial class MainWindow
 
     private void SeekTimeline(long frame)
     {
+        TrimmerDeck.StopPlayback();
         Pause(frame);
         lastScrubAt = Stopwatch.GetTimestamp();
     }
@@ -35,7 +36,8 @@ public partial class MainWindow
 
         var movement = vm.Project.FrameRate.Seconds(vm.Position - previous);
         var speed = Math.Clamp(Math.Abs(movement) / elapsed, .25, TimelineScrubSession.MaxRate);
-        timelineScrub ??= new TimelineScrubSession(vm.Renderer, vm.Project.DeepClone(), scrubShutdown);
+        timelineScrub ??= new TimelineScrubSession(vm.Renderer, vm.Project.DeepClone(),
+            Task.WhenAll(scrubShutdown, explorerPreviewTask, TrimmerDeck.SourceAudioCompletion));
         if (!timelineScrub.Queue(vm.Position, Math.CopySign(speed, movement), MasterGain.Value))
         {
             scrubAudioUnavailable = true;

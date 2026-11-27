@@ -50,7 +50,9 @@ The Master Bus also displays integrated loudness for the current playback pass. 
 
 ## Source workflows
 
-Trimmer video playback converts elapsed time to whole project frames using the project's rational rate. A delayed display refresh keeps the correct position in the selection, including across repeated forward or reverse loops. The desktop workflow plays a one-second range in a 60 fps project and verifies its exact Out frame. The Trimmer shows audio waveforms. Audible source monitoring is available in Explorer.
+Trimmer video playback converts elapsed time to whole project frames using the project's rational rate. A delayed display refresh keeps the correct position in the selection, including across repeated forward or reverse loops. The desktop workflow plays a one-second range in a 60 fps project and verifies its exact Out frame.
+
+Sources with audio use a temporary timeline containing the marked source range. The shared WASAPI playback engine supplies audio and drives the Trimmer cursor and preview frames. Normal forward loops keep one device stream. Shuttled loops start another pass when they reach the range boundary. The monitor gain and mute are shared with the timeline. Seeking the timeline stops Trimmer audio. The desktop workflow starts the source audio device and checks this handoff. A device loopback test captures the marked range from a source with a silent lead-in.
 
 Drag the Video or Audio button in the Trimmer to place the marked range on a compatible track. I and O mark the source range. A starts placement at the timeline cursor and Shift+A ends placement there. Keyboard placement uses the focused track when it accepts the stream and falls back to an available compatible track. Shift+A retains the source Out point if the placement reaches project start. The desktop workflow verifies both stream-only drops, marks the range with I and O, and checks the exact saved ranges from A and Shift+A on a second video track.
 

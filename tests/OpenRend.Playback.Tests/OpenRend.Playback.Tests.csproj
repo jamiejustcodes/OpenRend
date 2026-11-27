@@ -14,6 +14,7 @@
     <PackageReference Include="NAudio" Version="2.2.1" />
     <ProjectReference Include="../../src/OpenRend.Media/OpenRend.Media.csproj" />
     <Compile Include="../../src/OpenRend.App/PlaybackSession.cs" Link="PlaybackSession.cs" />
+    <Compile Include="../../src/OpenRend.App/ISourceAudioSession.cs" Link="ISourceAudioSession.cs" />
     <Compile Include="../../src/OpenRend.App/TimelinePlaybackLoop.cs" Link="TimelinePlaybackLoop.cs" />
     <Compile Include="../../src/OpenRend.App/MasterAudioMeter.cs" Link="MasterAudioMeter.cs" />
     <Compile Include="../../src/OpenRend.App/TimelineScrubSession.cs" Link="TimelineScrubSession.cs" />
