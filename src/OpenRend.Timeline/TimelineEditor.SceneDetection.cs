@@ -82,13 +82,28 @@ public sealed partial class TimelineEditor
                     clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) == true)
                     throw new InvalidOperationException("Scene subclips require a forward, unretimed event.");
                 var source = Project.Media.Single(asset => asset.Id == clip.MediaId);
-                var subclips = spans.Select(span => MakeSubclip(source,
-                    new FrameRange(checked(clip.SourceInFrame + span.StartOffsetFrames), span.DurationFrames), span.Name)).ToArray();
-                Execute("Create scene subclips", project => project.Media.AddRange(subclips));
+                var subclips = AddSceneSubclips(source, clip.SourceInFrame, spans);
                 return new(boundaries.Length, spans.Count, [clip], []) { ResultSubclips = subclips };
             default:
                 throw new ArgumentOutOfRangeException(nameof(mode));
         }
+    }
+
+    public IReadOnlyList<MediaAsset> CreateSceneSubclips(Guid mediaId, IReadOnlyList<SceneCut> cuts)
+    {
+        ArgumentNullException.ThrowIfNull(cuts);
+        var source = Project.Media.SingleOrDefault(asset => asset.Id == mediaId) ?? throw new KeyNotFoundException("Media was not found.");
+        if (!source.HasVideo) throw new InvalidOperationException("Scene detection requires video media.");
+        var spans = SceneDetectionEngine.BuildSceneSpans(cuts, Project.FrameRate.Frames(source.DurationSeconds), baseName: source.Name);
+        return spans.Count > 1 ? AddSceneSubclips(source, 0, spans) : [];
+    }
+
+    private IReadOnlyList<MediaAsset> AddSceneSubclips(MediaAsset source, long sourceStart, IReadOnlyList<SceneSpan> spans)
+    {
+        var subclips = spans.Select(span => MakeSubclip(source,
+            new FrameRange(checked(sourceStart + span.StartOffsetFrames), span.DurationFrames), span.Name)).ToArray();
+        Execute("Create scene subclips", project => project.Media.AddRange(subclips));
+        return subclips;
     }
 
     private static void SetSceneSplitTakeState(ClipSplit split)

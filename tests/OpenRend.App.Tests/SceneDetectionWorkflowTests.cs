@@ -107,6 +107,60 @@ public sealed partial class EditorWorkflowTests
         finally { Directory.Delete(temporary, recursive: true); }
     }
 
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public async Task ProjectMediaDetectsScenesWithinASubclipWithoutPlacingEvents()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        var projectPath = Path.Combine(temporary, "media-scenes.openrend");
+        try
+        {
+            var source = Path.Combine(temporary, "three-scenes.mkv");
+            await CreateSceneFixture(Path.Combine(Path.GetDirectoryName(executable)!, "ffmpeg.exe"), source);
+            var asset = new MediaAsset
+            {
+                Path = source, DisplayName = "Last two shots", HasVideo = true, Width = 160, Height = 90,
+                DurationSeconds = 2, FrameRate = 30, SourceRange = new(1, 2, 1)
+            };
+            await ProjectStore.SaveAsync(new()
+            {
+                Name = "UI integration", Width = 160, Height = 90, FrameRate = new(30, 1), Media = [asset]
+            }, projectPath);
+
+            using var running = Launch(executable, projectPath, temporary);
+            var window = running.Window;
+            MediaContextCommand(window, asset.Name, "DetectScenesFromMedia").AsMenuItem().Invoke();
+            Window? dialog = null;
+            WaitFor(() => (dialog = window.ModalWindows.SingleOrDefault(modal => modal.Title == "Detect Scenes and Create Subclips")) is not null,
+                "Project Media did not open the scene subclip dialog.");
+            var apply = Find(dialog!, "ApplySceneCuts").AsButton();
+            Assert.False(apply.IsEnabled);
+            Find(dialog!, "AnalyzeScenes").AsButton().Invoke();
+            WaitFor(() => Find(dialog!, "SceneDetectionStatus").Name == "Review 1 detected cut.", "The source scanner did not isolate the cut inside the subclip.");
+            Assert.NotNull(Find(dialog!, "SceneCut_30"));
+            Assert.DoesNotContain('*', window.Title);
+            var captureDir = Path.Combine(root, ".local", "desktop-validation");
+            Directory.CreateDirectory(captureDir);
+            using (var screenshot = Capture.Element(dialog!)) screenshot.ToFile(Path.Combine(captureDir, "scene-detection-project-media.png"));
+            apply.Invoke();
+            WaitFor(() => window.ModalWindows.Length == 0 && window.Title.Contains('*'), "Creating source subclips did not edit the project.");
+            var saved = await SaveGrade(window, projectPath);
+            Assert.Empty(saved.Tracks.SelectMany(track => track.Clips));
+            Assert.Equal(new[] { new MediaSourceRange(1, 1, 1), new(2, 1, 1) },
+                saved.Media.Where(media => media.Id != asset.Id).Select(media => media.SourceRange!.Value));
+            Assert.All(saved.Media, media => Assert.Equal(source, media.Path));
+            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_Z);
+            saved = await SaveGrade(window, projectPath);
+            Assert.Equal(asset.Id, Assert.Single(saved.Media).Id);
+            running.CloseGracefully(waitForRender: false);
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
     private static Window OpenSceneDetection(Window window)
     {
         var tools = window.FindFirstDescendant(c => c.ByControlType(ControlType.MenuItem).And(c.ByName("Tools")));

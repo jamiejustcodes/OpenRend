@@ -20,19 +20,30 @@ public partial class MainWindow
     {
         var menu = (ContextMenu)sender;
         var selected = (menu.PlacementTarget as Selector)?.SelectedItem as MediaItem;
-        var openParent = menu.Items.OfType<MenuItem>()
-            .Single(item => AutomationProperties.GetAutomationId(item) == "OpenMediaParentInTrimmer");
+        MenuItem Command(string id) => menu.Items.OfType<MenuItem>().Single(item => AutomationProperties.GetAutomationId(item) == id);
+        var hasFile = selected is not null && File.Exists(selected.Asset.Path);
+        var openParent = Command("OpenMediaParentInTrimmer");
         openParent.Visibility = selected?.Asset.SourceRange is not null ? Visibility.Visible : Visibility.Collapsed;
-        openParent.IsEnabled = selected is not null && File.Exists(selected.Asset.Path);
+        openParent.IsEnabled = hasFile;
+        var detect = Command("DetectScenesFromMedia");
+        detect.Visibility = selected?.Asset is { HasVideo: true, IsGenerated: false } ? Visibility.Visible : Visibility.Collapsed;
+        detect.IsEnabled = hasFile;
     }
 
     private async void OpenMediaParentInTrimmerClick(object sender, RoutedEventArgs e)
     {
-        if (OpenTrimmerMenuItem(sender) is { } item)
+        if (MediaMenuSelection(sender) is { } item)
             await GuardAsync(() => OpenParentInTrimmerAsync(item.Asset, selectRange: false));
     }
 
-    private static MediaItem? OpenTrimmerMenuItem(object sender) =>
+    private void DetectScenesFromMediaClick(object sender, RoutedEventArgs e) => Guard(() =>
+    {
+        if (MediaMenuSelection(sender) is not { Asset: { HasVideo: true, IsGenerated: false } source }) return;
+        Pause();
+        new SceneDetectionWindow(vm, source) { Owner = this }.ShowDialog();
+    });
+
+    private static MediaItem? MediaMenuSelection(object sender) =>
         sender is MenuItem menuItem &&
         ItemsControl.ItemsControlFromItemContainer(menuItem) is ContextMenu { PlacementTarget: Selector selector }
             ? selector.SelectedItem as MediaItem : null;

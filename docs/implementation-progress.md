@@ -38,6 +38,8 @@ Clip Properties follows the focused timeline event. It shows opacity for video a
 
 Scene Detection separates analysis from editing. After a scan, review the cut positions in the project's ruler format and select which cuts to apply as event splits, regions or Project Media subclips. Repeated scans leave the project clean. The desktop workflow detects two real cuts, excludes one from the region output, undoes the regions, creates three independently bounded media entries and verifies the splits. The editor test also verifies that another event using the same source stays unchanged. Analysis covers hard cuts in forward, unretimed events within the source range. The detector samples every other frame above 3,000 frames.
 
+Project Media can scan a file or subclip before it is placed on the timeline. Detect Scenes and Create Subclips opens the shared analysis form with source-relative cut positions. The desktop test scans a subclip of the last two shots in a three-shot file, verifies the two resulting original-file ranges, and removes both with one Undo. The timeline remains empty throughout.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

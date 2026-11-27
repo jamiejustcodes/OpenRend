@@ -120,17 +120,10 @@ public sealed partial class EditorWorkflowTests
             OpenInTrimmerCommand(window, subclipEvent.Id).AsMenuItem().Invoke();
             CheckTrimmerRange("00:00:00:00", "00:00:01:00");
             RightClick(Find(window, "TrimmerCreateSubclip"));
-            PopupCommand("TrimmerSelectParentMedia").AsMenuItem().Invoke();
+            PopupCommand(window, "TrimmerSelectParentMedia").AsMenuItem().Invoke();
             CheckTrimmerRange("00:00:01:00", "00:00:02:00");
 
-            var mediaTab = window.FindFirstDescendant(condition => condition.ByControlType(ControlType.TabItem).And(condition.ByName("Project Media")));
-            Assert.NotNull(mediaTab);
-            mediaTab.Patterns.SelectionItem.Pattern.Select();
-            var list = Find(window, "MediaList").AsListBox();
-            var entry = Assert.Single(list.Items, item => item.FindAllDescendants().Any(child => child.Name == createdName));
-            entry.Patterns.SelectionItem.Pattern.Select();
-            RightClick(entry);
-            PopupCommand("OpenMediaParentInTrimmer").AsMenuItem().Invoke();
+            MediaContextCommand(window, createdName, "OpenMediaParentInTrimmer").AsMenuItem().Invoke();
             CheckTrimmerRange("00:00:00:00", "00:00:03:00");
             Assert.DoesNotContain('*', window.Title);
             running.CloseGracefully();
@@ -142,22 +135,37 @@ public sealed partial class EditorWorkflowTests
                         $"The Trimmer did not show {readout}.");
             }
 
-            AutomationElement PopupCommand(string id)
-            {
-                AutomationElement? command = null;
-                WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(condition =>
-                    condition.ByAutomationId(id).And(condition.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
-                    $"The menu did not expose {id}.");
-                Assert.True(command!.IsEnabled);
-                return command;
-            }
-
-            static void RightClick(AutomationElement element)
-            {
-                var bounds = element.BoundingRectangle;
-                Mouse.Click(new System.Drawing.Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), MouseButton.Right);
-            }
         }
         finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    private static AutomationElement MediaContextCommand(Window window, string name, string id)
+    {
+        var tab = window.FindFirstDescendant(condition => condition.ByControlType(ControlType.TabItem).And(condition.ByName("Project Media")));
+        Assert.NotNull(tab);
+        tab.Patterns.SelectionItem.Pattern.Select();
+        var list = Find(window, "MediaList").AsListBox();
+        ListBoxItem? entry = null;
+        WaitFor(() => (entry = list.Items.SingleOrDefault(item => item.FindAllDescendants().Any(child => child.Name == name))) is not null,
+            $"Project Media did not show {name}.");
+        entry!.Patterns.SelectionItem.Pattern.Select();
+        RightClick(entry);
+        return PopupCommand(window, id);
+    }
+
+    private static AutomationElement PopupCommand(Window window, string id)
+    {
+        AutomationElement? command = null;
+        WaitFor(() => (command = window.Automation.GetDesktop().FindFirstDescendant(condition =>
+            condition.ByAutomationId(id).And(condition.ByProcessId(window.Properties.ProcessId.Value)))) is not null,
+            $"The menu did not expose {id}.");
+        Assert.True(command!.IsEnabled);
+        return command;
+    }
+
+    private static void RightClick(AutomationElement element)
+    {
+        var bounds = element.BoundingRectangle;
+        Mouse.Click(new System.Drawing.Point(bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2), MouseButton.Right);
     }
 }

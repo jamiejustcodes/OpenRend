@@ -5,6 +5,7 @@
     <ContextMenu x:Key="ProjectMediaMenu" x:Shared="False" Opened="ProjectMediaMenuOpened">
       <MenuItem Header="Open in Trimmer" Click="OpenInTrimmerClick" AutomationProperties.AutomationId="OpenMediaInTrimmer"/>
       <MenuItem Header="Open Parent Media in Trimmer" Click="OpenMediaParentInTrimmerClick" AutomationProperties.AutomationId="OpenMediaParentInTrimmer"/>
+      <MenuItem Header="Detect Scenes and Create Subclips…" Click="DetectScenesFromMediaClick" AutomationProperties.AutomationId="DetectScenesFromMedia"/>
       <MenuItem Header="Replace source file…" Click="ReplaceMediaClick"/>
       <MenuItem Header="Media FX…" Click="MediaEffectsClick"/>
       <MenuItem Header="Media Color Grading…" Click="MediaColorGradingClick"/>

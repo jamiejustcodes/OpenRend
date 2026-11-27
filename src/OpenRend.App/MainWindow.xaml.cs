@@ -2989,7 +2989,7 @@ public partial class MainWindow : Window
 
     private void OpenInTrimmerClick(object sender, RoutedEventArgs e)
     {
-        if (OpenTrimmerMenuItem(sender) is { } item) OpenSourceInTrimmer(item.Asset);
+        if (MediaMenuSelection(sender) is { } item) OpenSourceInTrimmer(item.Asset);
     }
 
     private void VideoScopesClick(object sender, RoutedEventArgs e)

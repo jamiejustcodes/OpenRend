@@ -11,13 +11,17 @@ namespace OpenRend.App;
 
 public sealed class SceneDetectionWindow : TimelineEditDialog
 {
-    private sealed record Candidate(TimelineClip Clip, MediaAsset Media, string Label)
+    private sealed record Candidate(TimelineClip? Clip, MediaAsset Media, string Label)
     {
+        public long SourceInFrame => Clip?.SourceInFrame ?? 0;
+        public long StartFrame => Clip?.StartFrame ?? 0;
+        public long DurationFrames(Rational rate) => Clip?.DurationFrames ?? rate.Frames(Media.DurationSeconds);
         public override string ToString() => Label;
     }
     private sealed record CutChoice(SceneCut Cut, CheckBox Include);
 
     private readonly EditorViewModel vm;
+    private readonly Candidate? sourceCandidate;
     private readonly ComboBox events = new() { DisplayMemberPath = nameof(Candidate.Label) };
     private readonly ComboBox action = new() { Items = { "Split selected event", "Add scene regions", "Create subclips in Project Media" }, SelectedIndex = 0 };
     private readonly Slider sensitivity = new() { Minimum = 10, Maximum = 95, Value = 65, TickFrequency = 5, IsSnapToTickEnabled = true };
@@ -33,18 +37,31 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
     private CancellationTokenSource? scan;
     private bool closed;
 
-    public SceneDetectionWindow(EditorViewModel viewModel, TimelineClip? initialClip = null) : base("Scene Detection", 510)
+    public SceneDetectionWindow(EditorViewModel viewModel, TimelineClip? initialClip = null) : this(viewModel, initialClip, null)
+    {
+    }
+
+    internal SceneDetectionWindow(EditorViewModel viewModel, MediaAsset source) : this(viewModel, null, source)
+    {
+    }
+
+    private SceneDetectionWindow(EditorViewModel viewModel, TimelineClip? initialClip, MediaAsset? source)
+        : base(source is null ? "Scene Detection" : "Detect Scenes and Create Subclips", 510)
     {
         vm = viewModel;
-        var candidates = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
-            .SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
-            .Join(vm.Project.Media, pair => pair.Clip.MediaId, media => media.Id, (pair, media) => (pair.Track, pair.Clip, Media: media))
-            .Where(pair => pair.Media.HasVideo && !pair.Media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase))
-            .Select(pair => new Candidate(pair.Clip, pair.Media, $"{pair.Clip.Name} · {pair.Track.Name}")).ToArray();
-        events.ItemsSource = candidates;
-        events.SelectedItem = candidates.FirstOrDefault(candidate => initialClip?.Id == candidate.Clip.Id)
-            ?? candidates.FirstOrDefault(candidate => vm.Selection.Contains(candidate.Clip.Id))
-            ?? candidates.FirstOrDefault();
+        if (source is not null) sourceCandidate = new(null, source, source.Name);
+        else
+        {
+            var candidates = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+                .SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
+                .Join(vm.Project.Media, pair => pair.Clip.MediaId, media => media.Id, (pair, media) => (pair.Track, pair.Clip, Media: media))
+                .Where(pair => pair.Media.HasVideo && !pair.Media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase))
+                .Select(pair => new Candidate(pair.Clip, pair.Media, $"{pair.Clip.Name} · {pair.Track.Name}")).ToArray();
+            events.ItemsSource = candidates;
+            events.SelectedItem = candidates.FirstOrDefault(candidate => initialClip is not null && initialClip.Id == candidate.Clip?.Id)
+                ?? candidates.FirstOrDefault(candidate => candidate.Clip is { } clip && vm.Selection.Contains(clip.Id))
+                ?? candidates.FirstOrDefault();
+        }
 
         AutomationProperties.SetAutomationId(events, "SceneDetectionEvent");
         AutomationProperties.SetAutomationId(action, "SceneDetectionAction");
@@ -55,7 +72,8 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         AutomationProperties.SetLiveSetting(status, AutomationLiveSetting.Polite);
         actionField = Field("A_ction", action);
 
-        inputs.Children.Add(Field("_Video event", events));
+        if (sourceCandidate is null) inputs.Children.Add(Field("_Video event", events));
+        else inputs.Children.Add(new TextBlock { Text = sourceCandidate.Label, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10) });
         var sensitivityRow = new DockPanel();
         var value = new TextBlock { Width = 42, Text = "65%", TextAlignment = TextAlignment.Right };
         DockPanel.SetDock(value, Dock.Right);
@@ -91,14 +109,21 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
             closed = true;
             scan?.Cancel();
         };
-        AcceptButton.Content = "_Apply";
+        AcceptButton.Content = sourceCandidate is null ? "_Apply" : "_Create subclips";
         ResetResults();
     }
 
-    private bool CanAnalyze() => events.SelectedItem is Candidate target && !target.Clip.IsReversed
-        && target.Clip.PlaybackRate == 1 && target.Clip.UnderSampleRate == 1
-        && target.Clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) != true
-        && target.Clip.SourceInFrame >= 0 && target.Clip.SourceInFrame + target.Clip.DurationFrames <= vm.Project.FrameRate.Frames(target.Media.DurationSeconds);
+    private Candidate? Target => sourceCandidate ?? events.SelectedItem as Candidate;
+
+    private bool CanAnalyze(Candidate? target)
+    {
+        if (target is null || !target.Media.HasVideo || !File.Exists(target.Media.Path)) return false;
+        var rate = vm.Project.FrameRate;
+        if (target.Clip is not { } clip) return target.DurationFrames(rate) > 0;
+        return !clip.IsReversed && clip.PlaybackRate == 1 && clip.UnderSampleRate == 1
+            && clip.Envelopes?.Any(envelope => envelope.Type == EnvelopeType.Velocity && envelope.IsEnabled) != true
+            && clip.SourceInFrame >= 0 && clip.SourceInFrame <= rate.Frames(target.Media.DurationSeconds) - clip.DurationFrames;
+    }
 
     private void ResetResults()
     {
@@ -106,15 +131,18 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         choices.Clear();
         review.Children.Clear();
         UpdateApplyState();
-        analyze.IsEnabled = CanAnalyze();
-        ShowStatus(analyze.IsEnabled ? "Analyze the event for hard cuts."
-            : events.SelectedItem is null ? "No video events are available."
+        var target = Target;
+        analyze.IsEnabled = CanAnalyze(target);
+        ShowStatus(analyze.IsEnabled ? "Analyze for hard cuts."
+            : target is null ? "No video events are available."
+            : !File.Exists(target.Media.Path) ? "The source file is unavailable."
+            : target.Clip is null ? "The source has no video frames to analyze."
             : "Analyze requires a forward, unretimed event within its source range.");
     }
 
     private async Task AnalyzeAsync()
     {
-        if (!CanAnalyze() || events.SelectedItem is not Candidate target) return;
+        if (Target is not { } target || !CanAnalyze(target)) return;
         if (!double.TryParse(minimumLength.Text, NumberStyles.Float, CultureInfo.CurrentCulture, out var duration)
             || !double.IsFinite(duration) || duration is < 50 or > 60000)
         {
@@ -138,8 +166,9 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
                 if (!closed && scan == cancellation) progress.Value = value;
             });
             var options = new SceneDetectionOptions { Sensitivity = sensitivity.Value / 100, MinSceneLengthMs = duration };
+            var rate = vm.Project.FrameRate;
             var detected = await new SceneDetectionService(vm.Media).DetectScenesAsync(
-                target.Media, target.Clip.SourceInFrame, target.Clip.DurationFrames, vm.Project.FrameRate, options, target.Clip.StartFrame,
+                target.Media, target.SourceInFrame, target.DurationFrames(rate), rate, options, target.StartFrame,
                 updates, cancellation.Token);
             cancellation.Token.ThrowIfCancellationRequested();
             if (!closed) ShowCuts(detected);
@@ -148,7 +177,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         {
             if (!closed) ShowStatus("Analysis cancelled.");
         }
-        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException)
+        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or MediaException)
         {
             if (!closed) ShowStatus("Analysis failed. " + error.Message);
         }
@@ -179,7 +208,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         foreach (var cut in cuts)
         {
             var position = TimecodeFormatter.Format(cut.AbsoluteFrame, project.FrameRate, project.RulerFormat,
-                project.AudioSampleRate, project.BeatsPerMinute, project.BeatsPerMeasure, project.RulerStartTimeFrames);
+                project.AudioSampleRate, project.BeatsPerMinute, project.BeatsPerMeasure, sourceCandidate is null ? project.RulerStartTimeFrames : 0);
             var include = new CheckBox { Content = $"Cut at {position}", IsChecked = true };
             AutomationProperties.SetAutomationId(include, $"SceneCut_{cut.AbsoluteFrame}");
             include.Checked += (_, _) => UpdateApplyState();
@@ -194,8 +223,11 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
         list.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
         list.SetResourceReference(Border.BackgroundProperty, "PanelBrush");
         review.Children.Add(list);
-        review.Children.Add(actionField);
-        review.Children.Add(grouped);
+        if (sourceCandidate is null)
+        {
+            review.Children.Add(actionField);
+            review.Children.Add(grouped);
+        }
         UpdateApplyState();
     }
 
@@ -208,15 +240,21 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
 
     protected override bool TryAccept()
     {
-        if (events.SelectedItem is not Candidate target || scan is not null) return false;
+        if (Target is not { } target || scan is not null) return false;
         var cuts = choices.Where(choice => choice.Include.IsChecked == true).Select(choice => choice.Cut).ToArray();
         if (cuts.Length == 0) return false;
 
         var mode = (SceneDetectionMode)action.SelectedIndex;
         try
         {
-            var result = vm.Editor.ApplySceneDetection(target.Clip.Id, cuts, mode,
-                new() { IncludeGroupedTracks = grouped.IsChecked == true }, target.Clip.Name);
+            if (target.Clip is not { } clip)
+            {
+                var created = vm.Editor.CreateSceneSubclips(target.Media.Id, cuts);
+                vm.Status = $"Created {created.Count} scene subclips in Project Media.";
+                return true;
+            }
+            var result = vm.Editor.ApplySceneDetection(clip.Id, cuts, mode,
+                new() { IncludeGroupedTracks = grouped.IsChecked == true }, clip.Name);
             vm.Status = mode switch
             {
                 SceneDetectionMode.SplitOnTimeline => $"Split the event into {result.SceneCount} scenes.",
@@ -225,7 +263,7 @@ public sealed class SceneDetectionWindow : TimelineEditDialog
             };
             return true;
         }
-        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or OverflowException)
+        catch (Exception error) when (error is IOException or InvalidOperationException or ArgumentException or OverflowException or KeyNotFoundException)
         {
             ShowStatus("Could not apply the cuts. " + error.Message);
             return false;

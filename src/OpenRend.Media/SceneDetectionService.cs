@@ -63,16 +63,7 @@ public sealed class SceneDetectionService
                 var currentFrameIndex = startFrame + offset;
                 var timeSec = frameRate.Seconds(currentFrameIndex);
 
-                byte[] currFrame;
-                try
-                {
-                    currFrame = mediaService.GetFrame(asset, timeSec, ProxyWidth, ProxyHeight);
-                }
-                catch
-                {
-                    // If frame decode fails at stream boundary, continue
-                    break;
-                }
+                var currFrame = mediaService.GetFrame(asset, timeSec, ProxyWidth, ProxyHeight);
 
                 if (prevFrame is not null)
                 {
