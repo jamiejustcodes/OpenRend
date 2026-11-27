@@ -8,7 +8,7 @@ namespace OpenRend.Media;
 public sealed partial class TimelineRenderService
 {
     private byte[] RenderDissolve(ProjectDocument project, long frame, EvaluatedClip outgoing, EvaluatedClip incoming,
-        EvaluatedDissolve dissolve, int width, int height)
+        EvaluatedDissolve dissolve, int width, int height, bool bypassVideoEffects)
     {
         var output = new byte[checked(width * height * 4)];
         if (outgoing.Track.Opacity <= 0) return output;
@@ -16,8 +16,8 @@ public sealed partial class TimelineRenderService
         var secondWeight = (float)(incoming.Clip.Opacity * (dissolve.IncomingWeight ?? dissolve.Progress));
         var firstOpacity = (float)outgoing.Clip.Opacity;
         var secondOpacity = (float)incoming.Clip.Opacity;
-        var first = outgoing.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, outgoing, width, height);
-        var second = incoming.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, incoming, width, height);
+        var first = outgoing.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, outgoing, width, height, bypassVideoEffects);
+        var second = incoming.Clip.Opacity <= 0 ? null : PrepareDissolveLayer(project, frame, incoming, width, height, bypassVideoEffects);
 
         var transition = dissolve.Transition;
         if (transition is null || (transition.Kind == VideoTransitionKind.Dissolve && (transition.Preset == "Default" || string.IsNullOrEmpty(transition.Preset))))
@@ -525,7 +525,7 @@ public sealed partial class TimelineRenderService
 
     private static byte Quantize(float value) => (byte)Math.Clamp((int)MathF.Round(value), 0, 255);
 
-    private DissolveSource? PrepareDissolveLayer(ProjectDocument project, long frame, EvaluatedClip layer, int width, int height)
+    private DissolveSource? PrepareDissolveLayer(ProjectDocument project, long frame, EvaluatedClip layer, int width, int height, bool bypassVideoEffects)
     {
         if (IsSubtitleLayer(layer))
         {
@@ -533,13 +533,13 @@ public sealed partial class TimelineRenderService
             var style = ExtractSubtitleStyle(layer.Track.Name, layer.Clip, layer.Media.Path, frame);
             var handles = ActiveSubtitleClipId == layer.Clip.Id;
             var pixels = SubtitleRenderer.RenderSubtitle(layer.Clip.Name, width, height, style, handles, out _);
-            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+            if (!bypassVideoEffects) pixels = ApplySourceEffects(pixels, layer, frame, width, height);
             return new(pixels, width, height, null);
         }
-        if (IsColorGeneratorLayer(layer))
+        if (IsGeneratorLayer(layer))
         {
-            var pixels = RenderColorGenerator(layer.Media.Path, width, height);
-            pixels = VideoEffectProcessor.Apply(pixels, width, height, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+            var pixels = MediaGeneratorSynthesizer.Render(layer.Media, width, height, frame);
+            if (!bypassVideoEffects) pixels = ApplySourceEffects(pixels, layer, frame, width, height);
             return new(pixels, width, height, null);
         }
         var (sourceWidth, sourceHeight) = SourceDimensions(layer.Media);
@@ -548,15 +548,12 @@ public sealed partial class TimelineRenderService
         var transformed = crop.Width != sourceWidth || crop.Height != sourceHeight ||
             crop.CenterX != sourceWidth / 2.0 || crop.CenterY != sourceHeight / 2.0 || crop.RotationDegrees % 360 != 0;
         var hasMask = layer.Clip.Mask?.IsEnabled == true;
-        if (transformed || hasMask || VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
+        if (transformed || hasMask || (!bypassVideoEffects && (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects) || VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))))
         {
             if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
                 throw new MediaException("Source dimensions exceed video processing limits.");
             var pixels = media.GetFrame(layer.Media, layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
-            if (VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
-                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
-            if (VideoEffectProcessor.HasActiveEffects(layer.Clip.VideoEffects))
-                pixels = VideoEffectProcessor.Apply(pixels, sourceWidth, sourceHeight, layer.Clip.VideoEffects, Math.Max(0, frame - layer.Clip.StartFrame));
+            if (!bypassVideoEffects) pixels = ApplySourceEffects(pixels, layer, frame, sourceWidth, sourceHeight);
             if (hasMask)
             {
                 var maskShape = TimelineEvaluator.MaskAt(layer.Clip, checked(layer.SourceFrame - layer.Clip.SourceInFrame));

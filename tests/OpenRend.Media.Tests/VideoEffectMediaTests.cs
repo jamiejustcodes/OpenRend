@@ -1,5 +1,6 @@
 using OpenRend.Core;
 using OpenRend.Media;
+using OpenRend.Timeline;
 using Xunit;
 
 namespace OpenRend.Media.Tests;
@@ -121,5 +122,49 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
             for (var channel = 0; channel < 3; channel++)
                 Assert.InRange(Math.Abs(encoded[offset + channel] - preview[offset + channel]), 0, 8);
         }
+    }
+
+    [Fact]
+    public async Task GeneratedMediaGradeAppliesBeforeEventEffectsThroughADissolve()
+    {
+        using var media = new MediaService();
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.SetParameter("BrightnessAdjust", .2);
+        var parameters = new Dictionary<string, string> { ["hex"] = "#404040" };
+        var source = new MediaAsset
+        {
+            Path = MediaGeneratorCatalog.CreateUri(MediaGeneratorKind.SolidColor, "Gray", parameters),
+            HasVideo = true, IsGenerated = true, Width = 64, Height = 48, DurationSeconds = 2, VideoEffects = [grade],
+            Generator = new() { Kind = MediaGeneratorKind.SolidColor, Title = "Solid Color", PresetName = "Gray", Parameters = parameters }
+        };
+        var outgoing = new TimelineClip
+        {
+            MediaId = source.Id, DurationFrames = 12, FadeOutFrames = 4, VideoEffects = [VideoEffect.Create(VideoEffectKind.Invert)]
+        };
+        var incoming = new TimelineClip
+        {
+            MediaId = source.Id, StartFrame = 8, DurationFrames = 12, FadeInFrames = 4,
+            FadeInTransition = new(), VideoEffects = [VideoEffect.Create(VideoEffectKind.Invert)]
+        };
+        var project = new ProjectDocument
+        {
+            Width = 64, Height = 48, Media = [source],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming] }]
+        };
+        const int overlap = 10;
+        var layers = TimelineEvaluator.Evaluate(project, overlap).Video;
+        Assert.Equal(2, layers.Count);
+        Assert.All(layers, layer => Assert.NotNull(layer.Dissolve));
+
+        using var renderer = new TimelineRenderService(media);
+        Assert.Equal(new byte[] { 140, 140, 140, 255 }, renderer.RenderFrame(project, 0, 64, 48)[..4]);
+        Assert.Equal(new byte[] { 140, 140, 140, 255 }, renderer.RenderFrame(project, overlap, 64, 48)[..4]);
+        Assert.Equal(new byte[] { 64, 64, 64, 255 }, renderer.RenderFrame(project, overlap, 64, 48, bypassVideoEffects: true)[..4]);
+
+        var output = Path.Combine(fixture.Directory, "generator-grade.mp4");
+        await new ExportService(renderer).ExportAsync(project, output);
+        var encoded = media.GetFrame(output, project.FrameRate.Seconds(overlap), 64, 48);
+        for (var channel = 0; channel < 3; channel++) Assert.InRange((int)encoded[channel], 137, 143);
+        Assert.Equal(new byte[] { 64, 64, 64, 255 }, MediaGeneratorSynthesizer.Render(source, 64, 48)[..4]);
     }
 }
