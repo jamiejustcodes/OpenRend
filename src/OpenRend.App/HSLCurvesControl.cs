@@ -61,11 +61,14 @@ public sealed class HSLCurvesControl : CurveGraphControl
         HSLCurveMode.HueVsSat => curves.HueVsSat,
         HSLCurveMode.HueVsLum => curves.HueVsLum,
         HSLCurveMode.SatVsSat => curves.SatVsSat,
+        HSLCurveMode.SatVsLum => curves.SatVsLum,
         HSLCurveMode.LumVsSat => curves.LumVsSat,
         _ => curves.HueVsSat
     };
 
     private bool IsHueMode => activeMode is HSLCurveMode.HueVsHue or HSLCurveMode.HueVsSat or HSLCurveMode.HueVsLum;
+    private bool IsSaturationMode => activeMode is HSLCurveMode.SatVsSat or HSLCurveMode.SatVsLum;
+    private bool UsesFreePoints => activeMode == HSLCurveMode.SatVsLum;
 
     protected override int PointCount => ActiveCurve.Points.Count;
     protected override int SelectedPointIndex
@@ -101,13 +104,14 @@ public sealed class HSLCurvesControl : CurveGraphControl
     public void ResetActive()
     {
         CancelDrag();
-        var fresh = IsHueMode ? HSLCurve.CreateDefaultHue() : HSLCurve.CreateDefaultLinear();
+        var fresh = UsesFreePoints ? new HSLCurve() : IsHueMode ? HSLCurve.CreateDefaultHue() : HSLCurve.CreateDefaultLinear();
         switch (activeMode)
         {
             case HSLCurveMode.HueVsHue: curves.HueVsHue = fresh; break;
             case HSLCurveMode.HueVsSat: curves.HueVsSat = fresh; break;
             case HSLCurveMode.HueVsLum: curves.HueVsLum = fresh; break;
             case HSLCurveMode.SatVsSat: curves.SatVsSat = fresh; break;
+            case HSLCurveMode.SatVsLum: curves.SatVsLum = fresh; break;
             case HSLCurveMode.LumVsSat: curves.LumVsSat = fresh; break;
         }
         selectedPointIndex = -1;
@@ -153,7 +157,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
                 },
                 new Point(0, 0), new Point(1, 0));
         }
-        else if (activeMode == HSLCurveMode.SatVsSat)
+        else if (IsSaturationMode)
         {
             spectrumBrush = new LinearGradientBrush(
                 Color.FromRgb(128, 128, 128), Color.FromRgb(255, 0, 128), 0.0);
@@ -242,11 +246,8 @@ public sealed class HSLCurvesControl : CurveGraphControl
             return Color.FromRgb((byte)(r * 255), (byte)(g * 255), (byte)(b * 255));
         }
 
-        if (activeMode == HSLCurveMode.SatVsSat)
-        {
-            var s = (byte)(x * 255);
-            return Color.FromRgb(255, (byte)(255 - s), (byte)(255 - s / 2));
-        }
+        if (IsSaturationMode)
+            return Color.FromRgb((byte)(128 + x * 127), (byte)(128 * (1 - x)), 128);
 
         var l = (byte)(x * 255);
         return Color.FromRgb(l, l, l);
@@ -282,7 +283,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
         if (e.ChangedButton == MouseButton.Left && (hitIdx >= 0 || GraphRect.Contains(pos)))
         {
             e.Handled = true;
-            if (e.ClickCount == 2 && hitIdx >= 0 && pts.Count > 2)
+            if (e.ClickCount == 2 && hitIdx >= 0 && (UsesFreePoints || pts.Count > 2))
             {
                 // Double click removes point
                 pts.RemoveAt(hitIdx);
@@ -292,6 +293,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
                 CurvesChanged?.Invoke();
                 return;
             }
+            if (UsesFreePoints && hitIdx < 0 && e.ClickCount < 2) return;
 
             if (!CaptureMouse()) return;
             SnapshotCurveGesture();
@@ -323,17 +325,18 @@ public sealed class HSLCurvesControl : CurveGraphControl
 
             pt.Y = norm.Y;
 
-            // For linear non-hue curves, clamp endpoints
             if (!IsHueMode)
             {
-                if (selectedPointIndex == 0) pt.X = 0.0;
-                else if (selectedPointIndex == pts.Count - 1) pt.X = 1.0;
+                var first = selectedPointIndex == 0;
+                var last = selectedPointIndex == pts.Count - 1;
+                if (!UsesFreePoints && first) pt.X = 0.0;
+                else if (!UsesFreePoints && last) pt.X = 1.0;
                 else
                 {
-                    var left = pts[selectedPointIndex - 1].X;
-                    var right = pts[selectedPointIndex + 1].X;
+                    var left = first ? 0 : pts[selectedPointIndex - 1].X;
+                    var right = last ? 1 : pts[selectedPointIndex + 1].X;
                     var gap = right - left >= 0.01 ? 0.005 : 0;
-                    pt.X = Math.Clamp(norm.X, left + gap, right - gap);
+                    pt.X = Math.Clamp(norm.X, first ? left : left + gap, last ? right : right - gap);
                 }
             }
 
@@ -399,7 +402,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
             }
             return;
         }
-        if (e.Key == Key.Delete && selectedPointIndex >= 0 && ActiveCurve.Points.Count > 2)
+        if (e.Key == Key.Delete && selectedPointIndex >= 0 && (UsesFreePoints || ActiveCurve.Points.Count > 2))
         {
             ActiveCurve.Points.RemoveAt(selectedPointIndex);
             selectedPointIndex = -1;
@@ -434,6 +437,10 @@ public sealed class HSLCurvesControl : CurveGraphControl
                 var deg = (int)Math.Round(p.X * 360.0);
                 PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "Hue: {0}°   Shift: {1}{2:F1}%", deg, sign, deltaPercent));
             }
+            else if (activeMode == HSLCurveMode.SatVsLum)
+            {
+                PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "Saturation {0:F1}%   Luminance {1}{2:F1}%", p.X * 100.0, sign, deltaPercent));
+            }
             else
             {
                 PointSelected?.Invoke(string.Format(CultureInfo.InvariantCulture, "In: {0:F1}%   Mod: {1}{2:F1}%", p.X * 100.0, sign, deltaPercent));
@@ -447,6 +454,7 @@ public sealed class HSLCurvesControl : CurveGraphControl
                 HSLCurveMode.HueVsSat => "Hue vs Saturation",
                 HSLCurveMode.HueVsLum => "Hue vs Luminance",
                 HSLCurveMode.SatVsSat => "Saturation vs Saturation",
+                HSLCurveMode.SatVsLum => "Saturation vs Luminance",
                 HSLCurveMode.LumVsSat => "Luminance vs Saturation",
                 _ => "HSL Curve"
             };

@@ -16,6 +16,8 @@ public sealed class HSLCurvesTests
         Assert.True(hsl.HueVsSat.IsIdentity);
         Assert.True(hsl.HueVsLum.IsIdentity);
         Assert.True(hsl.SatVsSat.IsIdentity);
+        Assert.Empty(hsl.SatVsLum.Points);
+        Assert.True(hsl.SatVsLum.IsIdentity);
         Assert.True(hsl.LumVsSat.IsIdentity);
 
         Assert.Equal(6, hsl.HueVsHue.Points.Count);
@@ -99,6 +101,26 @@ public sealed class HSLCurvesTests
     }
 
     [Fact]
+    public void SatVsLumDefaultsToNeutralInOldGradesAndOnePointAppliesAcrossTheDomain()
+    {
+        var old = JsonSerializer.Deserialize<HSLCurvesData>("""{"SatVsSat":{"Points":[{"X":0,"Y":0.5},{"X":1,"Y":0.5}]}}""");
+        Assert.NotNull(old);
+        var curve = old.SatVsLum;
+        curve.Validate();
+        Assert.False(old.HasAdjustments);
+        Assert.Equal(.5, curve.Evaluate(.8, isHuePeriodic: false));
+
+        curve.Points.Add(new(.37, .72));
+        curve.Validate();
+        Assert.True(old.HasAdjustments);
+        Assert.Equal(.72, curve.Evaluate(0, isHuePeriodic: false));
+        Assert.Equal(.72, curve.Evaluate(1, isHuePeriodic: false));
+        Assert.True(old.ContentEquals(old.DeepClone()));
+        curve.Points.Add(new(1, .61));
+        Assert.Equal(.61, curve.BuildLut(256, false, includeEndpoint: true)[^1]);
+    }
+
+    [Fact]
     public void VideoEffectWithHSLCurvesSerializesAndDeserializesAccurately()
     {
         var effect = new VideoEffect
@@ -108,6 +130,7 @@ public sealed class HSLCurvesTests
         };
         effect.HSLCurves.HueVsHue.Points[0].Y = 0.65;
         effect.HSLCurves.SatVsSat.Points[1].Y = 0.35;
+        effect.HSLCurves.SatVsLum.Points.Add(new(.8, .61));
 
         var json = JsonSerializer.Serialize(effect);
         var restored = JsonSerializer.Deserialize<VideoEffect>(json);
@@ -117,5 +140,6 @@ public sealed class HSLCurvesTests
         Assert.True(restored.HSLCurves.HasAdjustments);
         Assert.Equal(0.65, restored.HSLCurves.HueVsHue.Points[0].Y, 3);
         Assert.Equal(0.35, restored.HSLCurves.SatVsSat.Points[1].Y, 3);
+        Assert.Equal(.61, Assert.Single(restored.HSLCurves.SatVsLum.Points).Y, 3);
     }
 }

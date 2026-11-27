@@ -13,7 +13,8 @@ public enum HSLCurveMode
     HueVsSat = 1,
     HueVsLum = 2,
     SatVsSat = 3,
-    LumVsSat = 4
+    LumVsSat = 4,
+    SatVsLum = 5
 }
 
 public sealed class HSLCurvePoint
@@ -96,8 +97,8 @@ public sealed class HSLCurve
 
     public void Validate()
     {
-        if (Points == null || Points.Count < 2)
-            throw new InvalidDataException("An HSL curve requires at least two control points.");
+        if (Points is null)
+            throw new InvalidDataException("The HSL curve points are missing.");
 
         for (var i = 0; i < Points.Count; i++)
         {
@@ -114,6 +115,7 @@ public sealed class HSLCurve
     {
         if (Points.Count == 0) return 0.5;
         if (IsIdentity) return 0.5;
+        if (Points.Count == 1) return Points[0].Y;
 
         x = Math.Clamp(x, 0.0, 1.0);
 
@@ -176,12 +178,13 @@ public sealed class HSLCurve
     /// <summary>
     /// Builds a precomputed lookup table for fast per-pixel grading evaluation.
     /// </summary>
-    public double[] BuildLut(int steps = 360, bool isHuePeriodic = true)
+    public double[] BuildLut(int steps = 360, bool isHuePeriodic = true, bool includeEndpoint = false)
     {
         var lut = new double[steps];
+        var intervals = includeEndpoint ? Math.Max(1, steps - 1) : steps;
         for (var i = 0; i < steps; i++)
         {
-            var normalized = i / (double)steps;
+            var normalized = i / (double)intervals;
             lut[i] = Evaluate(normalized, isHuePeriodic);
         }
         return lut;
@@ -194,6 +197,7 @@ public sealed class HSLCurvesData
     public HSLCurve HueVsSat { get; set; } = HSLCurve.CreateDefaultHue();
     public HSLCurve HueVsLum { get; set; } = HSLCurve.CreateDefaultHue();
     public HSLCurve SatVsSat { get; set; } = HSLCurve.CreateDefaultLinear();
+    public HSLCurve SatVsLum { get; set; } = new();
     public HSLCurve LumVsSat { get; set; } = HSLCurve.CreateDefaultLinear();
 
     [JsonIgnore]
@@ -202,6 +206,7 @@ public sealed class HSLCurvesData
         !HueVsSat.IsIdentity ||
         !HueVsLum.IsIdentity ||
         !SatVsSat.IsIdentity ||
+        !SatVsLum.IsIdentity ||
         !LumVsSat.IsIdentity;
 
     public HSLCurvesData DeepClone() => new()
@@ -210,12 +215,14 @@ public sealed class HSLCurvesData
         HueVsSat = HueVsSat.DeepClone(),
         HueVsLum = HueVsLum.DeepClone(),
         SatVsSat = SatVsSat.DeepClone(),
+        SatVsLum = SatVsLum.DeepClone(),
         LumVsSat = LumVsSat.DeepClone()
     };
 
     public bool ContentEquals(HSLCurvesData? other) => other is not null &&
         SameCurve(HueVsHue, other.HueVsHue) && SameCurve(HueVsSat, other.HueVsSat) &&
-        SameCurve(HueVsLum, other.HueVsLum) && SameCurve(SatVsSat, other.SatVsSat) && SameCurve(LumVsSat, other.LumVsSat);
+        SameCurve(HueVsLum, other.HueVsLum) && SameCurve(SatVsSat, other.SatVsSat) &&
+        SameCurve(SatVsLum, other.SatVsLum) && SameCurve(LumVsSat, other.LumVsSat);
 
     private static bool SameCurve(HSLCurve left, HSLCurve right) => left.Points.Count == right.Points.Count &&
         left.Points.Zip(right.Points).All(pair =>
@@ -228,6 +235,7 @@ public sealed class HSLCurvesData
         HueVsSat?.Validate();
         HueVsLum?.Validate();
         SatVsSat?.Validate();
+        SatVsLum?.Validate();
         LumVsSat?.Validate();
     }
 }

@@ -195,4 +195,38 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
         for (var channel = 0; channel < 3; channel++)
             Assert.InRange(Math.Abs(encoded[channel] - preview[channel]), 0, 5);
     }
+
+    [Fact]
+    public async Task SaturationCurveChangesLuminanceOfSaturatedPixelsInPreviewAndExport()
+    {
+        using var media = new MediaService();
+        var parameters = new Dictionary<string, string> { ["color1"] = "#808080", ["color2"] = "#FF0000", ["size"] = "32" };
+        var asset = new MediaAsset
+        {
+            IsGenerated = true, HasVideo = true, DurationSeconds = 1, Width = 64, Height = 48,
+            Path = MediaGeneratorCatalog.CreateUri(MediaGeneratorKind.Checkerboard, "Saturation plate", parameters),
+            Generator = new() { Kind = MediaGeneratorKind.Checkerboard, Title = "Checkerboard", PresetName = "Saturation plate", Parameters = parameters }
+        };
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.HSLCurves = new();
+        grade.HSLCurves.SatVsLum.Points = [new(.6, .5), new(1, .75)];
+        var project = new ProjectDocument
+        {
+            Width = 64, Height = 48, Media = [asset], VideoOutputEffects = [grade],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = asset.Id, DurationFrames = 3 }] }]
+        };
+        using var renderer = new TimelineRenderService(media);
+        var preview = renderer.RenderFrame(project, 0, 64, 48);
+        var gray = (16 * 64 + 16) * 4;
+        var red = (16 * 64 + 48) * 4;
+        Assert.Equal(new byte[] { 128, 128, 128, 255 }, preview[gray..(gray + 4)]);
+        Assert.Equal(new byte[] { 128, 128, 255, 255 }, preview[red..(red + 4)]);
+
+        var output = Path.Combine(fixture.Directory, "saturation-luminance.mp4");
+        await new ExportService(renderer).ExportAsync(project, output);
+        var encoded = media.GetFrame(output, 0, 64, 48);
+        foreach (var sample in new[] { gray, red })
+            for (var channel = 0; channel < 3; channel++)
+                Assert.InRange(Math.Abs(encoded[sample + channel] - preview[sample + channel]), 0, 6);
+    }
 }

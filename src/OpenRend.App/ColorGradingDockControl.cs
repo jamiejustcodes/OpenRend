@@ -976,11 +976,13 @@ public sealed partial class ColorGradingDockControl : UserControl
         var btnHvs = new Button { Content = "Hue vs Sat", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0), FontWeight = FontWeights.Bold };
         var btnHvl = new Button { Content = "Hue vs Lum", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
         var btnSvs = new Button { Content = "Sat vs Sat", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
+        var btnSvl = new Button { Content = "Sat vs Lum", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0), ToolTip = "Saturation vs Luminance" };
         var btnLvs = new Button { Content = "Lum vs Sat", Padding = new Thickness(6, 2, 6, 2) };
         hslTop.Children.Add(btnHvh);
         hslTop.Children.Add(btnHvs);
         hslTop.Children.Add(btnHvl);
         hslTop.Children.Add(btnSvs);
+        hslTop.Children.Add(btnSvl);
         hslTop.Children.Add(btnLvs);
 
         var rstHslModeBtn = new Button { Content = "Reset Mode", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(0, 0, 4, 0) };
@@ -1027,12 +1029,14 @@ public sealed partial class ColorGradingDockControl : UserControl
             btnHvs.FontWeight = m == HSLCurveMode.HueVsSat ? FontWeights.Bold : FontWeights.Normal;
             btnHvl.FontWeight = m == HSLCurveMode.HueVsLum ? FontWeights.Bold : FontWeights.Normal;
             btnSvs.FontWeight = m == HSLCurveMode.SatVsSat ? FontWeights.Bold : FontWeights.Normal;
+            btnSvl.FontWeight = m == HSLCurveMode.SatVsLum ? FontWeights.Bold : FontWeights.Normal;
             btnLvs.FontWeight = m == HSLCurveMode.LumVsSat ? FontWeights.Bold : FontWeights.Normal;
         }
         btnHvh.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.HueVsHue; UpdateHslModeStyles(HSLCurveMode.HueVsHue); };
         btnHvs.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.HueVsSat; UpdateHslModeStyles(HSLCurveMode.HueVsSat); };
         btnHvl.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.HueVsLum; UpdateHslModeStyles(HSLCurveMode.HueVsLum); };
         btnSvs.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.SatVsSat; UpdateHslModeStyles(HSLCurveMode.SatVsSat); };
+        btnSvl.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.SatVsLum; UpdateHslModeStyles(HSLCurveMode.SatVsLum); };
         btnLvs.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.LumVsSat; UpdateHslModeStyles(HSLCurveMode.LumVsSat); };
         rstHslModeBtn.Click += (_, _) => hc.ResetActive();
         rstAllHslBtn.Click += (_, _) => hc.ResetAll();

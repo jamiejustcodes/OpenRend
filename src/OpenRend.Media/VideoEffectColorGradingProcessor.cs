@@ -122,6 +122,7 @@ internal static partial class VideoEffectProcessor
         var hvsLut = hasHslCurves && !hslCurves!.HueVsSat.IsIdentity ? hslCurves.HueVsSat.BuildLut(360, true) : null;
         var hvlLut = hasHslCurves && !hslCurves!.HueVsLum.IsIdentity ? hslCurves.HueVsLum.BuildLut(360, true) : null;
         var svsLut = hasHslCurves && !hslCurves!.SatVsSat.IsIdentity ? hslCurves.SatVsSat.BuildLut(256, false) : null;
+        var svlLut = hasHslCurves && !hslCurves!.SatVsLum.IsIdentity ? hslCurves.SatVsLum.BuildLut(256, false, includeEndpoint: true) : null;
         var lvsLut = hasHslCurves && !hslCurves!.LumVsSat.IsIdentity ? hslCurves.LumVsSat.BuildLut(256, false) : null;
 
         // Apply primary grading operations in single color transform pass
@@ -268,6 +269,11 @@ internal static partial class VideoEffectProcessor
                 {
                     var sIdx = Math.Clamp((int)(s * 255.99), 0, 255);
                     s = Math.Clamp(s * (svsLut[sIdx] * 2.0), 0.0, 1.0);
+                }
+                if (svlLut is not null)
+                {
+                    var sIdx = (int)Math.Round(s * (svlLut.Length - 1));
+                    l = Math.Clamp(l + svlLut[sIdx] - 0.5, 0.0, 1.0);
                 }
                 if (lvsLut is not null)
                 {
