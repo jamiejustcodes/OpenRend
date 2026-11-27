@@ -51,11 +51,14 @@ public sealed partial class EditorWorkflowTests
             Window? preferences = null;
             WaitFor(() => (preferences = main.ModalWindows.SingleOrDefault(dialog => dialog.Title == "Preferences")) is not null,
                 "Editing preferences did not open.");
-            Find(preferences!, "OverlapNewMedia").Patterns.Toggle.Pattern.Toggle();
+            var overlapPreference = Find(preferences!, "OverlapNewMedia").Patterns.Toggle.Pattern;
+            overlapPreference.Toggle();
+            WaitFor(() => overlapPreference.ToggleState.Value == ToggleState.On, "The overlap preference did not turn on.");
             Find(preferences!, "CutOverlapSeconds").AsTextBox().Text = "0.4";
             Find(preferences!, "EditingPreferencesOk").AsButton().Invoke();
             WaitFor(() => main.ModalWindows.Length == 0, "Saving overlap preferences did not close the dialog.");
-            Assert.True(EditingPreferencesStore.Load(Path.Combine(directory, "editing.json")).OverlapNewMedia);
+            WaitFor(() => EditingPreferencesStore.Load(Path.Combine(directory, "editing.json")).OverlapNewMedia,
+                "The overlap preference was not written after the modal closed.");
 
             SelectBrowserTab(main, "Project Media");
             var tiles = Find(main, "MediaList").AsListBox().Items;
