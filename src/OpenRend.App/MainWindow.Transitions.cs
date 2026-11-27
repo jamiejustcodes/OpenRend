@@ -202,6 +202,7 @@ public partial class MainWindow
     {
         if (TransitionPresets is null || DefaultDissolvePreset is null) return;
         var previous = (TransitionPresets.SelectedItem as ListBoxItem)?.DataContext as TransitionPresetInfo;
+        StopTransitionDemo();
         TransitionPresets.Items.Clear();
         if (TransitionPlugIns.SelectedItem is not ListBoxItem { Visibility: Visibility.Visible, DataContext: TransitionPluginInfo plugin })
             return;
@@ -213,12 +214,8 @@ public partial class MainWindow
             if (!showAllPresets && !preset.Name.Contains(query, StringComparison.OrdinalIgnoreCase)) continue;
             var item = plugin.Kind == VideoTransitionKind.Dissolve && preset == plugin.Presets[0]
                 ? DefaultDissolvePreset
-                : new ListBoxItem
-                {
-                    Padding = new Thickness(8, 5, 8, 5),
-                    Content = preset.Name,
-                    ToolTip = "Drag to a video overlap or apply to the selected events"
-                };
+                : new ListBoxItem();
+            if (!ReferenceEquals(item.DataContext, preset)) SetTransitionPresetContent(item, preset);
             item.DataContext = preset;
             TransitionPresets.Items.Add(item);
             if (preset == previous) item.IsSelected = true;
@@ -296,6 +293,7 @@ public partial class MainWindow
         if (Math.Abs(offset.X) < SystemParameters.MinimumHorizontalDragDistance
             && Math.Abs(offset.Y) < SystemParameters.MinimumVerticalDragDistance) return;
         transitionDragItem = null;
+        StopTransitionDemo();
         var transition = item == DefaultDissolvePreset
             ? new VideoTransition { Kind = VideoTransitionKind.Dissolve, Preset = "Default" }
             : MakeTransition(preset);

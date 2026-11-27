@@ -153,7 +153,9 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [ ] Implement distinct rendering for the three catalog entries that currently render as dissolves.
 - [x] Verify the desktop workflow and encoded output.
 
-The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer.
+The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Apply or double-click a preset to use it on the selected events, or drag it onto a cut or overlap. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer.
+
+The browser renders each preset thumbnail with the same timeline renderer using a separate project with two synthetic patterns. Hover plays the example when Windows animations are enabled. Moving away restores the midpoint frame. The preview has no audio and makes no project edits.
 
 Transition parameter slider drags send the draft setting through the preview renderer. Release saves one undoable edit. Escape restores the original value and pixels. Keyboard increments keep focus on the slider. The desktop workflow verifies all three gestures and the saved angle of a Linear Wipe.
 

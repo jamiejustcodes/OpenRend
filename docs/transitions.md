@@ -1,6 +1,6 @@
 # Default Dissolve and crossfades
 
-Open the Transitions tab and select Dissolve > Default. A click selects the preset without editing the project. Use its + button, double-click it, or drag it to a video overlap. Two selected video events target their own pair; a single selected event can affect existing adjacent overlaps.
+Open the Transitions tab and select Dissolve > Default. A click selects the preset without editing the project. Choose Apply, double-click the preset, or drag it to a video overlap. Two selected video events target their own pair, and a single selected event can affect existing adjacent overlaps.
 
 The star beside Dissolve adds or removes it from Favorites. The choice survives relaunch and is stored in `transitions.json` under the application data directory, or `OPENREND_DATA_DIR`. Search combines with the selected category and matches the supported plug-in, preset and category names. These browser choices do not edit the project.
 
@@ -70,7 +70,7 @@ The Transitions tab groups 18 entries by effect type. All Plug-ins shows the ful
 - **Transforms** includes Push, Slide, Zoom, Swap, Squeeze, and Cross Effect.
 - **3D and Peels** includes Page Loop, Page Peel, and Page Roll.
 
-Choose an entry to see its presets. Use Apply, press Enter, or double-click a preset to apply it to selected events. Drag a preset to a cut or existing overlap to place it directly.
+Choose an entry to see its presets. Each thumbnail shows the midpoint of that preset. Hover to play the transition between two sample patterns when Windows animations are enabled. Use Apply, press Enter, or double-click a preset to apply it to selected events. Drag a preset to a cut or existing overlap to place it directly.
 
 ### Transition Properties Window
 
