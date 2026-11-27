@@ -75,7 +75,7 @@ public sealed partial class TimelineEditor
             throw new InvalidOperationException("Slide requires constant source speed. The event has a velocity envelope.");
         if (track.Kind == TrackKind.Audio && (clip.PlaybackRate != 1 || clip.IsReversed))
             throw new InvalidOperationException("Slide requires forward audio at normal speed.");
-        if (delta % TimelineEvaluator.MediaUnderSampleStep(clip) != 0)
+        if (delta % VideoSourcePhase.SampleStepFor(clip) != 0)
             throw new InvalidOperationException("Slide must align with the event's undersampled frame grid.");
 
         var rate = clip.IsReversed ? -Math.Abs(clip.PlaybackRate) : clip.PlaybackRate;

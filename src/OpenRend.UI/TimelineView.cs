@@ -1215,12 +1215,16 @@ public sealed partial class TimelineView : FrameworkElement
             {
                 var start = clip.StartFrame;
                 var duration = clip.DurationFrames;
+                var sourceIn = clip.SourceInFrame;
+                var playbackRate = clip.PlaybackRate;
                 var cy = y;
                 var rowHeight = item.Height;
                 var isPrimaryDragged = isDragging && dragging?.Id == clip.Id;
                 var isMovingMember = isDragging && dragging is not null && mode == "Move" && movingClipIds is not null && movingClipIds.Contains(clip.Id);
                 var isSlidingMember = isDragging && mode == "Slide" && (isPrimaryDragged ||
                     (!IgnoreGroups && dragging?.GroupId is Guid groupId && clip.GroupId == groupId));
+                var isSlippingMember = isDragging && mode == "Slip" && (isPrimaryDragged ||
+                    (!IgnoreGroups && dragging?.GroupId is Guid slipGroup && clip.GroupId == slipGroup));
 
                 if (isMovingMember)
                 {
@@ -1236,12 +1240,24 @@ public sealed partial class TimelineView : FrameworkElement
                 else if (isSlidingMember)
                 {
                     start += delta;
+                    sourceIn += (long)Math.Round(delta * (clip.IsReversed ? -Math.Abs(playbackRate) : playbackRate));
+                }
+                else if (isSlippingMember)
+                {
+                    sourceIn += delta;
                 }
                 else if (isPrimaryDragged)
                 {
-                    if (mode == "TrimLeft") { start += delta; duration -= delta; }
+                    if (mode == "TrimLeft") { start += delta; duration -= delta; sourceIn += delta; }
                     if (mode == "TrimRight") duration += delta;
+                    if (mode is "TimeStretchLeft" or "TimeStretchRight")
+                    {
+                        if (mode == "TimeStretchLeft") { start += delta; duration -= delta; }
+                        else duration += delta;
+                        playbackRate = Math.Clamp(clip.PlaybackRate * ((double)clip.DurationFrames / Math.Max(1, duration)), .25, 4);
+                    }
                 }
+                if (clip.VideoSourceMode != VideoSourceMode.Loop) sourceIn = Math.Max(0, sourceIn);
                 if (rowHeight <= 2) continue;
                 var rect = new Rect(X(start), cy + 1, Math.Max(2, Project.FrameRate.Seconds(Math.Max(1, duration)) * PixelsPerSecond), rowHeight - 2);
                 if (rect.Right < HeaderWidth || rect.Left > ActualWidth) continue;
@@ -1300,29 +1316,29 @@ public sealed partial class TimelineView : FrameworkElement
                     for (var x = rect.X + firstImage * width; x < Math.Min(rect.Right, ActualWidth); x += width)
                         dc.DrawImage(image, new Rect(x, rect.Y + 19, width, height));
                 }
-                if (rowHeight >= TrackHeight && track.Kind == TrackKind.Audio && Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
+                var media = clip.CanExtendSource || track.Kind == TrackKind.Audio
+                    ? Project.Media.Find(asset => asset.Id == clip.MediaId) : null;
+                if (media is { DurationSeconds: > 0 } && rowHeight >= TrackHeight && track.Kind == TrackKind.Audio &&
+                    Waveforms.TryGetValue(clip.MediaId, out var peaks) && peaks.Length > 0)
                 {
-                    MediaAsset? media = null;
-                    for (var mIdx = 0; mIdx < Project.Media.Count; mIdx++)
+                    var mid = rect.Y + (rowHeight + 15) / 2;
+                    var wp = FrozenPen("#A5D3B5", 1);
+                    var startPx = Math.Max(0.0, HeaderWidth - rect.X);
+                    var endPx = Math.Min(rect.Width, ActualWidth - rect.X);
+                    var period = AudioSourceTime.SourceSampleCount(media);
+                    var originSample = AudioSourceOrigin(Project.FrameRate, clip, sourceIn, duration);
+                    for (var px = startPx; px < endPx; px += 2)
                     {
-                        if (Project.Media[mIdx].Id == clip.MediaId) { media = Project.Media[mIdx]; break; }
-                    }
-                    if (media is not null && media.DurationSeconds > 0)
-                    {
-                        var mid = rect.Y + (rowHeight + 15) / 2;
-                        var wp = FrozenPen("#A5D3B5", 1);
-                        var startPx = Math.Max(0.0, HeaderWidth - rect.X);
-                        var endPx = Math.Min(rect.Width, ActualWidth - rect.X);
-                        for (var px = startPx; px < endPx; px += 2)
-                        {
-                            var t = Project.FrameRate.Seconds(clip.SourceInFrame) + px / PixelsPerSecond;
-                            if (clip.AudioSourceMode == AudioSourceMode.Loop) t %= media.DurationSeconds;
-                            var index = (int)(t / media.DurationSeconds * peaks.Length);
-                            var amplitude = index >= 0 && index < peaks.Length ? Math.Min(1, peaks[index] * clip.Gain) * (rowHeight - 21) / 2 : 0;
-                            dc.DrawLine(wp, new Point(rect.X + px, mid - amplitude), new Point(rect.X + px, mid + amplitude));
-                        }
+                        var localSample = AudioSourceTime.SampleAt(px / PixelsPerSecond);
+                        var sample = clip.IsReversed ? originSample - 1 - localSample : originSample + localSample;
+                        if (clip.AudioSourceMode == AudioSourceMode.Loop && period > 0) sample %= period;
+                        var index = sample >= 0 && sample < period ? (int)(sample / period * peaks.Length) : -1;
+                        var amplitude = index >= 0 && index < peaks.Length ? Math.Min(1, peaks[index] * clip.Gain) * (rowHeight - 21) / 2 : 0;
+                        dc.DrawLine(wp, new Point(rect.X + px, mid - amplitude), new Point(rect.X + px, mid + amplitude));
                     }
                 }
+                if (clip.CanExtendSource && media is not null)
+                    DrawSourceGuides(dc, track, clip, media, rect, sourceIn, duration, playbackRate);
                 var fadePen = FrozenPen("#E4E4E4", 1);
                 if (clip.FadeInFrames > 0) dc.DrawLine(fadePen, rect.BottomLeft, new Point(rect.Left + Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeInFrames) * PixelsPerSecond), rect.Y + 20));
                 if (clip.FadeOutFrames > 0) dc.DrawLine(fadePen, rect.BottomRight, new Point(rect.Right - Math.Min(rect.Width, Project.FrameRate.Seconds(clip.FadeOutFrames) * PixelsPerSecond), rect.Y + 20));

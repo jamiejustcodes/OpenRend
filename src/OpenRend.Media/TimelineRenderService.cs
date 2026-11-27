@@ -544,7 +544,7 @@ public sealed partial class TimelineRenderService : IDisposable
                     if (clip.IsReversed)
                     {
                         var rate = project.FrameRate;
-                        var durationSamples = MediaService.AudioFramesInRange((Int128)clip.DurationFrames * rate.Denominator, rate.Numerator);
+                        var durationSamples = AudioSourceTime.SampleCount((Int128)clip.DurationFrames * rate.Denominator, rate.Numerator);
                         var firstSample = Math.Round(localStart * MediaService.SampleRate, MidpointRounding.AwayFromZero);
                         sourceStart = sourceIn + (durationSamples - firstSample - sampleCount) / MediaService.SampleRate;
                     }

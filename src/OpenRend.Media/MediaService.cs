@@ -4,7 +4,7 @@ namespace OpenRend.Media;
 
 public sealed class MediaService : IDisposable
 {
-    public const int SampleRate = 48_000;
+    public const int SampleRate = AudioSourceTime.MixSampleRate;
     public const int Channels = 2;
     private readonly object gate = new();
     private readonly Dictionary<DecoderKey, CachedDecoder> decoders = new();
@@ -169,9 +169,8 @@ public sealed class MediaService : IDisposable
         if (frames == 0) return;
 
         // Each request uses the same sample period, even when the source ends between project frames.
-        double period = asset.SourceRange is { } range ? AudioFramesInRange(range.TickCount, range.TicksPerSecond)
-            : Math.Round(asset.DurationSeconds * SampleRate, MidpointRounding.AwayFromZero);
-        var sourceSample = Math.Round(seconds * SampleRate, MidpointRounding.AwayFromZero);
+        var period = AudioSourceTime.SourceSampleCount(asset);
+        var sourceSample = AudioSourceTime.SampleAt(seconds);
         if (period < 1 || (mode == AudioSourceMode.PadSilence && sourceSample >= period))
         {
             Array.Clear(destination, 0, frames * Channels);
@@ -217,7 +216,7 @@ public sealed class MediaService : IDisposable
     {
         if (seconds >= range.DurationSeconds) return 0;
         // Anchor all blocks to the same sample grid so adjacent requests do not repeat or skip a sample.
-        var durationSamples = AudioFramesInRange(range.TickCount, range.TicksPerSecond);
+        var durationSamples = AudioSourceTime.SampleCount(range.TickCount, range.TicksPerSecond);
         var remaining = durationSamples - Math.Round(seconds * SampleRate, MidpointRounding.AwayFromZero);
         var count = (int)Math.Clamp(remaining, 0, frames);
         if (count == 0) return 0;
@@ -227,9 +226,6 @@ public sealed class MediaService : IDisposable
         ReverseStereo(destination, count);
         return count;
     }
-
-    internal static long AudioFramesInRange(Int128 ticks, long ticksPerSecond) =>
-        checked((long)((ticks * SampleRate + ticksPerSecond - 1) / ticksPerSecond));
 
     internal static void ReverseStereo(float[] samples, int frames)
     {

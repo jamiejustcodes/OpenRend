@@ -15,9 +15,6 @@ public sealed record EvaluatedFrame(IReadOnlyList<EvaluatedClip> Video, IReadOnl
 
 public static class TimelineEvaluator
 {
-    internal static int MediaUnderSampleStep(TimelineClip clip) => clip.UnderSampleRate is > .001 and < .999
-        ? Math.Max(1, (int)Math.Round(1 / clip.UnderSampleRate)) : 1;
-
     private static readonly Comparison<TimelineClip> ClipFadeOrderComparison = static (a, b) =>
     {
         var offsetA = a.StartFrame - a.FadeOffsetFrames;
@@ -217,15 +214,9 @@ public static class TimelineEvaluator
                 var peak = Math.Max(left, right);
                 var pan = peak == 0 ? 0 : left < right ? 1 - left / right : right / left - 1;
 
-                var underStep = MediaUnderSampleStep(clip);
-                if (underStep > 1) local = local / underStep * underStep;
-
-                var effPlaybackRate = double.IsFinite(clip.PlaybackRate) && clip.PlaybackRate != 0 ? clip.PlaybackRate : 1.0;
-                var sourceFrame = FindEnabledEnvelope(clip.Envelopes, EnvelopeType.Velocity) is { } velocityEnv
-                    ? velocityEnv.CalculateAccumulatedSourceFrame(clip.SourceInFrame, local, effPlaybackRate, clip.IsReversed, clip.DurationFrames)
-                    : clip.IsReversed
-                        ? clip.SourceInFrame + (long)Math.Round(Math.Max(0, clip.DurationFrames - 1 - local) * Math.Abs(effPlaybackRate))
-                        : clip.SourceInFrame + (long)Math.Round(local * effPlaybackRate);
+                var sourcePhase = new VideoSourcePhase(clip, clip.SourceInFrame, clip.DurationFrames, clip.PlaybackRate);
+                local = sourcePhase.SampledEventFrame(local);
+                var sourceFrame = sourcePhase.SourceFrameAtSample(local);
 
                 var opacity = clip.Opacity * track.Opacity * fade;
                 if (FindEnabledEnvelope(track.Envelopes, EnvelopeType.Composite) is { } trackComp)
