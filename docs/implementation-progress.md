@@ -14,7 +14,7 @@ Ctrl-drag a floating core pane to the top edge of the workspace to create an upp
 
 Open floating panes also recheck their work area when Windows reports a display or work-area change. Geometry tests cover recovery from a removed negative-coordinate monitor and fitting to a smaller work area. A simulated Windows display-change notification recovered an open Trimmer in the desktop test. Physical display removal remains unverified.
 
-OpenRend declares per-monitor v2 DPI awareness. After WPF processes a DPI change, the editor rechecks floating and maximized bounds against the Windows work area. The Direct3D preview sizes its renderer from the native child window's client pixels. The desktop workflow verifies the main and floating Trimmer window contexts at 96 DPI. A transition between displays at different scale factors remains unverified.
+OpenRend declares per-monitor v2 DPI awareness. After WPF processes a DPI change, the editor rechecks floating and maximized bounds against the Windows work area. The Direct3D preview sizes its renderer from the native child window's client pixels. The workspace desktop workflows passed at 96 and 120 DPI. On one Windows display, changing the scale from 100% to 125% and back while the editor and floating Trimmer were open kept both windows inside the work area. Win32 reported 96, 120 and 96 DPI for both windows. Moves between displays with different scale factors remain unverified.
 
 ## Slip and slide edits
 
