@@ -30,14 +30,21 @@ public sealed partial class TimelineEditor
         return true;
     }
 
-    public bool SetMarkerLabel(Guid markerId, string label)
+    public bool SetMarkerLabel(Guid markerId, string label) => SetMarkerProperties(markerId, label);
+
+    public bool SetMarkerProperties(Guid markerId, string label, int? colorId = null)
     {
         var target = Project.Markers.FirstOrDefault(m => m.Id == markerId);
         if (target == null) return false;
-        Execute(p =>
+        var updatedLabel = label ?? "";
+        var updatedColor = colorId.HasValue
+            ? Math.Clamp(colorId.Value, 0, TimelineMarker.MarkerColors.Length - 1)
+            : target.ColorId;
+        if (target.Label == updatedLabel && target.ColorId == updatedColor) return true;
+        Execute(_ =>
         {
-            var m = p.Markers.First(x => x.Id == markerId);
-            m.Label = label ?? "";
+            target.Label = updatedLabel;
+            target.ColorId = updatedColor;
         });
         return true;
     }

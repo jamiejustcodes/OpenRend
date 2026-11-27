@@ -494,7 +494,7 @@ public sealed class EditDetailsWindow : Window
                 var region = vm.Project.Regions.FirstOrDefault(r => r.Id == row.RegionId);
                 if (region != null)
                 {
-                    var dlg = new RegionEditDialog(region, vm.Project.FrameRate) { Owner = this };
+                    var dlg = new RegionEditDialog(region) { Owner = this };
                     if (dlg.ShowDialog() == true)
                     {
                         vm.Editor.SetRegion(region.Id, dlg.ResultStartFrame, dlg.ResultEndFrame, dlg.ResultLabel, dlg.ResultColorId);

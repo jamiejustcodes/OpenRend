@@ -41,13 +41,16 @@ public sealed partial class TimelineEditor
         if (target == null) return false;
         var clampedStart = Math.Max(0, startFrame);
         var clampedEnd = Math.Max(clampedStart + 1, endFrame);
+        var updatedLabel = label ?? "";
+        var updatedColor = Math.Clamp(colorId, 0, TimelineMarker.MarkerColors.Length - 1);
+        if (target.StartFrame == clampedStart && target.EndFrame == clampedEnd &&
+            target.Label == updatedLabel && target.ColorId == updatedColor) return true;
         Execute(p =>
         {
-            var r = p.Regions.First(x => x.Id == regionId);
-            r.StartFrame = clampedStart;
-            r.EndFrame = clampedEnd;
-            r.Label = label ?? "";
-            r.ColorId = Math.Clamp(colorId, 0, TimelineMarker.MarkerColors.Length - 1);
+            target.StartFrame = clampedStart;
+            target.EndFrame = clampedEnd;
+            target.Label = updatedLabel;
+            target.ColorId = updatedColor;
             p.Regions.Sort((a, b) => a.StartFrame.CompareTo(b.StartFrame));
         });
         return true;

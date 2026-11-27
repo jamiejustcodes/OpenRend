@@ -64,12 +64,36 @@ public sealed partial class EditorWorkflowTests
                 Point OnRegionBar(int frame, double offset) => new(
                     (int)Math.Round(clipBounds.Left + clipBounds.Width * frame / 90.0),
                     (int)Math.Round(clipBounds.Top - (46 - offset) * scale));
+                var markerPoint = OnRegionBar(0, 20);
+                markerPoint.Offset(3, 0);
+                Mouse.DoubleClick(markerPoint);
+                WaitFor(() => window.ModalWindows.Any(dialog => dialog.Title == "Edit Marker 1"),
+                    "Double-clicking the marker did not open its properties.");
+                var markerDialog = window.ModalWindows.Single(dialog => dialog.Title == "Edit Marker 1");
+                var markerLabel = Find(markerDialog, "AnnotationLabel").AsTextBox();
+                markerLabel.Text = "Opening beat";
+                var markerColor = Find(markerDialog, "AnnotationColor").AsComboBox();
+                markerColor.Select(3);
+                markerColor.Patterns.ExpandCollapse.Pattern.Collapse();
+                markerLabel.Focus();
+                Chord(markerDialog, VirtualKeyShort.RETURN);
+                WaitFor(() => window.ModalWindows.Length == 0, "The marker editor did not close.");
+
                 Mouse.Drag(OnRegionBar(18, 12), OnRegionBar(60, 12), MouseButton.Left);
                 WaitFor(() => Find(window, "WorkspaceSelectionDuration").Name == "Selection 00:00:01.12",
                     "Dragging the range did not select frames 18 through 59.");
                 Chord(window, VirtualKeyShort.KEY_R);
                 WaitFor(() => window.ModalWindows.Any(dialog => dialog.Title == "Edit Region 1"), "R did not create a region.");
-                window.ModalWindows.Single(dialog => dialog.Title == "Edit Region 1").Close();
+                var regionDialog = window.ModalWindows.Single(dialog => dialog.Title == "Edit Region 1");
+                var regionEnd = Find(regionDialog, "RegionEndFrame").AsTextBox();
+                regionEnd.Text = "17";
+                Chord(regionDialog, VirtualKeyShort.RETURN);
+                WaitFor(() => Find(regionDialog, "DialogValidationError").Name.Contains("after the start"),
+                    "The region editor did not reject a reversed range.");
+                regionEnd.Text = "60";
+                Assert.Equal("Length 42 frames", Find(regionDialog, "RegionLength").Name);
+                Find(regionDialog, "AnnotationLabel").AsTextBox().Text = "Review";
+                Chord(regionDialog, VirtualKeyShort.RETURN);
                 WaitFor(() => window.ModalWindows.Length == 0, "The region editor did not close.");
 
                 Mouse.Click(OnRegionBar(75, 12));
@@ -88,8 +112,10 @@ public sealed partial class EditorWorkflowTests
                 Assert.Single(savedProject.Markers);
                 Assert.Equal(1, savedProject.Markers[0].Index);
                 Assert.Equal(0, savedProject.Markers[0].Frame);
+                Assert.Equal(("Opening beat", 3), (savedProject.Markers[0].Label, savedProject.Markers[0].ColorId));
                 var region = Assert.Single(savedProject.Regions);
                 Assert.Equal((18L, 60L), (region.StartFrame, region.EndFrame));
+                Assert.Equal("Review", region.Label);
                 running.CloseGracefully();
             }
 

@@ -43,12 +43,13 @@ public sealed class MarkerEditorTests
         var marker = editor.AddMarker(60, "Draft");
         Assert.Single(editor.Project.Markers);
 
-        editor.SetMarkerLabel(marker.Id, "Final");
-        Assert.Equal("Final", editor.Project.Markers[0].Label);
+        Assert.True(editor.SetMarkerProperties(marker.Id, "Final", 3));
+        Assert.True(editor.SetMarkerProperties(marker.Id, "Final", 3));
+        Assert.Equal(("Final", 3), (editor.Project.Markers[0].Label, editor.Project.Markers[0].ColorId));
 
-        // Undo label edit
+        // Undo both properties together, with no extra step for the unchanged values.
         Assert.True(editor.Undo());
-        Assert.Equal("Draft", editor.Project.Markers[0].Label);
+        Assert.Equal(("Draft", 0), (editor.Project.Markers[0].Label, editor.Project.Markers[0].ColorId));
 
         // Undo marker creation
         Assert.True(editor.Undo());
@@ -59,9 +60,9 @@ public sealed class MarkerEditorTests
         Assert.Single(editor.Project.Markers);
         Assert.Equal("Draft", editor.Project.Markers[0].Label);
 
-        // Redo label edit
+        // Redo both property changes.
         Assert.True(editor.Redo());
-        Assert.Equal("Final", editor.Project.Markers[0].Label);
+        Assert.Equal(("Final", 3), (editor.Project.Markers[0].Label, editor.Project.Markers[0].ColorId));
     }
 
     [Fact]

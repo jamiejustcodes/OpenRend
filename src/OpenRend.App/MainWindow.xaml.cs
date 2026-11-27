@@ -2479,15 +2479,10 @@ public partial class MainWindow : Window
     private void OpenMarkerEdit(TimelineMarker marker) => Guard(() =>
     {
         Pause();
-        var dlg = new MarkerEditDialog(marker, vm.Project.FrameRate) { Owner = this };
+        var dlg = new MarkerEditDialog(marker, vm.Project) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
-            vm.Editor.SetMarkerLabel(marker.Id, dlg.ResultLabel);
-            vm.Editor.Execute(p =>
-            {
-                var m = p.Markers.FirstOrDefault(x => x.Id == marker.Id);
-                if (m != null) m.ColorId = dlg.ResultColorId;
-            });
+            vm.Editor.SetMarkerProperties(marker.Id, dlg.ResultLabel, dlg.ResultColorId);
             Timeline.InvalidateVisual();
             vm.Status = $"Updated Marker {marker.Index}.";
         }
@@ -2514,7 +2509,7 @@ public partial class MainWindow : Window
     private void OpenRegionEdit(TimelineRegion region) => Guard(() =>
     {
         Pause();
-        var dlg = new RegionEditDialog(region, vm.Project.FrameRate) { Owner = this };
+        var dlg = new RegionEditDialog(region) { Owner = this };
         if (dlg.ShowDialog() == true)
         {
             vm.Editor.SetRegion(region.Id, dlg.ResultStartFrame, dlg.ResultEndFrame, dlg.ResultLabel, dlg.ResultColorId);

@@ -28,6 +28,8 @@ Set Time at Cursor, Insert Time and Paste Repeat share OpenRend's field styles, 
 
 The editor menus use WPF access keys. Main timeline commands yield while a menu has focus. View > Window groups the tool windows, and layout slot labels show the assigned name or the empty state. Ruler format choices from Options, the timecode display and the ruler all use the same undoable project edit. The desktop workflow opens Paste Repeat with Alt+E then A and selects Time & Frames with Alt+O then F then M. It verifies the saved format and that the sequence leaves the marker list empty.
 
+Marker and region editors use the same form layout and color picker as each other. The marker displays its position in the active ruler format. The region form shows its frame count as the bounds change and gives inline feedback for an invalid range. A marker's label and color save in one undo step. The desktop workflow edits both forms, verifies the saved details and checks region selection and ripple after reopening.
+
 ## Auto Ripple and ruler regions
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.
