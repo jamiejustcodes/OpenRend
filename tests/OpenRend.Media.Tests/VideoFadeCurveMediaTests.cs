@@ -95,4 +95,53 @@ public sealed class VideoFadeCurveMediaTests
         }
         finally { Directory.Delete(folder, true); }
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TransitionProgressHoldsReversesAndSurvivesSplitAndExport(bool usePlugin)
+    {
+        var red = new MediaAsset { Path = "openrend://color?hex=#C80000", HasVideo = true };
+        var green = new MediaAsset { Path = "openrend://color?hex=#00C800", HasVideo = true };
+        var outgoing = new TimelineClip { MediaId = red.Id, DurationFrames = 30, FadeOutFrames = 24 };
+        var incoming = new TimelineClip { MediaId = green.Id, StartFrame = 6, DurationFrames = 30, FadeInFrames = 24,
+            FadeInTransition = usePlugin ? new VideoTransition() : null };
+        var project = new ProjectDocument { Width = 32, Height = 24, FrameRate = new(30000, 1001), Media = [red, green],
+            Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming] }] };
+        var editor = new TimelineEditor(project);
+        editor.SetTransitionProgress(incoming.Id, new TransitionProgressCurve
+        {
+            Points = [new(0, 0), new(6, .75, EnvelopeCurveType.Hold), new(12, .75), new(18, .25)]
+        });
+        using var media = new MediaService();
+        using var cpu = new TimelineRenderService(media, false);
+        using var gpu = new TimelineRenderService(media);
+        var frames = new[] { (12L, 150), (16L, 150), (21L, 100), (24L, 50), (30L, 200) };
+        var preview = frames.Select(item => cpu.RenderFrame(project, item.Item1, 32, 24)).ToArray();
+        editor.SplitClip(incoming.Id, 18);
+
+        var folder = Path.Combine(Path.GetTempPath(), $"openrend-transition-progress-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var output = Path.Combine(folder, "progress.mp4");
+            await new ExportService(cpu).ExportAsync(project, output);
+            using var decoded = new MediaService();
+            for (var index = 0; index < frames.Length; index++)
+            {
+                var (frame, greenValue) = frames[index];
+                var expected = preview[index];
+                Assert.InRange(Math.Abs(expected[1] - greenValue), 0, 1);
+                Assert.Equal(expected, cpu.RenderFrame(project, frame, 32, 24));
+                var gpuPixels = gpu.RenderFrame(project, frame, 32, 24);
+                var outputPixels = decoded.GetFrame(output, project.FrameRate.Seconds(frame), 32, 24);
+                for (var i = 0; i < expected.Length; i++)
+                {
+                    Assert.InRange(Math.Abs(expected[i] - gpuPixels[i]), 0, 1);
+                    Assert.InRange(Math.Abs(expected[i] - outputPixels[i]), 0, 6);
+                }
+            }
+        }
+        finally { Directory.Delete(folder, true); }
+    }
 }

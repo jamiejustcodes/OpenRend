@@ -57,6 +57,21 @@ public sealed class EnvelopePoint : IEquatable<EnvelopePoint>
         if (!Enum.IsDefined(Curve)) throw new InvalidDataException("Envelope curve type is invalid.");
     }
 
+    internal double InterpolateTo(double value, double position)
+    {
+        var t = Math.Clamp(position, 0, 1);
+        var weight = Curve switch
+        {
+            EnvelopeCurveType.Fast => 1 - (1 - t) * (1 - t),
+            EnvelopeCurveType.Slow => t * t,
+            EnvelopeCurveType.Smooth => t * t * (3 - 2 * t),
+            EnvelopeCurveType.Sharp => t * t * t,
+            EnvelopeCurveType.Hold => t >= 1 ? 1 : 0,
+            _ => t
+        };
+        return Value + weight * (value - Value);
+    }
+
     public bool Equals(EnvelopePoint? other)
     {
         if (other is null) return false;
@@ -128,21 +143,7 @@ public sealed class ClipEnvelope : IEquatable<ClipEnvelope>
         var frameDelta = p1.Frame - p0.Frame;
         if (frameDelta <= 0) return Math.Clamp(p0.Value, MinValue, MaxValue);
 
-        double t = (double)(frame - p0.Frame) / frameDelta;
-        t = Math.Clamp(t, 0.0, 1.0);
-
-        double w = p0.Curve switch
-        {
-            EnvelopeCurveType.Linear => t,
-            EnvelopeCurveType.Fast => 1.0 - (1.0 - t) * (1.0 - t),
-            EnvelopeCurveType.Slow => t * t,
-            EnvelopeCurveType.Smooth => t * t * (3.0 - 2.0 * t),
-            EnvelopeCurveType.Sharp => t * t * t,
-            EnvelopeCurveType.Hold => t >= 1.0 ? 1.0 : 0.0,
-            _ => t
-        };
-
-        double interpolated = p0.Value + w * (p1.Value - p0.Value);
+        var interpolated = p0.InterpolateTo(p1.Value, (double)(frame - p0.Frame) / frameDelta);
         return Math.Clamp(interpolated, MinValue, MaxValue);
     }
 

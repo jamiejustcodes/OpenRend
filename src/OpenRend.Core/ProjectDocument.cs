@@ -487,7 +487,7 @@ public sealed class ProjectDocument
                 if (!Enum.IsDefined(clip.ResampleMode)) throw new InvalidDataException("Clip resample mode is invalid.");
                 var envelope = clip.FadeDurationFrames ?? clip.DurationFrames;
                 if (envelope <= 0 || clip.FadeOffsetFrames < 0 || clip.FadeOffsetFrames > envelope - clip.DurationFrames || clip.FadeInFrames < 0 || clip.FadeOutFrames < 0 || clip.FadeInFrames > envelope || clip.FadeOutFrames > envelope - clip.FadeInFrames) throw new InvalidDataException("Clip fade range is invalid.");
-                if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null))
+                if (track.Kind != TrackKind.Video && (clip.FadeInTransition is not null || clip.FadeOutTransition is not null || clip.FadeInProgress is not null))
                     throw new InvalidDataException("Video transitions require a video clip.");
                 if (!Enum.IsDefined(clip.FadeInCurve) || !Enum.IsDefined(clip.FadeOutCurve) ||
                     !Enum.IsDefined(clip.FadeInReciprocalCurve) || !Enum.IsDefined(clip.FadeOutReciprocalCurve) ||
@@ -496,6 +496,7 @@ public sealed class ProjectDocument
                     throw new InvalidDataException("Video fade curves require a video clip and a supported shape.");
                 clip.FadeInTransition?.Validate();
                 clip.FadeOutTransition?.Validate();
+                clip.FadeInProgress?.Validate();
                 if (clip.Crop is not null)
                 {
                     if (track.Kind != TrackKind.Video || clip.CropOffsetFrames > long.MaxValue - clip.DurationFrames) throw new InvalidDataException("Clip crop range is invalid.");
@@ -871,6 +872,7 @@ public sealed class TimelineClip
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] public VideoFadeCurve FadeOutReciprocalCurve { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeInTransition { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public VideoTransition? FadeOutTransition { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] public TransitionProgressCurve? FadeInProgress { get; set; }
     public long FadeOffsetFrames { get; set; }
     public long? FadeDurationFrames { get; set; }
     public double Pan { get; set; }
@@ -897,6 +899,7 @@ public sealed class TimelineClip
         clone.Mask = Mask?.DeepClone();
         clone.FadeInTransition = FadeInTransition?.DeepClone();
         clone.FadeOutTransition = FadeOutTransition?.DeepClone();
+        clone.FadeInProgress = FadeInProgress?.DeepClone();
 
         clone.VideoEffects = new List<VideoEffect>(VideoEffects.Count);
         for (var i = 0; i < VideoEffects.Count; i++) clone.VideoEffects.Add(VideoEffects[i].DeepClone());

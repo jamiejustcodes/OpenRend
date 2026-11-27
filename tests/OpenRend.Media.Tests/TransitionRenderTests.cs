@@ -57,6 +57,27 @@ public sealed class TransitionRenderTests
     }
 
     [Fact]
+    public void TransitionProgressReversesTheWipeBoundary()
+    {
+        var project = CreateTransitionProject(new VideoTransition { Kind = VideoTransitionKind.LinearWipe });
+        var editor = new TimelineEditor(project);
+        editor.SetTransitionProgress(project.Tracks[0].Clips[1].Id, new TransitionProgressCurve
+        {
+            Points = [new(0, 0), new(4, .75, EnvelopeCurveType.Hold), new(10, .25)]
+        });
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media, useGpuCompositing: false);
+        var mid = (12 * 32 + 16) * 4;
+        var advanced = renderer.RenderFrame(project, 19, 32, 24);
+        var held = renderer.RenderFrame(project, 23, 32, 24);
+        var reversed = renderer.RenderFrame(project, 25, 32, 24);
+        Assert.Equal(255, advanced[mid]);
+        Assert.Equal(advanced, held);
+        Assert.Equal(255, reversed[mid + 2]);
+        Assert.Equal(0, reversed[mid]);
+    }
+
+    [Fact]
     public void BarnDoorRendersCenterOutwardCorrectly()
     {
         var transition = new VideoTransition

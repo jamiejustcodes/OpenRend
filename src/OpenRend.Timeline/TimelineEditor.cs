@@ -450,6 +450,7 @@ public sealed partial class TimelineEditor
             incoming.CropOffsetFrames = trimmedIncoming.CropOffsetFrames;
             incoming.FadeInFrames = 0;
             incoming.FadeInTransition = null;
+            incoming.FadeInProgress = null;
         });
     }
 

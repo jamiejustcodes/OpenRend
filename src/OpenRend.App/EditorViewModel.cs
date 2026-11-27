@@ -853,6 +853,7 @@ public sealed class EditorViewModel : ObservableObject
                     clip.FadeDurationFrames = copied.Clip.FadeDurationFrames.HasValue ? envelope : null;
                     clip.FadeInFrames = Math.Min(envelope, ConvertFrame(copied.Clip.FadeInFrames));
                     clip.FadeOutFrames = Math.Min(envelope - clip.FadeInFrames, ConvertFrame(copied.Clip.FadeOutFrames));
+                    clip.FadeInProgress = copied.Clip.FadeInProgress?.WithFrameRate(ConvertFrame);
                     clip.CropOffsetFrames = ConvertFrame(copied.Clip.CropOffsetFrames);
                     if (clip.Crop is { } crop)
                     {
@@ -868,7 +869,7 @@ public sealed class EditorViewModel : ObservableObject
                     track.Clips.Add(clip); pasted.Add(clip);
                     copies.Add(copied.Clip.Id, clip);
                 }
-                foreach (var incoming in clipboard.Where(item => item.Clip.FadeInTransition is not null &&
+                foreach (var incoming in clipboard.Where(item => (item.Clip.FadeInTransition is not null || item.Clip.FadeInProgress is not null) &&
                     item.Clip.FadeOffsetFrames == 0 && item.Clip.FadeDurationFrames is null))
                 {
                     var source = incoming.Clip;

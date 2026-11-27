@@ -332,7 +332,7 @@ public sealed class ClipboardRegressionTests
     [InlineData(30, 1, 1)]
     [InlineData(30, 1, 2)]
     [InlineData(30000, 1001, 2)]
-    public async Task SplitDissolveClipboardPreservesEvaluationAndIndependentPresetsAfterReopen(int numerator, int denominator, int scale)
+    public async Task SplitDissolveClipboardPreservesThePresetAndProgressCurveAfterReopen(int numerator, int denominator, int scale)
     {
         using var session = new Session();
         var vm = session.ViewModel;
@@ -343,6 +343,10 @@ public sealed class ClipboardRegressionTests
             new TimelineTrack { Kind = TrackKind.Video, Clips = [outgoing, incoming] }
         ] }, "split-source.openrend");
         vm.Editor.ApplyDissolve(outgoing.Id, incoming.Id);
+        vm.Editor.SetTransitionProgress(incoming.Id, new TransitionProgressCurve
+        {
+            Points = [new(0, 0), new(10, .7, EnvelopeCurveType.Hold), new(20, .25)]
+        });
         vm.Editor.SplitClip(outgoing.Id, 45);
         vm.Editor.SplitClip(incoming.Id, 45);
         var source = vm.Project.DeepClone();
@@ -357,6 +361,9 @@ public sealed class ClipboardRegressionTests
         var second = Selected(vm);
         var firstPreset = first.First(clip => clip.FadeInTransition is not null).FadeInTransition;
         Assert.All(second.Where(clip => clip.FadeInTransition is not null), clip => Assert.NotSame(firstPreset, clip.FadeInTransition));
+        var firstProgress = first.First(clip => clip.FadeInProgress is not null).FadeInProgress!;
+        Assert.Equal(new long[] { 0, 10 * scale, 20 * scale }, firstProgress.Points.Select(point => point.Frame));
+        Assert.All(second.Where(clip => clip.FadeInProgress is not null), clip => Assert.NotSame(firstProgress, clip.FadeInProgress));
         var path = System.IO.Path.Combine(System.IO.Path.GetTempPath(), $"openrend-transition-{Guid.NewGuid():N}.openrend");
         try
         {

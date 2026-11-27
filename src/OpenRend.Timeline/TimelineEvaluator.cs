@@ -177,7 +177,8 @@ public static class TimelineEvaluator
                         }
                         if (hasInterfering) continue;
 
-                        var progress = (double)incomingPosition / incoming.FadeInFrames;
+                        var progress = incoming.FadeInProgress?.ValueAt(incomingPosition, incoming.FadeInFrames)
+                            ?? (double)incomingPosition / incoming.FadeInFrames;
                         var inWeight = incoming.FadeInTransition is null
                             ? VideoFadeInterpolation.Evaluate(incoming.FadeInCurve, progress)
                             : progress;
@@ -259,7 +260,7 @@ public static class TimelineEvaluator
         return new(video, audio);
     }
 
-    private static bool IsCanonicalCrossfade(TimelineClip outgoing, TimelineClip incoming, IReadOnlyList<TimelineClip> clips)
+    internal static bool IsCanonicalCrossfade(TimelineClip outgoing, TimelineClip incoming, IReadOnlyList<TimelineClip> clips)
     {
         if (outgoing.FadeOutFrames != incoming.FadeInFrames) return false;
         var start = (decimal)incoming.StartFrame - incoming.FadeOffsetFrames;
