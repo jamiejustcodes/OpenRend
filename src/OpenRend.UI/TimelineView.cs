@@ -110,6 +110,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action? VideoEffectsRequested;
     public event Action? ColorGradingRequested;
     public event Action<Guid>? TransitionPropertiesRequested;
+    public event Action<Guid>? TransitionProgressRequested;
+    public Func<Guid, bool>? CanEditTransitionProgress { get; set; }
     public event Action<Guid, VideoSourceMode>? VideoSourceModeRequested;
     public event Action<Guid, AudioSourceMode>? AudioSourceModeRequested;
     public event Action<Guid, VideoFadeCurve, VideoFadeCurve?, bool>? VideoFadeCurveRequested;

@@ -16,6 +16,14 @@ Dragging Default to an existing cut instead extends the events' source handles. 
 
 Click the properties icon on the overlap strip, or choose Transition Properties from the incoming event's options menu. The strip shows the effect name and its tooltip includes the preset. Locked events disable the properties button. Remove Selected Plug-In clears the effect and leaves an ordinary crossfade. Undo and Redo are available in the properties window.
 
+## Animate transition progress
+
+Choose **Transition Progress** in the transition properties window or under **Insert > Video Envelopes**. The incoming event's **Insert/Remove Envelope** menu also opens the editor. Ordinary crossfades and transition effects both support progress curves.
+
+The curve starts at 0% and ends at 100%. Add points at whole-frame offsets inside the overlap, drag their handles, or enter an offset and a progress percentage in the fields. Each point sets the shape of the following segment. Hold keeps its value until the next point. Decreasing the progress reverses the effect. Click the graph to seek within the overlap. Release applies a drag in one edit. Escape cancels it.
+
+The timeline shows the saved curve on the incoming fade. Shortening the overlap keeps keys beyond its new end available if the overlap is extended again. Reset Curve restores regular progress. Splits share the original fade coordinates, and editing a split transition updates the pieces that still share its fade.
+
 ## Convert an overlap to a cut
 
 Focus the timeline, activate the video track and place the cursor inside a complete two-event crossfade. Press Ctrl + numeric keypad /. The saved Editing alignment chooses the cut: Before cut uses the overlap end, After cut uses its start, and Centered on cut uses its midpoint. The overlap amount preference does not set the cut position.

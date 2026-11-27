@@ -14,21 +14,37 @@ public sealed class TransitionPropertiesWindow : Window
     private readonly TextBlock heading = new(), timing = new();
     private readonly ComboBox presetCombo = new();
     private readonly StackPanel paramPanel = new();
-    private readonly Button remove, undo, redo;
+    private readonly StackPanel settings = new();
+    private readonly TransitionProgressEditor progress;
+    private readonly Button remove, undo, redo, switchPanel;
     private bool updatingControls;
+    private bool showingProgress;
 
-    public TransitionPropertiesWindow(EditorViewModel viewModel, Guid eventId)
+    public TransitionPropertiesWindow(EditorViewModel viewModel, Guid eventId, bool showProgress = false, Action<long>? seek = null)
     {
         vm = viewModel; clipId = eventId;
+        showingProgress = showProgress;
+        progress = new(curve => vm.Editor.SetTransitionProgress(clipId, curve), offset =>
+        {
+            if (seek is null) return;
+            var (_, clip) = vm.Editor.FindClip(clipId);
+            var frame = (decimal)clip.StartFrame - clip.FadeOffsetFrames + Math.Min(offset, clip.FadeInFrames - 1);
+            seek((long)Math.Clamp(frame, 0, vm.Project.DurationFrames));
+        });
         Style = (Style)FindResource(typeof(Window));
-        Title = "Video event FX"; Width = 580; Height = 360; MinWidth = 470; MinHeight = 260;
+        Title = "Video event FX"; Width = 580; Height = 408; MinWidth = 470; MinHeight = 260;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var root = new DockPanel { Background = (Brush)FindResource("PanelBrush") };
         var tools = new StackPanel { Orientation = Orientation.Horizontal, Background = (Brush)FindResource("HeaderBrush") };
         remove = Button("Remove Selected Plug-In", "RemoveTransitionPlugin", () => vm.Editor.RemoveVideoTransition(clipId));
         undo = Button("Undo", "UndoTransitionEdit", () => vm.Editor.Undo());
         redo = Button("Redo", "RedoTransitionEdit", () => vm.Editor.Redo());
-        tools.Children.Add(remove); tools.Children.Add(undo); tools.Children.Add(redo);
+        switchPanel = Button("Transition Progress", "TransitionProgressPanel", () =>
+        {
+            showingProgress = !showingProgress;
+            ShowPanel();
+        });
+        tools.Children.Add(remove); tools.Children.Add(undo); tools.Children.Add(redo); tools.Children.Add(switchPanel);
         DockPanel.SetDock(tools, Dock.Top); root.Children.Add(tools);
         var close = Button("Close", "CloseTransitionProperties", Close);
         close.HorizontalAlignment = HorizontalAlignment.Right; close.MinWidth = 78;
@@ -51,8 +67,10 @@ public sealed class TransitionPropertiesWindow : Window
 
         body.Children.Add(heading);
         body.Children.Add(timing);
-        body.Children.Add(presetRow);
-        body.Children.Add(paramPanel);
+        settings.Children.Add(presetRow);
+        settings.Children.Add(paramPanel);
+        body.Children.Add(settings);
+        body.Children.Add(progress);
 
         scroll.Content = body;
         root.Children.Add(scroll);
@@ -82,11 +100,18 @@ public sealed class TransitionPropertiesWindow : Window
         var item = vm.Project.Tracks.SelectMany(track => track.Clips.Select(clip => (Track: track, Clip: clip)))
             .FirstOrDefault(item => item.Clip.Id == clipId);
         var clip = item.Clip;
-        heading.Text = clip?.FadeInTransition is { } effect ? $"{TransitionCatalog.DisplayNameFor(effect.Kind)} · {effect.Preset}" : "No transition plug-in";
+        var canEditProgress = vm.Editor.CanEditTransitionProgress(clipId);
+        switchPanel.IsEnabled = canEditProgress;
+        switchPanel.Visibility = clip?.FadeInTransition is null ? Visibility.Collapsed : Visibility.Visible;
+        heading.Text = clip?.FadeInTransition is { } effect ? $"{TransitionCatalog.DisplayNameFor(effect.Kind)} · {effect.Preset}"
+            : canEditProgress ? "Crossfade" : "No transition plug-in";
         timing.Text = clip is null ? "Event is no longer in the project." : $"Fade in: {clip.FadeInFrames} frames";
         var editable = clip is { IsLocked: false, FadeInTransition: not null } && !item.Track.IsLocked;
         remove.IsEnabled = paramPanel.IsEnabled = presetCombo.IsEnabled = editable;
         undo.IsEnabled = vm.Editor.CanUndo; redo.IsEnabled = vm.Editor.CanRedo;
+        progress.Bind(clip?.FadeInFrames ?? 1, clip?.FadeInProgress, canEditProgress);
+        showingProgress = canEditProgress && (showingProgress || clip?.FadeInTransition is null);
+        ShowPanel();
 
         updatingControls = true;
         try
@@ -109,6 +134,13 @@ public sealed class TransitionPropertiesWindow : Window
         {
             updatingControls = false;
         }
+    }
+
+    private void ShowPanel()
+    {
+        switchPanel.Content = showingProgress ? "Effect Settings" : "Transition Progress";
+        settings.Visibility = showingProgress ? Visibility.Collapsed : Visibility.Visible;
+        progress.Visibility = showingProgress ? Visibility.Visible : Visibility.Collapsed;
     }
 
     private void PresetChanged(object sender, SelectionChangedEventArgs e)

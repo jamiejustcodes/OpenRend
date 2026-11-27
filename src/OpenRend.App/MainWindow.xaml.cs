@@ -331,11 +331,9 @@ public partial class MainWindow : Window
             Timeline.InvalidateVisual();
             vm.Status = "Deleted region.";
         });
-        Timeline.TransitionPropertiesRequested += id => Guard(() =>
-        {
-            Pause();
-            new TransitionPropertiesWindow(vm, id) { Owner = this }.ShowDialog();
-        });
+        Timeline.TransitionPropertiesRequested += id => ShowTransitionProperties(id, showProgress: false);
+        Timeline.CanEditTransitionProgress = id => vm.Editor.CanEditTransitionProgress(id);
+        Timeline.TransitionProgressRequested += OpenTransitionProgress;
         Timeline.VideoSourceModeRequested += (id, mode) => Guard(() =>
         {
             Pause();
@@ -3224,6 +3222,42 @@ public partial class MainWindow : Window
         VideoEventVelocityEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Velocity));
         VideoEventFreezeFrameEnvelopeMenu.IsEnabled = targetClips.Count > 0 && targetClips.Any(c => vm.Position >= c.StartFrame && vm.Position < c.EndFrame);
         VideoEventCompositeEnvelopeMenu.IsChecked = targetClips.Count > 0 && targetClips.All(c => vm.Editor.HasClipEnvelope(c.Id, EnvelopeType.Composite));
+        TransitionProgressEnvelopeMenu.IsEnabled = TransitionProgressTarget() is not null;
+    }
+
+    private void OpenTransitionProgressClick(object sender, RoutedEventArgs e)
+    {
+        if (TransitionProgressTarget() is Guid id) OpenTransitionProgress(id);
+    }
+
+    private void OpenTransitionProgress(Guid id) => ShowTransitionProperties(id, showProgress: true);
+
+    private void ShowTransitionProperties(Guid id, bool showProgress) => Guard(() =>
+    {
+        if (showProgress && !vm.Editor.CanEditTransitionProgress(id)) return;
+        Pause();
+        new TransitionPropertiesWindow(vm, id, showProgress, frame =>
+        {
+            vm.Position = frame;
+            UpdatePosition();
+            RequestPreview();
+        }) { Owner = this }.ShowDialog();
+    });
+
+    private Guid? TransitionProgressTarget()
+    {
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id))).ToArray();
+        if (selected.Length > 0)
+        {
+            var editable = selected.Where(clip => vm.Editor.CanEditTransitionProgress(clip.Id)).ToArray();
+            return editable.Length == 1 ? editable[0].Id : editable.FirstOrDefault(AtCursor)?.Id;
+        }
+        if (vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex) is not { Kind: TrackKind.Video } track) return null;
+        return track.Clips.FirstOrDefault(clip => AtCursor(clip) && vm.Editor.CanEditTransitionProgress(clip.Id))?.Id;
+
+        bool AtCursor(TimelineClip clip) => vm.Position >= clip.StartFrame && vm.Position < clip.EndFrame &&
+            vm.Position - clip.StartFrame < clip.FadeInFrames - clip.FadeOffsetFrames;
     }
 
     private List<TimelineClip> GetTargetVideoClipsForEnvelopes()

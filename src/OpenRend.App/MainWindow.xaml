@@ -180,6 +180,7 @@
           <MenuItem x:Name="VideoEventVelocityEnvelopeMenu" Header="Event Velocity" Click="ToggleEventVelocityEnvelopeClick" AutomationProperties.AutomationId="VideoEventVelocityEnvelopeMenu"/>
           <MenuItem x:Name="VideoEventFreezeFrameEnvelopeMenu" Header="Freeze Frame at Cursor" Click="FreezeFrameAtCursorClick" AutomationProperties.AutomationId="VideoEventFreezeFrameEnvelopeMenu"/>
           <MenuItem x:Name="VideoEventCompositeEnvelopeMenu" Header="Event Composite Level" Click="ToggleEventCompositeEnvelopeClick" AutomationProperties.AutomationId="VideoEventCompositeEnvelopeMenu"/>
+          <MenuItem x:Name="TransitionProgressEnvelopeMenu" Header="Transition Progress…" Click="OpenTransitionProgressClick" AutomationProperties.AutomationId="TransitionProgressEnvelopeMenu"/>
         </MenuItem>
       </MenuItem>
       <MenuItem Header="_Tools">

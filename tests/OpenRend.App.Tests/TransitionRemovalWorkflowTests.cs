@@ -51,6 +51,12 @@ public sealed partial class EditorWorkflowTests
             WaitFor(() => (stripDialog = window.ModalWindows.SingleOrDefault(w => w.Title == "Video event FX")) is not null,
                 "The overlap properties button did not open its dialog.");
             Assert.Equal(transitionName, Find(stripDialog!, "TransitionPluginName").Name);
+            var progress = Find(stripDialog!, "TransitionProgressPanel").AsButton();
+            progress.Invoke();
+            WaitFor(() => stripDialog!.FindFirstDescendant(c => c.ByAutomationId("TransitionProgressGraph")) is { IsOffscreen: false },
+                "The Linear Wipe progress graph did not open.");
+            progress.Invoke();
+            WaitFor(() => Find(stripDialog!, "TransitionPresetCombo").IsOffscreen == false, "The Linear Wipe settings did not return.");
             Find(stripDialog!, "CloseTransitionProperties").AsButton().Invoke();
             WaitFor(() => window.ModalWindows.Length == 0, "The strip properties window did not close.");
             Find(window, $"Clip_{incoming.Id:N}_More").AsButton().Invoke();

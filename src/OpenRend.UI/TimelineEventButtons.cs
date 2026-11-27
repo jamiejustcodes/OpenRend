@@ -583,9 +583,17 @@ public sealed partial class TimelineView
         AutomationProperties.SetAutomationId(compositeItem, "EnvelopeComposite");
         var freezeFrameEnvItem = new MenuItem { Header = "Freeze Frame at Cursor" };
         AutomationProperties.SetAutomationId(freezeFrameEnvItem, "EnvelopeFreezeFrameAtCursor");
+        var transitionProgress = new MenuItem { Header = "Transition Progress…" };
+        AutomationProperties.SetAutomationId(transitionProgress, "EventTransitionProgress");
+        transitionProgress.Click += (_, _) =>
+        {
+            if (TargetEvent() is { } target && CanEditTransitionProgress?.Invoke(target.Id) == true)
+                TransitionProgressRequested?.Invoke(target.Id);
+        };
         envelopeMenu.Items.Add(velocityItem);
         envelopeMenu.Items.Add(freezeFrameEnvItem);
         envelopeMenu.Items.Add(compositeItem);
+        envelopeMenu.Items.Add(transitionProgress);
         menu.Items.Add(envelopeMenu);
 
         velocityItem.Click += (_, _) =>
@@ -681,6 +689,10 @@ public sealed partial class TimelineView
             transition.Visibility = video.Length == 1 && video[0].Clip.FadeInTransition is not null
                 ? Visibility.Visible : Visibility.Collapsed;
             transition.IsEnabled = IsEnabled && video.Length == 1 && !video[0].Track.IsLocked && !isLocked;
+            var progressTarget = TargetEvent();
+            transitionProgress.Visibility = progressTarget?.FadeInFrames > progressTarget?.FadeOffsetFrames
+                ? Visibility.Visible : Visibility.Collapsed;
+            transitionProgress.IsEnabled = IsEnabled && progressTarget is not null && CanEditTransitionProgress?.Invoke(progressTarget.Id) == true;
             if (resizeAdj != null)
             {
                 var isAdj = singleTarget.Clip?.IsAdjustmentEvent == true || (video.Length == 1 && video[0].Clip.IsAdjustmentEvent);
@@ -830,6 +842,7 @@ public sealed partial class TimelineView
     private void DrawEventButtons(DrawingContext dc, TimelineTrack track, TimelineClip clip, Rect rect)
     {
         DrawTransitionStrip(dc, track, clip);
+        DrawTransitionProgress(dc, clip, rect);
         var actions = EventButtonActions(track, clip).Where(action => action != "Transition").ToArray();
         var left = actions.Length == 0 ? rect.Right : actions.Min(action => EventButtonBounds(track.Id, clip, action).Left);
         if (ShowEventLengths && left - rect.Left > 90)
