@@ -8,6 +8,7 @@ using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using OpenRend.Core;
+using OpenRend.Media;
 using OpenRend.Project;
 using OpenRend.Timeline;
 
@@ -82,7 +83,7 @@ public sealed class PanCropWindow : Window
     private long sourceRequest;
     private bool sourceRunning;
     private bool sourcePending;
-    private (string Path, long Frame, int Width, int Height, Rational Rate)? requestedSource;
+    private (string Path, double Seconds, int Width, int Height)? requestedSource;
     private CropState state;
     private MaskShape maskState = new();
 
@@ -933,7 +934,8 @@ public sealed class PanCropWindow : Window
     }
     private async Task LoadSourceAsync()
     {
-        var desired = (Source.Path, checked(EventClip.SourceInFrame + localFrame), Source.Width, Source.Height, editor.Project.FrameRate);
+        var localSeconds = editor.Project.FrameRate.Seconds(checked(EventClip.SourceInFrame + localFrame));
+        var desired = (Source.Path, MediaService.VideoFileTime(Source, localSeconds), Source.Width, Source.Height);
         if (requestedSource == desired) return;
         requestedSource = desired; sourceRequest++; sourcePending = true;
         if (sourceRunning) return;
@@ -947,8 +949,7 @@ public sealed class PanCropWindow : Window
                 try
                 {
                     var width = Math.Min(1280, Math.Max(1, source.Width)); var height = Math.Clamp((int)Math.Round(width * Math.Max(1, source.Height) / (double)Math.Max(1, source.Width)), 1, 4096);
-                    var seconds = source.Rate.Seconds(source.Frame);
-                    var pixels = await Task.Run(() => vm.Media.GetFrame(source.Path, seconds, width, height));
+                    var pixels = await Task.Run(() => vm.Media.GetFrame(source.Path, source.Seconds, width, height));
                     if (closed || request != sourceRequest) continue;
                     var bitmap = BitmapSource.Create(width, height, 96, 96, PixelFormats.Bgra32, null, pixels, width * 4); bitmap.Freeze();
                     workspace.Image = bitmap; workspace.InvalidateVisual();

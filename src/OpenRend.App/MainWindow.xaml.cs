@@ -761,6 +761,12 @@ public partial class MainWindow : Window
         TimelineScroll.Maximum = Math.Max(1, vm.Project.FrameRate.Seconds(vm.Project.DurationFrames) * Timeline.PixelsPerSecond);
         TimelineScroll.ViewportSize = Math.Max(1, Timeline.ActualWidth - TimelineView.HeaderWidth);
         UpdatePreviewStatus();
+        foreach (var id in cachedMediaPaths.Keys.Where(id => vm.Project.Media.All(asset => asset.Id != id)).ToArray())
+        {
+            cachedMediaPaths.Remove(id);
+            Timeline.Thumbnails.Remove(id);
+            Timeline.Waveforms.Remove(id);
+        }
         if (vm.Project.Media.Any(m => !cachedMediaPaths.TryGetValue(m.Id, out var path) || path != m.Path)) _ = PopulateMediaVisualsAsync();
         UpdateWorkspaceStatus();
         if (editDetailsWindow != null && editDetailsWindow.IsLoaded) editDetailsWindow.RefreshGrid();
@@ -1236,14 +1242,14 @@ public partial class MainWindow : Window
                 }
                 if (asset.HasVideo)
                 {
-                    var data = await vm.Media.GetThumbnailAsync(path, 0, 160, 90);
+                    var data = await vm.Media.GetFrameAsync(asset, 0, 160, 90);
                     if (vm.Project.Media.All(m => m.Id != asset.Id || m.Path != path)) continue;
                     var bitmap = BitmapSource.Create(160, 90, 96, 96, PixelFormats.Bgra32, null, data, 160 * 4); bitmap.Freeze();
                     item.Thumbnail = bitmap; Timeline.Thumbnails[asset.Id] = bitmap;
                 }
                 if (asset.HasAudio)
                 {
-                    var waveform = await vm.Media.GetWaveformAsync(path, 512);
+                    var waveform = await vm.Media.GetWaveformAsync(asset, 512);
                     if (vm.Project.Media.Any(m => m.Id == asset.Id && m.Path == path)) Timeline.Waveforms[asset.Id] = waveform;
                 }
                 Timeline.InvalidateVisual();
@@ -2133,7 +2139,7 @@ public partial class MainWindow : Window
                 var totalFrames = (int)Math.Ceiling(durSec * MediaService.SampleRate);
                 if (totalFrames <= 0) continue;
 
-                var samples = vm.Media.GetAudio(media.Path, startSec, totalFrames);
+                var samples = vm.Media.GetAudio(media, startSec, totalFrames);
                 var peak = 0f;
                 for (var i = 0; i < samples.Length; i++)
                 {

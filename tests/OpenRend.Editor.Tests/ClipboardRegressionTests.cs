@@ -139,6 +139,29 @@ public sealed class ClipboardRegressionTests
     }
 
     [Fact]
+    public void PasteReusesTheSubclipByIdentityEvenWhenTheOriginalFileIsAlreadyImported()
+    {
+        using var session = new Session();
+        var vm = session.ViewModel;
+        var source = vm.Project.Media[0].DeepClone();
+        var subclip = vm.Editor.CreateSubclip(source.Id, new(90, 60), "Selection");
+        var placed = vm.Editor.PlaceClip(subclip.Id, vm.Project.Tracks[0].Id, 110);
+        vm.Selection.Clear();
+        vm.Selection.Add(placed.Id);
+        vm.Copy();
+        vm.Replace(new ProjectDocument { Media = [source], Tracks = [new() { Kind = TrackKind.Video }] }, "destination.openrend");
+
+        vm.Paste();
+        vm.Position = 60;
+        vm.Paste();
+
+        Assert.Equal(2, vm.Project.Media.Count);
+        Assert.Equal(subclip.SourceRange, vm.Project.Media.Single(asset => asset.Id == subclip.Id).SourceRange);
+        Assert.Equal(2, vm.Project.Tracks.Sum(track => track.Clips.Count));
+        Assert.All(vm.Project.Tracks.SelectMany(track => track.Clips), clip => Assert.Equal(subclip.Id, clip.MediaId));
+    }
+
+    [Fact]
     public void PasteRemapsAConflictingMediaIdWithoutReplacingTheDestinationAsset()
     {
         using var session = new Session();

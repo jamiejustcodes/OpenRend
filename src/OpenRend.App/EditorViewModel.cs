@@ -342,7 +342,7 @@ public sealed class EditorViewModel : ObservableObject
     public async Task<MediaAsset> ImportAsync(string path, CancellationToken cancellationToken = default)
     {
         var full = Path.GetFullPath(path);
-        var existing = Project.Media.FirstOrDefault(m => string.Equals(m.Path, full, StringComparison.OrdinalIgnoreCase));
+        var existing = Project.Media.FirstOrDefault(m => m.SourceRange is null && string.Equals(m.Path, full, StringComparison.OrdinalIgnoreCase));
         if (existing is not null) return existing;
         var editor = Editor;
         Status = $"Importing {Path.GetFileName(path)}…";
@@ -713,7 +713,9 @@ public sealed class EditorViewModel : ObservableObject
             var assets = new Dictionary<Guid, Guid>();
             foreach (var source in clipboardMedia)
             {
-                var existing = p.Media.FirstOrDefault(m => string.Equals(m.Path, source.Path, StringComparison.OrdinalIgnoreCase));
+                var existing = p.Media.FirstOrDefault(m => m.SourceRange == source.SourceRange &&
+                    (source.SourceRange is null || m.Id == source.Id) &&
+                    string.Equals(m.Path, source.Path, StringComparison.OrdinalIgnoreCase));
                 if (existing is null)
                 {
                     existing = source.DeepClone();

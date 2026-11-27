@@ -225,6 +225,27 @@ public sealed class TrimmerEditorTests
         var subclip = vm.Project.Media.Last();
         Assert.NotEqual(media.Id, subclip.Id);
         Assert.Equal(2.0, subclip.DurationSeconds); // (90 - 30) / 30 = 2.0s
+        Assert.Equal(new MediaSourceRange(1, 2, 1), subclip.SourceRange);
+        Assert.Equal(media.Path, subclip.Path);
+        Assert.True(vm.Dirty);
+        Assert.True(vm.Editor.Undo());
+        Assert.Equal(media.Id, Assert.Single(vm.Project.Media).Id);
+        Assert.True(vm.Editor.Redo());
+        Assert.Equal(subclip.SourceRange, vm.Project.Media.Single(asset => asset.Id == subclip.Id).SourceRange);
+    });
+
+    [Fact]
+    public void NestedSubclipKeepsAnExactSourceOffsetAfterChangingTheProjectRate() => RunSta(() =>
+    {
+        var original = new MediaAsset { Path = "interview.mp4", DurationSeconds = 20, HasVideo = true };
+        var vm = CreateViewModel();
+        vm.Replace(new ProjectDocument { FrameRate = new(30, 1), Media = [original] }, null);
+        var parent = vm.Editor.CreateSubclip(original.Id, new(31, 60), "Parent");
+        vm.Editor.Execute(project => project.FrameRate = new(24000, 1001));
+        var nested = vm.Editor.CreateSubclip(parent.Id, new(1, 24), "Nested");
+        Assert.Equal(new MediaSourceRange(25801, 24024, 24000), nested.SourceRange);
+        Assert.Equal(original.Path, nested.Path);
+        Assert.Equal(2, parent.DurationSeconds);
     });
 
     [Fact]

@@ -455,6 +455,47 @@ public sealed class TimelineMediaTests(MediaFixture fixture, ITestOutputHelper l
     }
 
     [Fact]
+    public async Task SubclipsReadOnlyTheirSourceRangeInPreviewAndExport()
+    {
+        using var media = new MediaService();
+        using var renderer = new TimelineRenderService(media);
+        var source = await media.ProbeAsync(fixture.Source);
+        var project = new ProjectDocument { Width = 160, Height = 90, FrameRate = new(30, 1), Media = [source] };
+        var editor = new TimelineEditor(project);
+        var first = editor.CreateSubclip(source.Id, new(0, 30), "Red");
+        var second = editor.CreateSubclip(source.Id, new(30, 30), "Blue");
+        Pixel(await media.GetFrameAsync(second, 0, 160, 90), red: 0, blue: 255);
+        Pixel(media.GetFrame(first, 1, 160, 90), red: 255, blue: 0);
+        var audioAtEnd = media.GetAudio(first, .99, 960);
+        Assert.Equal(media.GetAudio(source.Path, .99, 480), audioAtEnd[..960]);
+        Assert.InRange(Rms(audioAtEnd[..960], 0), .055, .075);
+        Assert.All(audioAtEnd[960..], sample => Assert.Equal(0, sample));
+
+        var preview = MediaService.CreateSourcePreview(second, project.FrameRate);
+        Pixel(renderer.RenderFrame(preview, 0, 160, 90), red: 0, blue: 255);
+        Assert.Equal(media.GetAudio(source.Path, 1.25, 2400), renderer.RenderAudio(preview, .25, 2400));
+
+        var destination = Path.Combine(fixture.Directory, "subclip.mp4");
+        await new ExportService(renderer).ExportAsync(preview, destination);
+        Pixel(media.GetFrame(destination, 0, 160, 90), red: 0, blue: 255, tolerance: 12);
+        var exported = media.GetAudio(destination, .25, 4800);
+        Assert.True(TonePower(880) > 8 * TonePower(440), "The encoded audio should contain the second scene's 880 Hz tone.");
+
+        double TonePower(int frequency)
+        {
+            var cosine = 0d;
+            var sine = 0d;
+            for (var sample = 0; sample < exported.Length / 2; sample++)
+            {
+                var phase = 2 * Math.PI * frequency * sample / MediaService.SampleRate;
+                cosine += exported[2 * sample] * Math.Cos(phase);
+                sine += exported[2 * sample] * Math.Sin(phase);
+            }
+            return cosine * cosine + sine * sine;
+        }
+    }
+
+    [Fact]
     public async Task FractionalAudioFadesAndVideoFadeUseTheSameEnvelopeAfterSplit()
     {
         using var media = new MediaService();

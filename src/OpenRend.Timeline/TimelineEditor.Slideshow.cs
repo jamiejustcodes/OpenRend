@@ -83,7 +83,7 @@ public sealed partial class TimelineEditor
                 var pic = settings.Pictures[i];
 
                 // 2. Ensure media asset exists in project
-                var asset = p.Media.FirstOrDefault(m => string.Equals(m.Path, pic.Path, StringComparison.OrdinalIgnoreCase));
+                var asset = p.Media.FirstOrDefault(m => m.SourceRange is null && string.Equals(m.Path, pic.Path, StringComparison.OrdinalIgnoreCase));
                 if (asset == null)
                 {
                     var width = p.Width > 0 ? p.Width : 1920;

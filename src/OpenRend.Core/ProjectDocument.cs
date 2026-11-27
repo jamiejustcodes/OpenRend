@@ -369,8 +369,15 @@ public sealed class ProjectDocument
         {
             if (media == null || media.Id == Guid.Empty || !mediaIds.Add(media.Id)) throw new InvalidDataException("Media IDs must be unique and non-empty.");
             if (!double.IsFinite(media.DurationSeconds) || media.DurationSeconds < 0) throw new InvalidDataException("Media duration is invalid.");
-            if (!double.IsFinite(media.FrameRate) || media.FrameRate < 0 || media.Width < 0 || media.Height < 0) throw new InvalidDataException("Media metadata is invalid.");
             if (string.IsNullOrWhiteSpace(media.Path)) throw new InvalidDataException("Media path is empty.");
+            if (media.SourceRange is { } sourceRange)
+            {
+                sourceRange.Validate();
+                if (media.IsGenerated || media.Path.StartsWith("openrend://", StringComparison.OrdinalIgnoreCase) ||
+                    media.DurationSeconds != sourceRange.DurationSeconds)
+                    throw new InvalidDataException("Subclip media metadata is invalid.");
+            }
+            if (!double.IsFinite(media.FrameRate) || media.FrameRate < 0 || media.Width < 0 || media.Height < 0) throw new InvalidDataException("Media metadata is invalid.");
             if (media.VideoEffects != null)
             {
                 var mediaEffectIds = new HashSet<Guid>();
@@ -603,6 +610,8 @@ public sealed class MediaAsset
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public MediaGeneratorData? Generator { get; set; }
     public double DurationSeconds { get; set; }
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public MediaSourceRange? SourceRange { get; set; }
     public int Width { get; set; }
     public int Height { get; set; }
     public double FrameRate { get; set; }

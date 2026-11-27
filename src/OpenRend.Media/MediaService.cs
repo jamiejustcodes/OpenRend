@@ -71,6 +71,20 @@ public sealed class MediaService : IDisposable
 
     public Task<byte[]> GetThumbnailAsync(string path, double seconds, int width, int height, CancellationToken cancellationToken = default) => GetFrameAsync(path, seconds, width, height, cancellationToken);
 
+    public Task<byte[]> GetFrameAsync(MediaAsset asset, double seconds, int width, int height, CancellationToken cancellationToken = default) =>
+        GetFrameAsync(asset.Path, VideoFileTime(asset, seconds), width, height, cancellationToken);
+
+    public byte[] GetFrame(MediaAsset asset, double seconds, int width, int height) =>
+        GetFrame(asset.Path, VideoFileTime(asset, seconds), width, height);
+
+    public static double VideoFileTime(MediaAsset asset, double seconds)
+    {
+        if (asset.SourceRange is not { } range) return seconds;
+        // Keep end previews and hold-last playback on the included side of the decoder's PTS tolerance.
+        var last = Math.Max(range.StartSeconds, range.EndSeconds - 0.000001);
+        return Math.Clamp(range.StartSeconds + seconds, range.StartSeconds, last);
+    }
+
     public byte[] GetFrame(string path, double seconds, int width, int height)
     {
         var result = new byte[checked(width * height * 4)];
@@ -102,41 +116,74 @@ public sealed class MediaService : IDisposable
 
     public void GetAudio(string path, double seconds, int frames, float[] destination)
     {
+        ValidateAudioDestination(seconds, frames, destination);
+        DecodeAudio(path, seconds, frames, destination);
+    }
+
+    private static void ValidateAudioDestination(double seconds, int frames, float[] destination)
+    {
         if (!double.IsFinite(seconds) || seconds < 0) throw new ArgumentOutOfRangeException(nameof(seconds));
         if (frames < 0) throw new ArgumentOutOfRangeException(nameof(frames));
         ArgumentNullException.ThrowIfNull(destination);
-        var requiredSamples = checked(frames * Channels);
-        if (destination.Length < requiredSamples) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
+        if (destination.Length < checked(frames * Channels)) throw new ArgumentException("Destination buffer is too small.", nameof(destination));
+    }
+
+    private void DecodeAudio(string path, double seconds, int frames, float[] destination)
+    {
         if (frames == 0) return;
         lock (gate)
         {
             var decoder = GetDecoder(path, 1, 1);
-            var read = NativeMethods.DecoderAudio(decoder, seconds, frames, destination, requiredSamples);
+            var read = NativeMethods.DecoderAudio(decoder, seconds, frames, destination, frames * Channels);
             if (read < 0) throw NativeMethods.Error("Could not decode audio samples");
             if (read < frames) Array.Clear(destination, read * Channels, (frames - read) * Channels);
         }
     }
 
-    public async Task<float[]> GetWaveformAsync(string path, int bins = 256, CancellationToken cancellationToken = default)
+    public float[] GetAudio(MediaAsset asset, double seconds, int frames)
+    {
+        var result = new float[checked(frames * Channels)];
+        GetAudio(asset, seconds, frames, result);
+        return result;
+    }
+
+    public void GetAudio(MediaAsset asset, double seconds, int frames, float[] destination)
+    {
+        ValidateAudioDestination(seconds, frames, destination);
+        if (asset.SourceRange is not { } range)
+        {
+            DecodeAudio(asset.Path, seconds, frames, destination);
+            return;
+        }
+
+        var available = Math.Max(0, range.DurationSeconds - seconds);
+        var count = (int)Math.Clamp(Math.Ceiling(available * SampleRate - 1e-7), 0, frames);
+        DecodeAudio(asset.Path, range.StartSeconds + seconds, count, destination);
+        Array.Clear(destination, count * Channels, (frames - count) * Channels);
+    }
+
+    public async Task<float[]> GetWaveformAsync(string path, int bins = 256, CancellationToken cancellationToken = default) =>
+        await GetWaveformAsync(await ProbeAsync(path, cancellationToken).ConfigureAwait(false), bins, cancellationToken).ConfigureAwait(false);
+
+    public Task<float[]> GetWaveformAsync(MediaAsset asset, int bins = 256, CancellationToken cancellationToken = default)
     {
         if (bins is < 1 or > 16384) throw new ArgumentOutOfRangeException(nameof(bins));
-        var metadata = await ProbeAsync(path, cancellationToken).ConfigureAwait(false);
-        if (!metadata.HasAudio) return new float[bins];
-        return await Task.Run(() =>
+        if (!asset.HasAudio) return Task.FromResult(new float[bins]);
+        return Task.Run(() =>
         {
             var peaks = new float[bins];
             // A short evenly spaced window keeps long recordings cheap to index.
-            var window = Math.Min(2048, Math.Max(1, (int)(metadata.DurationSeconds * SampleRate / bins)));
+            var window = (int)Math.Clamp(asset.DurationSeconds * SampleRate / bins, 1, 2048);
             for (var bin = 0; bin < bins; bin++)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var samples = GetAudio(path, metadata.DurationSeconds * bin / bins, window);
+                var samples = GetAudio(asset, asset.DurationSeconds * bin / bins, window);
                 var peak = 0f;
                 foreach (var sample in samples) peak = Math.Max(peak, Math.Abs(sample));
                 peaks[bin] = Math.Min(1, peak);
             }
             return peaks;
-        }, cancellationToken).ConfigureAwait(false);
+        }, cancellationToken);
     }
 
     public void ClearCache()

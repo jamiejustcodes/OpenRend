@@ -264,7 +264,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         {
                             if (sourceWidth <= 0 || sourceHeight <= 0 || sourceWidth > 16384 || sourceHeight > 16384 || (long)sourceWidth * sourceHeight * 4 > int.MaxValue)
                                 throw new MediaException("Source dimensions exceed video processing limits.");
-                            var sourcePixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), sourceWidth, sourceHeight);
+                            var sourcePixels = media.GetFrame(layer.Media, layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame), sourceWidth, sourceHeight);
                             if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(layer.Media.VideoEffects))
                             {
                                 sourcePixels = VideoEffectProcessor.Apply(sourcePixels, sourceWidth, sourceHeight, layer.Media.VideoEffects, frame);
@@ -290,7 +290,7 @@ public sealed partial class TimelineRenderService : IDisposable
                         var scale = Math.Min((double)width / sourceWidth, (double)height / sourceHeight);
                         var layerWidth = Math.Clamp((int)Math.Round(sourceWidth * scale), 1, width);
                         var layerHeight = Math.Clamp((int)Math.Round(sourceHeight * scale), 1, height);
-                        var pixels = media.GetFrame(layer.Media.Path, (layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame)), layerWidth, layerHeight);
+                        var pixels = media.GetFrame(layer.Media, layer.SourceTimeSeconds ?? project.FrameRate.Seconds(layer.SourceFrame), layerWidth, layerHeight);
                         if (currentCompositor != null)
                         {
                             if (NativeMethods.CompositorLayer(currentCompositor, pixels, layerWidth, layerHeight, layerWidth * 4, effOpacity) < 0)
@@ -557,7 +557,7 @@ public sealed partial class TimelineRenderService : IDisposable
                     var rentedDecoded = ExactBufferPool.RentFloats(decodedSamples);
                     try
                     {
-                        media.GetAudio(asset.Path, sourceStart, sampleCount, rentedDecoded);
+                        media.GetAudio(asset, sourceStart, sampleCount, rentedDecoded);
                         if (clip.AudioEffects != null && clip.AudioEffects.Count > 0)
                         {
                             AudioDspService.ProcessAudioChain(rentedDecoded, MediaService.SampleRate, clip.AudioEffects);

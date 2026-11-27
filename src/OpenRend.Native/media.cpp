@@ -195,7 +195,8 @@ int or_decoder_frame(void* handle, double seconds, uint8_t* bgra, int capacity) 
     require(handle && bgra && std::isfinite(seconds) && seconds >= 0, "Invalid video frame arguments"); auto& d = *static_cast<Decoder*>(handle); std::lock_guard lock(d.mutex);
     require(d.video.codec, "Media has no video stream"); require(int64_t(d.width) * d.height * 4 <= capacity, "Video frame buffer is too small");
     auto& v = d.video;
-    if (seconds < d.previous_video_time - 0.0001 || seconds > d.previous_video_time + 1.0 || d.previous_video_time < -10) { v.seek(seconds); av_frame_unref(d.retained_video); }
+    // Even a small backward step can cross a frame boundary at a subclip's exclusive out point.
+    if (seconds < d.previous_video_time || seconds > d.previous_video_time + 1.0 || d.previous_video_time < -10) { v.seek(seconds); av_frame_unref(d.retained_video); }
     auto decode = [&] {
         // A frame is held until the next PTS, which can be much later in VFR media.
         while (v.frame->data[0] || v.next()) {

@@ -211,6 +211,7 @@ public sealed partial class TrimmerControl : UserControl
             BorderBrush = new SolidColorBrush(Color.FromRgb(0x44, 0x44, 0x44)),
             ToolTip = "Create named subclip asset in Project Media pool"
         };
+        AutomationProperties.SetAutomationId(createSubclipBtn, "TrimmerCreateSubclip");
         createSubclipBtn.Click += (_, _) => CreateSubclip();
 
         fitToFillBtn = new Button
@@ -369,7 +370,7 @@ public sealed partial class TrimmerControl : UserControl
         {
             try
             {
-                var waveform = await vm.Media.GetWaveformAsync(media.Path, 1024);
+                var waveform = await vm.Media.GetWaveformAsync(media, 1024);
                 if (loadId == mediaLoadId)
                 {
                     audioWaveform = waveform;
@@ -608,11 +609,19 @@ public sealed partial class TrimmerControl : UserControl
     public void CreateSubclip(string? customName = null)
     {
         if (activeMedia is null || vm is null) return;
+        var editor = vm.Editor;
+        var source = editor.Project.Media.FirstOrDefault(asset => asset.Id == activeMedia.Id);
+        if (source is null || source.IsGenerated || outFrame <= inFrame)
+        {
+            vm.Status = "Choose a nonempty range in a file from Project Media.";
+            return;
+        }
         var rate = vm.Project.FrameRate;
-        var duration = Math.Max(1, outFrame - inFrame);
+        var range = new FrameRange(inFrame, outFrame - inFrame);
 
-        var existingCount = vm.Project.Media.Count(m => m.Path == activeMedia.Path && m.Name.Contains("Subclip"));
-        var defaultName = customName ?? $"{activeMedia.Name} - Subclip {existingCount + 1}";
+        var existingCount = vm.Project.Media.Count(m => m.SourceRange is not null &&
+            string.Equals(m.Path, source.Path, StringComparison.OrdinalIgnoreCase));
+        var defaultName = customName ?? $"{source.Name} - Subclip {existingCount + 1}";
         var subclipName = defaultName;
 
         var parentWindow = Window.GetWindow(this);
@@ -620,8 +629,8 @@ public sealed partial class TrimmerControl : UserControl
         {
             var inTc = TimelineView.FormatTimecode(inFrame, rate);
             var outTc = TimelineView.FormatTimecode(outFrame, rate);
-            var lenTc = TimelineView.FormatTimecode(duration, rate);
-            var dlg = new CreateSubclipDialog(defaultName, activeMedia.Name, inTc, outTc, lenTc)
+            var lenTc = TimelineView.FormatTimecode(range.FrameCount, rate);
+            var dlg = new CreateSubclipDialog(defaultName, source.Name, inTc, outTc, lenTc)
             {
                 Owner = parentWindow
             };
@@ -629,14 +638,16 @@ public sealed partial class TrimmerControl : UserControl
             subclipName = dlg.SubclipName;
         }
 
-        var subclipAsset = activeMedia.DeepClone();
-        subclipAsset.Id = Guid.NewGuid();
-        subclipAsset.DisplayName = subclipName;
-        subclipAsset.DurationSeconds = duration / (double)rate.Value;
-
-        vm.Project.Media.Add(subclipAsset);
-        vm.RefreshLibrary();
-        vm.Status = $"Created subclip '{subclipAsset.Name}' in Project Media pool.";
+        if (!ReferenceEquals(editor, vm.Editor)) return;
+        try
+        {
+            var subclip = editor.CreateSubclip(source.Id, range, subclipName);
+            vm.Status = $"Created subclip '{subclip.Name}' in Project Media.";
+        }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException or KeyNotFoundException or OverflowException)
+        {
+            vm.Status = error.Message;
+        }
     }
 
     private void OnPlaybackTick(object? sender, EventArgs e)
@@ -706,7 +717,7 @@ public sealed partial class TrimmerControl : UserControl
             if (activeMedia.HasVideo)
             {
                 var requestId = ++previewRequestId;
-                var bytes = await vm.Media.GetFrameAsync(activeMedia.Path, seconds, 640, 360);
+                var bytes = await vm.Media.GetFrameAsync(activeMedia, seconds, 640, 360);
                 if (requestId == previewRequestId && bytes.Length == 640 * 360 * 4)
                 {
                     var wb = new WriteableBitmap(640, 360, 96, 96, PixelFormats.Bgra32, null);
