@@ -3,6 +3,7 @@ using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Media;
@@ -3307,7 +3308,7 @@ public partial class MainWindow : Window
             e.Handled = true;
             return;
         }
-        if (vm.Busy) return;
+        if (vm.Busy || Keyboard.FocusedElement is MenuItem or MenuBase) return;
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
@@ -3385,7 +3386,6 @@ public partial class MainWindow : Window
             Key.T when ctrl && shift => () => InsertTextMediaClick(this, e),
             Key.T when !ctrl && !alt && !shift => () => NextTakeClick(this, e),
             Key.T when !ctrl && !alt && shift => () => PreviousTakeClick(this, e),
-            Key.N when ctrl && shift => () => ProjectNotesClick(this, e),
             Key.M when !ctrl && !shift && !alt => () => InsertMarkerClick(this, e),
             Key.R when !ctrl && !shift && !alt => () => InsertRegionClick(this, e),
             Key.OemPlus or Key.Add when !ctrl && !alt => () => AdjustPitchClick(1.0),

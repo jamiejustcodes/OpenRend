@@ -26,6 +26,8 @@ Move and standard trim snapping use a ten-DIP distance from the unrounded drag p
 
 Set Time at Cursor, Insert Time and Paste Repeat share OpenRend's field styles, action row and inline validation. The first field is selected on open. Paste Repeat enables the spacing field only in Even spacing mode, and its step buttons apply to the typed value. The project ruler origin applies to positions. Durations use the selected ruler format with a zero origin. The desktop workflow enters invalid values, cancels a repeat, and verifies the saved clip starts from inserting and repeating with a nonzero ruler origin.
 
+The editor menus use WPF access keys. Main timeline commands yield while a menu has focus. View > Window groups the tool windows, and layout slot labels show the assigned name or the empty state. Ruler format choices from Options, the timecode display and the ruler all use the same undoable project edit. The desktop workflow opens Paste Repeat with Alt+E then A and selects Time & Frames with Alt+O then F then M. It verifies the saved format and that the sequence leaves the marker list empty.
+
 ## Auto Ripple and ruler regions
 
 Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift downstream regions and adjust regions that span an edit. On deletion, each region endpoint follows the remaining project time and regions fully covered by removed spans are deleted. Regions that end exactly at an insertion point stay on the left of it. The ruler changes share the event's undo step. Managed tests cover event moves and trims, disjoint removals, undo, and paste and Trimmer insertion. The desktop workflow enables Auto Ripple, moves an event ten frames, and verifies the saved region end moves ten frames.

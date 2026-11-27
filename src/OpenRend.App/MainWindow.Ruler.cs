@@ -9,10 +9,7 @@ public partial class MainWindow
 {
     private void InitializeRulerEvents()
     {
-        Timeline.RulerFormatChanged += format => Guard(() =>
-        {
-            SetRulerFormat(format);
-        });
+        Timeline.RulerFormatRequested += SetRulerFormat;
 
         Timeline.SetTimeAtCursorRequested += () => Guard(OpenSetTimeAtCursorDialog);
         Timeline.InsertTimeRequested += () => InsertTimeClick(this, new RoutedEventArgs());
@@ -29,13 +26,7 @@ public partial class MainWindow
         }
     }
 
-    public void SetRulerFormat(RulerFormat format)
-    {
-        vm.SetRulerFormat(format);
-        Timeline.RulerFormat = format;
-        SyncRulerFormatMenuChecks();
-        UpdatePosition();
-    }
+    public void SetRulerFormat(RulerFormat format) => Guard(() => vm.SetRulerFormat(format));
 
     private void SyncRulerFormatMenuChecks()
     {
@@ -57,7 +48,7 @@ public partial class MainWindow
 
         var menu = new ContextMenu();
 
-        var formatSubmenu = new MenuItem { Header = "Time &Format" };
+        var formatSubmenu = new MenuItem { Header = "Time _Format" };
         var activeFormat = vm.Project.RulerFormat;
 
         foreach (var fmt in RulerFormatExtensions.AllStandardFormats)
@@ -74,7 +65,7 @@ public partial class MainWindow
         }
 
         menu.Items.Add(formatSubmenu);
-        var rootSetTime = new MenuItem { Header = "Set T&ime at Cursor…" };
+        var rootSetTime = new MenuItem { Header = "Set T_ime at Cursor…" };
         rootSetTime.Click += (_, _) => OpenSetTimeAtCursorDialog();
         menu.Items.Add(rootSetTime);
 

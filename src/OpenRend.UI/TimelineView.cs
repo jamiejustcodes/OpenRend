@@ -165,18 +165,8 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<Guid, bool>? TrackGroupMuteRequested;
     public event Action<Guid, bool>? TrackGroupSoloRequested;
     public event Action<Guid>? RenameTrackGroupRequested;
-    public RulerFormat RulerFormat
-    {
-        get => Project.RulerFormat;
-        set
-        {
-            if (Project.RulerFormat == value) return;
-            Project.RulerFormat = value;
-            InvalidateVisual();
-            RulerFormatChanged?.Invoke(value);
-        }
-    }
-    public event Action<RulerFormat>? RulerFormatChanged;
+    public RulerFormat RulerFormat => Project.RulerFormat;
+    public event Action<RulerFormat>? RulerFormatRequested;
     public event Action? SetTimeAtCursorRequested;
     public event Action? InsertTimeRequested;
     public event Action? DeleteTimeRequested;
@@ -2584,22 +2574,21 @@ public sealed partial class TimelineView : FrameworkElement
                 IsCheckable = true,
                 IsChecked = RulerFormat == fmt
             };
-            var chosen = fmt;
-            item.Click += (_, _) => RulerFormat = chosen;
+            item.Click += (_, _) => RulerFormatRequested?.Invoke(fmt);
             menu.Items.Add(item);
         }
 
         menu.Items.Add(new Separator());
 
-        var setTimeItem = new MenuItem { Header = "Set T&ime at Cursor…" };
+        var setTimeItem = new MenuItem { Header = "Set T_ime at Cursor…" };
         setTimeItem.Click += (_, _) => SetTimeAtCursorRequested?.Invoke();
         menu.Items.Add(setTimeItem);
 
-        var insertTimeItem = new MenuItem { Header = "&Insert Time…" };
+        var insertTimeItem = new MenuItem { Header = "Inse_rt Time…" };
         insertTimeItem.Click += (_, _) => InsertTimeRequested?.Invoke();
         menu.Items.Add(insertTimeItem);
 
-        var deleteTimeItem = new MenuItem { Header = "&Delete Time", InputGestureText = "Ctrl+Shift+Delete" };
+        var deleteTimeItem = new MenuItem { Header = "Delete Time", InputGestureText = "Ctrl+Shift+Delete" };
         deleteTimeItem.Click += (_, _) => DeleteTimeRequested?.Invoke();
         menu.Items.Add(deleteTimeItem);
 
@@ -2840,7 +2829,7 @@ public sealed partial class TimelineView : FrameworkElement
                 }
                 else if (track.Kind == TrackKind.Audio)
                 {
-                    var trackFx = new MenuItem { Header = "Track FXâ€¦" };
+                    var trackFx = new MenuItem { Header = "Track FX…" };
                     trackFx.Click += (_, _) => TrackAudioFxRequested?.Invoke(track.Id);
                     menu.Items.Add(trackFx);
 

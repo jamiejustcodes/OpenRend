@@ -217,16 +217,22 @@ public sealed class RulerFormatEditorTests
     [Fact]
     public void EditorViewModel_SetRulerFormat_UpdatesProjectAndStatus()
     {
-        var (vm, doc) = CreateVm();
+        var (vm, _) = CreateVm();
+        var previousFormat = vm.RulerFormat;
         bool changedFired = false;
         vm.Changed += () => changedFired = true;
 
         vm.SetRulerFormat(RulerFormat.MeasuresAndBeats);
 
         Assert.True(changedFired);
+        Assert.True(vm.Dirty);
         Assert.Equal(RulerFormat.MeasuresAndBeats, vm.Project.RulerFormat);
         Assert.Equal("Measures & Beats", vm.Project.RulerTimeFormat);
         Assert.Contains("Measures & Beats", vm.Status);
+        Assert.True(vm.Editor.Undo());
+        Assert.Equal(previousFormat, vm.RulerFormat);
+        Assert.True(vm.Editor.Redo());
+        Assert.Equal(RulerFormat.MeasuresAndBeats, vm.RulerFormat);
     }
 
     [Fact]

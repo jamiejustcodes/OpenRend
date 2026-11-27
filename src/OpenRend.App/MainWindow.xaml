@@ -46,13 +46,13 @@
         <MenuItem Header="Cut" InputGestureText="Ctrl+X" Click="CutClick"/>
         <MenuItem Header="Copy" InputGestureText="Ctrl+C" Click="CopyClick"/>
         <MenuItem Header="Paste" InputGestureText="Ctrl+V" Click="PasteClick"/>
-        <MenuItem x:Name="PasteRepeatMenu" Header="P&amp;aste Repeat..." InputGestureText="Ctrl+B" Click="PasteRepeatClick" AutomationProperties.AutomationId="PasteRepeatMenu"/>
-        <MenuItem x:Name="PasteInsertMenu" Header="Pa&amp;ste Insert" InputGestureText="Ctrl+Shift+V" Click="PasteInsertClick" AutomationProperties.AutomationId="PasteInsertMenu"/>
-        <MenuItem x:Name="PasteEventAttributesMenu" Header="Paste E&amp;vent Attributes" Click="PasteEventAttributesClick" AutomationProperties.AutomationId="PasteEventAttributesMenu"/>
-        <MenuItem x:Name="SelectivelyPasteEventAttributesMenu" Header="Selectively Paste Event Attributes..." Click="SelectivelyPasteEventAttributesClick" AutomationProperties.AutomationId="SelectivelyPasteEventAttributesMenu"/>
+        <MenuItem x:Name="PasteRepeatMenu" Header="P_aste Repeat…" InputGestureText="Ctrl+B" Click="PasteRepeatClick" AutomationProperties.AutomationId="PasteRepeatMenu"/>
+        <MenuItem x:Name="PasteInsertMenu" Header="Pa_ste Insert" InputGestureText="Ctrl+Shift+V" Click="PasteInsertClick" AutomationProperties.AutomationId="PasteInsertMenu"/>
+        <MenuItem x:Name="PasteEventAttributesMenu" Header="Paste E_vent Attributes" Click="PasteEventAttributesClick" AutomationProperties.AutomationId="PasteEventAttributesMenu"/>
+        <MenuItem x:Name="SelectivelyPasteEventAttributesMenu" Header="Selectively Paste Event Attributes…" Click="SelectivelyPasteEventAttributesClick" AutomationProperties.AutomationId="SelectivelyPasteEventAttributesMenu"/>
         <Separator/>
         <MenuItem Header="Split at cursor" InputGestureText="S" Click="SplitClick"/>
-        <MenuItem x:Name="SmartSplitMenu" Header="Smart Spl&amp;it" InputGestureText="Alt+S" Click="SmartSplitClick" AutomationProperties.AutomationId="SmartSplitMenu"/>
+        <MenuItem x:Name="SmartSplitMenu" Header="Smart S_plit" InputGestureText="Alt+S" Click="SmartSplitClick" AutomationProperties.AutomationId="SmartSplitMenu"/>
         <MenuItem x:Name="FreezeFrameAtCursorMenu" Header="Freeze Frame at Cursor" Click="FreezeFrameAtCursorClick" AutomationProperties.AutomationId="FreezeFrameAtCursorMenu"/>
         <MenuItem x:Name="EventHealMenu" Header="Event Heal" Click="EventHealClick" AutomationProperties.AutomationId="EventHealMenu"/>
         <MenuItem x:Name="CloseGapsMenu" Header="Close Gaps" Click="CloseGapsClick" AutomationProperties.AutomationId="CloseGapsMenu"/>
@@ -60,14 +60,14 @@
         <MenuItem x:Name="DeleteTimeMenu" Header="Delete _Time" InputGestureText="Ctrl+Shift+Delete" Click="DeleteTimeClick" AutomationProperties.AutomationId="DeleteTimeMenu"/>
         <MenuItem Header="Select all clips" InputGestureText="Ctrl+A" Click="SelectAllClick"/>
         <Separator/>
-        <MenuItem Header="&amp;Editing Tool">
-          <MenuItem x:Name="EditToolNormalMenu" Header="&amp;Normal Edit Tool" InputGestureText="Ctrl+D" Click="EditToolNormalClick" IsCheckable="True" IsChecked="True"/>
-          <MenuItem x:Name="EditToolEnvelopeMenu" Header="&amp;Envelope Edit Tool" Click="EditToolEnvelopeClick" IsCheckable="True"/>
-          <MenuItem x:Name="EditToolSelectionMenu" Header="&amp;Selection Edit Tool" InputGestureText="D" Click="EditToolSelectionClick" IsCheckable="True"/>
-          <MenuItem x:Name="EditToolZoomMenu" Header="&amp;Zoom Tool" Click="EditToolZoomClick" IsCheckable="True"/>
+        <MenuItem Header="_Editing Tool">
+          <MenuItem x:Name="EditToolNormalMenu" Header="_Normal Edit Tool" InputGestureText="Ctrl+D" Click="EditToolNormalClick" IsCheckable="True" IsChecked="True"/>
+          <MenuItem x:Name="EditToolEnvelopeMenu" Header="_Envelope Edit Tool" Click="EditToolEnvelopeClick" IsCheckable="True"/>
+          <MenuItem x:Name="EditToolSelectionMenu" Header="_Selection Edit Tool" InputGestureText="D" Click="EditToolSelectionClick" IsCheckable="True"/>
+          <MenuItem x:Name="EditToolZoomMenu" Header="_Zoom Tool" Click="EditToolZoomClick" IsCheckable="True"/>
           <Separator/>
-          <MenuItem Header="Ne&amp;xt Tool" InputGestureText="D" Click="EditToolNextClick"/>
-          <MenuItem Header="Pre&amp;vious Tool" InputGestureText="Shift+D" Click="EditToolPreviousClick"/>
+          <MenuItem Header="Ne_xt Tool" InputGestureText="D" Click="EditToolNextClick"/>
+          <MenuItem Header="Pre_vious Tool" InputGestureText="Shift+D" Click="EditToolPreviousClick"/>
         </MenuItem>
         <Separator/>
         <MenuItem Header="_Group">
@@ -117,16 +117,16 @@
           <MenuItem Header="_Source Window Layout" InputGestureText="Alt+D, S" Click="SourceWindowLayoutClick"/>
           <MenuItem Header="_Timeline Top Layout" InputGestureText="Alt+D, T" Click="TimelineTopLayoutClick"/>
           <Separator/>
-          <MenuItem x:Name="LayoutSlot0Menu" Header="Layout &amp;0 &lt;EMPTY&gt;" InputGestureText="Alt+D, 0" Click="LayoutSlotClick" Tag="0"/>
-          <MenuItem x:Name="LayoutSlot1Menu" Header="Layout &amp;1 &lt;EMPTY&gt;" InputGestureText="Alt+D, 1" Click="LayoutSlotClick" Tag="1"/>
-          <MenuItem x:Name="LayoutSlot2Menu" Header="Layout &amp;2 &lt;EMPTY&gt;" InputGestureText="Alt+D, 2" Click="LayoutSlotClick" Tag="2"/>
-          <MenuItem x:Name="LayoutSlot3Menu" Header="Layout &amp;3 &lt;EMPTY&gt;" InputGestureText="Alt+D, 3" Click="LayoutSlotClick" Tag="3"/>
-          <MenuItem x:Name="LayoutSlot4Menu" Header="Layout &amp;4 &lt;EMPTY&gt;" InputGestureText="Alt+D, 4" Click="LayoutSlotClick" Tag="4"/>
-          <MenuItem x:Name="LayoutSlot5Menu" Header="Layout &amp;5 &lt;EMPTY&gt;" InputGestureText="Alt+D, 5" Click="LayoutSlotClick" Tag="5"/>
-          <MenuItem x:Name="LayoutSlot6Menu" Header="Layout &amp;6 &lt;EMPTY&gt;" InputGestureText="Alt+D, 6" Click="LayoutSlotClick" Tag="6"/>
-          <MenuItem x:Name="LayoutSlot7Menu" Header="Layout &amp;7 &lt;EMPTY&gt;" InputGestureText="Alt+D, 7" Click="LayoutSlotClick" Tag="7"/>
-          <MenuItem x:Name="LayoutSlot8Menu" Header="Layout &amp;8 &lt;EMPTY&gt;" InputGestureText="Alt+D, 8" Click="LayoutSlotClick" Tag="8"/>
-          <MenuItem x:Name="LayoutSlot9Menu" Header="Layout &amp;9 &lt;EMPTY&gt;" InputGestureText="Alt+D, 9" Click="LayoutSlotClick" Tag="9"/>
+          <MenuItem x:Name="LayoutSlot0Menu" Header="Layout _0 (empty)" InputGestureText="Alt+D, 0" Click="LayoutSlotClick" Tag="0"/>
+          <MenuItem x:Name="LayoutSlot1Menu" Header="Layout _1 (empty)" InputGestureText="Alt+D, 1" Click="LayoutSlotClick" Tag="1"/>
+          <MenuItem x:Name="LayoutSlot2Menu" Header="Layout _2 (empty)" InputGestureText="Alt+D, 2" Click="LayoutSlotClick" Tag="2"/>
+          <MenuItem x:Name="LayoutSlot3Menu" Header="Layout _3 (empty)" InputGestureText="Alt+D, 3" Click="LayoutSlotClick" Tag="3"/>
+          <MenuItem x:Name="LayoutSlot4Menu" Header="Layout _4 (empty)" InputGestureText="Alt+D, 4" Click="LayoutSlotClick" Tag="4"/>
+          <MenuItem x:Name="LayoutSlot5Menu" Header="Layout _5 (empty)" InputGestureText="Alt+D, 5" Click="LayoutSlotClick" Tag="5"/>
+          <MenuItem x:Name="LayoutSlot6Menu" Header="Layout _6 (empty)" InputGestureText="Alt+D, 6" Click="LayoutSlotClick" Tag="6"/>
+          <MenuItem x:Name="LayoutSlot7Menu" Header="Layout _7 (empty)" InputGestureText="Alt+D, 7" Click="LayoutSlotClick" Tag="7"/>
+          <MenuItem x:Name="LayoutSlot8Menu" Header="Layout _8 (empty)" InputGestureText="Alt+D, 8" Click="LayoutSlotClick" Tag="8"/>
+          <MenuItem x:Name="LayoutSlot9Menu" Header="Layout _9 (empty)" InputGestureText="Alt+D, 9" Click="LayoutSlotClick" Tag="9"/>
         </MenuItem>
         <MenuItem x:Name="WorkspaceWindowMenu" Header="Window">
           <MenuItem x:Name="TrimmerWindowMenu" Header="Trimmer" InputGestureText="Alt+2" Click="TrimmerClick"/>
@@ -135,11 +135,6 @@
           <MenuItem x:Name="MixingConsoleWindowMenu" Header="Mixing Console" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
           <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         </MenuItem>
-        <MenuItem x:Name="TrimmerMenu" Header="Trimmer…" InputGestureText="Alt+2" Click="TrimmerClick"/>
-        <MenuItem x:Name="MixingConsoleMenu" Header="Mixing Console…" InputGestureText="Ctrl+Alt+5" Click="MixingConsoleClick"/>
-        <MenuItem x:Name="VideoScopesMenu" Header="Video Scopes…" InputGestureText="Ctrl+Alt+2" Click="VideoScopesClick"/>
-        <MenuItem x:Name="EditDetailsMenu" Header="Edit Detailsâ€¦" InputGestureText="Ctrl+Alt+4" Click="EditDetailsClick"/>
-        <MenuItem Header="Project Notes" Click="ProjectNotesClick"/>
         <Separator/>
         <MenuItem Header="Fit timeline" InputGestureText="Ctrl+F" Click="FitClick"/>
         <MenuItem Header="Zoom in" InputGestureText="+" Click="ZoomInClick"/>
@@ -150,7 +145,7 @@
         <MenuItem x:Name="InsertMarkerMenu" Header="Marker" InputGestureText="M" Click="InsertMarkerClick" AutomationProperties.AutomationId="InsertMarkerMenu"/>
         <MenuItem x:Name="InsertRegionMenu" Header="Region" InputGestureText="R" Click="InsertRegionClick" AutomationProperties.AutomationId="InsertRegionMenu"/>
         <MenuItem x:Name="InsertTimeMenu" Header="_Time…" Click="InsertTimeClick" AutomationProperties.AutomationId="InsertTimeMenu"/>
-        <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" InputGestureText="Ctrl+Shift+N" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
+        <MenuItem x:Name="ProjectNotesMenu" Header="Project Notes…" Click="ProjectNotesClick" AutomationProperties.AutomationId="ProjectNotesMenu"/>
         <Separator/>
         <MenuItem Header="Slideshow…" Click="CreateSlideshowClick"/>
         <MenuItem Header="Text media…" InputGestureText="Ctrl+Shift+T" Click="InsertTextMediaClick"/>
@@ -211,22 +206,22 @@
           <MenuItem x:Name="RippleAffectedTracksMarkersMenu" Header="Affected Tracks, Bus Tracks, _Markers and Regions" InputGestureText="Ctrl+Shift+F" IsCheckable="True" Click="RippleAffectedTracksMarkersClick"/>
           <MenuItem x:Name="RippleAllTracksMarkersMenu" Header="All _Tracks, Markers, Regions" InputGestureText="Ctrl+Alt+F" IsCheckable="True" Click="RippleAllTracksMarkersClick"/>
         </MenuItem>
-        <MenuItem x:Name="RulerFormatMenu" Header="Ruler &amp;Format">
-          <MenuItem x:Name="RulerFormatSamples" Header="&amp;Samples" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Samples"/>
-          <MenuItem x:Name="RulerFormatTime" Header="&amp;Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Time"/>
-          <MenuItem x:Name="RulerFormatSeconds" Header="Se&amp;conds" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Seconds"/>
-          <MenuItem x:Name="RulerFormatTimeAndFrames" Header="Time &amp;&amp; Fra&amp;mes" IsCheckable="True" Click="RulerFormatMenuClick" Tag="TimeAndFrames"/>
-          <MenuItem x:Name="RulerFormatAbsoluteFrames" Header="Absol&amp;ute Frames" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AbsoluteFrames"/>
-          <MenuItem x:Name="RulerFormatMeasuresAndBeats" Header="Measures &amp;&amp; &amp;Beats" IsCheckable="True" Click="RulerFormatMenuClick" Tag="MeasuresAndBeats"/>
-          <MenuItem x:Name="RulerFormatFeet16mm" Header="Feet and Frames &amp;16mm (40 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames16mm"/>
-          <MenuItem x:Name="RulerFormatFeet35mm" Header="Feet and Frames &amp;35mm (16 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames35mm"/>
-          <MenuItem x:Name="RulerFormatFilmSyncIVTC" Header="SMPTE Fi&amp;lm Sync IVTC (23.976 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSyncIVTC"/>
-          <MenuItem x:Name="RulerFormatFilmSync" Header="SMPTE &amp;Film Sync (24 fps, Film)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSync"/>
-          <MenuItem x:Name="RulerFormatEBU" Header="SMPTE &amp;EBU (25 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteEBU"/>
-          <MenuItem x:Name="RulerFormatNonDrop" Header="SMPTE &amp;Non-Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteNonDrop"/>
-          <MenuItem x:Name="RulerFormatDrop" Header="SMPTE &amp;Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteDrop"/>
-          <MenuItem x:Name="RulerFormat30" Header="SM&amp;PTE 30 (30 fps, Audio)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Smpte30"/>
-          <MenuItem x:Name="RulerFormatAudioCD" Header="&amp;Audio CD Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AudioCDTime"/>
+        <MenuItem x:Name="RulerFormatMenu" Header="Ruler _Format">
+          <MenuItem x:Name="RulerFormatSamples" Header="_Samples" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Samples"/>
+          <MenuItem x:Name="RulerFormatTime" Header="_Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Time"/>
+          <MenuItem x:Name="RulerFormatSeconds" Header="Se_conds" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Seconds"/>
+          <MenuItem x:Name="RulerFormatTimeAndFrames" Header="Time &amp; Fra_mes" IsCheckable="True" Click="RulerFormatMenuClick" Tag="TimeAndFrames"/>
+          <MenuItem x:Name="RulerFormatAbsoluteFrames" Header="Absol_ute Frames" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AbsoluteFrames"/>
+          <MenuItem x:Name="RulerFormatMeasuresAndBeats" Header="Measures &amp; _Beats" IsCheckable="True" Click="RulerFormatMenuClick" Tag="MeasuresAndBeats"/>
+          <MenuItem x:Name="RulerFormatFeet16mm" Header="Feet and Frames _16mm (40 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames16mm"/>
+          <MenuItem x:Name="RulerFormatFeet35mm" Header="Feet and Frames _35mm (16 fpf)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="FeetAndFrames35mm"/>
+          <MenuItem x:Name="RulerFormatFilmSyncIVTC" Header="SMPTE Fi_lm Sync IVTC (23.976 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSyncIVTC"/>
+          <MenuItem x:Name="RulerFormatFilmSync" Header="SMPTE _Film Sync (24 fps, Film)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteFilmSync"/>
+          <MenuItem x:Name="RulerFormatEBU" Header="SMPTE _EBU (25 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteEBU"/>
+          <MenuItem x:Name="RulerFormatNonDrop" Header="SMPTE _Non-Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteNonDrop"/>
+          <MenuItem x:Name="RulerFormatDrop" Header="SMPTE _Drop (29.97 fps, Video)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="SmpteDrop"/>
+          <MenuItem x:Name="RulerFormat30" Header="SM_PTE 30 (30 fps, Audio)" IsCheckable="True" Click="RulerFormatMenuClick" Tag="Smpte30"/>
+          <MenuItem x:Name="RulerFormatAudioCD" Header="_Audio CD Time" IsCheckable="True" Click="RulerFormatMenuClick" Tag="AudioCDTime"/>
         </MenuItem>
         <Separator/>
         <MenuItem Header="Preferences…" Click="EditingPreferencesClick" AutomationProperties.AutomationId="EditingPreferencesMenu"/>

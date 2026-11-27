@@ -3,8 +3,7 @@ using System.Text.Json.Serialization;
 namespace OpenRend.Core;
 
 /// <summary>
-/// Vegas Pro 1:1 timeline ruler and timecode display formats.
-/// Corresponds to ScriptPortal.Vegas.RulerFormat.
+/// Timeline ruler and timecode display formats.
 /// </summary>
 [JsonConverter(typeof(JsonStringEnumConverter<RulerFormat>))]
 public enum RulerFormat
@@ -31,7 +30,7 @@ public enum RulerFormat
 public static class RulerFormatExtensions
 {
     /// <summary>
-    /// Standard ordered list of ruler formats matching Vegas Pro Options -> Ruler Format menu.
+    /// Ruler formats available from the timeline menus.
     /// </summary>
     public static readonly RulerFormat[] AllStandardFormats =
     [
@@ -76,21 +75,21 @@ public static class RulerFormatExtensions
 
     public static string ToMenuHeader(this RulerFormat format) => format switch
     {
-        RulerFormat.Samples => "&Samples",
-        RulerFormat.Time => "&Time",
-        RulerFormat.Seconds => "Se&conds",
-        RulerFormat.TimeAndFrames => "Time && Fra&mes",
-        RulerFormat.AbsoluteFrames => "Absol&ute Frames",
-        RulerFormat.MeasuresAndBeats => "Measures && &Beats",
-        RulerFormat.FeetAndFrames16mm => "Feet and Frames &16mm (40 fpf)",
-        RulerFormat.FeetAndFrames35mm => "Feet and Frames &35mm (16 fpf)",
-        RulerFormat.SmpteFilmSyncIVTC => "SMPTE Fi&lm Sync IVTC (23.976 fps, Video)",
-        RulerFormat.SmpteFilmSync => "SMPTE &Film Sync (24 fps, Film)",
-        RulerFormat.SmpteEBU => "SMPTE &EBU (25 fps, Video)",
-        RulerFormat.SmpteNonDrop => "SMPTE &Non-Drop (29.97 fps, Video)",
-        RulerFormat.SmpteDrop => "SMPTE &Drop (29.97 fps, Video)",
-        RulerFormat.Smpte30 => "SM&PTE 30 (30 fps, Audio)",
-        RulerFormat.AudioCDTime => "&Audio CD Time",
+        RulerFormat.Samples => "_Samples",
+        RulerFormat.Time => "_Time",
+        RulerFormat.Seconds => "Se_conds",
+        RulerFormat.TimeAndFrames => "Time & Fra_mes",
+        RulerFormat.AbsoluteFrames => "Absol_ute Frames",
+        RulerFormat.MeasuresAndBeats => "Measures & _Beats",
+        RulerFormat.FeetAndFrames16mm => "Feet and Frames _16mm (40 fpf)",
+        RulerFormat.FeetAndFrames35mm => "Feet and Frames _35mm (16 fpf)",
+        RulerFormat.SmpteFilmSyncIVTC => "SMPTE Fi_lm Sync IVTC (23.976 fps, Video)",
+        RulerFormat.SmpteFilmSync => "SMPTE _Film Sync (24 fps, Film)",
+        RulerFormat.SmpteEBU => "SMPTE _EBU (25 fps, Video)",
+        RulerFormat.SmpteNonDrop => "SMPTE _Non-Drop (29.97 fps, Video)",
+        RulerFormat.SmpteDrop => "SMPTE _Drop (29.97 fps, Video)",
+        RulerFormat.Smpte30 => "SM_PTE 30 (30 fps, Audio)",
+        RulerFormat.AudioCDTime => "_Audio CD Time",
         RulerFormat.Nanoseconds => "Nanoseconds",
         RulerFormat.Microseconds => "Microseconds",
         _ => format.ToDisplayName()

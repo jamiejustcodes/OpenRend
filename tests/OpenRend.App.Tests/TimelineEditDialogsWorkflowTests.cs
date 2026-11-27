@@ -1,4 +1,5 @@
 using FlaUI.Core.AutomationElements;
+using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
@@ -68,7 +69,10 @@ public sealed partial class EditorWorkflowTests
 
             Find(window, $"Clip_{clip.Id:N}").Patterns.SelectionItem.Pattern.Select();
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_C);
-            Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.KEY_B);
+            Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.KEY_E);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("PasteRepeatMenu"))?.Name == "Paste Repeat…",
+                "The Edit menu did not show the Paste Repeat label.");
+            Keyboard.Type(VirtualKeyShort.KEY_A);
             var paste = OpenDialog(window, "Paste Repeat");
             var copies = Find(paste, "PasteRepeatCountBox").AsTextBox();
             Assert.True(copies.Properties.HasKeyboardFocus.Value);
@@ -106,6 +110,22 @@ public sealed partial class EditorWorkflowTests
             WaitFor(() => !window.Title.Contains('*'), "Paste Repeat did not save.");
             var saved = await ProjectStore.LoadAsync(path);
             Assert.Equal(new long[] { 12, 72, 89, 106 }, saved.Tracks[0].Clips.Select(item => item.StartFrame).Order());
+
+            Chord(window, VirtualKeyShort.ALT, VirtualKeyShort.KEY_O);
+            WaitFor(() => window.FindFirstDescendant(c => c.ByAutomationId("RulerFormatMenu"))?.Name == "Ruler Format",
+                "The Options menu did not show the Ruler Format label.");
+            Keyboard.Type(VirtualKeyShort.KEY_F);
+            WaitFor(() => Find(window, "RulerFormatMenu").Patterns.ExpandCollapse.Pattern.ExpandCollapseState.Value == ExpandCollapseState.Expanded,
+                "F did not open Ruler Format from the Options menu.");
+            Assert.Equal("Time & Frames", Find(window, "RulerFormatTimeAndFrames").Name);
+            Keyboard.Type(VirtualKeyShort.KEY_M);
+            WaitFor(() => window.Title.Contains('*') && Find(window, "Timecode").Name.Contains('.'),
+                "M did not select Time & Frames and mark the project dirty.");
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The ruler format did not save.");
+            saved = await ProjectStore.LoadAsync(path);
+            Assert.Equal(RulerFormat.TimeAndFrames, saved.RulerFormat);
+            Assert.Empty(saved.Markers);
             running.CloseGracefully();
         }
         finally

@@ -255,13 +255,14 @@ public partial class MainWindow
             {
                 if (slotMap.TryGetValue(i, out var assignedLayout))
                 {
-                    menu.Header = $"Layout &{i} {assignedLayout.Name}";
+                    var layoutName = assignedLayout.Name.Replace("_", "__");
+                    menu.Header = $"Layout _{i} · {layoutName}";
                     menu.ToolTip = $"Loads {assignedLayout.Name} (Alt+D, {i})";
                 }
                 else
                 {
-                    menu.Header = $"Layout &{i} <EMPTY>";
-                    menu.ToolTip = $"Slot {i} is unassigned. Save a layout with shortcut slot {i} to populate.";
+                    menu.Header = $"Layout _{i} (empty)";
+                    menu.ToolTip = $"Save a layout to slot {i} to use this shortcut.";
                 }
             }
         }

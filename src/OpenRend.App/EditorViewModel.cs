@@ -120,10 +120,12 @@ public sealed class EditorViewModel : ObservableObject
     public void SetRulerFormat(RulerFormat format)
     {
         if (Project.RulerFormat == format) return;
-        Project.RulerFormat = format;
-        Project.RulerTimeFormat = format.ToDisplayName();
+        Editor.Execute(project =>
+        {
+            project.RulerFormat = format;
+            project.RulerTimeFormat = format.ToDisplayName();
+        });
         OnPropertyChanged(nameof(RulerFormat));
-        Changed?.Invoke();
         Status = $"Ruler format set to {format.ToDisplayName()}.";
     }
     public void SetTimeAtCursor(long frame)

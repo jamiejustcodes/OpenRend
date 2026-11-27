@@ -89,15 +89,15 @@ public partial class MainWindow
     private ContextMenu CreateTreeContextMenu()
     {
         var menu = new ContextMenu();
-        var newBinItem = new MenuItem { Header = "Create New &Bin" };
+        var newBinItem = new MenuItem { Header = "Create new _bin" };
         newBinItem.Click += (_, _) => PromptCreateBin(activeBinId);
         menu.Items.Add(newBinItem);
 
-        var renameItem = new MenuItem { Header = "&Rename Bin…" };
+        var renameItem = new MenuItem { Header = "_Rename bin…" };
         renameItem.Click += (_, _) => PromptRenameBin(activeBinId);
         menu.Items.Add(renameItem);
 
-        var deleteItem = new MenuItem { Header = "&Delete Bin" };
+        var deleteItem = new MenuItem { Header = "_Delete bin" };
         deleteItem.Click += (_, _) => PromptDeleteBin(activeBinId);
         menu.Items.Add(deleteItem);
 
