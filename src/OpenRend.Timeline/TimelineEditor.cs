@@ -363,12 +363,7 @@ public sealed partial class TimelineEditor
             throw new InvalidOperationException("Choose two video events that meet at a cut on the same track.");
         EnsureUnlocked(outgoingTrack, outgoing);
         EnsureUnlocked(incomingTrack, incoming);
-        var before = alignment switch
-        {
-            CutTransitionAlignment.BeforeCut => overlapFrames,
-            CutTransitionAlignment.CenteredOnCut => overlapFrames / 2,
-            _ => 0
-        };
+        var before = OverlapFramesBeforeCut(overlapFrames, alignment);
         var after = overlapFrames - before;
         var extendedOutgoing = outgoing.DeepClone();
         var extendedIncoming = incoming.DeepClone();
@@ -424,14 +419,7 @@ public sealed partial class TimelineEditor
         if (outgoingTrack.Clips.Any(clip => clip.Id != outgoing.Id && clip.Id != incoming.Id &&
             clip.StartFrame < outgoing.EndFrame && clip.EndFrame > incoming.StartFrame))
             throw new InvalidOperationException("A cut conversion requires exactly two events in the overlap.");
-        if (alignment == CutTransitionAlignment.CenteredOnCut && overlap % 2 != 0)
-            throw new InvalidOperationException("Centering this overlap would create a half-frame cut. OpenRend stores edits in whole project frames.");
-        var cut = alignment switch
-        {
-            CutTransitionAlignment.BeforeCut => outgoing.EndFrame,
-            CutTransitionAlignment.AfterCut => incoming.StartFrame,
-            _ => checked(incoming.StartFrame + overlap / 2)
-        };
+        var cut = checked(incoming.StartFrame + OverlapFramesBeforeCut(overlap, alignment));
         var trimmedOutgoing = outgoing.DeepClone();
         var trimmedIncoming = incoming.DeepClone();
         var headTrim = cut - incoming.StartFrame;
@@ -464,6 +452,15 @@ public sealed partial class TimelineEditor
             incoming.FadeInTransition = null;
         });
     }
+
+    private static long OverlapFramesBeforeCut(long overlap, CutTransitionAlignment alignment) => alignment switch
+    {
+        CutTransitionAlignment.BeforeCut => overlap,
+        // Both conversions use the earlier whole frame when the midpoint falls between frames.
+        CutTransitionAlignment.CenteredOnCut => overlap / 2,
+        _ => 0
+    };
+
     public int ApplyDissolvesToAdjacent(IEnumerable<Guid> selectedClipIds, VideoTransition? transition = null)
     {
         var selected = ExpandSelection(selectedClipIds, ignoreGroups: true);

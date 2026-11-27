@@ -9,12 +9,13 @@ namespace OpenRend.Core.Tests;
 public sealed class OverlapToCutTests
 {
     [Theory]
-    [InlineData(CutTransitionAlignment.BeforeCut, 120, 60)]
-    [InlineData(CutTransitionAlignment.CenteredOnCut, 105, 45)]
-    [InlineData(CutTransitionAlignment.AfterCut, 90, 30)]
-    public async Task ConversionPreservesSurvivingContentAndRoundTrips(CutTransitionAlignment alignment, long cut, long source)
+    [InlineData(CutTransitionAlignment.BeforeCut, 30, 120, 60)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 30, 105, 45)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 31, 104, 44)]
+    [InlineData(CutTransitionAlignment.AfterCut, 30, 90, 30)]
+    public async Task ConversionPreservesSurvivingContentAndRoundTrips(CutTransitionAlignment alignment, long overlap, long cut, long source)
     {
-        var editor = Create();
+        var editor = Create(overlap);
         var pair = editor.Project.Tracks[0].Clips;
         var outgoing = pair[0]; var incoming = pair[1];
         var previous = editor.Project.DeepClone();
@@ -58,8 +59,9 @@ public sealed class OverlapToCutTests
 
     [Theory]
     [InlineData(CutTransitionAlignment.BeforeCut, 120, 60)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 104, 44)]
     [InlineData(CutTransitionAlignment.AfterCut, 89, 29)]
-    public void OddOverlapSupportsEndpointAlignmentsWithoutAPlugin(CutTransitionAlignment alignment, long cut, long source)
+    public void OddCrossfadeWithoutAPluginConvertsToAWholeFrameCut(CutTransitionAlignment alignment, long cut, long source)
     {
         var editor = Create(31, plain: true);
         var pair = editor.Project.Tracks[0].Clips;
@@ -70,7 +72,27 @@ public sealed class OverlapToCutTests
     }
 
     [Theory]
-    [InlineData("half-frame")]
+    [InlineData(1)]
+    [InlineData(15)]
+    public void OddCenteredCutConversionReturnsToTheOriginalFrame(long overlap)
+    {
+        var editor = Create();
+        var pair = editor.Project.Tracks[0].Clips;
+        var outgoing = pair[0];
+        var incoming = pair[1];
+        editor.ConvertOverlapToCut(outgoing.Id, incoming.Id, CutTransitionAlignment.CenteredOnCut);
+        var cut = incoming.StartFrame;
+        var sourceIn = incoming.SourceInFrame;
+        editor.ConvertCutToDissolve(outgoing.Id, incoming.Id, overlap, CutTransitionAlignment.CenteredOnCut);
+        Assert.Equal(overlap, outgoing.EndFrame - incoming.StartFrame);
+        Assert.Equal(overlap / 2, cut - incoming.StartFrame);
+        editor.ConvertOverlapToCut(outgoing.Id, incoming.Id, CutTransitionAlignment.CenteredOnCut);
+        Assert.Equal(cut, outgoing.EndFrame);
+        Assert.Equal(cut, incoming.StartFrame);
+        Assert.Equal(sourceIn, incoming.SourceInFrame);
+    }
+
+    [Theory]
     [InlineData("locked")]
     [InlineData("three-way")]
     [InlineData("split")]
@@ -80,7 +102,7 @@ public sealed class OverlapToCutTests
     [InlineData("invalid-alignment")]
     public void UnsupportedConversionIsAtomicAndKeepsRedo(string scenario)
     {
-        var editor = Create(scenario == "half-frame" ? 31 : 30);
+        var editor = Create();
         editor.Execute(project => project.Name = "Changed"); Assert.True(editor.Undo());
         var pair = editor.Project.Tracks[0].Clips;
         if (scenario == "locked") editor.Project.Tracks[0].IsLocked = true;
@@ -94,7 +116,6 @@ public sealed class OverlapToCutTests
         var error = Record.Exception(() => editor.ConvertOverlapToCut(outgoing, incoming,
             scenario == "invalid-alignment" ? (CutTransitionAlignment)999 : CutTransitionAlignment.CenteredOnCut));
         Assert.True(error is ArgumentException or InvalidOperationException, error?.ToString() ?? "The invalid conversion was accepted.");
-        if (scenario == "half-frame") Assert.Contains("half-frame", error!.Message);
         Assert.Equal(snapshot, JsonSerializer.Serialize(editor.Project));
         Assert.False(editor.CanUndo); Assert.True(editor.CanRedo); Assert.Equal(0, changes);
     }

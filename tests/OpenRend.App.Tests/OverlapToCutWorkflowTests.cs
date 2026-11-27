@@ -1,5 +1,4 @@
 using FlaUI.Core.AutomationElements;
-using FlaUI.Core.Definitions;
 using FlaUI.Core.Input;
 using FlaUI.Core.WindowsAPI;
 using OpenRend.Core;
@@ -24,9 +23,9 @@ public sealed partial class EditorWorkflowTests
 
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]
-    public Task OverlapToCutReportsHalfFrameWithoutEditing() => VerifyOverlapToCut(CutTransitionAlignment.CenteredOnCut, 15, null);
+    public Task OverlapToCutShortcutUsesEarlierWholeFrameForAnOddCenter() => VerifyOverlapToCut(CutTransitionAlignment.CenteredOnCut, 15, 52);
 
-    private async Task VerifyOverlapToCut(CutTransitionAlignment alignment, long overlap, long? cut)
+    private async Task VerifyOverlapToCut(CutTransitionAlignment alignment, long overlap, long cut)
     {
         var root = FindRepository();
         var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
@@ -42,7 +41,6 @@ public sealed partial class EditorWorkflowTests
         var unrelated = new TimelineClip { MediaId = asset.Id, StartFrame = 120, DurationFrames = 30 };
         await ProjectStore.SaveAsync(new() { Name = "UI integration", Width = 320, Height = 180, FrameRate = new(30000, 1001), Media = [asset],
             Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming, unrelated] }] }, path);
-        var originalBytes = await File.ReadAllBytesAsync(path);
         EditingPreferencesStore.Save(new() { CutOverlapAlignment = alignment, CutOverlapSeconds = .1 }, Path.Combine(temporary, "editing.json"));
         try
         {
@@ -55,36 +53,22 @@ public sealed partial class EditorWorkflowTests
             var x = (int)(incomingBounds.Left + incomingBounds.Width * overlap / (2 * incoming.DurationFrames));
             Mouse.Click(new System.Drawing.Point(x, (int)(incomingBounds.Top - 10 * scale)));
             Chord(window, VirtualKeyShort.CONTROL, VirtualKeyShort.DIVIDE);
-            if (cut is null)
-            {
-                Window? error = null;
-                WaitFor(() => (error = window.ModalWindows.SingleOrDefault()) is not null, "The half-frame limitation was not reported.");
-                Assert.NotNull(error!.FindFirstDescendant(c => c.ByControlType(ControlType.Text).And(c.ByName(
-                    "Centering this overlap would create a half-frame cut. OpenRend stores edits in whole project frames."))));
-                Chord(error!, VirtualKeyShort.RETURN);
-                WaitFor(() => window.ModalWindows.Length == 0, "The error did not close.");
-                Assert.False(window.Title.Contains('*'));
-                Assert.Equal(originalBytes, await File.ReadAllBytesAsync(path));
-            }
-            else
-            {
-                WaitFor(() => window.Title.Contains('*'), "The overlap-to-cut shortcut did not edit the project.");
-                Find(window, "UndoButton").AsButton().Invoke();
-                WaitFor(() => !Find(window, "UndoButton").IsEnabled, "Conversion created more than one undo step.");
-                Assert.NotNull(Find(window, $"Clip_{incoming.Id:N}_Transition"));
-                Find(window, "RedoButton").AsButton().Invoke();
-                WaitFor(() => Find(window, "UndoButton").IsEnabled, "Redo did not restore the cut.");
-                SaveButton(window).Invoke();
-                WaitFor(() => !window.Title.Contains('*'), "The cut was not saved.");
-                var loaded = await ProjectStore.LoadAsync(path);
-                var clips = loaded.Tracks[0].Clips;
-                Assert.Equal(cut.Value, clips[0].EndFrame); Assert.Equal(cut.Value, clips[1].StartFrame);
-                Assert.Equal(90, clips[1].EndFrame);
-                Assert.Equal(5 + cut.Value - incoming.StartFrame, clips[1].SourceInFrame);
-                Assert.Equal(0, clips[0].FadeOutFrames); Assert.Equal(0, clips[1].FadeInFrames);
-                Assert.Null(clips[1].FadeInTransition); Assert.Equal(120, clips[2].StartFrame);
-                Assert.True(Find(window, $"Clip_{unrelated.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
-            }
+            WaitFor(() => window.Title.Contains('*'), "The overlap-to-cut shortcut did not edit the project.");
+            Find(window, "UndoButton").AsButton().Invoke();
+            WaitFor(() => !Find(window, "UndoButton").IsEnabled, "Conversion created more than one undo step.");
+            Assert.NotNull(Find(window, $"Clip_{incoming.Id:N}_Transition"));
+            Find(window, "RedoButton").AsButton().Invoke();
+            WaitFor(() => Find(window, "UndoButton").IsEnabled, "Redo did not restore the cut.");
+            SaveButton(window).Invoke();
+            WaitFor(() => !window.Title.Contains('*'), "The cut was not saved.");
+            var loaded = await ProjectStore.LoadAsync(path);
+            var clips = loaded.Tracks[0].Clips;
+            Assert.Equal(cut, clips[0].EndFrame); Assert.Equal(cut, clips[1].StartFrame);
+            Assert.Equal(90, clips[1].EndFrame);
+            Assert.Equal(5 + cut - incoming.StartFrame, clips[1].SourceInFrame);
+            Assert.Equal(0, clips[0].FadeOutFrames); Assert.Equal(0, clips[1].FadeInFrames);
+            Assert.Null(clips[1].FadeInTransition); Assert.Equal(120, clips[2].StartFrame);
+            Assert.True(Find(window, $"Clip_{unrelated.Id:N}").Patterns.SelectionItem.Pattern.IsSelected.Value);
             running.CloseGracefully();
         }
         finally { Directory.Delete(temporary, recursive: true); }

@@ -8,10 +8,11 @@ namespace OpenRend.Media.Tests;
 public sealed class OverlapToCutMediaTests
 {
     [Theory]
-    [InlineData(CutTransitionAlignment.BeforeCut, 60, 255, 255, 255)]
-    [InlineData(CutTransitionAlignment.CenteredOnCut, 45, 0, 0, 255)]
-    [InlineData(CutTransitionAlignment.AfterCut, 30, 255, 0, 0)]
-    public async Task PreviewAndExportCutAtTheSameFrameWithTheSurvivingTake(CutTransitionAlignment alignment, long cut, int red, int green, int blue)
+    [InlineData(CutTransitionAlignment.BeforeCut, 30, 60, 255, 255, 255)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 30, 45, 0, 0, 255)]
+    [InlineData(CutTransitionAlignment.CenteredOnCut, 31, 44, 0, 0, 255)]
+    [InlineData(CutTransitionAlignment.AfterCut, 30, 30, 255, 0, 0)]
+    public async Task PreviewAndExportCutAtTheSameFrameWithTheSurvivingTake(CutTransitionAlignment alignment, long overlap, long cut, int red, int green, int blue)
     {
         var directory = Path.Combine(Path.GetTempPath(), $"openrend-overlap-cut-{Guid.NewGuid():N}");
         Directory.CreateDirectory(directory);
@@ -27,9 +28,9 @@ public sealed class OverlapToCutMediaTests
             using var media = new MediaService();
             var asset = await media.ProbeAsync(source);
             var color = new MediaAsset { Path = "openrend://color?hex=#00FF00", HasVideo = true, DurationSeconds = 3 };
-            var outgoing = new TimelineClip { MediaId = color.Id, DurationFrames = 60, FadeOutFrames = 30 };
-            var incoming = new TimelineClip { MediaId = asset.Id, StartFrame = 30, SourceInFrame = 15, DurationFrames = 60,
-                FadeInFrames = 30, FadeInTransition = new() };
+            var outgoing = new TimelineClip { MediaId = color.Id, DurationFrames = 60, FadeOutFrames = overlap };
+            var incoming = new TimelineClip { MediaId = asset.Id, StartFrame = 60 - overlap, SourceInFrame = 15, DurationFrames = 30 + overlap,
+                FadeInFrames = overlap, FadeInTransition = new() };
             var project = new ProjectDocument { Width = 32, Height = 24, FrameRate = new(30000, 1001), Media = [color, asset],
                 Tracks = [new() { Kind = TrackKind.Video, Clips = [outgoing, incoming] }] };
             new TimelineEditor(project).ConvertOverlapToCut(outgoing.Id, incoming.Id, alignment);
