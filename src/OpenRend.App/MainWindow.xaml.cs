@@ -574,6 +574,12 @@ public partial class MainWindow : Window
             vm.Status = $"Set {type} envelope point at frame {frame} ({Math.Round(val * 100)}%).";
             RequestPreview();
         });
+        Timeline.EnvelopePointMoved += (track, clip, envelope, index, original, moved) => Guard(() =>
+        {
+            Pause();
+            vm.Editor.MoveEnvelopePoint(track, clip, envelope, index, original, moved);
+            RequestPreview();
+        });
         Timeline.RemoveEnvelopePointRequested += (id, type, frame) => Guard(() =>
         {
             Pause();

@@ -70,6 +70,28 @@ public sealed partial class TimelineEditor
         });
     }
 
+    public void MoveEnvelopePoint(Guid trackId, Guid? clipId, Guid envelopeId, int index, EnvelopePoint original, EnvelopePoint moved)
+    {
+        var track = Project.Tracks.Find(item => item.Id == trackId);
+        if (track is null) return;
+        var clip = clipId is Guid id ? track.Clips.Find(item => item.Id == id) : null;
+        var envelope = (clipId.HasValue ? clip?.Envelopes : track.Envelopes)?.Find(item => item.Id == envelopeId);
+        if (envelope is null || index < 0 || index >= envelope.Points.Count || !envelope.Points[index].Equals(original))
+            return;
+        if (clip is null) EnsureUnlocked(track); else EnsureUnlocked(track, clip);
+
+        var point = envelope.Points[index];
+        var frame = Math.Clamp(moved.Frame, 0, clip?.DurationFrames ?? long.MaxValue);
+        var value = Math.Clamp(moved.Value, envelope.MinValue, envelope.MaxValue);
+        if (frame == point.Frame && value == point.Value) return;
+        Execute("Move Envelope Point", _ =>
+        {
+            point.Frame = frame;
+            point.Value = value;
+            envelope.Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+        });
+    }
+
     public void SetEnvelopePoint(Guid clipId, EnvelopeType type, long frame, double value, EnvelopeCurveType curve = EnvelopeCurveType.Linear)
     {
         Execute(p =>

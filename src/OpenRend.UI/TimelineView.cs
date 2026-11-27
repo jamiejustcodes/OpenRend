@@ -251,6 +251,7 @@ public sealed partial class TimelineView : FrameworkElement
     public void CancelPointerInput()
     {
         pressedEventButton = null;
+        envelopeDrag = null;
         if (selectingLoop) RestoreLoopBeforeDrag();
         selectingLoop = false;
         isDragging = false; alreadySelectedOnDown = false;
@@ -2299,7 +2300,7 @@ public sealed partial class TimelineView : FrameworkElement
         {
             CompleteEventButton(e.GetPosition(this)); e.Handled = true; return;
         }
-        if (HandleEnvelopeMouseUp(e.GetPosition(this))) { e.Handled = true; return;
+        if (HandleEnvelopeMouseUp()) { e.Handled = true; return;
         }
         if (seeking)
         {
@@ -2535,6 +2536,7 @@ public sealed partial class TimelineView : FrameworkElement
     protected override void OnLostMouseCapture(MouseEventArgs e)
     {
         base.OnLostMouseCapture(e);
+        envelopeDrag = null;
         if (isDragging || dragging is not null)
         {
             isDragging = false; alreadySelectedOnDown = false;

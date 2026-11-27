@@ -12,11 +12,11 @@ namespace OpenRend.UI;
 
 public partial class TimelineView
 {
-    private TimelineClip? draggingEnvClip;
-    private TimelineTrack? draggingEnvTrack;
-    private ClipEnvelope? draggingEnv;
-    private EnvelopePoint? draggingEnvPt;
-    private bool isDraggingEnvelopePoint;
+    private sealed record EnvelopeDrag(TimelineTrack Track, TimelineClip? Clip, ClipEnvelope Source, ClipEnvelope Preview,
+        int Index, EnvelopePoint Original, EnvelopePoint Point);
+
+    private EnvelopeDrag? envelopeDrag;
+    public event Action<Guid, Guid?, Guid, int, EnvelopePoint, EnvelopePoint>? EnvelopePointMoved;
 
     private void DrawEnvelopes(DrawingContext dc, TimelineTrack track, TimelineClip clip, Rect rect)
     {
@@ -27,8 +27,9 @@ public partial class TimelineView
         var height = Math.Max(12.0, bottom - top);
         if (height <= 0 || rect.Width <= 2) return;
 
-        foreach (var env in clip.Envelopes)
+        foreach (var source in clip.Envelopes)
         {
+            var env = ReferenceEquals(source, envelopeDrag?.Source) ? envelopeDrag!.Preview : source;
             if (!env.IsEnabled) continue;
 
             var isVelocity = env.Type == EnvelopeType.Velocity;
@@ -103,7 +104,7 @@ public partial class TimelineView
                 var norm = Math.Clamp((pt.Value - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
                 var ptY = bottom - norm * height;
 
-                var isPointActive = isDraggingEnvelopePoint && draggingEnvPt == pt;
+                var isPointActive = ReferenceEquals(envelopeDrag?.Point, pt);
                 var fill = isPointActive ? activeFill : handleFill;
 
                 var handleRect = new Rect(ptX - 3.5, ptY - 3.5, 7.0, 7.0);
@@ -144,8 +145,9 @@ public partial class TimelineView
         var height = Math.Max(12.0, bottom - top);
         if (height <= 0 || rect.Width <= 2) return;
 
-        foreach (var env in track.Envelopes)
+        foreach (var source in track.Envelopes)
         {
+            var env = ReferenceEquals(source, envelopeDrag?.Source) ? envelopeDrag!.Preview : source;
             if (!env.IsEnabled) continue;
 
             var (strokeHex, baselineHex, labelHex) = env.Type switch
@@ -222,7 +224,7 @@ public partial class TimelineView
                 var norm = Math.Clamp((pt.Value - env.MinValue) / (env.MaxValue - env.MinValue), 0.0, 1.0);
                 var ptY = bottom - norm * height;
 
-                var isPointActive = isDraggingEnvelopePoint && draggingEnvPt == pt;
+                var isPointActive = ReferenceEquals(envelopeDrag?.Point, pt);
                 var fill = isPointActive ? activeFill : handleFill;
 
                 var handleRect = new Rect(ptX - 3.5, ptY - 3.5, 7.0, 7.0);
@@ -461,26 +463,15 @@ public partial class TimelineView
         // Clip envelope point hit
         if (HitEnvelopePoint(p, out var clip, out var env, out var pt))
         {
-            draggingEnvClip = clip;
-            draggingEnvTrack = null;
-            draggingEnv = env;
-            draggingEnvPt = pt;
-            isDraggingEnvelopePoint = true;
-            CaptureMouse();
-            InvalidateVisual();
+            var owner = Project.Tracks.First(candidate => candidate.Clips.Contains(clip!));
+            BeginEnvelopeDrag(owner, clip, env!, pt!);
             return true;
         }
 
         // Track envelope point hit
         if (HitTrackEnvelopePoint(p, out var track, out var trackEnv, out var trackPt))
         {
-            draggingEnvClip = null;
-            draggingEnvTrack = track;
-            draggingEnv = trackEnv;
-            draggingEnvPt = trackPt;
-            isDraggingEnvelopePoint = true;
-            CaptureMouse();
-            InvalidateVisual();
+            BeginEnvelopeDrag(track!, null, trackEnv!, trackPt!);
             return true;
         }
 
@@ -503,104 +494,67 @@ public partial class TimelineView
         return false;
     }
 
-    private bool HandleEnvelopeMouseMove(Point p)
+    private void BeginEnvelopeDrag(TimelineTrack track, TimelineClip? clip, ClipEnvelope envelope, EnvelopePoint point)
     {
-        if (!isDraggingEnvelopePoint || draggingEnv == null || draggingEnvPt == null)
-            return false;
-
-        if (draggingEnvClip != null)
-        {
-            var trackIndex = Project.Tracks.IndexOf(Project.Tracks.First(t => t.Clips.Any(c => c.Id == draggingEnvClip.Id)));
-            var y = GetTrackY(trackIndex);
-            var rowHeight = GetTrackHeight(trackIndex);
-            if (rowHeight < TrackHeight) return true;
-            var top = y + (ShowEventHeaders ? 20.0 : 4.0);
-            var bottom = y + rowHeight - 4.0;
-            var height = Math.Max(12.0, bottom - top);
-
-            var rect = new Rect(X(draggingEnvClip.StartFrame), y + 1, Math.Max(2, Project.FrameRate.Seconds(draggingEnvClip.DurationFrames) * PixelsPerSecond), rowHeight - 2);
-
-            var progress = Math.Clamp((p.X - rect.Left) / rect.Width, 0.0, 1.0);
-            var newFrame = (long)Math.Round(progress * draggingEnvClip.DurationFrames);
-
-            var mouseNorm = Math.Clamp((bottom - p.Y) / height, 0.0, 1.0);
-            var newVal = draggingEnv.MinValue + mouseNorm * (draggingEnv.MaxValue - draggingEnv.MinValue);
-
-            if (draggingEnv.Type == EnvelopeType.Velocity)
-            {
-                if (Math.Abs(newVal) < 0.04) newVal = 0.0;
-                else if (Math.Abs(newVal - 1.0) < 0.04) newVal = 1.0;
-                else if (Math.Abs(newVal - (-1.0)) < 0.04) newVal = -1.0;
-                else if (Math.Abs(newVal - 2.0) < 0.04) newVal = 2.0;
-                else if (Math.Abs(newVal - 3.0) < 0.04) newVal = 3.0;
-            }
-
-            if (draggingEnvPt.Frame == 0 && progress < 0.1) newFrame = 0;
-            else if (draggingEnvPt.Frame == draggingEnvClip.DurationFrames && progress > 0.9) newFrame = draggingEnvClip.DurationFrames;
-
-            draggingEnvPt.Frame = newFrame;
-            draggingEnvPt.Value = newVal;
-            draggingEnv.Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
-
-            InvalidateVisual();
-            return true;
-        }
-
-        if (draggingEnvTrack != null)
-        {
-            var trackIndex = Project.Tracks.IndexOf(draggingEnvTrack);
-            var y = GetTrackY(trackIndex);
-            var rowHeight = GetTrackHeight(trackIndex);
-            if (rowHeight < TrackHeight) return true;
-            var top = y + 4.0;
-            var bottom = y + rowHeight - 4.0;
-            var height = Math.Max(12.0, bottom - top);
-
-            var newFrame = Math.Max(0, FrameAt(p.X));
-            var mouseNorm = Math.Clamp((bottom - p.Y) / height, 0.0, 1.0);
-            var newVal = draggingEnv.MinValue + mouseNorm * (draggingEnv.MaxValue - draggingEnv.MinValue);
-
-            if (draggingEnv.Type == EnvelopeType.Velocity)
-            {
-                if (Math.Abs(newVal) < 0.04) newVal = 0.0;
-                else if (Math.Abs(newVal - 1.0) < 0.04) newVal = 1.0;
-                else if (Math.Abs(newVal - (-1.0)) < 0.04) newVal = -1.0;
-                else if (Math.Abs(newVal - 2.0) < 0.04) newVal = 2.0;
-                else if (Math.Abs(newVal - 3.0) < 0.04) newVal = 3.0;
-            }
-
-            draggingEnvPt.Frame = newFrame;
-            draggingEnvPt.Value = newVal;
-            draggingEnv.Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
-
-            InvalidateVisual();
-            return true;
-        }
-
-        return false;
+        var index = envelope.Points.FindIndex(candidate => ReferenceEquals(candidate, point));
+        if (index < 0 || track.IsLocked || clip?.IsLocked == true || !CaptureMouse()) return;
+        var preview = envelope.DeepClone();
+        envelopeDrag = new(track, clip, envelope, preview, index, point.DeepClone(), preview.Points[index]);
+        InvalidateVisual();
     }
 
-    private bool HandleEnvelopeMouseUp(Point p)
+    private bool HandleEnvelopeMouseMove(Point p)
     {
-        if (!isDraggingEnvelopePoint || draggingEnv == null || draggingEnvPt == null)
-            return false;
+        if (envelopeDrag is not { } drag) return false;
+        var trackIndex = Project.Tracks.IndexOf(drag.Track);
+        if (trackIndex < 0)
+        {
+            envelopeDrag = null;
+            ReleaseMouseCapture();
+            InvalidateVisual();
+            return true;
+        }
+        var rowHeight = GetTrackHeight(trackIndex);
+        if (rowHeight < TrackHeight) return true;
+        var y = GetTrackY(trackIndex);
+        var top = y + (drag.Clip is not null && ShowEventHeaders ? 20.0 : 4.0);
+        var bottom = y + rowHeight - 4.0;
+        var height = Math.Max(12.0, bottom - top);
 
+        var frame = FrameAt(p.X);
+        if (drag.Clip is { } clip)
+        {
+            var width = Math.Max(2, Project.FrameRate.Seconds(clip.DurationFrames) * PixelsPerSecond);
+            var progress = Math.Clamp((p.X - X(clip.StartFrame)) / width, 0.0, 1.0);
+            frame = (long)Math.Round(progress * clip.DurationFrames);
+            if (drag.Original.Frame == 0 && progress < 0.1) frame = 0;
+            else if (drag.Original.Frame == clip.DurationFrames && progress > 0.9) frame = clip.DurationFrames;
+        }
+
+        var norm = Math.Clamp((bottom - p.Y) / height, 0.0, 1.0);
+        var envelope = drag.Preview;
+        var value = envelope.MinValue + norm * (envelope.MaxValue - envelope.MinValue);
+        if (envelope.Type == EnvelopeType.Velocity)
+        {
+            var detent = Math.Round(value);
+            if (detent is >= -1 and <= 3 && Math.Abs(value - detent) < 0.04)
+                value = detent;
+        }
+
+        drag.Point.Frame = frame;
+        drag.Point.Value = value;
+        envelope.Points.Sort((a, b) => a.Frame.CompareTo(b.Frame));
+        InvalidateVisual();
+        return true;
+    }
+
+    private bool HandleEnvelopeMouseUp()
+    {
+        if (envelopeDrag is not { } drag) return false;
+        envelopeDrag = null;
         ReleaseMouseCapture();
-        isDraggingEnvelopePoint = false;
-
-        if (draggingEnvClip != null)
-        {
-            SetEnvelopePointRequested?.Invoke(draggingEnvClip.Id, draggingEnv.Type, draggingEnvPt.Frame, draggingEnvPt.Value, draggingEnvPt.Curve);
-        }
-        else if (draggingEnvTrack != null)
-        {
-            SetTrackEnvelopePointRequested?.Invoke(draggingEnvTrack.Id, draggingEnv.Type, draggingEnvPt.Frame, draggingEnvPt.Value, draggingEnvPt.Curve);
-        }
-
-        draggingEnvClip = null;
-        draggingEnvTrack = null;
-        draggingEnv = null;
-        draggingEnvPt = null;
+        if (Project.Tracks.Contains(drag.Track) && !drag.Point.Equals(drag.Original))
+            EnvelopePointMoved?.Invoke(drag.Track.Id, drag.Clip?.Id, drag.Source.Id, drag.Index, drag.Original, drag.Point);
         InvalidateVisual();
         return true;
     }

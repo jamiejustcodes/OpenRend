@@ -9,6 +9,32 @@ namespace OpenRend.Editor.Tests;
 
 public sealed class EnvelopeEditorTests
 {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void MoveEnvelopePointIsAtomicForEventsAndTracks(bool onTrack)
+    {
+        var (doc, editor, clip) = CreateTestProject();
+        var track = Assert.Single(doc.Tracks);
+        var original = new EnvelopePoint(20, .5, EnvelopeCurveType.Smooth);
+        var envelope = new ClipEnvelope { Type = EnvelopeType.Composite, Points = [original] };
+        if (onTrack) track.Envelopes = [envelope]; else clip.Envelopes = [envelope];
+        Guid? clipId = onTrack ? null : clip.Id;
+        var expected = original.DeepClone();
+        var revised = new EnvelopePoint(35, .65, EnvelopeCurveType.Linear);
+
+        editor.MoveEnvelopePoint(track.Id, clipId, envelope.Id, 0, expected, expected);
+        Assert.False(editor.CanUndo);
+        editor.MoveEnvelopePoint(track.Id, clipId, envelope.Id, 0, expected, revised);
+
+        Assert.Equal(new EnvelopePoint(35, .65, EnvelopeCurveType.Smooth), Assert.Single(envelope.Points));
+        Assert.True(editor.Undo());
+        var restoredTrack = Assert.Single(doc.Tracks);
+        var restored = onTrack ? restoredTrack.Envelopes : Assert.Single(restoredTrack.Clips).Envelopes;
+        Assert.Equal(expected, Assert.Single(Assert.Single(restored!).Points));
+        Assert.False(editor.CanUndo);
+    }
+
     private static (ProjectDocument doc, TimelineEditor editor, TimelineClip clip) CreateTestProject()
     {
         var doc = new ProjectDocument

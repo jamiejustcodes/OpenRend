@@ -30,6 +30,8 @@ Ctrl+L toggles Auto Ripple. Both modes that include ruler annotations shift down
 
 Track envelopes follow events in all three modes. Affected Tracks limits the automation shift to edited tracks. The desktop workflow moves the same event again in Affected Tracks mode and verifies that its opacity point moves another ten frames while the region stays at its previous bounds.
 
+Dragging a track or event automation point previews the curve in the timeline. Release applies the point's new time and value in one undo step and preserves its interpolation. Escape or loss of pointer capture discards the preview. Managed tests cover both envelope owners. The desktop workflow saves a moved track point, undoes and redoes it, then saves another edit after cancelling a second drag.
+
 ## Timeline track height
 
 Use Track height on a track header's context menu to minimize, expand, or restore that row. The view recalculates event, drop target, automation envelope, and accessibility bounds together. These choices apply to the current project session. Focused layout and accessibility tests passed, followed by all 27 current-executable desktop workflows, including the track header context menu.
