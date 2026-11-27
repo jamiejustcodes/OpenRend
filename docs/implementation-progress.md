@@ -32,6 +32,8 @@ Transitions uses the same browser controls and a preset list. When a category or
 
 The docked Color Grading pane binds to one selected video event even when its linked audio is selected. The toolbar wraps, grading sections stack at compact widths, and wider docks place the sections side by side. Both Look LUT pickers read the same event and select, replace or clear its LUT. An imported LUT displays as imported with its file name in the slot. The desktop workflow resizes the real pane, saves a LUT and a 0.005 input-level adjustment, clears the LUT, and checks that Undo restores it.
 
+Clip Properties follows the focused timeline event. It shows opacity for video and gain and pan for audio, with lock and mute states visible above the form. Enter or Apply checks the frame and level fields inline. Timing edits validate every affected event before changing the project. Moving or slipping an event keeps its fade envelope phase, and changing source in updates the active take. Desktop coverage selects both members of a link, rejects invalid edits, saves their timing and verifies one-step Undo.
+
 ## Slip and slide edits
 
 Alt-drag changes the source In point while keeping the event on its original project frames. Ctrl+Alt-drag on an event body moves the window and adjusts the source In point so the same video frames or audio samples remain under each shared project frame. Linked windows move in one undo step, with neighboring events retaining their ranges. A slide requires forward 1× audio or constant-rate video with a displacement that aligns to the source frame grid. The editor rejects the whole linked edit if one member cannot move. The desktop workflow checks both shortcuts and saves the resulting linked and unlinked ranges.

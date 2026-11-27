@@ -1543,58 +1543,6 @@ public partial class MainWindow : Window
         Refresh();
     }
     private TimelineClip? SelectedClip => vm.Project.Tracks.SelectMany(t => t.Clips).FirstOrDefault(c => vm.Selection.Contains(c.Id));
-    private void UpdateInspector()
-    {
-        var clip = SelectedClip; Inspector.IsEnabled = clip is not null; ClipName.Text = clip?.Name ?? "Select a timeline clip";
-        var selectedVideo = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
-            .SelectMany(track => track.Clips).Where(eventClip => vm.Selection.Contains(eventClip.Id)).Take(2).ToArray();
-        DockColorGrading.BindToClip(selectedVideo.Length == 1 ? selectedVideo[0] : null);
-        if (clip is null)
-        {
-            EditTextMediaButton.Visibility = Visibility.Collapsed;
-            vm.Renderer.ActiveSubtitleClipId = null;
-            return;
-        }
-        ClipStart.Text = clip.StartFrame.ToString(); ClipIn.Text = clip.SourceInFrame.ToString(); ClipDuration.Text = clip.DurationFrames.ToString();
-        ClipOpacity.Text = clip.Opacity.ToString(CultureInfo.CurrentCulture); ClipGain.Text = clip.Gain.ToString(CultureInfo.CurrentCulture);
-        ClipPan.Text = clip.Pan.ToString(CultureInfo.CurrentCulture); ClipFadeIn.Text = clip.FadeInFrames.ToString(); ClipFadeOut.Text = clip.FadeOutFrames.ToString();
-        var isText = vm.Project.Media.Any(m => m.Id == clip.MediaId && (m.Path.StartsWith("openrend://text", StringComparison.OrdinalIgnoreCase) || m.Path.StartsWith("openrend://subtitles", StringComparison.OrdinalIgnoreCase)));
-        EditTextMediaButton.Visibility = isText ? Visibility.Visible : Visibility.Collapsed;
-        vm.Renderer.ActiveSubtitleClipId = isText ? clip.Id : null;
-    }
-    private void ApplyPropertiesClick(object sender, RoutedEventArgs e) => Guard(() =>
-    {
-        if (SelectedClip is not { } clip) return;
-        if (vm.Project.Tracks.Single(t => t.Clips.Contains(clip)).IsLocked) throw new InvalidOperationException("Unlock this track before changing clip properties.");
-        if (clip.IsLocked) throw new InvalidOperationException("Unlock this event before changing clip properties.");
-        Pause();
-        vm.Editor.Execute(p =>
-        {
-            var start = long.Parse(ClipStart.Text); var sourceIn = long.Parse(ClipIn.Text); var duration = long.Parse(ClipDuration.Text);
-            var fadeIn = long.Parse(ClipFadeIn.Text); var fadeOut = long.Parse(ClipFadeOut.Text);
-            var moved = start != clip.StartFrame || sourceIn != clip.SourceInFrame || duration != clip.DurationFrames;
-            var fadesChanged = fadeIn != clip.FadeInFrames || fadeOut != clip.FadeOutFrames;
-            if (moved)
-            {
-                var startDelta = start - clip.StartFrame; var sourceDelta = sourceIn - clip.SourceInFrame; var durationDelta = duration - clip.DurationFrames;
-                var members = vm.Editor.ExpandSelection([clip.Id], vm.IgnoreGroups);
-                foreach (var track in p.Tracks)
-                    foreach (var member in track.Clips.Where(c => members.Contains(c.Id)))
-                    {
-                        if (track.IsLocked) throw new InvalidOperationException("A linked track is locked.");
-                        member.StartFrame = checked(member.StartFrame + startDelta); member.SourceInFrame = checked(member.SourceInFrame + sourceDelta);
-                        member.DurationFrames = checked(member.DurationFrames + durationDelta); member.FadeOffsetFrames = 0; member.FadeDurationFrames = null;
-                        member.FadeInFrames = Math.Min(member.FadeInFrames, member.DurationFrames);
-                        member.FadeOutFrames = Math.Min(member.FadeOutFrames, member.DurationFrames - member.FadeInFrames);
-                    }
-            }
-            clip.Opacity = double.Parse(ClipOpacity.Text); clip.Gain = double.Parse(ClipGain.Text); clip.Pan = double.Parse(ClipPan.Text);
-            if (moved || fadesChanged)
-            {
-                clip.FadeInFrames = fadeIn; clip.FadeOutFrames = fadeOut; clip.FadeOffsetFrames = 0; clip.FadeDurationFrames = null;
-            }
-        });
-    });
     private async void ExportClick(object sender, RoutedEventArgs e) => await GuardAsync(async () =>
     {
         if (vm.Project.DurationFrames == 0) { vm.Status = "Place media on the timeline before rendering."; return; }
@@ -2432,8 +2380,8 @@ public partial class MainWindow : Window
     });
     private void EditTextMediaClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        if (SelectedClip is not { } clip) return;
-        OpenEditTextMedia(clip.Id);
+        var id = sender == EditTextMediaButton ? inspectorClipId : SelectedClip?.Id;
+        if (id is { } clipId) OpenEditTextMedia(clipId);
     });
     private void OpenEditTextMedia(Guid clipId)
     {

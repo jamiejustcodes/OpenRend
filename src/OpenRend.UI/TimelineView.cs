@@ -230,7 +230,7 @@ public sealed partial class TimelineView : FrameworkElement
     private Guid? activeClipId;
     private Guid? hoverClipId;
     private string hoverMode = "";
-    internal Guid? ActiveClipId => activeClipId;
+    public Guid? ActiveClipId => activeClipId;
     internal bool IsTrackLevelFocused(Guid trackId, string level) => IsKeyboardFocusWithin && levelTrack == trackId && levelKind == level;
     public void CancelTrackLevelInput()
     {
