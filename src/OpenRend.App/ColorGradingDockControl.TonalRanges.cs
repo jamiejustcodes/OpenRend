@@ -145,10 +145,10 @@ public sealed partial class ColorGradingDockControl
             if (thresholdDrag == slider)
             {
                 ScopeLimitsChanged?.Invoke();
-                if (scope is { } current && ActiveEffect is { IsEnabled: true } grade && TonalRangeGrading.HasAdjustments(grade))
+                if (ActiveEffect is { IsEnabled: true } grade && TonalRangeGrading.HasAdjustments(grade))
                 {
                     showingThresholdPreview = true;
-                    GradingPreviewRequested?.Invoke(new(current, targetId, grade.Id, Thresholds: SelectedThresholds));
+                    GradingPreviewRequested?.Invoke(new(scope, targetId, grade.Id, Thresholds: SelectedThresholds));
                 }
             }
             else

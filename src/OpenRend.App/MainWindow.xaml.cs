@@ -130,6 +130,7 @@ public partial class MainWindow : Window
             Timeline.Selection.UnionWith(vm.Selection); Timeline.InvalidateVisual(); UpdateInspector();
             CutButton.IsEnabled = CopyButton.IsEnabled = vm.Selection.Count > 0;
         };
+        Timeline.ActiveTrackChanged += () => DockColorGrading.RefreshContext(EffectScope.Track);
         Timeline.EditRequested += gesture => Guard(() => ApplyGesture(gesture));
         Timeline.TrackLevelRequested += gesture => Guard(() =>
         {
@@ -651,7 +652,7 @@ public partial class MainWindow : Window
         Preview.CanvasMouseDoubleClick += OnPreviewMouseDoubleClick;
         Preview.Ready += () => { UpdatePreviewStatus(); RequestPreview(); };
         Preview.SizeChanged += (_, _) => UpdatePreviewStatus();
-        DockColorGrading.Initialize(vm, () => RequestPreview(), () => OpenColorGrading());
+        DockColorGrading.Initialize(vm, RequestPreview, ResolveGradingTarget, ShowScopedColorGrading);
         DockColorGrading.GradingPreviewRequested += SetGradingPreview;
         DockColorGrading.ScopeLimitsChanged += UpdateGradingScopeLimits;
         Timeline.LoopRegionChanged += range =>
@@ -927,7 +928,8 @@ public partial class MainWindow : Window
         };
     }
     private MediaItem? SelectedLibraryItem =>
-        (MediaList?.SelectedItem ?? MediaDetailsList?.SelectedItem ?? MediaCompactList?.SelectedItem) as MediaItem;
+        (MediaDetailsList?.Visibility == Visibility.Visible ? MediaDetailsList.SelectedItem :
+         MediaCompactList?.Visibility == Visibility.Visible ? MediaCompactList.SelectedItem : MediaList?.SelectedItem) as MediaItem;
 
     private void MediaFilterChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
     {
@@ -1514,6 +1516,7 @@ public partial class MainWindow : Window
         {
             MediaDetails.Text = string.Empty;
         }
+        DockColorGrading?.RefreshContext(EffectScope.Media);
     }
     private void BrowseFolderClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -2027,16 +2030,21 @@ public partial class MainWindow : Window
     private void ColorGradingClick(object sender, RoutedEventArgs e) => OpenColorGrading();
     private void VideoTrackColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var track = vm.Project.Tracks.FirstOrDefault(t => t.Kind == TrackKind.Video);
-        if (track is null) { vm.Status = "Create a video track before editing track color grading."; return; }
-        OpenTrackColorGrading(track.Id);
+        if (ResolveGradingTarget(EffectScope.Track) is not { } id)
+        {
+            vm.Status = "Select a video track to edit its color grading.";
+            return;
+        }
+        OpenTrackColorGrading(id);
     });
     private void MediaColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
-        var item = SelectedLibraryItem ?? vm.Library.FirstOrDefault();
-        if (item is null) { vm.Status = "Select a media item to edit its color grading."; return; }
-        if (!item.Asset.HasVideo) { vm.Status = "Select a video media asset to edit its color grading."; return; }
-        OpenMediaColorGrading(item.Asset.Id);
+        if (ResolveGradingTarget(EffectScope.Media) is not { } id)
+        {
+            vm.Status = "Select video media or a video event to edit its source grade.";
+            return;
+        }
+        OpenMediaColorGrading(id);
     });
     private void VideoOutputColorGradingClick(object sender, RoutedEventArgs e) => Guard(() =>
     {
@@ -2049,7 +2057,6 @@ public partial class MainWindow : Window
         if (selected.Length != 1) { vm.Status = "Select one video event to edit its color grading."; return; }
         if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
         if (selected[0].Clip.IsLocked) { vm.Status = "Unlock the video event before editing its color grading."; return; }
-        Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
         var clipId = selected[0].Clip.Id;
         ShowScopedColorGrading(EffectScope.Event, clipId);
     });
@@ -2058,24 +2065,45 @@ public partial class MainWindow : Window
         var track = vm.Project.Tracks.FirstOrDefault(t => t.Id == trackId);
         if (track is null) return;
         if (track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
-        Pause(); RequestPreview();
         ShowScopedColorGrading(EffectScope.Track, trackId);
     });
     private void OpenMediaColorGrading(Guid mediaId) => Guard(() =>
     {
         var asset = vm.Project.Media.FirstOrDefault(m => m.Id == mediaId);
         if (asset is null) return;
-        Pause(); RequestPreview();
         ShowScopedColorGrading(EffectScope.Media, mediaId);
     });
     private void OpenVideoOutputColorGrading() => Guard(() =>
     {
-        Pause(); RequestPreview();
         ShowScopedColorGrading(EffectScope.Output, Guid.Empty);
     });
-    private void ShowScopedColorGrading(EffectScope scope, Guid target)
+    private Guid? ResolveGradingTarget(EffectScope level)
     {
-        var window = new ColorGradingWindow(vm, scope, target, null, RequestPreview) { Owner = this };
+        if (level == EffectScope.Output) return Guid.Empty;
+        if (level == EffectScope.Track)
+            return vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex) is { Kind: TrackKind.Video } track
+                ? track.Id : null;
+        if (level == EffectScope.Media && SelectedLibraryItem?.Asset is { HasVideo: true } selectedMedia &&
+            vm.Project.Media.Any(media => media.Id == selectedMedia.Id))
+            return selectedMedia.Id;
+
+        var selected = vm.Project.Tracks.Where(track => track.Kind == TrackKind.Video)
+            .SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id))).Take(2).ToArray();
+        if (selected.Length != 1) return null;
+        return level == EffectScope.Event ? selected[0].Id : selected[0].MediaId;
+    }
+
+    private void ShowScopedColorGrading(EffectScope scope, Guid target, int page = 1)
+    {
+        Pause();
+        if (scope == EffectScope.Event &&
+            vm.Project.Tracks.SelectMany(track => track.Clips).FirstOrDefault(clip => clip.Id == target) is { } clip)
+        {
+            vm.Position = Math.Clamp(vm.Position, clip.StartFrame, clip.EndFrame - 1);
+            UpdatePosition();
+        }
+        RequestPreview();
+        var window = new ColorGradingWindow(vm, scope, target, null, RequestPreview, ResolveGradingTarget, page) { Owner = this };
         scopedColorGradingWindow = window;
         window.GradingPreviewRequested += SetGradingPreview;
         window.ScopeLimitsChanged += UpdateGradingScopeLimits;
@@ -3324,6 +3352,13 @@ public partial class MainWindow : Window
         if (vm.Busy || Keyboard.FocusedElement is MenuItem or MenuBase) return;
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
+        if (key == Key.G && alt && !ctrl && !shift)
+        {
+            e.Handled = true;
+            if (!e.IsRepeat) TogglePane(workspacePanes["ColorGrading"]);
+            return;
+        }
+        if (!ctrl && !alt && DockColorGrading.HandlesScopePickerKey(key)) return;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
         if (key == Key.Escape && DockColorGrading.IsThresholdDragging) return;
         if (!ctrl && !alt && DockColorGrading.IsThresholdSliderFocused &&

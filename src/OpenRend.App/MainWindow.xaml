@@ -89,7 +89,7 @@
         </MenuItem>
         <MenuItem x:Name="IgnoreGroupsMenu" Header="_Ignore Event Grouping" InputGestureText="Ctrl+Shift+U" IsCheckable="True" Click="IgnoreGroupsClick"/>
         <MenuItem Header="Track _Grouping">
-          <MenuItem x:Name="GroupTracksMenu" Header="_Group Selected Tracks" InputGestureText="Ctrl+Shift+G" Click="GroupTracksClick"/>
+          <MenuItem x:Name="GroupTracksMenu" Header="_Group Selected Tracks" Click="GroupTracksClick"/>
           <MenuItem x:Name="UngroupTracksMenu" Header="_Ungroup Selected Tracks" Click="UngroupTracksClick"/>
           <MenuItem x:Name="RemoveFromTrackGroupMenu" Header="_Remove from Track Group" Click="RemoveFromTrackGroupClick"/>
         </MenuItem>
@@ -731,7 +731,6 @@
           </Grid>
         </TabItem>
 
-        <!-- 1:1 Vegas Pro Color Grading Tab -->
         <TabItem x:Name="ColorGradingTab" Header="Color Grading">
           <local:ColorGradingDockControl x:Name="DockColorGrading"/>
         </TabItem>

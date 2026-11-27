@@ -12,6 +12,12 @@ public sealed class ColorGradingWindow : Window
     internal LuminanceThresholds? ScopeLimits => panel.ScopeLimits;
 
     public ColorGradingWindow(EditorViewModel viewModel, EffectScope scope, Guid targetId, Guid? effectId = null, Action? onPreview = null)
+        : this(viewModel, scope, targetId, effectId, onPreview, null, 1)
+    {
+    }
+
+    internal ColorGradingWindow(EditorViewModel viewModel, EffectScope scope, Guid targetId, Guid? effectId,
+        Action? onPreview, Func<EffectScope, Guid?>? resolveTarget, int page)
     {
         SetResourceReference(StyleProperty, typeof(Window));
         Title = "Color Grading";
@@ -25,7 +31,7 @@ public sealed class ColorGradingWindow : Window
         panel = new ColorGradingDockControl();
         panel.GradingPreviewRequested += preview => GradingPreviewRequested?.Invoke(preview);
         panel.ScopeLimitsChanged += () => ScopeLimitsChanged?.Invoke();
-        panel.BindScope(viewModel, scope, targetId, effectId, onPreview);
+        panel.BindScope(viewModel, scope, targetId, effectId, onPreview, resolveTarget, page);
         Content = panel;
         Loaded += OnLoaded;
         Closed += (_, _) => viewModel.Changed -= panel.RefreshTarget;

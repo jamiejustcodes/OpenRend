@@ -17,8 +17,7 @@ public partial class MainWindow
     {
         var selected = vm.Project.Tracks.SelectMany(track => track.Clips.Where(clip => vm.Selection.Contains(clip.Id))
             .Select(clip => (Track: track, Clip: clip))).ToArray();
-        var video = selected.Where(item => item.Track.Kind == TrackKind.Video).Take(2).ToArray();
-        DockColorGrading.BindToClip(video.Length == 1 ? video[0].Clip : null);
+        DockColorGrading.RefreshTarget();
 
         var active = vm.Project.Tracks.ElementAtOrDefault(Timeline.ActiveTrackIndex);
         var target = selected.FirstOrDefault(item => item.Clip.Id == Timeline.ActiveClipId);

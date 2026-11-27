@@ -41,9 +41,8 @@ public sealed class ColorGradingWheelsEditorTests
         }, "grade.openrend");
 
         var panel = new ColorGradingDockControl();
-        panel.Initialize(vm, () => { }, () => { });
-        vm.Changed += () => panel.BindToClip(vm.Project.Tracks[0].Clips[0]);
-        panel.BindToClip(clip);
+        panel.Initialize(vm, () => { }, _ => clip.Id, (_, _, _) => { });
+        vm.Changed += panel.RefreshTarget;
 
         Assert.Empty(clip.VideoEffects);
         Assert.False(vm.Dirty);

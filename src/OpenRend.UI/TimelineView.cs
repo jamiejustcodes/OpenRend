@@ -37,7 +37,17 @@ public sealed partial class TimelineView : FrameworkElement
             InvalidateVisual();
         }
     }
-    public int ActiveTrackIndex { get; private set; }
+    private int activeTrackIndex;
+    public int ActiveTrackIndex
+    {
+        get => activeTrackIndex;
+        private set
+        {
+            if (activeTrackIndex == value) return;
+            activeTrackIndex = value;
+            ActiveTrackChanged?.Invoke();
+        }
+    }
     public HashSet<int> SelectedTrackIndices { get; } = [];
     public long Position { get; set; }
     public HashSet<Guid> Selection { get; } = [];
@@ -76,6 +86,7 @@ public sealed partial class TimelineView : FrameworkElement
     public event Action<long>? ScrubMoved;
     public event Action? ScrubEnded;
     public event Action? SelectionChanged;
+    public event Action? ActiveTrackChanged;
     public event Action<ClipGesture>? EditRequested;
     public event Action? UnlinkRequested;
     public event Action? LinkRequested;

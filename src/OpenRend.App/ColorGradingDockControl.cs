@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Automation;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using Microsoft.Win32;
 using OpenRend.Core;
@@ -45,8 +46,10 @@ public sealed partial class ColorGradingDockControl : UserControl
 {
     private EditorViewModel? vm;
     private Action? previewCallback;
-    private Action? popoutCallback;
-    private EffectScope? scope;
+    private Action<EffectScope, Guid, int>? popoutCallback;
+    private Func<EffectScope, Guid?>? resolveTarget;
+    private (EffectScope Scope, Guid Target, Guid? Grade)? pinnedTarget;
+    private EffectScope scope;
     private Guid targetId;
     private Guid? effectId;
     private List<VideoEffect>? targetEffects;
@@ -60,6 +63,7 @@ public sealed partial class ColorGradingDockControl : UserControl
 
     // Header controls
     private readonly TextBlock targetLabel;
+    private readonly ComboBox scopePicker;
     private readonly ToggleButton bypassBtn;
     private readonly Button resetAllBtn;
     private readonly ComboBox presetCombo;
@@ -156,6 +160,23 @@ public sealed partial class ColorGradingDockControl : UserControl
         headerContent.Children.Add(targetLabel);
 
         var tools = new WrapPanel();
+        scopePicker = new ComboBox
+        {
+            Width = 105, Margin = new Thickness(0, 0, 4, 4),
+            SelectedValuePath = nameof(ComboBoxItem.Tag), ToolTip = "Choose which part of the project to grade",
+            Visibility = Visibility.Collapsed
+        };
+        foreach (var (level, label) in new[]
+        {
+            (EffectScope.Event, "Event FX"), (EffectScope.Track, "Track FX"),
+            (EffectScope.Media, "Media FX"), (EffectScope.Output, "Output FX")
+        })
+            scopePicker.Items.Add(new ComboBoxItem { Content = label, Tag = level });
+        scopePicker.SelectedValue = EffectScope.Event;
+        AutomationProperties.SetName(scopePicker, "Grading target");
+        AutomationProperties.SetAutomationId(scopePicker, "ColorGrading_Scope");
+        tools.Children.Add(scopePicker);
+
         bypassBtn = new ToggleButton { Content = "Bypass", Margin = new Thickness(0, 0, 4, 4) };
         bypassBtn.SetResourceReference(StyleProperty, "TextToggleButton");
         AutomationProperties.SetAutomationId(bypassBtn, "m_BypassButton");
@@ -176,7 +197,6 @@ public sealed partial class ColorGradingDockControl : UserControl
 
         popoutBtn = new Button { Content = "Open panel…", Margin = new Thickness(0, 0, 4, 4) };
         AutomationProperties.SetAutomationId(popoutBtn, "ColorGrading_PopoutButton");
-        popoutBtn.Click += (_, _) => popoutCallback?.Invoke();
         tools.Children.Add(popoutBtn);
         undoBtn = AddWindowAction("Undo", "ColorGrading_Undo", () => MoveHistory(undo: true));
         redoBtn = AddWindowAction("Redo", "ColorGrading_Redo", () => MoveHistory(undo: false));
@@ -275,7 +295,12 @@ public sealed partial class ColorGradingDockControl : UserControl
 
         Content = root;
         SelectPage(0);
-        BindToClip(null);
+        popoutBtn.Click += (_, _) =>
+        {
+            if (targetEffects is not null) popoutCallback?.Invoke(scope, targetId, navList.SelectedIndex);
+        };
+        scopePicker.SelectionChanged += (_, _) => RefreshTarget();
+        RefreshTarget();
         Loaded += (_, _) => ScopeLimitsChanged?.Invoke();
         Unloaded += (_, _) =>
         {
@@ -311,30 +336,42 @@ public sealed partial class ColorGradingDockControl : UserControl
         return item;
     }
 
-    public void Initialize(EditorViewModel viewModel, Action requestPreview, Action openPopout)
+    internal void Initialize(EditorViewModel viewModel, Action requestPreview,
+        Func<EffectScope, Guid?> targetResolver, Action<EffectScope, Guid, int> openPopout)
     {
         vm = viewModel;
         previewCallback = requestPreview;
+        resolveTarget = targetResolver;
         popoutCallback = openPopout;
-    }
-
-    public void BindToClip(TimelineClip? clip)
-    {
-        scope = clip is null ? null : EffectScope.Event;
-        targetId = clip?.Id ?? Guid.Empty;
+        scopePicker.Visibility = Visibility.Visible;
         RefreshTarget();
     }
 
-    internal void BindScope(EditorViewModel viewModel, EffectScope effectScope, Guid id, Guid? gradeId, Action? requestPreview)
+    internal void RefreshContext(EffectScope level)
+    {
+        if (scopePicker.SelectedValue is EffectScope selected && selected == level)
+            RefreshTarget();
+    }
+
+    internal bool HandlesScopePickerKey(Key key) => scopePicker.IsKeyboardFocusWithin &&
+        (key is Key.Up or Key.Down or Key.Home or Key.End or Key.Enter or Key.Space ||
+            key == Key.Escape && scopePicker.IsDropDownOpen);
+
+    internal void SetWorkspaceFloating(bool floating) =>
+        popoutBtn.Visibility = floating ? Visibility.Collapsed : Visibility.Visible;
+
+    internal void BindScope(EditorViewModel viewModel, EffectScope effectScope, Guid id, Guid? gradeId, Action? requestPreview,
+        Func<EffectScope, Guid?>? targetResolver, int page)
     {
         vm = viewModel;
         previewCallback = requestPreview;
-        scope = effectScope;
-        targetId = id;
-        effectId = gradeId;
+        pinnedTarget = (effectScope, id, gradeId);
+        resolveTarget = targetResolver;
+        scopePicker.Visibility = targetResolver is null ? Visibility.Collapsed : Visibility.Visible;
+        scopePicker.SelectedValue = effectScope;
         popoutBtn.Visibility = Visibility.Collapsed;
         undoBtn.Visibility = redoBtn.Visibility = closeBtn.Visibility = Visibility.Visible;
-        navList.SelectedIndex = 1;
+        navList.SelectedIndex = page;
         RefreshTarget();
     }
 
@@ -342,6 +379,17 @@ public sealed partial class ColorGradingDockControl : UserControl
     {
         CancelCurveDrags();
         CancelThresholdDrag();
+        scope = scopePicker.SelectedValue is EffectScope selected ? selected : EffectScope.Event;
+        if (pinnedTarget is { } pinned && pinned.Scope == scope)
+        {
+            targetId = pinned.Target;
+            effectId = pinned.Grade;
+        }
+        else
+        {
+            targetId = resolveTarget?.Invoke(scope) ?? Guid.Empty;
+            effectId = null;
+        }
         var (effects, name) = FindTarget(vm?.Project, scope, targetId);
         var targetChanged = !ReferenceEquals(targetEffects, effects);
         targetEffects = effects;
@@ -354,9 +402,9 @@ public sealed partial class ColorGradingDockControl : UserControl
         UpdateControlsFromEffect(targetChanged);
     }
 
-    internal static (List<VideoEffect>? Effects, string Name) FindTarget(ProjectDocument? project, EffectScope? scope, Guid targetId)
+    internal static (List<VideoEffect>? Effects, string Name) FindTarget(ProjectDocument? project, EffectScope scope, Guid targetId)
     {
-        if (project is null || scope is null) return (null, "Select one unlocked video event");
+        if (project is null) return (null, "Select one unlocked video event");
         switch (scope)
         {
             case EffectScope.Event:
@@ -368,10 +416,10 @@ public sealed partial class ColorGradingDockControl : UserControl
                 return (null, "Select one unlocked video event");
             case EffectScope.Track:
                 var matchedTrack = project.Tracks.FirstOrDefault(track => track.Id == targetId && track.Kind == TrackKind.Video && !track.IsLocked);
-                return matchedTrack is null ? (null, "Video track unavailable") : (matchedTrack.VideoEffects, $"Track FX · {matchedTrack.Name}");
+                return matchedTrack is null ? (null, "Select an unlocked video track") : (matchedTrack.VideoEffects, $"Track FX · {matchedTrack.Name}");
             case EffectScope.Media:
                 var media = project.Media.FirstOrDefault(media => media.Id == targetId && media.HasVideo);
-                return media is null ? (null, "Video media unavailable") : (media.VideoEffects, $"Media FX · {media.Name}");
+                return media is null ? (null, "Select video media or a video event") : (media.VideoEffects, $"Media FX · {media.Name}");
             case EffectScope.Output:
                 return (project.VideoOutputEffects, "Video Output FX");
             default:
@@ -1030,8 +1078,8 @@ public sealed partial class ColorGradingDockControl : UserControl
 
     private void EditGrade(Func<VideoEffect, bool> edit)
     {
-        if (updating || targetEffects is null || vm is null || scope is not { } currentScope) return;
-        var effects = vm.Editor.GetScopedVideoEffects(currentScope, targetId);
+        if (updating || targetEffects is null || vm is null) return;
+        var effects = vm.Editor.GetScopedVideoEffects(scope, targetId);
         var existing = ActiveEffect;
         var before = existing ?? NeutralGrade;
         var grade = before.DeepClone();
@@ -1050,7 +1098,8 @@ public sealed partial class ColorGradingDockControl : UserControl
 
     private void SampleNeutralTone()
     {
-        if (vm is not { } viewModel || scope is not { } selectedScope || targetEffects is null) return;
+        if (vm is not { } viewModel || targetEffects is null) return;
+        var selectedScope = scope;
         var editor = viewModel.Editor;
         var selectedTarget = targetId;
         var existing = ActiveEffect;
@@ -1105,10 +1154,10 @@ public sealed partial class ColorGradingDockControl : UserControl
     private void PreviewCurves()
     {
         if (GradingPreviewRequested is not { } request) return;
-        if (scope is { } current && targetEffects is not null && (curvesControl.IsDragging || hslCurvesControl.IsDragging))
+        if (targetEffects is not null && (curvesControl.IsDragging || hslCurvesControl.IsDragging))
         {
             showingCurvePreview = true;
-            request(new(current, targetId, ActiveEffect?.Id ?? effectId,
+            request(new(scope, targetId, ActiveEffect?.Id ?? effectId,
                 curvesControl.IsDragging ? curvesControl.Curves.DeepClone() : null,
                 hslCurvesControl.IsDragging ? hslCurvesControl.Curves.DeepClone() : null));
         }

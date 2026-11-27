@@ -57,10 +57,11 @@ public partial class MainWindow
         RegisterWorkspacePane("ProjectMedia", ToolsTabs, ProjectMediaTab);
         RegisterWorkspacePane("VideoEffects", ToolsTabs, VideoEffectsTab);
         RegisterWorkspacePane("Transitions", ToolsTabs, TransitionsTab);
+        RegisterWorkspacePane("ColorGrading", ToolsTabs, ColorGradingTab, "Alt+G");
         RegisterWorkspacePane("MasterBus", MasterBusTabs, MasterBusTab);
     }
 
-    private void RegisterWorkspacePane(string id, TabControl dock, TabItem tab)
+    private void RegisterWorkspacePane(string id, TabControl dock, TabItem tab, string? shortcut = null)
     {
         var name = (string)tab.Header;
         var pane = new DockablePane(name, dock, tab);
@@ -93,6 +94,7 @@ public partial class MainWindow
         BindPaneDrag(pane, tab, close);
 
         var show = new MenuItem { Header = name };
+        if (shortcut is not null) show.InputGestureText = shortcut;
         AutomationProperties.SetAutomationId(show, $"ShowPane_{id}");
         show.Click += (_, _) => ShowPane(pane);
         WorkspaceWindowMenu.Items.Insert(WorkspaceWindowMenu.Items.Count - 1, show);
@@ -171,12 +173,16 @@ public partial class MainWindow
         if (e.IsRepeat || vm.Busy)
             return true;
 
-        if (trimmerPane.Window is not null ||
-            (trimmerPane.IsDocked && trimmerPane.Dock.SelectedItem == TrimmerTab))
-            HidePane(trimmerPane);
-        else
-            ShowTrimmerPane();
+        TogglePane(trimmerPane);
         return true;
+    }
+
+    private void TogglePane(DockablePane pane)
+    {
+        if (pane.Window is not null || (pane.IsDocked && pane.Dock.SelectedItem == pane.Tab))
+            HidePane(pane);
+        else
+            ShowPane(pane);
     }
 
     private void HidePaneTab(DockablePane pane)
@@ -280,6 +286,7 @@ public partial class MainWindow
         HidePaneTab(pane);
         var content = (UIElement)pane.Tab.Content;
         pane.Tab.Content = null;
+        if (content is ColorGradingDockControl grading) grading.SetWorkspaceFloating(true);
 
         var window = new Window
         {
@@ -338,6 +345,7 @@ public partial class MainWindow
         {
             panel.Children.Remove(content);
             pane.Tab.Content = content;
+            if (content is ColorGradingDockControl grading) grading.SetWorkspaceFloating(false);
             pane.Window = null;
             ShowPaneDockOutline(null);
             if (pane.Floats)
