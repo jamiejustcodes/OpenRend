@@ -206,6 +206,13 @@ public sealed class HSLCurvesData
         LumVsSat = LumVsSat.DeepClone()
     };
 
+    public bool ContentEquals(HSLCurvesData? other) => other is not null &&
+        SameCurve(HueVsHue, other.HueVsHue) && SameCurve(HueVsSat, other.HueVsSat) &&
+        SameCurve(HueVsLum, other.HueVsLum) && SameCurve(SatVsSat, other.SatVsSat) && SameCurve(LumVsSat, other.LumVsSat);
+
+    private static bool SameCurve(HSLCurve left, HSLCurve right) => left.Points.Count == right.Points.Count &&
+        left.Points.Zip(right.Points).All(pair => (pair.First.X, pair.First.Y) == (pair.Second.X, pair.Second.Y));
+
     public void Validate()
     {
         HueVsHue?.Validate();

@@ -106,6 +106,16 @@ public sealed partial class EditorWorkflowTests
             saved = await SaveGrade(window, path);
             Assert.Equal(BuiltinLutLibrary.LookLutNames[1], Assert.Single(saved.Tracks[1].Clips[0].VideoEffects).LookLut?.Title);
 
+            Find(window, "CurvesItem").Patterns.SelectionItem.Pattern.Select();
+            var graph = Find(window, "CurvesItem_Control");
+            Mouse.Click(PointIn(graph.BoundingRectangle, .42, .35));
+            WaitFor(() => window.Title.Contains('*'), "Adding a curve point did not edit the event grade.");
+            WaitFor(() => graph.Properties.HasKeyboardFocus.ValueOrDefault, "The curve did not retain keyboard focus after clicking a point.");
+            Keyboard.Type(VirtualKeyShort.DELETE);
+            saved = await SaveGrade(window, path);
+            Assert.Equal(2, saved.Tracks[1].Clips.Count);
+            Assert.Null(Assert.Single(saved.Tracks[1].Clips[0].VideoEffects).Curves);
+
             Find(window, "LUTsItem").Patterns.SelectionItem.Pattern.Select();
             Find(window, $"Clip_{other.Id:N}").Patterns.SelectionItem.Pattern.Select();
             WaitFor(() => quick.SelectedItem?.Name == "Imported LUT" && preset.SelectedItem?.Name == "Imported LUT",

@@ -216,6 +216,15 @@ public sealed class ColorCurvesData
         Blue = Blue.DeepClone()
     };
 
+    public bool ContentEquals(ColorCurvesData? other) => other is not null &&
+        SameCurve(Master, other.Master) && SameCurve(Red, other.Red) &&
+        SameCurve(Green, other.Green) && SameCurve(Blue, other.Blue);
+
+    private static bool SameCurve(ColorCurve left, ColorCurve right) => left.Points.Count == right.Points.Count &&
+        left.Points.Zip(right.Points).All(pair =>
+            (pair.First.X, pair.First.Y, pair.First.InHandleX, pair.First.InHandleY, pair.First.OutHandleX, pair.First.OutHandleY) ==
+            (pair.Second.X, pair.Second.Y, pair.Second.InHandleX, pair.Second.InHandleY, pair.Second.OutHandleX, pair.Second.OutHandleY));
+
     public void Validate()
     {
         Master?.Validate();

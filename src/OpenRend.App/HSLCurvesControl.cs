@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Windows;
+using System.Windows.Automation.Peers;
 using System.Windows.Input;
 using System.Windows.Media;
 using OpenRend.Core;
@@ -234,6 +235,8 @@ public sealed class HSLCurvesControl : FrameworkElement
         return Color.FromRgb(l, l, l);
     }
 
+    protected override AutomationPeer OnCreateAutomationPeer() => new FrameworkElementAutomationPeer(this);
+
     protected override void OnMouseDown(MouseButtonEventArgs e)
     {
         Focus();
@@ -253,8 +256,9 @@ public sealed class HSLCurvesControl : FrameworkElement
             }
         }
 
-        if (e.LeftButton == MouseButtonState.Pressed)
+        if (e.ChangedButton == MouseButton.Left)
         {
+            e.Handled = true;
             if (e.ClickCount == 2 && hitIdx >= 0 && pts.Count > 2)
             {
                 // Double click removes point
@@ -285,7 +289,6 @@ public sealed class HSLCurvesControl : FrameworkElement
                 CaptureMouse();
                 InvalidateVisual();
                 UpdateReadout();
-                CurvesChanged?.Invoke();
             }
         }
     }
@@ -308,26 +311,37 @@ public sealed class HSLCurvesControl : FrameworkElement
                 else if (selectedPointIndex == pts.Count - 1) pt.X = 1.0;
                 else
                 {
-                    var minX = pts[selectedPointIndex - 1].X + 0.005;
-                    var maxX = pts[selectedPointIndex + 1].X - 0.005;
-                    pt.X = Math.Clamp(norm.X, minX, maxX);
+                    var left = pts[selectedPointIndex - 1].X;
+                    var right = pts[selectedPointIndex + 1].X;
+                    var gap = right - left >= 0.01 ? 0.005 : 0;
+                    pt.X = Math.Clamp(norm.X, left + gap, right - gap);
                 }
             }
 
             InvalidateVisual();
             UpdateReadout();
-            CurvesChanged?.Invoke();
         }
     }
 
     protected override void OnMouseUp(MouseButtonEventArgs e)
     {
-        if (isDragging)
-        {
-            isDragging = false;
-            ReleaseMouseCapture();
-            CurvesChanged?.Invoke();
-        }
+        if (e.ChangedButton != MouseButton.Left || !isDragging) return;
+        e.Handled = true;
+        FinishDrag();
+    }
+
+    protected override void OnLostMouseCapture(MouseEventArgs e)
+    {
+        base.OnLostMouseCapture(e);
+        FinishDrag();
+    }
+
+    private void FinishDrag()
+    {
+        if (!isDragging) return;
+        isDragging = false;
+        if (IsMouseCaptured) ReleaseMouseCapture();
+        CurvesChanged?.Invoke();
     }
 
     protected override void OnKeyDown(KeyEventArgs e)

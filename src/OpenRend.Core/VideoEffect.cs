@@ -86,32 +86,10 @@ public sealed class VideoEffect
         Id == other.Id && Kind == other.Kind && IsEnabled == other.IsEnabled &&
         (Lut is { } camera ? camera.ContentEquals(other.Lut) : other.Lut is null) &&
         (LookLut is { } look ? look.ContentEquals(other.LookLut) : other.LookLut is null) &&
-        SameCurves(Curves, other.Curves) && SameHslCurves(HSLCurves, other.HSLCurves) &&
+        (Curves is { } rgb ? rgb.ContentEquals(other.Curves) : other.Curves is null) &&
+        (HSLCurves is { } hsl ? hsl.ContentEquals(other.HSLCurves) : other.HSLCurves is null) &&
         SameAnimation(Animation, other.Animation) &&
         VideoEffectCatalog.Get(Kind).Parameters.All(parameter => GetParameter(parameter.Key) == other.GetParameter(parameter.Key));
-
-    private static bool SameCurves(ColorCurvesData? first, ColorCurvesData? second)
-    {
-        if (first is null || second is null) return first == second;
-        return SameCurve(first.Master, second.Master) && SameCurve(first.Red, second.Red) &&
-            SameCurve(first.Green, second.Green) && SameCurve(first.Blue, second.Blue);
-
-        static bool SameCurve(ColorCurve left, ColorCurve right) => left.Points.Count == right.Points.Count &&
-            left.Points.Zip(right.Points).All(pair =>
-                (pair.First.X, pair.First.Y, pair.First.InHandleX, pair.First.InHandleY, pair.First.OutHandleX, pair.First.OutHandleY) ==
-                (pair.Second.X, pair.Second.Y, pair.Second.InHandleX, pair.Second.InHandleY, pair.Second.OutHandleX, pair.Second.OutHandleY));
-    }
-
-    private static bool SameHslCurves(HSLCurvesData? first, HSLCurvesData? second)
-    {
-        if (first is null || second is null) return first == second;
-        return SameCurve(first.HueVsHue, second.HueVsHue) && SameCurve(first.HueVsSat, second.HueVsSat) &&
-            SameCurve(first.HueVsLum, second.HueVsLum) && SameCurve(first.SatVsSat, second.SatVsSat) &&
-            SameCurve(first.LumVsSat, second.LumVsSat);
-
-        static bool SameCurve(HSLCurve left, HSLCurve right) => left.Points.Count == right.Points.Count &&
-            left.Points.Zip(right.Points).All(pair => (pair.First.X, pair.First.Y) == (pair.Second.X, pair.Second.Y));
-    }
 
     private static bool SameAnimation(VideoEffectAnimation? first, VideoEffectAnimation? second)
     {

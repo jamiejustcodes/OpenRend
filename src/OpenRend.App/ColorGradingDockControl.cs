@@ -11,7 +11,7 @@ using OpenRend.Core;
 namespace OpenRend.App;
 
 /// <summary>
-/// Docked Color Grading panel hosted in MainWindow.
+/// Shared Color Grading controls for docked and scoped editing.
 /// Provides category navigation (LUTs, Color Wheels, Utilities, Curves),
 /// dual 3D LUT slots with built-in camera/look presets, interactive color wheels,
 /// curves, tone, levels, white balance, and HSL controls.
@@ -21,9 +21,14 @@ public sealed class ColorGradingDockControl : UserControl
     private EditorViewModel? vm;
     private Action? previewCallback;
     private Action? popoutCallback;
-    private TimelineClip? activeClip;
+    private EffectScope? scope;
+    private Guid targetId;
+    private Guid? effectId;
+    private List<VideoEffect>? targetEffects;
     private bool updating;
     private static readonly VideoEffect NeutralGrade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+    private static readonly ColorCurvesData NeutralRgb = new();
+    private static readonly HSLCurvesData NeutralHsl = new();
 
     // Header controls
     private readonly TextBlock targetLabel;
@@ -31,6 +36,9 @@ public sealed class ColorGradingDockControl : UserControl
     private readonly Button resetAllBtn;
     private readonly ComboBox presetCombo;
     private readonly Button popoutBtn;
+    private readonly Button undoBtn;
+    private readonly Button redoBtn;
+    private readonly Button closeBtn;
 
     // Navigation Tree / List
     private readonly ListBox navList;
@@ -93,7 +101,8 @@ public sealed class ColorGradingDockControl : UserControl
     private readonly ComboBox lookLutInterpCombo;
     private readonly CheckBox lookLutBypassCheck;
 
-    private VideoEffect? ActiveEffect => activeClip?.VideoEffects.FirstOrDefault(e => e.Kind == VideoEffectKind.ColorGrading);
+    private VideoEffect? ActiveEffect => targetEffects?.FirstOrDefault(effect =>
+        effect.Kind == VideoEffectKind.ColorGrading && (effectId is null || effect.Id == effectId));
 
     public ColorGradingDockControl()
     {
@@ -141,6 +150,9 @@ public sealed class ColorGradingDockControl : UserControl
         AutomationProperties.SetAutomationId(popoutBtn, "ColorGrading_PopoutButton");
         popoutBtn.Click += (_, _) => popoutCallback?.Invoke();
         tools.Children.Add(popoutBtn);
+        undoBtn = AddWindowAction("Undo", "ColorGrading_Undo", () => MoveHistory(undo: true));
+        redoBtn = AddWindowAction("Redo", "ColorGrading_Redo", () => MoveHistory(undo: false));
+        closeBtn = AddWindowAction("Close", "ColorGrading_Close", () => Window.GetWindow(this)?.Close());
 
         headerContent.Children.Add(tools);
         header.Child = headerContent;
@@ -233,6 +245,15 @@ public sealed class ColorGradingDockControl : UserControl
         Content = root;
         SelectPage(0);
         BindToClip(null);
+
+        Button AddWindowAction(string title, string id, Action action)
+        {
+            var button = new Button { Content = title, Margin = new Thickness(0, 0, 4, 4), Visibility = Visibility.Collapsed };
+            AutomationProperties.SetAutomationId(button, id);
+            button.Click += (_, _) => action();
+            tools.Children.Add(button);
+            return button;
+        }
     }
 
     private static ListBoxItem MakeNavItem(string label, string autoId)
@@ -256,13 +277,68 @@ public sealed class ColorGradingDockControl : UserControl
 
     public void BindToClip(TimelineClip? clip)
     {
-        activeClip = clip is { IsLocked: false } && vm?.Project.Tracks.Any(track =>
-            track.Kind == TrackKind.Video && !track.IsLocked && track.Clips.Contains(clip)) == true ? clip : null;
-        targetLabel.Text = activeClip is { } target ? $"Event FX · {target.Name}" : "Select one unlocked video event";
-        targetLabel.ToolTip = activeClip?.Name;
+        scope = clip is null ? null : EffectScope.Event;
+        targetId = clip?.Id ?? Guid.Empty;
+        RefreshTarget();
+    }
+
+    internal void BindScope(EditorViewModel viewModel, EffectScope effectScope, Guid id, Guid? gradeId, Action? requestPreview)
+    {
+        vm = viewModel;
+        previewCallback = requestPreview;
+        scope = effectScope;
+        targetId = id;
+        effectId = gradeId;
+        popoutBtn.Visibility = Visibility.Collapsed;
+        undoBtn.Visibility = redoBtn.Visibility = closeBtn.Visibility = Visibility.Visible;
+        navList.SelectedIndex = 1;
+        RefreshTarget();
+    }
+
+    internal void RefreshTarget()
+    {
+        var (effects, name) = FindTarget();
+        var targetChanged = !ReferenceEquals(targetEffects, effects);
+        targetEffects = effects;
+        targetLabel.Text = name;
+        targetLabel.ToolTip = name;
         bypassBtn.IsEnabled = resetAllBtn.IsEnabled = ActiveEffect is not null;
-        presetCombo.IsEnabled = popoutBtn.IsEnabled = pageContainer.IsEnabled = activeClip is not null;
-        UpdateControlsFromEffect();
+        presetCombo.IsEnabled = popoutBtn.IsEnabled = pageContainer.IsEnabled = targetEffects is not null;
+        undoBtn.IsEnabled = vm?.Editor.CanUndo == true;
+        redoBtn.IsEnabled = vm?.Editor.CanRedo == true;
+        UpdateControlsFromEffect(targetChanged);
+    }
+
+    private (List<VideoEffect>? Effects, string Name) FindTarget()
+    {
+        if (vm is null || scope is null) return (null, "Select one unlocked video event");
+        var project = vm.Project;
+        switch (scope)
+        {
+            case EffectScope.Event:
+                var pair = project.Tracks.Where(track => track.Kind == TrackKind.Video)
+                    .SelectMany(track => track.Clips.Where(clip => clip.Id == targetId).Select(clip => (Track: track, Clip: clip)))
+                    .FirstOrDefault();
+                if (pair.Clip is { IsLocked: false } clip && !pair.Track.IsLocked)
+                    return (clip.VideoEffects, $"Event FX · {clip.Name}");
+                return (null, "Select one unlocked video event");
+            case EffectScope.Track:
+                var matchedTrack = project.Tracks.FirstOrDefault(track => track.Id == targetId && track.Kind == TrackKind.Video && !track.IsLocked);
+                return matchedTrack is null ? (null, "Video track unavailable") : (matchedTrack.VideoEffects, $"Track FX · {matchedTrack.Name}");
+            case EffectScope.Media:
+                var media = project.Media.FirstOrDefault(media => media.Id == targetId && media.HasVideo);
+                return media is null ? (null, "Video media unavailable") : (media.VideoEffects, $"Media FX · {media.Name}");
+            case EffectScope.Output:
+                return (project.VideoOutputEffects, "Video Output FX");
+            default:
+                return (null, "Color grading unavailable");
+        }
+    }
+
+    private void MoveHistory(bool undo)
+    {
+        if (vm is not null && (undo ? vm.Editor.Undo() : vm.Editor.Redo()))
+            previewCallback?.Invoke();
     }
 
     private void SelectPage(int index)
@@ -677,14 +753,17 @@ public sealed class ColorGradingDockControl : UserControl
 
         var rstChBtn = new Button { Content = "Reset Channel", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 4, 0) };
         var rstAllBtn = new Button { Content = "Reset All Curves", Padding = new Thickness(8, 2, 8, 2) };
+        var smoothBtn = new Button { Content = "Smooth curve", Margin = new Thickness(4, 0, 0, 0) };
         top.Children.Add(rstChBtn);
         top.Children.Add(rstAllBtn);
+        top.Children.Add(smoothBtn);
 
         Grid.SetRow(top, 0);
         colorGrid.Children.Add(top);
 
         ctrl = new ColorCurvesControl { Margin = new Thickness(0, 0, 0, 4), MinHeight = 170 };
         AutomationProperties.SetAutomationId(ctrl, "CurvesItem_Control");
+        AutomationProperties.SetName(ctrl, "RGB curve graph");
         var c = ctrl;
         void UpdateColorChannelStyles(CurveChannel ch)
         {
@@ -697,11 +776,18 @@ public sealed class ColorGradingDockControl : UserControl
         btnRed.Click += (_, _) => { c.ActiveChannel = CurveChannel.Red; UpdateColorChannelStyles(CurveChannel.Red); };
         btnGreen.Click += (_, _) => { c.ActiveChannel = CurveChannel.Green; UpdateColorChannelStyles(CurveChannel.Green); };
         btnBlue.Click += (_, _) => { c.ActiveChannel = CurveChannel.Blue; UpdateColorChannelStyles(CurveChannel.Blue); };
-        rstChBtn.Click += (_, _) => { c.ResetActive(); CommitCurves(); };
-        rstAllBtn.Click += (_, _) => { c.ResetAll(); CommitCurves(); };
-        ctrl.CurvesChanged += CommitCurves;
+        rstChBtn.Click += (_, _) => c.ResetActive();
+        rstAllBtn.Click += (_, _) => c.ResetAll();
+        smoothBtn.Click += (_, _) => c.SmoothActive();
+        ctrl.CurvesChanged += CommitRgbCurves;
 
-        readout = new TextBlock { Text = "Channel: Master", Foreground = Brushes.Gray, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Left };
+        var rgbStatus = new TextBlock { Text = "Master curve", Margin = new Thickness(0, 0, 0, 4) };
+        rgbStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        readout = rgbStatus;
+        c.PointSelected += text => rgbStatus.Text = text;
+        colorGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(rgbStatus, 2);
+        colorGrid.Children.Add(rgbStatus);
 
         Grid.SetRow(ctrl, 1);
         colorGrid.Children.Add(ctrl);
@@ -729,6 +815,7 @@ public sealed class ColorGradingDockControl : UserControl
 
         hslCtrl = new HSLCurvesControl { Margin = new Thickness(0, 0, 0, 4), MinHeight = 170 };
         AutomationProperties.SetAutomationId(hslCtrl, "HSLCurvesItem_Control");
+        AutomationProperties.SetName(hslCtrl, "HSL curve graph");
         var hc = hslCtrl;
         void UpdateHslModeStyles(HSLCurveMode m)
         {
@@ -743,11 +830,17 @@ public sealed class ColorGradingDockControl : UserControl
         btnHvl.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.HueVsLum; UpdateHslModeStyles(HSLCurveMode.HueVsLum); };
         btnSvs.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.SatVsSat; UpdateHslModeStyles(HSLCurveMode.SatVsSat); };
         btnLvs.Click += (_, _) => { hc.ActiveMode = HSLCurveMode.LumVsSat; UpdateHslModeStyles(HSLCurveMode.LumVsSat); };
-        rstHslModeBtn.Click += (_, _) => { hc.ResetActive(); CommitCurves(); };
-        rstAllHslBtn.Click += (_, _) => { hc.ResetAll(); CommitCurves(); };
-        hslCtrl.CurvesChanged += CommitCurves;
+        rstHslModeBtn.Click += (_, _) => hc.ResetActive();
+        rstAllHslBtn.Click += (_, _) => hc.ResetAll();
+        hslCtrl.CurvesChanged += CommitHslCurves;
 
-        hslReadout = new TextBlock { Text = "Mode: Hue vs Sat", Foreground = Brushes.Gray, FontSize = 10, HorizontalAlignment = HorizontalAlignment.Left };
+        var hslStatus = new TextBlock { Text = "Hue vs saturation", Margin = new Thickness(0, 0, 0, 4) };
+        hslStatus.SetResourceReference(TextBlock.ForegroundProperty, "MutedTextBrush");
+        hslReadout = hslStatus;
+        hc.PointSelected += text => hslStatus.Text = text;
+        hslGrid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+        Grid.SetRow(hslStatus, 2);
+        hslGrid.Children.Add(hslStatus);
 
         Grid.SetRow(hslCtrl, 1);
         hslGrid.Children.Add(hslCtrl);
@@ -799,7 +892,7 @@ public sealed class ColorGradingDockControl : UserControl
 
     // --- State Synchronization ---
 
-    private void UpdateControlsFromEffect()
+    private void UpdateControlsFromEffect(bool resetCurveSelection)
     {
         var fx = ActiveEffect ?? NeutralGrade;
         updating = true;
@@ -846,8 +939,10 @@ public sealed class ColorGradingDockControl : UserControl
             valHslSlider.Value = fx.GetParameter("ValAdjust");
 
             // Curves
-            curvesControl.Curves = fx.Curves?.DeepClone() ?? new ColorCurvesData();
-            hslCurvesControl.Curves = fx.HSLCurves?.DeepClone() ?? new HSLCurvesData();
+            var rgb = fx.Curves ?? NeutralRgb;
+            var hsl = fx.HSLCurves ?? NeutralHsl;
+            if (resetCurveSelection || !curvesControl.Curves.ContentEquals(rgb)) curvesControl.Curves = rgb.DeepClone();
+            if (resetCurveSelection || !hslCurvesControl.Curves.ContentEquals(hsl)) hslCurvesControl.Curves = hsl.DeepClone();
 
             // Camera LUT
             cameraLutPathText.Text = fx.Lut is not null ? (fx.Lut.Title ?? "Embedded 3D LUT") : "(No LUT loaded)";
@@ -874,11 +969,14 @@ public sealed class ColorGradingDockControl : UserControl
 
     private void EditGrade(Func<VideoEffect, bool> edit)
     {
-        if (updating || activeClip is null || vm is null) return;
-        var effects = vm.Editor.GetScopedVideoEffects(EffectScope.Event, activeClip.Id);
-        var index = effects.FindIndex(effect => effect.Kind == VideoEffectKind.ColorGrading);
-        var grade = index >= 0 ? effects[index].DeepClone() : VideoEffect.Create(VideoEffectKind.ColorGrading);
-        if (!edit(grade)) return;
+        if (updating || targetEffects is null || vm is null || scope is not { } currentScope) return;
+        var effects = vm.Editor.GetScopedVideoEffects(currentScope, targetId);
+        var existing = ActiveEffect;
+        var before = existing ?? NeutralGrade;
+        var grade = before.DeepClone();
+        if (!edit(grade) || before.ContentEquals(grade)) return;
+        var index = existing is null ? -1 : effects.IndexOf(existing);
+        if (index < 0) grade.Id = effectId ?? Guid.NewGuid();
 
         // Insert a new grade with its first adjustment in the same undo step.
         vm.Editor.Execute(_ =>
@@ -905,10 +1003,17 @@ public sealed class ColorGradingDockControl : UserControl
         return true;
     }
 
-    private void CommitCurves() => EditGrade(grade =>
+    private void CommitRgbCurves() => EditGrade(grade =>
     {
-        grade.Curves = curvesControl.Curves.DeepClone();
-        grade.HSLCurves = hslCurvesControl.Curves.DeepClone();
+        var curves = curvesControl.Curves;
+        grade.Curves = curves.ContentEquals(NeutralRgb) ? null : curves.DeepClone();
+        return true;
+    });
+
+    private void CommitHslCurves() => EditGrade(grade =>
+    {
+        var curves = hslCurvesControl.Curves;
+        grade.HSLCurves = curves.ContentEquals(NeutralHsl) ? null : curves.DeepClone();
         return true;
     });
 

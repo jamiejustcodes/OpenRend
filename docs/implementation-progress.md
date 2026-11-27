@@ -32,6 +32,8 @@ Transitions uses the same browser controls and a preset list. When a category or
 
 The docked Color Grading pane binds to one selected video event even when its linked audio is selected. The toolbar wraps, grading sections stack at compact widths, and wider docks place the sections side by side. Both Look LUT pickers read the same event and select, replace or clear its LUT. An imported LUT displays as imported with its file name in the slot. The desktop workflow resizes the real pane, saves a LUT and a 0.005 input-level adjustment, clears the LUT, and checks that Undo restores it.
 
+Floating Color Grading hosts the same controls and binds to the chosen event, track, media asset or video output. The first adjustment adds the effect and its values in one undo step. Curve points move on the graph during a drag and the project commits the gesture on release. Delete in the docked graph removes a selected point. The desktop workflows save a Look LUT and the RGB and HSL curves in all four scopes and verify that Undo restores the curve while the LUT remains set.
+
 Clip Properties follows the focused timeline event. It shows opacity for video and gain and pan for audio, with lock and mute states visible above the form. Enter or Apply checks the frame and level fields inline. Timing edits validate every affected event before changing the project. Moving or slipping an event keeps its fade envelope phase, and changing source in updates the active take. Desktop coverage selects both members of a link, rejects invalid edits, saves their timing and verifies one-step Undo.
 
 ## Slip and slide edits

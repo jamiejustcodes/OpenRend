@@ -2008,6 +2008,7 @@ public partial class MainWindow : Window
             .SelectMany(track => track.Clips.Where(clip => requestedClip is { } id ? clip.Id == id : vm.Selection.Contains(clip.Id)).Select(clip => (Track: track, Clip: clip))).ToArray();
         if (selected.Length != 1) { vm.Status = "Select one video event to edit its color grading."; return; }
         if (selected[0].Track.IsLocked) { vm.Status = "Unlock the video track before editing its color grading."; return; }
+        if (selected[0].Clip.IsLocked) { vm.Status = "Unlock the video event before editing its color grading."; return; }
         Pause(); vm.Position = Math.Clamp(vm.Position, selected[0].Clip.StartFrame, selected[0].Clip.EndFrame - 1); UpdatePosition(); RequestPreview();
         var clipId = selected[0].Clip.Id;
         new ColorGradingWindow(vm, EffectScope.Event, clipId, null, () => RequestPreview()) { Owner = this }.ShowDialog();
@@ -3261,6 +3262,7 @@ public partial class MainWindow : Window
         var ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control); var shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift); var alt = Keyboard.Modifiers.HasFlag(ModifierKeys.Alt);
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
         if (Keyboard.FocusedElement is TextBox && !(ctrl && key is Key.S or Key.O or Key.I or Key.N || ctrl && shift && key is Key.E or Key.M or Key.L)) return;
+        if (key == Key.Delete && Keyboard.FocusedElement is ColorCurvesControl or HSLCurvesControl) return;
         if (key == Key.Enter && !ctrl && !alt && !shift &&
             (VideoFxPresets.IsKeyboardFocusWithin || MediaGenPresets.IsKeyboardFocusWithin || TransitionPresets.IsKeyboardFocusWithin)) return;
         if (HandleLayoutChordKey(e)) return;
