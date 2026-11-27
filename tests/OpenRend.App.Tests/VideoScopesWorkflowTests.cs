@@ -14,6 +14,61 @@ public sealed partial class EditorWorkflowTests
 {
     [WindowsDesktopFact]
     [Trait("Category", "Desktop")]
+    public async Task SplitPreviewBypassesOutputGradeOnlyOnTheComparisonSide()
+    {
+        var root = FindRepository();
+        var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
+            ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
+        var temporary = Path.Combine(Path.GetTempPath(), "OpenRendDesktopTests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(temporary);
+        var path = Path.Combine(temporary, "output-comparison.openrend");
+        try
+        {
+            var asset = Solid("Gray plate", "#808080");
+            var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+            grade.SetParameter("BrightnessAdjust", .2);
+            await ProjectStore.SaveAsync(new ProjectDocument
+            {
+                Name = "UI integration", Width = 640, Height = 360, Media = [asset], VideoOutputEffects = [grade],
+                Tracks = [new() { Kind = TrackKind.Video, Clips = [new() { MediaId = asset.Id, DurationFrames = 90 }] }]
+            }, path);
+            using var running = Launch(executable, path, temporary);
+            var main = running.Window;
+            var preview = Assert.Single(main.FindAllDescendants(condition => condition.ByClassName("OpenRend.Preview")));
+            WaitFor(BothSidesGraded, "The output grade did not reach the preview.");
+            var split = Find(main, "SplitScreenButton").AsButton();
+            split.Invoke();
+            WaitFor(() =>
+            {
+                var (left, right) = SampleSides();
+                return Math.Min(left, right) is >= 126 and <= 130 && Math.Max(left, right) is >= 177 and <= 181;
+            }, "The comparison should show the untreated source and the output grade.");
+            split.Invoke();
+            WaitFor(BothSidesGraded, "Closing the comparison did not restore the full output grade.");
+            Assert.DoesNotContain('*', main.Title);
+            running.CloseGracefully();
+
+            bool BothSidesGraded()
+            {
+                var (left, right) = SampleSides();
+                return left is >= 177 and <= 181 && right is >= 177 and <= 181;
+            }
+
+            (int Left, int Right) SampleSides()
+            {
+                using var image = Capture.Element(preview);
+                var width = Math.Min(image.Bitmap.Width, image.Bitmap.Height * (16.0 / 9));
+                var y = image.Bitmap.Height / 2;
+                var center = image.Bitmap.Width / 2.0;
+                return (image.Bitmap.GetPixel((int)(center - width / 4), y).R,
+                    image.Bitmap.GetPixel((int)(center + width / 4), y).R);
+            }
+        }
+        finally { Directory.Delete(temporary, recursive: true); }
+    }
+
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
     public async Task VideoScopesMeasureUnguidedFramesAndCanHoldPlayback()
     {
         var root = FindRepository();

@@ -112,6 +112,7 @@ public sealed class VideoEffectMediaTests(MediaFixture fixture) : IClassFixture<
         var red = (12 * 64 + 16) * 4;
         Assert.Equal(0, original[red]);
         Assert.Equal(38, preview[red]);
+        Assert.Equal(original, renderer.RenderFrame(project, 0, 64, 48, bypassVideoEffects: true));
 
         var destination = Path.Combine(fixture.Directory, "tonal-grade.mp4");
         await new ExportService(renderer).ExportAsync(project, destination);

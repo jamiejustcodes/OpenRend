@@ -363,7 +363,7 @@ public sealed partial class TimelineRenderService : IDisposable
                 if (compositor != null && NativeMethods.CompositorReadback(compositor, output, bufferSize) < 0)
                     throw NativeMethods.Error("Could not read composited timeline frame");
 
-                if (VideoEffectProcessor.HasActiveEffects(project.VideoOutputEffects))
+                if (!bypassVideoEffects && VideoEffectProcessor.HasActiveEffects(project.VideoOutputEffects))
                 {
                     var fxResult = VideoEffectProcessor.Apply(output, width, height, project.VideoOutputEffects, frame);
                     if (!ReferenceEquals(fxResult, output))
