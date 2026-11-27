@@ -45,6 +45,11 @@ public sealed partial class TimelineRenderService
             RenderCrossEffect(output, first, second, width, height, p, CrossEffectSettings.Read(parameters), firstOpacity, secondOpacity);
             return output;
         }
+        if (PageTransitionSettings.Supports(transition.Kind))
+        {
+            RenderPageTransition(output, first, second, width, height, p, transition.Kind, parameters, firstOpacity, secondOpacity);
+            return output;
+        }
         SqueezeSettings? squeeze = transition.Kind == VideoTransitionKind.Squeeze ? ReadSqueezeSettings(parameters) : null;
         SwapFrame? swap = transition.Kind == VideoTransitionKind.Swap ? BuildSwapFrame(first, second, p, parameters, firstOpacity, secondOpacity) : null;
 
@@ -405,16 +410,6 @@ public sealed partial class TimelineRenderService
                 return isIncoming
                     ? SampleDissolveLayer(second, x, y, width, height) * secondOpacity
                     : SampleDissolveLayer(first, x, y, width, height) * firstOpacity;
-            }
-
-            case VideoTransitionKind.PageLoop:
-            case VideoTransitionKind.PagePeel:
-            case VideoTransitionKind.PageRoll:
-            {
-                // Smooth geometric crossfade
-                var s1 = SampleDissolveLayer(first, x, y, width, height) * firstOpacity;
-                var s2 = SampleDissolveLayer(second, x, y, width, height) * secondOpacity;
-                return Vector4.Lerp(s1, s2, p);
             }
 
             case VideoTransitionKind.Dissolve:

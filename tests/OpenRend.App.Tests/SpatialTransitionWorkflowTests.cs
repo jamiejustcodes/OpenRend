@@ -21,9 +21,15 @@ public sealed partial class EditorWorkflowTests
     public Task SwapDirectionChangesPreviewAndSurvivesReopen() =>
         VerifySpatialTransitionDirection(VideoTransitionKind.Swap, "Swap Left", startsWithGreen: false, savedDirection: "3");
 
+    [WindowsDesktopFact]
+    [Trait("Category", "Desktop")]
+    public Task PagePeelAngleChangesTheVisibleShotAndRoundTrips() =>
+        VerifySpatialTransitionDirection(VideoTransitionKind.PagePeel, "Top-Right, Medium Fold", startsWithGreen: false, savedDirection: "180.0");
+
     private async Task VerifySpatialTransitionDirection(VideoTransitionKind kind, string preset,
         bool startsWithGreen, string savedDirection)
     {
+        var page = kind == VideoTransitionKind.PagePeel;
         var root = FindRepository();
         var executable = Environment.GetEnvironmentVariable("OPENREND_APP_PATH")
             ?? Path.Combine(root, "src", "OpenRend.App", "bin", "Release", "net10.0-windows", "win-x64", "OpenRend.exe");
@@ -52,19 +58,48 @@ public sealed partial class EditorWorkflowTests
                 var properties = dialog!;
                 var area = main.BoundingRectangle;
                 properties.Patterns.Transform.Pattern.Move(area.Left + 12, area.Bottom - properties.BoundingRectangle.Height - 32);
-                Assert.Equal("Left", Find(properties, "TransitionParameter_Direction").AsComboBox().SelectedItem?.Name);
-                Find(properties, "TransitionParameter_Direction").AsComboBox().Select("Right");
+                if (page)
+                {
+                    var angle = Find(properties, "TransitionParameter_Angle").Patterns.RangeValue.Pattern;
+                    Assert.Equal(315, angle.Value.Value);
+                    Assert.True(Find(properties, "TransitionParameter_SlideAmount").IsEnabled);
+                    angle.SetValue(180);
+                }
+                else
+                {
+                    Assert.Equal("Left", Find(properties, "TransitionParameter_Direction").AsComboBox().SelectedItem?.Name);
+                    Find(properties, "TransitionParameter_Direction").AsComboBox().Select("Right");
+                }
                 CheckSide(main, !startsWithGreen);
                 Find(properties, "UndoTransitionEdit").AsButton().Invoke();
                 CheckSide(main, startsWithGreen);
                 Find(properties, "RedoTransitionEdit").AsButton().Invoke();
                 CheckSide(main, !startsWithGreen);
+                if (page)
+                {
+                    var light = Find(properties, "TransitionParameter_LightColor").AsComboBox();
+                    Assert.Equal("White", light.SelectedItem?.Name);
+                    light.Select("Blue");
+                    var preview = Assert.Single(main.FindAllDescendants(c => c.ByClassName("OpenRend.Preview")));
+                    WaitFor(() =>
+                    {
+                        using var capture = Capture.Element(preview);
+                        var width = Math.Min(capture.Bitmap.Width, capture.Bitmap.Height * 16 / 9);
+                        var pixel = capture.Bitmap.GetPixel(capture.Bitmap.Width / 2 - width / 8, capture.Bitmap.Height / 2);
+                        return pixel.R > 100 && pixel.G < 4 && pixel.B > 12;
+                    }, "The blue light did not tint the folded edge.");
+                    var captureFolder = Path.Combine(root, ".local", "desktop-validation");
+                    Directory.CreateDirectory(captureFolder);
+                    using (var capture = Capture.Element(properties)) capture.ToFile(Path.Combine(captureFolder, "page-peel-properties.png"));
+                    using (var capture = Capture.Element(preview)) capture.ToFile(Path.Combine(captureFolder, "page-peel-preview.png"));
+                }
                 Find(properties, "CloseTransitionProperties").AsButton().Invoke();
                 WaitFor(() => main.ModalWindows.Length == 0, "Transition properties did not close.");
                 var saved = await SaveGrade(main, path);
                 var savedTransition = saved.Tracks[0].Clips[1].FadeInTransition;
                 Assert.Equal(kind, savedTransition!.Kind);
-                Assert.Equal(savedDirection, savedTransition.Parameters!["Direction"]);
+                Assert.Equal(savedDirection, savedTransition.Parameters![page ? "Angle" : "Direction"]);
+                if (page) Assert.Equal("0 0 1 1", savedTransition.Parameters["LightColor"]);
                 Assert.Equal(preset, savedTransition.Preset);
                 running.CloseGracefully();
             }
@@ -86,14 +121,15 @@ public sealed partial class EditorWorkflowTests
         }
         finally { Directory.Delete(directory, recursive: true); }
 
-        static void CheckSide(Window main, bool green)
+        void CheckSide(Window main, bool green)
         {
             var preview = Assert.Single(main.FindAllDescendants(c => c.ByClassName("OpenRend.Preview")));
             WaitFor(() =>
             {
                 using var capture = Capture.Element(preview);
                 var width = Math.Min(capture.Bitmap.Width, capture.Bitmap.Height * 16 / 9);
-                var pixel = capture.Bitmap.GetPixel(capture.Bitmap.Width / 2 - width / 4, capture.Bitmap.Height / 2);
+                var x = capture.Bitmap.Width / 2 - (page ? width * 3 / 8 : width / 4);
+                var pixel = capture.Bitmap.GetPixel(x, capture.Bitmap.Height / 2);
                 return green ? pixel.G > 190 && pixel.R < 10 : pixel.R > 190 && pixel.G < 10;
             }, $"The transition did not render the expected left-side {(green ? "green" : "red")} image.");
         }

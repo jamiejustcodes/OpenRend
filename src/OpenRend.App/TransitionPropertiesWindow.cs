@@ -323,6 +323,22 @@ public sealed class TransitionPropertiesWindow : Window
                     AddSlider("Maximum Blur", "MaxBlur", 0, 1, cross.Blur, 2);
                 break;
             }
+            case VideoTransitionKind.PageLoop:
+            case VideoTransitionKind.PagePeel:
+            case VideoTransitionKind.PageRoll:
+            {
+                var page = PageTransitionSettings.Read(trans.Kind, paramsDict);
+                var loop = trans.Kind == VideoTransitionKind.PageLoop;
+                AddSlider("Angle (°)", "Angle", 0, 360, page.Angle, 1);
+                AddSlider(loop ? "Loop Radius" : "Fold Radius", "Radius", 0, 1, page.Radius, 2);
+                if (loop) AddSlider("Loop Position", "LoopPosition", 0, 1, page.LoopPosition, 2);
+                else AddSlider("Slide Amount", "SlideAmount", 0, 1, page.SlideAmount, 2);
+                AddSlider(loop ? "Paper Opacity" : "Fold Opacity", "Opacity", 0, 1, page.Opacity, 2);
+                AddSlider("Perspective", "Perspective", 0, 1, page.Perspective, 2);
+                AddColorChoice("Light Color", paramsDict.GetValueOrDefault("LightColor", PageTransitionSettings.DefaultLightColor),
+                    value => SetParam("LightColor", value), "TransitionParameter_LightColor");
+                break;
+            }
             case VideoTransitionKind.Dissolve:
             {
                 var types = new[] { "Crossfade", "Additive", "Subtractive", "Color Bleed", "Color Morph", "Threshold Dissolve", "Threshold Appear", "Fade Through Grayscale", "Fade Through Color", "RGB Crossfade" };
@@ -443,11 +459,13 @@ public sealed class TransitionPropertiesWindow : Window
         paramPanel.Children.Add(panel);
     }
 
-    private void AddColorChoice(string label, string currentColor, Action<string> onColor)
+    private void AddColorChoice(string label, string currentColor, Action<string> onColor, string? automationId = null)
     {
         var panel = new DockPanel { Margin = new Thickness(0, 3, 0, 3) };
         var text = new TextBlock { Text = label, Width = ParameterLabelWidth, VerticalAlignment = VerticalAlignment.Center, Foreground = (Brush)FindResource("TextBrush") };
         var combo = new ComboBox { Margin = new Thickness(6, 0, 0, 0) };
+        AutomationProperties.SetName(combo, label);
+        if (automationId is not null) AutomationProperties.SetAutomationId(combo, automationId);
         var colorOptions = new (string Name, string Value)[]
         {
             ("Black", "0 0 0 1"),
@@ -459,18 +477,15 @@ public sealed class TransitionPropertiesWindow : Window
             ("Transparent", "0 0 0 0")
         };
         foreach (var (name, _) in colorOptions) combo.Items.Add(name);
-        for (var i = 0; i < colorOptions.Length; i++)
+        combo.SelectedIndex = Array.FindIndex(colorOptions, color => currentColor == color.Value || currentColor + " 1" == color.Value);
+        if (combo.SelectedIndex < 0)
         {
-            if (currentColor.StartsWith(colorOptions[i].Value[..3], StringComparison.OrdinalIgnoreCase))
-            {
-                combo.SelectedIndex = i;
-                break;
-            }
+            combo.Items.Add(new ComboBoxItem { Content = "Saved color", IsEnabled = false });
+            combo.SelectedIndex = colorOptions.Length;
         }
-        if (combo.SelectedIndex < 0) combo.SelectedIndex = 0;
         combo.SelectionChanged += (_, _) =>
         {
-            if (!updatingControls && combo.SelectedIndex >= 0)
+            if (!updatingControls && combo.SelectedIndex >= 0 && combo.SelectedIndex < colorOptions.Length)
                 onColor(colorOptions[combo.SelectedIndex].Value);
         };
         panel.Children.Add(text);

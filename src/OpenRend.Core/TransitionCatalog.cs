@@ -319,8 +319,8 @@ public static class TransitionCatalog
             [
                 Preset("Top-Left, Medium Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "TopLeft")),
                 Preset("Top-Right, Medium Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "TopRight")),
-                Preset("Bottom-Right, Small Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "BottomRight")),
-                Preset("Bottom-Left, Small Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "BottomLeft"))
+                Preset("Bottom-Right, Small Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "BottomRight"), ("Radius", "0.18")),
+                Preset("Bottom-Left, Small Loop", VideoTransitionKind.PageLoop, "3D and Peels", ("Corner", "BottomLeft"), ("Radius", "0.18"))
             ]));
 
         // 17. Page Peel (3D and Peels)

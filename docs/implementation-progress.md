@@ -153,7 +153,7 @@ Status: functional startup slice, full parity open. OpenRend has its own welcome
 - [ ] Implement distinct rendering for the three catalog entries that currently render as dissolves.
 - [x] Verify the desktop workflow and encoded output.
 
-The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer. Page Loop, Page Peel, and Page Roll currently use its dissolve fallback.
+The catalog stores 18 transition kinds, presets and parameters on the incoming fade. Add, double-click, or drag a preset onto a cut or overlap to apply it. Transition Properties offers preset selection and controls for implemented parameters. Preview and export share the same renderer.
 
 Transition parameter slider drags send the draft setting through the preview renderer. Release saves one undoable edit. Escape restores the original value and pixels. Keyboard increments keep focus on the slider. The desktop workflow verifies all three gestures and the saved angle of a Linear Wipe.
 
@@ -162,6 +162,8 @@ Squeeze uses premultiplied sampling to rescale each shot along the chosen axis. 
 Swap moves two rescaled images apart and changes their drawing order as the incoming image comes forward. Empty regions reveal the lower tracks. The Direction and border controls use the same properties controls as Squeeze. Tests verify the four directions, the order change, border feathering, and CPU/D3D and encoded pixels. The desktop workflow checks the effect of changing direction and reopening the project.
 
 Cross Effect combines a centered fade with a zoom, pixelation or blur that peaks at the midpoint. Its properties select the affected shot, zoom centers, maximum block dimensions or maximum blur. Blur uses running sums in premultiplied space to preserve transparency with one scanline of scratch storage. Tests compare all three modes with encoded output and verify targeting, fade range, Undo, Redo and reopened preview pixels.
+
+Page Loop brings in the incoming image on a bent sheet. Page Peel and Page Roll include different fold profiles for the outgoing image. All three keep saved corner presets and share direction, radius, fold opacity, perspective and light controls. Media tests cover the flat-edge case, exact endpoints, each control, transparent coverage, and CPU/D3D and decoded export for Page Roll. The desktop workflow changes the peel angle and light, checks the rendered image, undoes and redoes the angle, and reopens the saved project.
 
 Verified parts:
 
