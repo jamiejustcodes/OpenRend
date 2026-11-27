@@ -33,6 +33,49 @@ public sealed class ColorGradingPixelTests
     }
 
     [Theory]
+    [InlineData(ColorGradingSequence.Legacy, 230)]
+    [InlineData(ColorGradingSequence.CurvesBeforeWheels, 243)]
+    public void SequenceControlsTheOrderOfWheelsBrightnessAndExposure(ColorGradingSequence sequence, byte expected)
+    {
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.GradingSequence = sequence;
+        grade.SetParameter("Gain_Y", 1.5);
+        grade.SetParameter("BrightnessAdjust", .1);
+        grade.SetParameter("ExposureLnAdjust", 1);
+        Assert.Equal(new byte[] { expected, expected, expected, 255 }, VideoEffectProcessor.Apply([64, 64, 64, 255], [grade]));
+    }
+
+    [Fact]
+    public void NewGradeTargetsSaturationBeforeWhiteBalanceColorsThePixel()
+    {
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        grade.HSLCurves = new();
+        grade.HSLCurves.SatVsLum.Points = [new(.05, .6), new(.21, .5)];
+        grade.SetParameter("TemperatureAdjust", 4000);
+        byte[] gray = [128, 128, 128, 255];
+        Assert.InRange(VideoEffectProcessor.Apply(gray, [grade])[1], (byte)153, (byte)154);
+        grade.GradingSequence = ColorGradingSequence.Legacy;
+        Assert.Equal(new byte[] { 77, 128, 179, 255 }, VideoEffectProcessor.Apply(gray, [grade]));
+    }
+
+    [Fact]
+    public void NewGradeAppliesRgbChannelCurvesBeforeTheMasterCurve()
+    {
+        var grade = VideoEffect.Create(VideoEffectKind.ColorGrading);
+        var curves = grade.Curves = new();
+        curves.Master.Points[0].Y = .25;
+        curves.Red.Points[^1].Y = .5;
+        var master = curves.Master.BuildLut();
+        var red = curves.Red.BuildLut();
+        byte[] pixel = [100, 100, 100, 255];
+        var current = VideoEffectProcessor.Apply(pixel, [grade]);
+        Assert.Equal(new byte[] { master[100], master[100], master[red[100]], 255 }, current);
+        grade.GradingSequence = ColorGradingSequence.Legacy;
+        Assert.Equal(new byte[] { master[100], master[100], red[master[100]], 255 }, VideoEffectProcessor.Apply(pixel, [grade]));
+        Assert.NotEqual(master[red[100]], red[master[100]]);
+    }
+
+    [Theory]
     [InlineData(TonalRangeGrading.Shadows, 0)]
     [InlineData(TonalRangeGrading.Midtones, 1)]
     [InlineData(TonalRangeGrading.Highlights, 2)]

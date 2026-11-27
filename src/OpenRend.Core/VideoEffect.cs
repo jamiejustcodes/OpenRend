@@ -22,6 +22,12 @@ public enum EffectScope
     Output
 }
 
+public enum ColorGradingSequence
+{
+    Legacy,
+    CurvesBeforeWheels
+}
+
 public sealed class VideoEffect
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -32,6 +38,9 @@ public sealed class VideoEffect
     public ColorCurvesData? Curves { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public HSLCurvesData? HSLCurves { get; set; }
+    // An omitted value keeps the order used by older project files.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public ColorGradingSequence GradingSequence { get; set; }
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public VideoEffectAnimation? Animation { get; set; }
     public double Amount { get; set; }
@@ -41,6 +50,7 @@ public sealed class VideoEffect
     public static VideoEffect Create(VideoEffectKind kind)
     {
         var effect = new VideoEffect { Kind = kind };
+        if (kind == VideoEffectKind.ColorGrading) effect.GradingSequence = ColorGradingSequence.CurvesBeforeWheels;
         foreach (var parameter in VideoEffectCatalog.Get(kind).Parameters)
             effect.SetParameter(parameter.Key, parameter.DefaultValue);
         effect.Validate();
@@ -84,6 +94,7 @@ public sealed class VideoEffect
 
     public bool ContentEquals(VideoEffect other) =>
         Id == other.Id && Kind == other.Kind && IsEnabled == other.IsEnabled &&
+        GradingSequence == other.GradingSequence &&
         (Lut is { } camera ? camera.ContentEquals(other.Lut) : other.Lut is null) &&
         (LookLut is { } look ? look.ContentEquals(other.LookLut) : other.LookLut is null) &&
         (Curves is { } rgb ? rgb.ContentEquals(other.Curves) : other.Curves is null) &&
@@ -133,6 +144,9 @@ public sealed class VideoEffect
             throw new InvalidDataException("Only a Color Grading effect can contain Color Curves data.");
         if (Kind != VideoEffectKind.ColorGrading && HSLCurves is not null)
             throw new InvalidDataException("Only a Color Grading effect can contain HSL Curves data.");
+        if (!Enum.IsDefined(GradingSequence) ||
+            (Kind != VideoEffectKind.ColorGrading && GradingSequence != ColorGradingSequence.Legacy))
+            throw new InvalidDataException("Color grading processing sequence is invalid.");
         Lut?.Validate();
         LookLut?.Validate();
         Curves?.Validate();

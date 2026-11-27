@@ -19,6 +19,8 @@ public sealed class ColorGradingTests
 
         var effect = VideoEffect.Create(VideoEffectKind.ColorGrading);
         effect.Validate();
+        Assert.Equal(ColorGradingSequence.CurvesBeforeWheels, effect.GradingSequence);
+        Assert.Equal(ColorGradingSequence.Legacy, new VideoEffect { Kind = VideoEffectKind.ColorGrading }.GradingSequence);
 
         // Color Wheels defaults
         Assert.Equal(0, effect.GetParameter("Lift_R"));
@@ -157,6 +159,7 @@ public sealed class ColorGradingTests
             var loaded = await ProjectStore.LoadAsync(path);
             var loadedFx = loaded.Tracks[0].Clips[0].VideoEffects[0];
             Assert.Equal(VideoEffectKind.ColorGrading, loadedFx.Kind);
+            Assert.Equal(ColorGradingSequence.CurvesBeforeWheels, loadedFx.GradingSequence);
             Assert.Equal(0.15, loadedFx.GetParameter("Lift_R"));
             Assert.Equal(1.25, loadedFx.GetParameter("Gamma_G"));
             Assert.Equal(0.85, loadedFx.GetParameter("Gain_B"));

@@ -47,6 +47,7 @@ internal static partial class VideoEffectProcessor
     private static Func<double, double, double, (double R, double G, double B)> CreatePrimaryGradeTransform(VideoEffect effect)
     {
         double P(string key) => effect.GetParameter(key);
+        var legacy = effect.GradingSequence == ColorGradingSequence.Legacy;
 
         // 2. Precompute Levels parameters
         var inMin = P("InMinAdjust");
@@ -125,37 +126,58 @@ internal static partial class VideoEffectProcessor
         var svlLut = hasHslCurves && !hslCurves!.SatVsLum.IsIdentity ? hslCurves.SatVsLum.BuildLut(256, false, includeEndpoint: true) : null;
         var lvsLut = hasHslCurves && !hslCurves!.LumVsSat.IsIdentity ? hslCurves.LumVsSat.BuildLut(256, false) : null;
 
-        // Apply primary grading operations in single color transform pass
-        return (red, green, blue) =>
+        return legacy ? ApplyLegacyGrade : ApplyCurvesBeforeWheels;
+
+        (double R, double G, double B) ApplyLegacyGrade(double red, double green, double blue)
         {
-            // Levels
+            ApplyLevels(ref red, ref green, ref blue);
+            ApplyWhiteBalance(ref red, ref green, ref blue);
+            if (tonalRange is not null) (red, green, blue) = tonalRange.Apply(red, green, blue);
+            ApplyTone(ref red, ref green, ref blue);
+            ApplyWheels(ref red, ref green, ref blue);
+            ApplyRgbCurves(ref red, ref green, ref blue);
+            ApplyHslCurves(ref red, ref green, ref blue);
+            ApplyHsl(ref red, ref green, ref blue);
+            return (red, green, blue);
+        }
+
+        (double R, double G, double B) ApplyCurvesBeforeWheels(double red, double green, double blue)
+        {
+            ApplyHslCurves(ref red, ref green, ref blue);
+            ApplyWhiteBalance(ref red, ref green, ref blue);
+            ApplyLevels(ref red, ref green, ref blue);
+            if (tonalRange is not null) (red, green, blue) = tonalRange.Apply(red, green, blue);
+            ApplyRgbCurves(ref red, ref green, ref blue);
+            ApplyWheels(ref red, ref green, ref blue);
+            ApplyTone(ref red, ref green, ref blue);
+            ApplyHsl(ref red, ref green, ref blue);
+            return (red, green, blue);
+        }
+
+        void ApplyLevels(ref double red, ref double green, ref double blue)
+        {
             if (hasLevels)
             {
                 red = outMin + Math.Clamp((red - inMin) / inRange, 0.0, 1.0) * outRange;
                 green = outMin + Math.Clamp((green - inMin) / inRange, 0.0, 1.0) * outRange;
                 blue = outMin + Math.Clamp((blue - inMin) / inRange, 0.0, 1.0) * outRange;
             }
+        }
 
-            // White Balance
+        void ApplyWhiteBalance(ref double red, ref double green, ref double blue)
+        {
             if (hasWB)
             {
                 red += deltaT * 0.2 + deltaTint * 0.075;
                 green -= deltaTint * 0.15;
                 blue += -deltaT * 0.2 + deltaTint * 0.075;
             }
+        }
 
-            if (tonalRange is not null)
-            {
-                (red, green, blue) = tonalRange.Apply(red, green, blue);
-            }
-
-            // Exposure
-            if (hasExposure)
-            {
-                red *= expScale;
-                green *= expScale;
-                blue *= expScale;
-            }
+        void ApplyTone(ref double red, ref double green, ref double blue)
+        {
+            if (legacy) MultiplyExposure(ref red, ref green, ref blue);
+            else ApplySaturation(ref red, ref green, ref blue);
 
             // Brightness
             if (brightness != 0)
@@ -173,7 +195,20 @@ internal static partial class VideoEffectProcessor
                 blue = contrastCenter + (blue - contrastCenter) * contrastFactor;
             }
 
-            // Saturation
+            if (legacy) ApplySaturation(ref red, ref green, ref blue);
+            else MultiplyExposure(ref red, ref green, ref blue);
+        }
+
+        void MultiplyExposure(ref double red, ref double green, ref double blue)
+        {
+            if (!hasExposure) return;
+            red *= expScale;
+            green *= expScale;
+            blue *= expScale;
+        }
+
+        void ApplySaturation(ref double red, ref double green, ref double blue)
+        {
             if (hasSaturation)
             {
                 var luma = 0.2126 * red + 0.7152 * green + 0.0722 * blue;
@@ -181,7 +216,10 @@ internal static partial class VideoEffectProcessor
                 green = luma + (green - luma) * saturation;
                 blue = luma + (blue - luma) * saturation;
             }
+        }
 
+        void ApplyWheels(ref double red, ref double green, ref double blue)
+        {
             // Color Wheels: Lift
             if (hasLift)
             {
@@ -213,30 +251,38 @@ internal static partial class VideoEffectProcessor
                 green += offsetG;
                 blue += offsetB;
             }
+        }
 
-            // Curves (RGB / Master)
+        void ApplyRgbCurves(ref double red, ref double green, ref double blue)
+        {
             if (hasCurves)
             {
                 var rByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(red, 0.0, 1.0) * 255.0), 0, 255);
                 var gByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(green, 0.0, 1.0) * 255.0), 0, 255);
                 var bByte = (byte)Math.Clamp((int)Math.Round(Math.Clamp(blue, 0.0, 1.0) * 255.0), 0, 255);
 
-                if (masterLut is not null)
-                {
-                    rByte = masterLut[rByte];
-                    gByte = masterLut[gByte];
-                    bByte = masterLut[bByte];
-                }
+                if (legacy) ApplyMaster(ref rByte, ref gByte, ref bByte);
                 if (redLut is not null) rByte = redLut[rByte];
                 if (greenLut is not null) gByte = greenLut[gByte];
                 if (blueLut is not null) bByte = blueLut[bByte];
+                if (!legacy) ApplyMaster(ref rByte, ref gByte, ref bByte);
 
                 red = rByte / 255.0;
                 green = gByte / 255.0;
                 blue = bByte / 255.0;
             }
+        }
 
-            // HSL Curves (Hue vs Hue, Hue vs Sat, Hue vs Lum, Sat vs Sat, Lum vs Sat)
+        void ApplyMaster(ref byte red, ref byte green, ref byte blue)
+        {
+            if (masterLut is null) return;
+            red = masterLut[red];
+            green = masterLut[green];
+            blue = masterLut[blue];
+        }
+
+        void ApplyHslCurves(ref double red, ref double green, ref double blue)
+        {
             if (hasHslCurves)
             {
                 var r0 = Math.Clamp(red, 0.0, 1.0);
@@ -297,8 +343,10 @@ internal static partial class VideoEffectProcessor
                 green = gh;
                 blue = bh;
             }
+        }
 
-            // HSL
+        void ApplyHsl(ref double red, ref double green, ref double blue)
+        {
             if (hasHsl)
             {
                 var (rh, gh, bh) = AdjustHsl(Math.Clamp(red, 0.0, 1.0), Math.Clamp(green, 0.0, 1.0), Math.Clamp(blue, 0.0, 1.0), hue, satHsl, (valHsl - 1.0) * 0.5);
@@ -306,9 +354,7 @@ internal static partial class VideoEffectProcessor
                 green = gh;
                 blue = bh;
             }
-
-            return (red, green, blue);
-        };
+        }
     }
 
     private static double WrapAngle(double value, double size) => (value % size + size) % size;
