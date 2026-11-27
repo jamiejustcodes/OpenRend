@@ -59,6 +59,7 @@
       <SolidColorBrush x:Key="ForegroundMutedBrush" Color="#888888"/>
       <SolidColorBrush x:Key="SubtleTextBrush" Color="#888888"/>
       <SolidColorBrush x:Key="TextMutedBrush" Color="#888888"/>
+      <SolidColorBrush x:Key="ValidationTextBrush" Color="#FF9A91"/>
 
       <Style x:Key="KeyboardFocus" TargetType="Control"><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Control"><Rectangle Stroke="{DynamicResource FocusBrush}" StrokeThickness="1" StrokeDashArray="1,1" Margin="1"/></ControlTemplate></Setter.Value></Setter></Style>
       <Style TargetType="Window"><Setter Property="Background" Value="{DynamicResource WindowBrush}"/><Setter Property="Foreground" Value="{DynamicResource TextBrush}"/><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="11"/><Setter Property="UseLayoutRounding" Value="True"/><Setter Property="SnapsToDevicePixels" Value="True"/><Setter Property="TextOptions.TextFormattingMode" Value="Display"/></Style>

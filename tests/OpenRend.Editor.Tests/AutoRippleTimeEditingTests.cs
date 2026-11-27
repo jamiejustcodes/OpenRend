@@ -287,13 +287,15 @@ public sealed class AutoRippleTimeEditingTests
         // Position cursor at 40
         vm.Position = 40;
         vm.RippleMode = AutoRippleMode.AllTracksAndMarkers;
+        vm.Project.RulerFormat = RulerFormat.AbsoluteFrames;
+        vm.Project.RulerStartTimeFrames = 100;
 
         // Insert 25 frames
         vm.InsertTime(25);
 
         var c2 = vm.Project.Tracks[0].Clips.First(c => c.Id == clip2.Id);
         Assert.Equal(75, c2.StartFrame); // 50 + 25 = 75
-        Assert.Contains("Inserted", vm.Status);
+        Assert.Equal("Inserted 25 at 140 (AllTracksAndMarkers).", vm.Status);
 
         // Mark loop region from 30 to 60 (length 30)
         vm.LoopRegion = new FrameRange(30, 30);
@@ -301,7 +303,7 @@ public sealed class AutoRippleTimeEditingTests
 
         c2 = vm.Project.Tracks[0].Clips.First(c => c.Id == clip2.Id);
         Assert.Equal(45, c2.StartFrame); // 75 - 30 = 45
-        Assert.Contains("Deleted", vm.Status);
+        Assert.Equal("Deleted 30 from 130 (AllTracksAndMarkers).", vm.Status);
     });
 
     [Theory]

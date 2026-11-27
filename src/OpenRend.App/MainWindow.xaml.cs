@@ -1790,7 +1790,8 @@ public partial class MainWindow : Window
             return;
         }
         var defaultSpacing = vm.ClipboardSpanFrames > 0 ? vm.ClipboardSpanFrames : vm.Project.FrameRate.Frames(1.0);
-        var dlg = new PasteRepeatDialog(defaultSpacing, vm.Project.FrameRate, vm.Project.RulerFormat)
+        var dlg = new PasteRepeatDialog(defaultSpacing, vm.Project.FrameRate, vm.Project.RulerFormat,
+            vm.Project.AudioSampleRate, vm.Project.BeatsPerMinute, vm.Project.BeatsPerMeasure)
         {
             Owner = this
         };
@@ -2463,8 +2464,7 @@ public partial class MainWindow : Window
             vm.Project.RulerFormat,
             vm.Project.AudioSampleRate,
             vm.Project.BeatsPerMinute,
-            vm.Project.BeatsPerMeasure,
-            vm.Project.RulerStartTimeFrames)
+            vm.Project.BeatsPerMeasure)
         {
             Owner = this
         };

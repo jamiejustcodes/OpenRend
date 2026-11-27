@@ -29,6 +29,7 @@
     <Compile Include="../../src/OpenRend.App/ColorCurvesControl.cs" Link="ColorCurvesControl.cs" />
     <Compile Include="../../src/OpenRend.App/HSLCurvesControl.cs" Link="HSLCurvesControl.cs" />
     <Compile Include="../../src/OpenRend.App/InsertTimeDialog.cs" Link="InsertTimeDialog.cs" />
+    <Compile Include="../../src/OpenRend.App/TimelineEditDialog.cs" Link="TimelineEditDialog.cs" />
     <Compile Include="../../src/OpenRend.App/TrackMotionWindow.cs" Link="TrackMotionWindow.cs" />
   </ItemGroup>
 </Project>

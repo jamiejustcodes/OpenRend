@@ -583,7 +583,11 @@ public sealed class EditorViewModel : ObservableObject
         if (durationFrames <= 0) return;
         var mode = rippleMode ?? RippleMode;
         Editor.InsertTime(Position, durationFrames, mode);
-        Status = $"Inserted {TimecodeFormatter.Format(durationFrames, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} at {TimecodeFormatter.Format(Position, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} ({mode}).";
+        var duration = TimecodeFormatter.Format(durationFrames, Project.FrameRate, Project.RulerFormat,
+            Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure);
+        var position = TimecodeFormatter.Format(Position, Project.FrameRate, Project.RulerFormat,
+            Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames);
+        Status = $"Inserted {duration} at {position} ({mode}).";
     }
 
     /// <summary>
@@ -608,7 +612,11 @@ public sealed class EditorViewModel : ObservableObject
 
         var mode = rippleMode ?? RippleMode;
         Editor.DeleteTime(start, duration, mode);
-        Status = $"Deleted {TimecodeFormatter.Format(duration, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} from {TimecodeFormatter.Format(start, Project.FrameRate, Project.RulerFormat, Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames)} ({mode}).";
+        var length = TimecodeFormatter.Format(duration, Project.FrameRate, Project.RulerFormat,
+            Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure);
+        var position = TimecodeFormatter.Format(start, Project.FrameRate, Project.RulerFormat,
+            Project.AudioSampleRate, Project.BeatsPerMinute, Project.BeatsPerMeasure, Project.RulerStartTimeFrames);
+        Status = $"Deleted {length} from {position} ({mode}).";
     }
 
     /// <summary>
